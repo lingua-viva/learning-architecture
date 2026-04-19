@@ -6,6 +6,8 @@
 
 ## Philosophy
 
+> **The implementation and the human interaction happening in class is still 90% of the impact. AI supports the 10% that is structural — planning, materials, documentation. The teacher is still the teacher.**
+
 AI does not replace teachers. AI supports the structural work that takes teachers away from teaching.
 
 The critical thinking, the empathy, the connection through relationship, the complexity of reading a classroom in real time — these are things only humans can fully grasp and have an impact on. Students need to be seen by their teacher as a role model, a guide, someone close to them who understands them in their actions and their thinking, who guides them through difficult times and celebrates their success, and who makes mistakes and explicitly teaches how important mistakes are.

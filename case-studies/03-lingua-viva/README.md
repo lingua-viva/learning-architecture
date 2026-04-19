@@ -38,7 +38,7 @@ The insight that drove this design: **these three pillars are not competing prio
 
 3. **50% standardized, 50% flexible**: The curriculum provides a structured framework (learning objectives, assessment rubrics, suggested activities) while leaving space for teachers to adapt to their classroom's needs and interests. This preserves professional autonomy within institutional alignment.
 
-4. **Collaborative creation**: I do not intend to design Lingua Viva alone. The plan is to create it in collaboration with teaching teams across grades, giving voice to different teaching styles and creating a laboratory where activities are implemented, observed, and refined through a feedback loop.
+4. **Collaborative creation**: Lingua Viva is not designed to be handed down from a coordinator. The plan is to create it in collaboration with teaching teams across grades, giving voice to different teaching styles and creating a laboratory where activities are implemented, observed, and refined through a continuous feedback loop. The curriculum improves because the people teaching it are also designing it.
 
 5. **Measurable outcomes**: Every unit connects to CEFR proficiency indicators and can be assessed through the school's existing tools (Toddle portfolios, Prove MT benchmarking, formative assessment via Kahoot).
 

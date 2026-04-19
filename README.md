@@ -73,7 +73,7 @@ See [publication-policy.md](publication-policy.md) for what is shared here, what
 ## About Me
 
 **Current**: Italian Language Program Coordinator & K-8 Educator, 4-campus IB international school, San Francisco
-**Previous**: Localization Program Manager, Google (2019-2020) · Research Associate & Lecturer, University of Cagliari (2012-2018) · PhD, Paris-Sorbonne University
+**Previous**: Localization Program Manager, Google (2018-2020) · Research Associate & Lecturer, University of Cagliari (2012-2018) · PhD, Paris-Sorbonne University
 **Languages**: Italian (native) · French (native) · English (C2) · Spanish (B2)
 
 ---

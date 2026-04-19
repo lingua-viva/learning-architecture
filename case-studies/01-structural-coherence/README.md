@@ -42,6 +42,8 @@ After years of observing these dynamics — and after studying how other schools
 4. **Evidence-Based**: Every layer is grounded in research from IB best practices, language acquisition theory, and Reggio documentation methodology.
 5. **Phased Rollout**: Pilot with early adopters, validate with evidence, then scale. No school-wide mandates before proof of concept.
 
+These principles apply beyond education — any organization integrating multiple operational frameworks faces the same coherence challenge.
+
 ### The 6 Layers
 
 | Layer | What It Addresses | Status |
