@@ -10,7 +10,7 @@ When a student moves from Grade 2 to Grade 3, the new teacher starts from scratc
 
 Learning styles, what worked, what didn't, which accommodations helped, which interventions were tried — this knowledge lives in the previous teacher's head. With teacher turnover, it disappears entirely. Students with specific learning needs are particularly affected: they spend the first weeks of each year being re-assessed for things that were already understood.
 
-This is not a technology problem. It is a structural problem — Layer 4 (Documentation & Institutional Memory) of the [Structural Coherence Framework](../01-structural-coherence/). But AI offers a specific, practical solution.
+This is not a technology problem. It is a structural problem — Layer 5 (Documentation & Institutional Memory) of the [Structural Coherence Framework](../01-structural-coherence/). But AI offers a specific, practical solution.
 
 ---
 
@@ -44,7 +44,7 @@ This is not a technology problem. It is a structural problem — Layer 4 (Docume
 
 ### Where AI helps
 - **Reducing documentation burden**: Voice-to-text transcription and summarization saves 20-35 minutes per documentation session (based on research from comparable tools like Toddle AI and Branching Minds).
-- **Preserving nuance at scale**: A teacher's observation that "Marco does better with visual supports in the afternoon but can handle auditory input in the morning" is exactly the kind of knowledge that gets lost in transitions. AI transcription preserves it.
+- **Preserving nuance at scale**: A teacher's observation that "a student does better with visual supports in the afternoon but can handle auditory input in the morning" is exactly the kind of knowledge that gets lost in transitions. AI transcription preserves it.
 - **Adaptive practice**: Platforms that adjust difficulty to the student's actual level (not their grade level) keep students in the zone of proximal development without requiring the teacher to create 20 different worksheets.
 
 ### Where AI does not help

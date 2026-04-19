@@ -18,6 +18,7 @@ This repository contains frameworks, case studies, and methods from my work desi
 | `observed` | I noticed this pattern across multiple contexts |
 | `designed` | I created a framework to address it |
 | `proposed` | I presented this to institutional leadership |
+| `piloted` | I tested this with a small group |
 | `validated` | I measured outcomes and have evidence |
 
 ---
@@ -27,7 +28,7 @@ This repository contains frameworks, case studies, and methods from my work desi
 ### [01 — Structural Coherence](case-studies/01-structural-coherence/)
 **`designed` · `proposed`**
 
-A 7-layer diagnostic framework for institutions where multiple pedagogical traditions coexist but compete for limited time and resources. Developed from observing how IB, Reggio Emilia, and Italian language immersion interact — and fail to interact — across a K-8 school with four campuses.
+A 6-layer diagnostic framework for institutions where multiple pedagogical traditions coexist but compete for limited time and resources. Developed from observing how IB, Reggio Emilia, and Italian language immersion interact — and fail to interact — across a K-8 school with four campuses.
 
 ### [02 — AI in the Classroom](case-studies/02-ai-classroom/)
 **`designed` · `proposed`**
@@ -72,7 +73,7 @@ See [publication-policy.md](publication-policy.md) for what is shared here, what
 ## About Me
 
 **Current**: Italian Language Program Coordinator & K-8 Educator, 4-campus IB international school, San Francisco
-**Previous**: Localization Program Manager, Google (2018-2020) · Research Associate & Lecturer, University of Cagliari (2012-2018) · PhD, Paris-Sorbonne University
+**Previous**: Localization Program Manager, Google (2019-2020) · Research Associate & Lecturer, University of Cagliari (2012-2018) · PhD, Paris-Sorbonne University
 **Languages**: Italian (native) · French (native) · English (C2) · Spanish (B2)
 
 ---
@@ -87,9 +88,9 @@ See [publication-policy.md](publication-policy.md) for what is shared here, what
 >
 > While maintaining a constant commitment to research and teaching — which allowed me to teach university courses and publish 10 books and more than 20 articles — I also managed the implementation of a localization project for a water treatment plant in North Africa, learning to manage larger projects with diverse stakeholders. This enabled me in my first phase of working life in San Francisco to work as a localization project manager for Google and successfully launch products in 40+ countries.
 >
-> In my phase at La Scuola I confronted myself with teaching elementary school children and learned in a few years the complexity of managing classroom dynamics with particular attention to the child, their needs, and the best way to accompany them on their journey. The methodologies the school promotes — Italian language immersion, IB framework, and Reggio-inspired approach — make the educational environment stimulating but at the same time are perceived as a heavy load for the teachers who operate within it.
+> In my phase at the school I confronted myself with teaching elementary school children and learned in a few years the complexity of managing classroom dynamics with particular attention to the child, their needs, and the best way to accompany them on their journey. The methodologies the school promotes — Italian language immersion, IB framework, and Reggio-inspired approach — make the educational environment stimulating but at the same time are perceived as a heavy load for the teachers who operate within it.
 >
-> In my journey at La Scuola I have reached a professional maturity where the management of my individual classroom is now consolidated and produces excellent results. What I would like to engage my highest competencies in are the structural challenges that would allow bringing excellence not to one grade but to all grades. Moving in this direction, I proposed the creation of an Italian curriculum — Lingua Viva — conceived with the school's methodological pillars in mind. I asked myself whether AI could facilitate data collection and our system of communicating this data in the transition between academic years, realizing that teachers operate mostly in isolation and this lack of alignment ultimately affects the learning trajectory of individual students and how families perceive it.
+> In my journey at the school I have reached a professional maturity where the management of my individual classroom is now consolidated and produces excellent results. What I would like to engage my highest competencies in are the structural challenges that would allow bringing excellence not to one grade but to all grades. Moving in this direction, I proposed the creation of an Italian curriculum — Lingua Viva — conceived with the school's methodological pillars in mind. I asked myself whether AI could facilitate data collection and our system of communicating this data in the transition between academic years, realizing that teachers operate mostly in isolation and this lack of alignment ultimately affects the learning trajectory of individual students and how families perceive it.
 >
 > Although these proposals may seem disparate and heterogeneous, they all address the improvement of the school's structure, which at this historical moment must find greater coherence and stronger reference points to sustain the growth and trust earned from its community.
 

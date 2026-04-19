@@ -30,9 +30,9 @@ The three identities are not the problem. The lack of a unifying architecture is
 
 ---
 
-## The Framework: 7 Layers
+## The Framework: 6 Layers
 
-After years of observing these dynamics — and after studying how other schools with similar challenges structure themselves — I developed a 7-layer framework designed to create institutional coherence without sacrificing the distinct value of each pedagogical tradition.
+After years of observing these dynamics — and after studying how other schools with similar challenges structure themselves — I developed a 6-layer framework designed to create institutional coherence without sacrificing the distinct value of each pedagogical tradition.
 
 ### Design Principles
 
@@ -42,21 +42,20 @@ After years of observing these dynamics — and after studying how other schools
 4. **Evidence-Based**: Every layer is grounded in research from IB best practices, language acquisition theory, and Reggio documentation methodology.
 5. **Phased Rollout**: Pilot with early adopters, validate with evidence, then scale. No school-wide mandates before proof of concept.
 
-### The 7 Layers
+### The 6 Layers
 
 | Layer | What It Addresses | Status |
 |-------|-------------------|--------|
-| **1. Guaranteed Curriculum** | Minimum competencies every student masters at each grade level — across language, math, self-management, and content | `designed` |
-| **2. Vertical Alignment** | Structures for K-8 continuity: vertical teams, handoff meetings, beginning-of-year assessment protocols | `designed` |
-| **3. Horizontal Collaboration** | Same-grade teams working on shared inquiry units, with Italian immersion integrated into IB transdisciplinary themes | `designed` |
-| **4. Documentation & Memory** | Institutional knowledge that survives teacher turnover — student profiles, strategy notes, what worked | `designed` |
-| **5. Assessment Coherence** | A unified assessment philosophy that satisfies IB standards, tracks CEFR progression, and honors Reggio documentation | `designed` |
-| **6. Community Communication** | How the school communicates its integrated identity to families — not three separate programs, but one coherent experience | `designed` |
-| **7. Professional Development** | Teacher learning designed around the integration challenge, not separate PD tracks for IB, immersion, and Reggio | `designed` |
+| **1. Institutional Direction** | Shared vision and protected collaboration time — the precondition for everything else | `designed` |
+| **2. Vertical Curriculum Alignment** | K-8 continuity maps with guaranteed minimum competencies per grade, vertical teams, handoff protocols | `designed` |
+| **3. Horizontal Alignment** | Same-grade teams working on shared inquiry units — 50% standardized, 50% flexible — with Italian immersion integrated into IB transdisciplinary themes | `designed` |
+| **4. Classroom Routine Structure** | Predictable routines and progressive consequences that reduce the 4-6 week grade-transition adjustment gap | `designed` |
+| **5. Documentation & Institutional Memory** | Knowledge that survives teacher turnover — student profiles, strategy notes, what worked. AI-assisted, voluntary in year 1 | `designed` |
+| **6. Language Integration** | CEFR K-8 proficiency targets (Pre-A1 to B2) with four-competency assessment across listening, speaking, reading, writing | `designed` |
 
 ### How the layers interact
 
-The layers are not sequential — they are interdependent. Layer 1 (what we teach) only works if Layer 2 (vertical alignment) ensures continuity across grades. Layer 4 (institutional memory) supports Layer 2 by preserving the knowledge that makes handoffs meaningful. Layer 5 (assessment) provides the evidence that Layer 1 needs to define "mastery."
+The layers are not sequential — they are interdependent. Layer 1 (institutional direction) creates the conditions for Layer 2 (vertical alignment) to function. Layer 5 (institutional memory) supports Layer 2 by preserving the knowledge that makes handoffs meaningful. Layer 6 (language integration) provides the proficiency targets that Layer 3 (horizontal alignment) needs to integrate immersion into IB inquiry.
 
 The framework is designed to be implemented in phases, starting with Layers 1 and 2 (highest impact, lowest disruption) and expanding outward as the school builds capacity and confidence.
 
@@ -66,9 +65,9 @@ The framework is designed to be implemented in phases, starting with Layers 1 an
 
 This framework emerged from a specific observation: that the three pedagogical traditions at my school are not the problem — they are the competitive advantage. The problem is that they were never architecturally integrated. Each tradition was implemented as if it were the only one, and teachers were left to reconcile the conflicts on their own, in real time, in the classroom.
 
-The 7-layer framework is my attempt to do that reconciliation at the structural level — so that teachers can focus on teaching instead of constantly navigating institutional incoherence.
+The 6-layer framework is my attempt to do that reconciliation at the structural level — so that teachers can focus on teaching instead of constantly navigating institutional incoherence.
 
-This thinking directly influenced my later work on [Lingua Viva](../03-lingua-viva/) (a curriculum that integrates all three traditions by design) and the [AI Classroom proposal](../02-ai-classroom/) (which addresses the institutional memory problem at Layer 4).
+This thinking directly influenced my later work on [Lingua Viva](../03-lingua-viva/) (a curriculum that integrates all three traditions by design) and the [AI Classroom proposal](../02-ai-classroom/) (which addresses the institutional memory problem at Layer 5).
 
 ---
 
