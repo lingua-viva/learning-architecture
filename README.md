@@ -73,7 +73,9 @@ See [publication-policy.md](publication-policy.md) for what is shared here, what
 ## About Me
 
 **Current**: Italian Language Program Coordinator & K-8 Educator, 4-campus IB international school, San Francisco
+**Recent**: Adjunct Lecturer, University of Paris Nanterre (2023–Dec 2025, concurrent — adult learning design)
 **Previous**: Localization Program Manager, Google (2018-2020) · Research Associate & Lecturer, University of Cagliari (2012-2018) · PhD, Paris-Sorbonne University
+**Professional Leadership**: AATI Conference Committee & California Chapter Organizer
 **Languages**: Italian (native) · French (native) · English (C2) · Spanish (B2)
 
 ---
