@@ -33,12 +33,12 @@ A 6-layer diagnostic framework for institutions where multiple pedagogical tradi
 ### [02 — AI in the Classroom](case-studies/02-ai-classroom/)
 **`designed` · `proposed`**
 
-An institutional proposal for using AI to solve the continuity problem — the loss of student knowledge when teachers change year to year. Two systems: teacher observation lenses (AI-summarized, accumulated K-8) and tiered adaptive learning (universal, targeted, intensive).
+An institutional proposal for using AI to strengthen continuity — preserving and enriching the knowledge teachers build about students as they progress through grades. Two systems: teacher observation lenses (AI-summarized, accumulated K-8) and tiered adaptive learning (universal, targeted, intensive).
 
 ### [03 — Lingua Viva](case-studies/03-lingua-viva/)
 **`designed`**
 
-A curriculum integration framework for building a vertically-aligned K-5 language immersion program that honors three pedagogical traditions simultaneously. Not an adaptation of an existing curriculum — built from zero to solve a problem no existing curriculum addresses.
+A curriculum integration framework for building a vertically-aligned K-5 language immersion program that honors three pedagogical traditions simultaneously. Not an adaptation of an existing curriculum — built from zero because no existing curriculum integrates IB, Reggio, and Italian immersion in a single design.
 
 ---
 

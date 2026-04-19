@@ -54,7 +54,7 @@ git push origin main
 learning-architecture/
 ├── case-studies/
 │   ├── 01-structural-coherence/    # 6-layer diagnostic framework
-│   ├── 02-ai-classroom/           # AI for continuity problem
+│   ├── 02-ai-classroom/           # AI for continuity opportunity
 │   └── 03-lingua-viva/            # K-5 curriculum integration
 ├── methods/
 │   ├── assessment-philosophy.md    # Evidence-based assessment (validated)

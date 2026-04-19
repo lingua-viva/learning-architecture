@@ -4,13 +4,13 @@
 
 ---
 
-## The Problem: Continuity
+## The Opportunity: Continuity
 
-When a student moves from Grade 2 to Grade 3, the new teacher starts from scratch.
+When a student moves from Grade 2 to Grade 3, the new teacher begins building their understanding of each child from the ground up.
 
-Learning styles, what worked, what didn't, which accommodations helped, which interventions were tried — this knowledge lives in the previous teacher's head. With teacher turnover, it disappears entirely. Students with specific learning needs are particularly affected: they spend the first weeks of each year being re-assessed for things that were already understood.
+Learning styles, effective strategies, accommodation history, intervention notes — this knowledge lives with the previous teacher. It transfers through conversations and handoff meetings, but the richness inevitably compresses. Students with specific learning needs feel this most: early weeks are spent re-establishing what was already understood. This is a universal challenge in education, not specific to any school — and it's one that AI can meaningfully address.
 
-This is not a technology problem. It is a structural problem — Layer 5 (Documentation & Institutional Memory) of the [Structural Coherence Framework](../01-structural-coherence/). But AI offers a specific, practical solution.
+This is a structural opportunity — Layer 5 (Documentation & Institutional Memory) of the [Structural Coherence Framework](../01-structural-coherence/). AI offers a specific, practical approach.
 
 ---
 
@@ -22,7 +22,7 @@ This is not a technology problem. It is a structural problem — Layer 5 (Docume
 
 **How it works**: Teachers record 2-3 minute voice notes about each student at key moments (end of unit, end of semester, year-end handoff). AI transcribes and summarizes these observations into the student profile. The profile accumulates year over year. New teachers read the profile before school starts.
 
-**What it replaces**: The current system where institutional knowledge about students lives in individual teachers' heads and leaves when they do.
+**What it enhances**: The existing handoff process — conversations, transition meetings, shared notes — by making the accumulated observations searchable, structured, and persistent across years.
 
 **What it does NOT do**: It does not assess students. It does not make instructional decisions. It does not interact with students. It is a teacher-facing documentation tool that uses AI to reduce the burden of writing while preserving the richness of observation.
 
@@ -56,9 +56,9 @@ This is not a technology problem. It is a structural problem — Layer 5 (Docume
 
 ## What Happened
 
-I presented this proposal to school leadership in March 2026. Leadership was appreciative but is processing institutional changes one at a time. The concrete response has been to expand my role as Italian Program Coordinator and support the development of a new curriculum framework — which suggests the structural thinking is valued, even if the AI-specific proposal has not yet been implemented.
+I presented this proposal to school leadership in March 2026. Leadership responded thoughtfully — recognizing the value of the structural thinking while managing institutional priorities. The concrete outcome was an expansion of my role as Italian Program Coordinator, with support for developing a new curriculum framework. This reflects a school that takes change seriously and sequences it deliberately.
 
-This is the reality of institutional change in education: good ideas move at the speed of organizational readiness, not at the speed of the person who had the idea. I consider this proposal a foundation document that will become relevant as the school's capacity for change grows.
+This is the reality of institutional change in education: meaningful innovation happens at the pace of organizational readiness. I see this proposal as a foundation document — one that establishes the design thinking for when the school is ready to implement it.
 
 ---
 

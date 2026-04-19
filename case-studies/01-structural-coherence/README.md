@@ -4,7 +4,7 @@
 
 ---
 
-## The Problem
+## The Challenge
 
 I work at an international school that operates at the intersection of three pedagogical traditions:
 
@@ -16,17 +16,17 @@ These three traditions are philosophically complementary but operationally in co
 
 ### What this looks like in practice
 
-**For students**: Difficult transitions between grades — 4-6 weeks of adjustment each year. Knowledge about what works for a child stays in the previous teacher's head and leaves when they do. Students with specific learning needs are particularly affected.
+**For students**: Grade transitions require adjustment — typically 4-6 weeks each year as new teachers learn what works for each child. Knowledge about a student's learning profile stays with the previous teacher, and students with specific learning needs feel the transition most acutely.
 
-**For teachers**: Frustration from lack of vertical alignment. Time spent filling gaps instead of teaching new content. Language objectives unclear and easy to sacrifice when IB inquiry units demand attention.
+**For teachers**: Vertical alignment across grades is an ongoing challenge in any multi-tradition school. Teachers invest significant time establishing baselines rather than building on prior work. Language objectives can be compressed when IB inquiry units require attention.
 
-**For families**: Complaints about year-to-year inconsistency. The perception that quality "depends on the teacher" rather than being structurally guaranteed.
+**For families**: Year-to-year consistency matters deeply to families. When coherence depends on individual teacher excellence rather than structural design, even a school with outstanding teachers can feel inconsistent.
 
-**For leadership**: Difficulty implementing lasting changes. Initiatives sacrificed for other priorities. No mechanism for institutional memory.
+**For leadership**: Sustaining institutional change requires systems, not just initiatives. Without a structural framework, even well-conceived improvements compete for bandwidth.
 
 ### Root cause
 
-The three identities are not the problem. The lack of a unifying architecture is. Each tradition has its own planning cycle, its own documentation requirements, its own definition of success. When time is constrained, IB wins (external accreditation pressure), language immersion is compressed, and Reggio documentation is abandoned. The result is inconsistency, not because teachers are inconsistent — but because the structure doesn't support coherence.
+The three traditions are a genuine strength — they create a learning environment richer than any single approach. The opportunity is in building a unifying architecture that lets each tradition contribute fully. Each has its own planning cycle, documentation requirements, and definition of success. When time is constrained — as it always is in schools — prioritization happens implicitly rather than by design. A structural framework makes that prioritization intentional and transparent.
 
 ---
 
@@ -65,11 +65,11 @@ The framework is designed to be implemented in phases, starting with Layers 1 an
 
 ## What I Learned
 
-This framework emerged from a specific observation: that the three pedagogical traditions at my school are not the problem — they are the competitive advantage. The problem is that they were never architecturally integrated. Each tradition was implemented as if it were the only one, and teachers were left to reconcile the conflicts on their own, in real time, in the classroom.
+This framework emerged from a specific observation: the three pedagogical traditions at my school are a genuine competitive advantage. The opportunity I saw was to create an architectural integration that would let each tradition contribute its full value. When multiple frameworks coexist without explicit design for how they interact, individual teachers carry the cognitive load of reconciling them — in real time, in the classroom.
 
-The 6-layer framework is my attempt to do that reconciliation at the structural level — so that teachers can focus on teaching instead of constantly navigating institutional incoherence.
+The 6-layer framework is my attempt to provide that structural support — so that teachers can focus on teaching, with the institutional architecture handling the coherence work behind the scenes.
 
-This thinking directly influenced my later work on [Lingua Viva](../03-lingua-viva/) (a curriculum that integrates all three traditions by design) and the [AI Classroom proposal](../02-ai-classroom/) (which addresses the institutional memory problem at Layer 5).
+This thinking directly influenced my later work on [Lingua Viva](../03-lingua-viva/) (a curriculum that integrates all three traditions by design) and the [AI Classroom proposal](../02-ai-classroom/) (which addresses the institutional memory opportunity at Layer 5).
 
 ---
 

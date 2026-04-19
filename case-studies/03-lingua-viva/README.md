@@ -4,13 +4,11 @@
 
 ---
 
-## The Problem
+## The Opportunity
 
-My school had no structured, vertically-aligned Italian language immersion curriculum. Four campuses, 200+ students across K-5, and no coherent program connecting what a first grader learns to what a fifth grader should be able to do.
+My school serves 200+ students across four campuses in a K-5 Italian language immersion program — and like most immersion programs worldwide, the curriculum evolved organically from the work of individual teachers rather than from a unified design.
 
-This is not unusual. Most bilingual immersion schools adapt existing curricula from single-tradition contexts. But my school operates at the intersection of three methodological pillars — IB inquiry, Italian language immersion, and Reggio-inspired pedagogy — and no existing curriculum integrates all three.
-
-The result was predictable: teachers worked in isolation, each designing their own approach. Quality depended on the individual teacher. Vertical alignment was aspirational. Families experienced inconsistency.
+This is common. Most bilingual immersion schools adapt existing curricula from single-tradition contexts. But my school operates at the intersection of three methodological pillars — IB inquiry, Italian language immersion, and Reggio-inspired pedagogy — and no existing curriculum integrates all three. The teachers are excellent, but they were each creating their own integration. The opportunity was to build a shared framework that honored their individual expertise while providing vertical coherence across grades.
 
 ---
 
@@ -26,7 +24,7 @@ Lingua Viva is a proposal to build a proprietary K-5 Italian language immersion 
 | **Italian Immersion** | CEFR proficiency progression (A1→B1), Ministerial Standards, authentic Italian content | Inquiry contexts to embed language learning, documentation of language development |
 | **Reggio Emilia** | Documentation as learning, emergent curriculum, child-led exploration, multimodal expression | Structured proficiency targets to anchor emergence, assessment coherence |
 
-The insight that drove this design: **these three pillars are not competing priorities. They are complementary systems that have never been architecturally integrated.** IB provides the inquiry structure. Italian immersion provides the linguistic rigor. Reggio provides the documentation methodology and respect for the child's voice. Together, they create something no single-tradition curriculum can offer.
+The insight that drove this design: **these three pillars are not competing priorities. They are complementary systems ready for architectural integration.** IB provides the inquiry structure. Italian immersion provides the linguistic rigor. Reggio provides the documentation methodology and respect for the child's voice. Together, they create something no single-tradition curriculum can offer.
 
 ---
 

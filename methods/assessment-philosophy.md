@@ -57,7 +57,7 @@ One example: a unit integrating economics, ethics, and real-world market experie
 
 2. **Data serves instruction**: I do not collect data for reporting. I collect data to make better instructional decisions. If an assessment result does not change what I do next, it is not worth the time it takes.
 
-3. **Transparency with families**: Families see Toddle portfolios, CEFR progress, and narrative reports. They know where their child is, where they are going, and what the evidence says. This builds trust and reduces the perception that quality "depends on the teacher."
+3. **Transparency with families**: Families see Toddle portfolios, CEFR progress, and narrative reports. They know where their child is, where they are going, and what the evidence says. This builds trust and reinforces families' confidence in the program's consistency.
 
 4. **Honest about what is measured and what is not**: Prove MT measures reading comprehension. It does not measure oral fluency, cultural competence, creative expression, or the ability to function in Italian in real life. These matter too — they are just harder to measure. I name this gap rather than pretending the metrics capture everything.
 
