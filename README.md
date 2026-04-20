@@ -38,7 +38,7 @@ An institutional proposal for using AI to strengthen continuity — preserving a
 ### [03 — Lingua Viva](case-studies/03-lingua-viva/)
 **`designed`**
 
-A programme guide for K-5 Italian language immersion — learning goals, activities, and assessment suggestions integrating IB PYP inquiry, CEFR progression, and Reggio-inspired multimodality. Currently evolving into a full Italian curriculum integrating Italy's Nuove Indicazioni Ministeriali with CEFR goals.
+A K-5 Italian language programme guide integrating four frameworks — Italy's Indicazioni Ministeriali, CEFR A1→B1 progression, IB PYP inquiry, and Reggio-inspired multimodality — into a single manual with learning goals, activities, assessment rubrics, and a student portfolio system. Part of a 3-year strategic initiative currently in the design and pilot phase.
 
 ---
 

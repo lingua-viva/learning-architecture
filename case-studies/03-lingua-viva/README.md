@@ -12,19 +12,33 @@ This is common. Most bilingual immersion schools adapt existing curricula from s
 
 ---
 
-## The Vision: One Curriculum, Three Traditions
+## The Vision: One Manual, Four Frameworks
 
-Lingua Viva is a K-5 Italian language immersion programme guide — a manual of learning goals, activities, and assessment suggestions that integrates all three pillars by design. Not a full curriculum yet, but the architectural foundation for one — a coherent framework where each tradition strengthens the others.
+Lingua Viva is a K-5 Italian language programme guide — a manual integrating four frameworks into a single coherent design:
 
-### What integration means in practice
+1. **Indicazioni Ministeriali italiane** (Italian national standards for L1)
+2. **CEFR progression A1→B1** (language acquisition for L2 learners in a bilingual context)
+3. **IB PYP inquiry pedagogy**
+4. **Reggio-inspired multimodality**
 
-| Pillar | What it contributes | What it needs from the others |
-|--------|-------------------|------------------------------|
-| **IB (PYP)** | Inquiry-based transdisciplinary themes, conceptual understanding, learner profile | Language proficiency targets, authentic cultural content, documentation methodology |
-| **Italian Immersion** | CEFR proficiency progression (A1→B1), Ministerial Standards, authentic Italian content | Inquiry contexts to embed language learning, documentation of language development |
-| **Reggio Emilia** | Documentation as learning, emergent curriculum, child-led exploration, multimodal expression | Structured proficiency targets to anchor emergence, assessment coherence |
+The manual is built around a pedagogical vision of language as three interconnected dimensions: *lingua come relazione* (language as relationship), *lingua come pensiero* (language as thinking), and *lingua come esperienza multimodale* (language as multimodal experience).
 
-The insight that drove this design: **these three pillars are not competing priorities. They are complementary systems ready for architectural integration.** IB provides the inquiry structure. Italian immersion provides the linguistic rigor. Reggio provides the documentation methodology and respect for the child's voice. Together, they create something no single-tradition curriculum can offer.
+Each grade volume contains four sections:
+- Disciplinary language pathway (Indicazioni Ministeriali)
+- CEFR acquisition progression (communicative functions, thematic vocabulary, oral routines, chunking)
+- Inquiry and multimodal activities (Socratic dialogues, explorations, projects, documentation)
+- Authentic assessment and portfolio (CEFR rubrics, writing samples, self-assessment, narrative observations)
+
+### How the four frameworks interact
+
+| Framework | What it contributes | What it needs from the others |
+|-----------|-------------------|------------------------------|
+| **Indicazioni Ministeriali** | Disciplinary rigor — reading, comprehension, text types, written production, linguistic reflection | Inquiry contexts, proficiency benchmarks for L2 learners, documentation methodology |
+| **CEFR (A1→B1)** | Structured proficiency progression — communicative functions, vocabulary, oral routines | Content to embed acquisition in, documentation of growth, assessment coherence |
+| **IB PYP** | Inquiry-based transdisciplinary themes, conceptual understanding, learner profile | Language proficiency targets, authentic cultural content |
+| **Reggio Emilia** | Documentation as learning, multimodal expression, child-led exploration | Structured targets to anchor emergence, assessment tools |
+
+The insight that drove this design: **these four frameworks are complementary systems ready for architectural integration.** The Indicazioni provide disciplinary depth. CEFR provides acquisition structure. IB provides the inquiry methodology. Reggio provides the documentation practice and respect for the child's voice. Together, they create something no single-framework manual can offer.
 
 ---
 
@@ -50,15 +64,26 @@ Lingua Viva is designed for my school's specific context, but the integration me
 
 ---
 
-## Current State
+## Current State and 3-Year Timeline
 
-Lingua Viva exists as a programme guide — learning goals, activities, and assessment suggestions across K-5. I am currently developing the next phase: a full Italian curriculum that integrates Italy's Nuove Indicazioni Ministeriali with CEFR goals into a vertically-aligned system. The next steps are:
+Lingua Viva is designed as a 3-year strategic initiative:
 
-1. Integrate the Nuove Indicazioni Ministeriali standards with existing CEFR targets and IB PYP scope and sequence
-2. Map the programme guide content against these integrated standards to identify development priorities
-3. Develop the first curriculum units in collaboration with teaching teams
-4. Pilot, collect feedback, iterate
-5. Expand to a full K-5 vertically-aligned curriculum
+**Year 1 (2026-27): Design & Pilot**
+- Alignment of Indicazioni Ministeriali + CEFR + IB PYP + Reggio frameworks
+- Design of the Language Acquisition Lab (Laboratorio Linguistico)
+- G3 pilot manual with full 4-section structure
+- Draft G1-G2, structural outline G4-G5
+
+**Year 2 (2027-28): Finalization & Implementation**
+- Internal publication of G3
+- Finalization of G1-G2
+- Development of G4-G5
+- Implementation, observation, and revision cycle
+
+**Year 3 (2028-29): Consolidation & Publication**
+- Full adoption G1-G5
+- Final revision based on 2 years of implementation data
+- Potential editorial publication — the integration of four frameworks into a single proprietary manual is, to my knowledge, unique globally among IB PYP schools with Italian immersion
 
 ---
 
