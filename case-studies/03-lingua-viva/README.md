@@ -1,4 +1,4 @@
-# Lingua Viva: Building a Curriculum from Zero
+# Lingua Viva: Building a Programme Guide from Zero
 
 **Status**: `designed` — active development with teaching teams
 
@@ -14,7 +14,7 @@ This is common. Most bilingual immersion schools adapt existing curricula from s
 
 ## The Vision: One Curriculum, Three Traditions
 
-Lingua Viva is a proposal to build a proprietary K-5 Italian language immersion curriculum that integrates all three pillars by design — not as three separate layers stacked on top of each other, but as a single coherent framework where each tradition strengthens the others.
+Lingua Viva is a K-5 Italian language immersion programme guide — a manual of learning goals, activities, and assessment suggestions that integrates all three pillars by design. Not a full curriculum yet, but the architectural foundation for one — a coherent framework where each tradition strengthens the others.
 
 ### What integration means in practice
 
@@ -52,13 +52,13 @@ Lingua Viva is designed for my school's specific context, but the integration me
 
 ## Current State
 
-Lingua Viva is in the design phase. I have proposed it to school leadership and received approval to develop it as part of an expanded coordinator role. The next steps are:
+Lingua Viva exists as a programme guide — learning goals, activities, and assessment suggestions across K-5. I am currently developing the next phase: a full Italian curriculum that integrates Italy's Nuove Indicazioni Ministeriali with CEFR goals into a vertically-aligned system. The next steps are:
 
-1. Map existing content across K-5 against CEFR targets and IB PYP scope and sequence
-2. Identify gaps and redundancies in the current unstructured approach
-3. Develop the first integrated units in collaboration with Grade 1-3 teaching teams
+1. Integrate the Nuove Indicazioni Ministeriali standards with existing CEFR targets and IB PYP scope and sequence
+2. Map the programme guide content against these integrated standards to identify development priorities
+3. Develop the first curriculum units in collaboration with teaching teams
 4. Pilot, collect feedback, iterate
-5. Expand to K-5 with a 3-year implementation roadmap
+5. Expand to a full K-5 vertically-aligned curriculum
 
 ---
 

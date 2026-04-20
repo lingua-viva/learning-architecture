@@ -38,7 +38,7 @@ An institutional proposal for using AI to strengthen continuity — preserving a
 ### [03 — Lingua Viva](case-studies/03-lingua-viva/)
 **`designed`**
 
-A curriculum integration framework for building a vertically-aligned K-5 language immersion program that honors three pedagogical traditions simultaneously. Not an adaptation of an existing curriculum — built from zero because no existing curriculum integrates IB, Reggio, and Italian immersion in a single design.
+A programme guide for K-5 Italian language immersion — learning goals, activities, and assessment suggestions integrating IB PYP inquiry, CEFR progression, and Reggio-inspired multimodality. Currently evolving into a full Italian curriculum integrating Italy's Nuove Indicazioni Ministeriali with CEFR goals.
 
 ---
 
@@ -76,7 +76,7 @@ See [publication-policy.md](publication-policy.md) for what is shared here, what
 **Recent**: Adjunct Lecturer, University of Paris Nanterre (2023–Dec 2025, concurrent — adult learning design)
 **Previous**: Localization Program Manager, Google (2018-2020) · Research Associate & Lecturer, University of Cagliari (2012-2018) · PhD, Paris-Sorbonne University
 **Professional Leadership**: AATI Conference Committee & California Chapter Organizer
-**Languages**: Italian (native) · French (native) · English (C2) · Spanish (B2)
+**Languages**: Italian (native) · French (native) · English (C2) · Spanish (conversational)
 
 ---
 

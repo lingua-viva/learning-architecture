@@ -69,7 +69,7 @@ This framework emerged from a specific observation: the three pedagogical tradit
 
 The 6-layer framework is my attempt to provide that structural support — so that teachers can focus on teaching, with the institutional architecture handling the coherence work behind the scenes.
 
-This thinking directly influenced my later work on [Lingua Viva](../03-lingua-viva/) (a curriculum that integrates all three traditions by design) and the [AI Classroom proposal](../02-ai-classroom/) (which addresses the institutional memory opportunity at Layer 5).
+This thinking directly influenced my later work on [Lingua Viva](../03-lingua-viva/) (a programme guide that integrates all three traditions by design) and the [AI Classroom proposal](../02-ai-classroom/) (which addresses the institutional memory opportunity at Layer 5).
 
 ---
 
