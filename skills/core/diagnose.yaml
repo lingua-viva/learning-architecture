@@ -1,0 +1,32 @@
+# DIAGNOSE Skill — Root cause isolation, 5-whys
+name: diagnose
+description: >
+  Root cause analysis through structured decomposition. 5-whys pattern.
+  Diagnosis paths are high-value memory — they record which paths
+  led to identifying the root cause.
+trigger_patterns:
+  - "why"
+  - "broken"
+  - "failing"
+  - "error"
+  - "not working"
+  - "stuck"
+  - "debug"
+  - "diagnose"
+  - "root cause"
+ontology_mapping:
+  primary: "CORE-DIAGNOSE"
+  domains: [core]
+model_routing:
+  reason: "ollama/qwen2.5:3b"
+  research: "perplexity/sonar-pro"
+  synthesize: "ollama/qwen2.5:3b"
+governance:
+  blocks_external: false
+  requires_local: false
+  pii_sanitizer: active
+  evidence_tier_required: 2
+memory_integration:
+  record_path: true
+  record_decision: true
+  high_value_path: true  # Diagnosis paths weighted higher

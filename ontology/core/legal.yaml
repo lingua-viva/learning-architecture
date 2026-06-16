@@ -1,0 +1,168 @@
+domain: legal
+version: '1.0'
+description: Privilege, compliance, deadlines, risk. Legal-specific nodes.
+nodes:
+- id: MC-LEGAL-001
+  name: Privilege Assessment
+  description: Determine if content is attorney-client privileged. Must never leave
+    the machine.
+  domain: legal
+  signals:
+  - privilege
+  - attorney-client
+  - privileged communication
+  - work product
+  - legal privilege
+  blocks_external: true
+  requires_local: true
+  default_intent: PROTECT
+  artifacts:
+  - privilege_log
+  failure_modes:
+    silent:
+    - privilege waived unknowingly by disclosing to external model
+    loud:
+    - privilege determination wrong
+  reversibility: one_way
+  parent: INTENT-PROTECT
+  success_conditions:
+    execution: privilege determination made
+    outcome: privileged content never disclosed externally
+    safety: privilege log maintained
+  produces:
+  - privilege_log
+  requires: []
+  suggests_next:
+  - MC-LEGAL-004
+- id: MC-LEGAL-002
+  name: Legal Research
+  description: Find precedent, statute, regulation. External research governed.
+  domain: legal
+  signals:
+  - legal research
+  - precedent
+  - statute
+  - regulation
+  - case law
+  - citation
+  blocks_external: false
+  default_intent: RESEARCH
+  artifacts:
+  - research_memo
+  - citation_list
+  reversibility: two_way
+  parent: INTENT-RESEARCH
+  produces:
+  - research_memo
+  - citation_list
+  requires: []
+  suggests_next:
+  - MC-WORK-003
+  failure_modes:
+    silent:
+    - outdated precedent cited
+    loud:
+    - hallucinated citation
+- id: MC-LEGAL-003
+  name: Obligation / Deadline Tracking
+  description: Monitor legal, regulatory, consent, filing, and response deadlines.
+  domain: legal
+  signals:
+  - deadline
+  - filing deadline
+  - obligation
+  - due date
+  - response deadline
+  - court date
+  - regulatory deadline
+  blocks_external: false
+  default_intent: CREATE
+  artifacts:
+  - obligation_register
+  - deadline_calendar
+  - alert_config
+  failure_modes:
+    silent:
+    - missed obligation — deadline passes without alert
+    loud:
+    - late escalation — deadline discovered with insufficient time
+  reversibility: one_way
+  parent: INTENT-CREATE
+  produces:
+  - obligation_register
+  - deadline_calendar
+  - alert_config
+  requires: []
+  suggests_next:
+  - MC-DEPLOY-005
+- id: MC-LEGAL-004
+  name: Contract Review
+  description: Analyze contract terms, flag risks. Sensitive content never leaves
+    machine.
+  domain: legal
+  signals:
+  - contract
+  - clause
+  - terms
+  - contract review
+  - agreement
+  - amendment
+  blocks_external: true
+  requires_local: true
+  default_intent: DECIDE
+  artifacts:
+  - clause_analysis
+  - risk_matrix
+  reversibility: two_way
+  parent: INTENT-DECIDE
+  success_conditions:
+    execution: contract clauses reviewed and annotated
+    outcome: risks flagged before signing
+    safety: no sensitive terms missed
+  produces:
+  - clause_analysis
+  - risk_matrix
+  requires: []
+  suggests_next:
+  - MC-WORK-003
+  - MC-LEGAL-005
+  failure_modes:
+    silent:
+    - ambiguous clause risk missed
+    loud:
+    - critical liability clause missed
+- id: MC-LEGAL-005
+  name: Compliance Audit
+  description: Verify regulatory compliance. GDPR, HIPAA, COPPA, industry-specific.
+  domain: legal
+  signals:
+  - compliance audit
+  - regulatory compliance
+  - audit
+  - GDPR compliance
+  - HIPAA compliance
+  blocks_external: false
+  default_intent: REFLECT
+  artifacts:
+  - compliance_checklist
+  - gap_report
+  dependencies:
+  - MC-DATA-006
+  reversibility: two_way
+  parent: INTENT-REFLECT
+  success_conditions:
+    execution: compliance checklist completed
+    outcome: all gaps identified with remediation plan
+    safety: regulatory deadlines met
+  produces:
+  - compliance_checklist
+  - gap_report
+  requires:
+  - privacy_impact_assessment
+  suggests_next:
+  - MC-WORK-003
+  failure_modes:
+    silent:
+    - compliance gap rationalized away
+    loud:
+    - regulatory deadline missed

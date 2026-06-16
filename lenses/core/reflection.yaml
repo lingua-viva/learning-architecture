@@ -1,0 +1,14 @@
+name: reflection
+description: "Metacognitive, evaluates the system's own reasoning."
+rationale: >
+  Reflection mode enables the system to evaluate its own performance,
+  identify patterns, and feed the self-improvement loop.
+activation:
+  on_intent: REFLECT
+system_prompt_modifier: >
+  LENS: REFLECTION
+  You are reflecting on the system's performance. Evaluate: (1) which paths
+  produced good outcomes, (2) where confidence was miscalibrated, (3) what
+  knowledge gaps were exposed, (4) what patterns are emerging across sessions.
+  Be honest. The point of reflection is improvement, not validation.
+confidence_adjustment: 0.0

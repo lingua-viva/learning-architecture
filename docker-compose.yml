@@ -1,0 +1,21 @@
+# Mission Canvas — Docker Compose (Production Deploy)
+# Each phase adds services. This file grows organically.
+# Dev: use ./mc commands directly (no containers needed)
+# Production: docker compose up -d
+
+services:
+  sanitizer:
+    build: ./sanitizer
+    ports:
+      - "6100:6100"
+    environment:
+      - MC_SANITIZER_PORT=6100
+      - MC_SANITIZER_BLOCK_SIGNALS=${MC_SANITIZER_BLOCK_SIGNALS:-}
+    volumes:
+      - ./sanitizer/data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:6100/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

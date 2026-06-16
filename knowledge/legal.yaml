@@ -1,0 +1,221 @@
+domain: legal
+version: '1.0'
+entries:
+- id: KL-LEGAL-001
+  title: Heppner v. Alyeska Pipeline Service Co. (SDNY 2026)
+  content: 'AI-generated legal research containing fabricated citations constitutes professional negligence. Attorneys have
+    a duty to verify all citations produced by AI tools. The court held that reliance on AI output without verification violates
+    the duty of competence under Model Rule 1.1.
+
+    '
+  ontology_nodes:
+  - RIU-701
+  evidence_tier: 1
+  citations:
+  - Heppner v. Alyeska Pipeline Service Co., No. 1:26-cv-00XXX (S.D.N.Y. Feb. 2026)
+  - Model Rules of Professional Conduct, Rule 1.1 (Competence)
+  tags:
+  - AI
+  - legal research
+  - professional negligence
+  - citation verification
+  verified: true
+- id: KL-LEGAL-002
+  title: Delaware Fiduciary Duty Framework
+  content: 'Delaware corporate law imposes three fiduciary duties on directors and officers: (1) Duty of Care — informed decision-making
+    with reasonably available information, protected by the business judgment rule (Aronson v. Lewis, 473 A.2d 805 (Del. 1984));
+    (2) Duty of Loyalty — no self-dealing, corporate opportunity doctrine; (3) Duty of Good Faith — cannot consciously disregard
+    duties (Stone v. Ritter, 911 A.2d 362 (Del. 2006), incorporating Caremark (In re Caremark Int''l Inc. Derivative Litig.,
+    698 A.2d 959 (Del. Ch. 1996))). Enhanced scrutiny under Revlon applies when the board decides to sell the company.
+
+    '
+  ontology_nodes:
+  - RIU-709
+  evidence_tier: 1
+  citations:
+  - Aronson v. Lewis, 473 A.2d 805 (Del. 1984)
+  - Stone v. Ritter, 911 A.2d 362 (Del. 2006)
+  - In re Caremark Int'l Inc. Derivative Litig., 698 A.2d 959 (Del. Ch. 1996)
+  - Revlon, Inc. v. MacAndrews & Forbes Holdings, Inc., 506 A.2d 173 (Del. 1986)
+  tags:
+  - fiduciary duty
+  - Delaware
+  - corporate governance
+  - Caremark
+  - Revlon
+  verified: true
+- id: KL-LEGAL-003
+  title: Attorney-Client Privilege Doctrine
+  content: 'Attorney-client privilege protects confidential communications between attorney and client made for the purpose
+    of obtaining or providing legal advice. Elements: (1) communication, (2) between privileged persons, (3) in confidence,
+    (4) for the purpose of obtaining or providing legal advice. The privilege belongs to the client, not the attorney. It
+    can be waived by voluntary disclosure. Crime-fraud exception applies when the communication furthers a crime or fraud.
+    Work product doctrine (Hickman v. Taylor, 329 U.S. 495 (1947)) provides additional protection for materials prepared in
+    anticipation of litigation.
+
+    '
+  ontology_nodes:
+  - RIU-700
+  - RIU-707
+  evidence_tier: 1
+  citations:
+  - Upjohn Co. v. United States, 449 U.S. 383 (1981)
+  - Hickman v. Taylor, 329 U.S. 495 (1947)
+  - Fed. R. Evid. 502 (waiver)
+  tags:
+  - privilege
+  - confidentiality
+  - work product
+  - waiver
+  verified: true
+- id: KL-LEGAL-004
+  title: GDPR Core Principles
+  content: 'The General Data Protection Regulation (EU 2016/679) establishes seven principles for processing personal data:
+    (1) Lawfulness, fairness, transparency; (2) Purpose limitation; (3) Data minimization; (4) Accuracy; (5) Storage limitation;
+    (6) Integrity and confidentiality; (7) Accountability. Data subjects have rights including: access, rectification, erasure
+    ("right to be forgotten"), data portability, and objection to automated decision-making. Fines up to 4% of global annual
+    turnover or EUR 20 million, whichever is higher.
+
+    '
+  ontology_nodes:
+  - RIU-705
+  evidence_tier: 1
+  citations:
+  - Regulation (EU) 2016/679 (GDPR)
+  - Art. 5 GDPR (Principles)
+  - Art. 83 GDPR (Fines)
+  tags:
+  - GDPR
+  - data privacy
+  - EU
+  - personal data
+  - data protection
+  verified: true
+- id: KL-LEGAL-005
+  title: COPPA 2.0 Compliance Requirements
+  content: 'The Children''s Online Privacy Protection Act (COPPA) as amended in 2026 requires opt-in parental consent before
+    collecting personal information from children under 13. Schools acting in loco parentis can consent on behalf of parents
+    for educational purposes only. Fines: up to $51,744 per child per violation. New requirements include: algorithmic transparency
+    for child-directed services, data minimization for educational technology, and annual compliance audits.
+
+    '
+  ontology_nodes:
+  - RIU-705
+  evidence_tier: 1
+  citations:
+  - 15 U.S.C. §§ 6501-6506 (COPPA)
+  - 16 C.F.R. Part 312 (FTC COPPA Rule)
+  - FTC Enforcement Actions 2025-2026
+  tags:
+  - COPPA
+  - children
+  - privacy
+  - education
+  - consent
+  verified: true
+- id: KL-LEGAL-006
+  title: EU AI Act Classification Framework
+  content: 'The EU AI Act (2024/1689) classifies AI systems into four risk tiers: (1) Unacceptable risk — banned (social scoring,
+    real-time biometric in public); (2) High risk — regulated (employment, credit, education, law enforcement); (3) Limited
+    risk — transparency obligations (chatbots must disclose AI); (4) Minimal risk — no obligations. General-purpose AI models
+    have additional transparency and copyright compliance obligations. Full enforcement begins August 2026 for high-risk systems.
+
+    '
+  ontology_nodes:
+  - RIU-705
+  evidence_tier: 1
+  citations:
+  - Regulation (EU) 2024/1689 (AI Act)
+  - Art. 6 AI Act (Classification Rules)
+  - Art. 52 AI Act (Transparency Obligations)
+  tags:
+  - AI Act
+  - EU
+  - AI governance
+  - risk classification
+  verified: true
+- id: KL-LEGAL-007
+  title: Conflict of Interest Rules — Model Rules 1.7-1.10
+  content: 'Model Rule 1.7 prohibits representation where a concurrent conflict exists unless: (1) lawyer reasonably believes
+    representation is not adversely affected, (2) representation is not prohibited by law, (3) clients are not opposed in
+    same litigation, (4) each client gives informed written consent. Rule 1.9 addresses former client conflicts. Rule 1.10
+    addresses imputed disqualification — a firm-wide prohibition based on one lawyer''s conflict. Screening provisions under
+    Rule 1.10(a)(2) may apply for lateral hires.
+
+    '
+  ontology_nodes:
+  - RIU-703
+  evidence_tier: 1
+  citations:
+  - Model Rules of Professional Conduct, Rules 1.7-1.10
+  - ABA Formal Ethics Opinion 509 (2024)
+  tags:
+  - conflict of interest
+  - ethics
+  - disqualification
+  - screening
+  verified: true
+- id: KL-LEGAL-008
+  title: e-Discovery Proportionality Standard
+  content: 'Following the 2015 amendments to Fed. R. Civ. P. 26(b)(1), discovery must be proportional to the needs of the
+    case. Factors: importance of issues, amount in controversy, parties'' resources, importance of discovery to case, burden
+    relative to benefit. Predictive coding / TAR accepted as reasonable (Rio Tinto v. Vale, 306 F.R.D. 125 (S.D.N.Y. 2015)).
+    Preservation obligations attach when litigation is reasonably anticipated.
+
+    '
+  ontology_nodes:
+  - RIU-707
+  evidence_tier: 1
+  citations:
+  - Fed. R. Civ. P. 26(b)(1)
+  - Rio Tinto PLC v. Vale S.A., 306 F.R.D. 125 (S.D.N.Y. 2015)
+  - Zubulake v. UBS Warburg LLC, 229 F.R.D. 422 (S.D.N.Y. 2004)
+  tags:
+  - e-discovery
+  - proportionality
+  - TAR
+  - preservation
+  verified: true
+- id: KL-LEGAL-009
+  title: Securities Disclosure Requirements (Material Information)
+  content: 'Material information is any information that a reasonable investor would consider important in making an investment
+    decision (TSC Industries v. Northway, 426 U.S. 438 (1976)). Companies must disclose material information promptly via
+    SEC filings (10-K, 10-Q, 8-K). Insider trading prohibition: trading on material nonpublic information (MNPI) violates
+    Section 10(b) of the Securities Exchange Act and Rule 10b-5.
+
+    '
+  ontology_nodes:
+  - RIU-705
+  evidence_tier: 1
+  citations:
+  - TSC Industries, Inc. v. Northway, Inc., 426 U.S. 438 (1976)
+  - Securities Exchange Act § 10(b), 15 U.S.C. § 78j(b)
+  - SEC Rule 10b-5, 17 C.F.R. § 240.10b-5
+  tags:
+  - securities
+  - disclosure
+  - materiality
+  - insider trading
+  - MNPI
+  verified: true
+- id: KL-LEGAL-010
+  title: Non-Compete Enforceability Post-FTC Rule
+  content: 'The FTC''s Non-Compete Clause Rule (2024) broadly bans non-competes for most workers. Exceptions: existing non-competes
+    for senior executives (policy-making position + total annual compensation > $151,164), and non-competes in connection
+    with bona fide sale of a business. State law varies significantly — California bans non-competes entirely under Business
+    and Professions Code § 16600.
+
+    '
+  ontology_nodes:
+  - RIU-701
+  - RIU-704
+  evidence_tier: 1
+  citations:
+  - FTC Non-Compete Clause Rule, 16 C.F.R. Part 910 (2024)
+  - Cal. Bus. & Prof. Code § 16600
+  tags:
+  - non-compete
+  - employment
+  - FTC
+  - California
+  verified: true

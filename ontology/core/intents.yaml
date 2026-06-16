@@ -1,0 +1,142 @@
+domain: intents
+version: '1.0'
+description: "Intent classification — what do you want to do? Scored in a separate pass from domain."
+nodes:
+- id: INTENT-PROTECT
+  name: Protect
+  description: Local-only analysis. No external calls. PII/PHI lock.
+  domain: intents
+  signals:
+  - confidential
+  - privileged
+  - private
+  - secret
+  - sensitive
+  - personal
+  - client
+  - patient
+  - not for sharing
+  - internal only
+  - off the record
+  - between us
+  - NDA
+  - trade secret
+  - proprietary
+  blocks_external: true
+  requires_local: true
+  default_intent: PROTECT
+
+- id: INTENT-RESEARCH
+  name: Research
+  description: External research allowed. Perplexity, web search, live data.
+  domain: intents
+  signals:
+  - find
+  - search
+  - look up
+  - what is
+  - who is
+  - latest
+  - current
+  - recent
+  - news
+  - research
+  - investigate
+  - explore
+  - compare
+  - market
+  - competitors
+  - trends
+  blocks_external: false
+  default_intent: RESEARCH
+
+- id: INTENT-DECIDE
+  name: Decide
+  description: Reversibility analysis. One-way door detection. Tradeoff evaluation.
+  domain: intents
+  signals:
+  - should I
+  - decide
+  - choose
+  - option
+  - tradeoff
+  - risk
+  - irreversible
+  - one-way door
+  - commit
+  - approve
+  - reject
+  - go/no-go
+  - recommend
+  - best approach
+  - weigh
+  - evaluate
+  blocks_external: false
+  default_intent: DECIDE
+
+- id: INTENT-CREATE
+  name: Create
+  description: Artifact generation. Templates applied. Build something.
+  domain: intents
+  signals:
+  - write
+  - create
+  - generate
+  - build
+  - draft
+  - compose
+  - design
+  - make
+  - produce
+  - outline
+  - template
+  - format
+  - code
+  - implement
+  blocks_external: false
+  default_intent: CREATE
+
+- id: INTENT-DIAGNOSE
+  name: Diagnose
+  description: Root cause analysis. Failure mode matching. Debug.
+  domain: intents
+  signals:
+  - why
+  - broken
+  - failing
+  - error
+  - bug
+  - not working
+  - wrong
+  - issue
+  - problem
+  - root cause
+  - debug
+  - troubleshoot
+  - diagnose
+  - stuck
+  - blocked
+  blocks_external: false
+  default_intent: DIAGNOSE
+
+- id: INTENT-REFLECT
+  name: Reflect
+  description: Self-audit. Pattern extraction. Path review. What did we learn.
+  domain: intents
+  signals:
+  - reflect
+  - review
+  - lesson
+  - learned
+  - improve
+  - retrospective
+  - what went well
+  - what went wrong
+  - pattern
+  - meta
+  - self-assess
+  - audit
+  - health check
+  - how are we doing
+  blocks_external: false
+  default_intent: REFLECT

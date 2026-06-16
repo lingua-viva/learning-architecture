@@ -1,0 +1,2181 @@
+domain: ai-enablement
+version: '1.0'
+description: Imported from Palette taxonomy v1.3. 111 nodes.
+imported_from: palette/taxonomy/releases/v1.3/
+nodes:
+- id: RIU-001
+  name: Convergence Brief (Semantic Blueprint)
+  description: Engagement starts underspecified; stakeholders differ on goals, constraints, and non-goals.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - new engagement
+  - conflicting asks
+  - paid commitment
+  - rebrand messaging risk
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-002
+  name: Stakeholder Map + RACI-lite
+  description: Decisions slow or blocked because ownership and approval paths unclear.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - scoping engagement
+  - change in mgmt context
+  - ambiguous requirements
+  - stakeholder alignment needed
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-003
+  name: Decision Log + One-Way Door Registry
+  description: Half-decisions and hidden commitments accumulate under pressure.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - scoping engagement
+  - quality concerns
+  - ambiguous requirements
+  - reliability concerns
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-004
+  name: Problem → Workstream Decomposition
+  description: Need expansive decomposition without committing to a plan.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - scoping engagement
+  - schema needs
+  - ambiguous requirements
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-005
+  name: Scope Freeze + Phased Delivery Contract
+  description: Customer expects fast delivery; scope must be bounded into phases.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - scoping-incident-response
+  - schema needs
+  - ambiguous requirements
+  - production deployment needed
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-006
+  name: Success Metrics Charter
+  description: Undefined success leads to churn and rework.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - debates about 'good'
+  - no KPI
+  - success criteria unclear
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-007
+  name: Constraint Profile Capture
+  description: Hidden constraints (latency, compliance, budget) break design late.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - security asks
+  - latency SLA
+  - budget cap
+  - compliance requirements
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-008
+  name: Assumptions Register
+  description: Work proceeds on assumptions; they must be explicit and testable.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - scoping-testing
+  - quality concerns
+  - testing needed before shipping
+  - ambiguous requirements
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-009
+  name: Risk Register + Mitigation Plan
+  description: Delivery risks need containment and owner assignment.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - scoping-testing
+  - ambiguous requirements
+  - reliability concerns
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-010
+  name: Access & Permissions Readiness Checklist
+  description: Blocked delivery due to missing credentials, network access, or unclear data movement constraints.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - testing engagement
+  - quality concerns
+  - unclear inputs/outputs
+  - access issues
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-011
+  name: Data Contract Freeze (Schemas + Samples)
+  description: Shifting schemas across sources cause downstream rework.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - schema engagement
+  - data contract needed
+  - unclear inputs/outputs
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-012
+  name: PII/Compliance Triage (Controls Plan)
+  description: Regulated data or compliance requirements constrain design and tooling.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - quality concerns
+  - discovery engagement
+  - compliance/audit requirements
+  - unclear inputs/outputs
+  blocks_external: true
+  requires_local: true
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-013
+  name: Source-of-Truth Inventory
+  description: Multiple systems exist; unclear which is authoritative for each datum.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - scoping engagement
+  - security concerns
+  - unclear inputs/outputs
+  - ambiguous requirements
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-014
+  name: Data Sampling + Edge-Case Catalog
+  description: Data fails in reality due to edge cases not seen during development.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - testing-data
+  - quality concerns
+  - testing needed before shipping
+  - unclear inputs/outputs
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: CREATE
+  default_lens: null
+- id: RIU-015
+  name: Contract for Outputs (API/Events/Files)
+  description: Downstream consumers need stable outputs; unclear payload/SLA/semantics.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - schema engagement
+  - API needed
+  - unclear inputs/outputs
+  - production deployment
+  - ONE-WAY DOOR risk
+  blocks_external: true
+  requires_local: true
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-016
+  name: API Contract Review + Versioning Plan
+  description: API changes break customers.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - quality concerns
+  - API engagement
+  - API interface needed
+  - unclear inputs/outputs
+  blocks_external: true
+  requires_local: true
+  escalates_to:
+  - RIU-015
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-017
+  name: Connector Spec (Source/Target)
+  description: Need to build/configure a connector reliably.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - integration engagement
+  - requirements needed
+  - spec/requirements document
+  - testing before shipping
+  - unclear inputs/outputs
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-010
+  - RIU-011
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-018
+  name: Schema Mapping Table (Source→Target)
+  description: Field mapping causes endless churn.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - schema engagement
+  - testing engagement
+  - data contract needed
+  - testing before shipping
+  - unclear inputs/outputs
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-011
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-019
+  name: Data Lineage Sketch (Minimal)
+  description: Need to understand data movement and dependencies.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - scoping engagement
+  - data engagement
+  - unclear inputs/outputs
+  - ambiguous requirements
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-013
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-020
+  name: Baseline Behavior Snapshot
+  description: Baseline unknown; risk of regressions.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - testing-schema
+  - quality concerns
+  - core behavior/logic changes needed
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: RESEARCH
+  default_lens: null
+- id: RIU-021
+  name: Golden Set + Offline Evaluation Harness
+  description: Quality needs measurement without perfect telemetry.
+  domain: ai-enablement
+  parent: CORE-RESEARCH
+  signals:
+  - evaluation engagement
+  - quality concerns
+  - reliability concerns
+  - core behavior/logic changes
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-022
+  name: Prompt Interface Contract
+  description: Prompting drifts; unclear variables and output format.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - schema engagement
+  - prompting engagement
+  - data contract needed
+  - core behavior/logic changes
+  - unclear inputs/outputs
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-023
+  name: Deterministic-First Pipeline Split
+  description: LLM used where deterministic logic would be safer; need containment.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - quality concerns
+  - schema engagement
+  - core behavior/logic changes
+  - reliability concerns
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-024
+  name: Sidecar Augmentation Pattern
+  description: Augment existing system without rewriting it.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - schema engagement
+  - docs engagement
+  - data contract needed
+  - core behavior/logic changes
+  - production deployment
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-025
+  name: Freshness/Staleness Rules (Deterministic)
+  description: Recommendations stale; ingestion lag exists; removals silent.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - testing-schema
+  - testing before shipping
+  - reliability concerns
+  - core behavior/logic changes
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: CREATE
+  default_lens: null
+- id: RIU-026
+  name: Hybrid Similarity (Enums + Embeddings)
+  description: Need 'seen this before' exemplars for faster operator reasoning.
+  domain: ai-enablement
+  parent: CORE-RESEARCH
+  signals:
+  - need similar past cases
+  - hard to route/triage
+  - embedding/semantic similarity search
+  - nearest-neighbor retrieval
+  - keyword search fails
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: CREATE
+  default_lens: null
+- id: RIU-027
+  name: Reranking Layer (Post-Retrieval)
+  description: Baseline retrieval exists; need better ordering without changing index.
+  domain: ai-enablement
+  parent: CORE-RESEARCH
+  signals:
+  - retrieval engagement
+  - ranking engagement
+  - core behavior/logic changes
+  - reliability concerns
+  - search/retrieval quality issues
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-028
+  name: Schema-Constrained Generation
+  description: Outputs must be machine-usable; free-form text breaks downstream.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - quality-testing
+  - schema engagement
+  - data contract needed
+  - core behavior/logic changes
+  - reliability concerns
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: CREATE
+  default_lens: null
+- id: RIU-029
+  name: Tool-Calling Safety Envelope
+  description: Agents can call tools; must limit blast radius and enforce permissions.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - agent-design
+  - quality concerns
+  - reliability concerns
+  - core behavior/logic changes
+  - compliance/audit requirements
+  - governance
+  - governed
+  - governed execution
+  - execution adapter
+  - sanitizer
+  - sanitize
+  - data boundary
+  - pii gate
+  - pii
+  - phi boundary
+  - phi
+  - outbound filter
+  - firewall
+  - entry gate
+  - exit gate
+  - safety envelope
+  - envelope
+  - blast radius
+  - permission boundary
+  - codex adapter
+  - codex
+  blocks_external: true
+  requires_local: true
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-032
+  name: Extraction Pattern (Structured from Unstructured)
+  description: Need reliable extraction of fields from text/docs.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - schema engagement
+  - quality concerns
+  - data contract needed
+  - core behavior/logic changes
+  - reliability concerns
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-028
+  - RIU-021
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-033
+  name: Classification Pattern (Soft Labels)
+  description: Need labels for narrowing/analytics without overfitting.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - schema engagement
+  - data contract needed
+  - core behavior/logic changes
+  - classification needed
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-021
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-034
+  name: Ranking Explanation Rules (Reason Codes)
+  description: Need explainability without LLM fluff.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - quality-ranking
+  - schema engagement
+  - core behavior/logic changes
+  - reliability concerns
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-027
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-035
+  name: Caching Strategy + Invalidation Plan
+  description: Latency/cost too high; caching needed; risk of staleness.
+  domain: ai-enablement
+  parent: CORE-RESEARCH
+  signals:
+  - schema-performance
+  - quality concerns
+  - core behavior/logic changes
+  - production deployment
+  - latency constraints
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-060
+  name: Deployment Readiness Envelope
+  description: Deployment readiness unknown; risk of environment surprises.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - deployment engagement
+  - quality concerns
+  - deploy/operationalize needed
+  - production deployment
+  - reliability concerns
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-061
+  name: Observability Baseline
+  description: System not observable; failures will be silent.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - observability engagement
+  - quality concerns
+  - spec/requirements document needed
+  - dashboards/visibility needed
+  - production deployment
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-062
+  name: Incident Containment & Recovery Plan
+  description: Need containment, rollback, comms, ownership before incidents happen.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - change-mgmt
+  - quality concerns
+  - runbooks/operational procedure needed
+  - production deployment
+  - stakeholder alignment needed
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-063
+  name: Performance & Load Characterization
+  description: Performance unknown; risk of SLA failure after commitments.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - testing-performance
+  - quality concerns
+  - testing before shipping
+  - production deployment
+  - reliability concerns
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-064
+  name: Feature Flags + Kill Switch Integration
+  description: Need safe rollout and instant rollback without redeploy.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - quality concerns
+  - deployment engagement
+  - production deployment
+  - reliability concerns
+  - system integration needed
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-065
+  name: Config Management + Environment Parity
+  description: Works in one env but fails in another; configs diverge.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - deployment engagement
+  - requirements engagement
+  - spec/requirements document needed
+  - production deployment
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: CREATE
+  default_lens: null
+- id: RIU-066
+  name: Secrets Handling + Rotation Expectations
+  description: Secrets needed; risk leakage or rotation breakage.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - testing-retrieval
+  - quality concerns
+  - playbook needed
+  - testing before shipping
+  - production deployment
+  blocks_external: true
+  requires_local: true
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-067
+  name: Database Migration Safety Wrapper
+  description: Schema changes are one-way doors and can cause outages.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - quality concerns
+  - data engagement
+  - migration needed
+  - production deployment
+  - reliability concerns
+  blocks_external: true
+  requires_local: true
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-068
+  name: Canary Rollout + Error Budget Gate
+  description: Need to ship while learning safely from real traffic.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - quality concerns
+  - incident-response
+  - production deployment
+  - reliability concerns
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-069
+  name: Runbook (Day-2 Operations)
+  description: Solution works but cannot be operated.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - change-mgmt
+  - deployment engagement
+  - runbooks/operational procedure needed
+  - production deployment
+  - stakeholder alignment needed
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-061
+  - RIU-062
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-070
+  name: SLO/SLI Definition + Alert Thresholds
+  description: Need reliability targets without overpromising.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - quality concerns
+  - monitoring engagement
+  - production deployment
+  - reliability concerns
+  - ONE-WAY DOOR risk
+  blocks_external: true
+  requires_local: true
+  escalates_to:
+  - RIU-061
+  - RIU-068
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-080
+  name: Contract Tests (Input/Output)
+  description: Interfaces drift; downstream breaks without loud failures.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - testing-schema
+  - testing before shipping
+  - reliability concerns
+  - unclear inputs/outputs
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: CREATE
+  default_lens: null
+- id: RIU-081
+  name: End-to-End Smoke Tests (Critical Path)
+  description: Need confidence that critical path works in prod-like conditions.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - testing-deployment
+  - quality concerns
+  - runbooks needed
+  - testing before shipping
+  - reliability concerns
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: CREATE
+  default_lens: null
+- id: RIU-082
+  name: LLM Safety Guardrails (Content + Tool Use)
+  description: LLM outputs can hallucinate or violate constraints.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - agent-design-scoping
+  - quality concerns
+  - reliability concerns
+  - core behavior/logic changes
+  - compliance/audit requirements
+  blocks_external: true
+  requires_local: true
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-083
+  name: Red Team Scenarios (Abuse + Failure)
+  description: System may be abused or fail dangerously under adversarial inputs.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - quality concerns
+  - docs engagement
+  - reliability concerns
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: REFLECT
+  default_lens: null
+- id: RIU-084
+  name: Data Quality Checks (Nulls, Duplicates, Ranges)
+  description: Bad data silently degrades outcomes.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - quality-schema
+  - data engagement
+  - reliability concerns
+  - unclear inputs/outputs
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: CREATE
+  default_lens: null
+- id: RIU-085
+  name: Cost/Latency Budget Envelope
+  description: Costs/latency can blow up unexpectedly.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - quality concerns
+  - cost concerns
+  - reliability concerns
+  - production deployment
+  - latency constraints
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-086
+  name: Regression Suite (Golden + Metamorphic)
+  description: Need regressions caught beyond a small golden set.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - testing-evaluation
+  - quality concerns
+  - reliability concerns
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-021
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-087
+  name: Human Review Gate (One-Way Doors)
+  description: Irreversible decisions need explicit gating.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - scoping-deployment
+  - quality concerns
+  - reliability concerns
+  - ambiguous requirements
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-003
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-088
+  name: Privacy Redaction Pipeline
+  description: Logs/prompts may include sensitive info.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - testing-schema
+  - runbooks needed
+  - testing before shipping
+  - reliability concerns
+  - production deployment
+  blocks_external: true
+  requires_local: true
+  escalates_to:
+  - RIU-012
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-100
+  name: Capability Statement (What/Why/How)
+  description: Customer/executive needs crisp 'what are we building' summary.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - change-mgmt
+  - stakeholder alignment needed
+  - capability statement
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: CREATE
+  default_lens: null
+- id: RIU-101
+  name: Customer Workshop Design (Discovery/Alignment)
+  description: Need structured discovery or alignment session with customer stakeholders.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - change-mgmt
+  - scoping engagement
+  - stakeholder alignment needed
+  - ambiguous requirements
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-002
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: CREATE
+  default_lens: null
+- id: RIU-102
+  name: Enablement Pack (Docs/Examples/How-To)
+  description: System delivered but customer cannot use it independently.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - change-mgmt
+  - stakeholder alignment needed
+  - training needed
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: CREATE
+  default_lens: null
+- id: RIU-103
+  name: Training Session Design + Delivery
+  description: Users need hands-on training to adopt new system.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - change-mgmt
+  - stakeholder alignment needed
+  - training needed
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-102
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: CREATE
+  default_lens: null
+- id: RIU-104
+  name: Handoff Bundle (Restartability)
+  description: Engagement ends; new person must continue without context loss.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - change-mgmt
+  - scoping engagement
+  - stakeholder alignment needed
+  - ambiguous requirements
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: CREATE
+  default_lens: null
+- id: RIU-105
+  name: Executive Update (Status/Risks/Decisions)
+  description: Leadership needs concise status without technical detail.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - change-mgmt
+  - stakeholder alignment needed
+  - executive update
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: CREATE
+  default_lens: null
+- id: RIU-120
+  name: Integration Mode Selection (Batch vs Stream vs Hybrid)
+  description: Unclear whether to use batch, streaming, or hybrid integration.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - integration engagement
+  - latency constraints
+  - volume requirements
+  blocks_external: true
+  requires_local: true
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-140
+  name: Competitive/Alternatives Scan (Landscape)
+  description: Need competitive intelligence or alternative solution research.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - competitive analysis needed
+  - alternatives evaluation
+  - market research
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: RESEARCH
+  default_lens: null
+- id: RIU-201
+  name: Competitive/Alternatives Research
+  description: Need detailed competitive analysis or alternative evaluation.
+  domain: ai-enablement
+  parent: CORE-RESEARCH
+  signals:
+  - competitive analysis
+  - alternatives needed
+  - reference games
+  - market positioning
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: RESEARCH
+  default_lens: null
+- id: RIU-231
+  name: Document Chunking Strategy
+  description: Documents need to be chunked for RAG or processing; strategy unclear.
+  domain: ai-enablement
+  parent: CORE-RESEARCH
+  signals:
+  - document processing
+  - RAG implementation
+  - chunking needed
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-232
+  name: Deduplication System
+  description: Duplicate data causing quality or processing issues.
+  domain: ai-enablement
+  parent: CORE-RESEARCH
+  signals:
+  - duplicate data
+  - deduplication needed
+  - data quality issues
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: CREATE
+  default_lens: null
+- id: RIU-250
+  name: Security Review Packet
+  description: Security review needed; unclear what to provide.
+  domain: ai-enablement
+  parent: CORE-RESEARCH
+  signals:
+  - security review needed
+  - compliance requirements
+  - threat modeling
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-252
+  name: Model Evaluation & Selection
+  description: Multiple model options; need systematic evaluation and selection.
+  domain: ai-enablement
+  parent: CORE-RESEARCH
+  signals:
+  - model selection needed
+  - evaluation required
+  - CLEAR framework
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-085
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-326
+  name: Threat Model + Attack Surface Map
+  description: Security risks unclear; need systematic threat identification.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - threat modeling
+  - security concerns
+  - attack vectors
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-327
+  name: AuthN/AuthZ Integration
+  description: Authentication and authorization needed for system.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - authentication needed
+  - authorization needed
+  - security requirements
+  - user management
+  blocks_external: true
+  requires_local: true
+  escalates_to:
+  - RIU-066
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-330
+  name: Error Messaging Standards
+  description: Error messages unclear or unhelpful; users frustrated.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - error messages
+  - user experience
+  - support burden
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: CREATE
+  default_lens: null
+- id: RIU-413
+  name: Customer Value Demo Creation
+  description: Need to demonstrate value to customer stakeholders.
+  domain: ai-enablement
+  parent: CORE-RESEARCH
+  signals:
+  - demo needed
+  - value demonstration
+  - stakeholder presentation
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: CREATE
+  default_lens: null
+- id: RIU-500
+  name: Multimodal Data Pipeline Design
+  description: System requires processing multiple data modalities (text, image, audio, video) with unified handling.
+  domain: ai-enablement
+  parent: CORE-RESEARCH
+  signals:
+  - multiple data types
+  - image processing
+  - audio processing
+  - video processing
+  - multimodal
+  - cross-modal
+  blocks_external: true
+  requires_local: true
+  escalates_to:
+  - RIU-011
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-501
+  name: Image/Vision Processing Integration
+  description: System needs to process, analyze, or generate images as part of AI workflow.
+  domain: ai-enablement
+  parent: CORE-RESEARCH
+  signals:
+  - image processing
+  - vision model
+  - image analysis
+  - OCR
+  - visual content
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-500
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: CREATE
+  default_lens: null
+- id: RIU-502
+  name: Audio Processing Integration
+  description: System needs to process, transcribe, or generate audio content.
+  domain: ai-enablement
+  parent: CORE-RESEARCH
+  signals:
+  - audio processing
+  - transcription
+  - speech-to-text
+  - voice
+  - audio content
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-500
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: CREATE
+  default_lens: null
+- id: RIU-503
+  name: Cross-Modal Validation Pattern
+  description: Outputs from one modality must be validated against another (e.g., image caption vs image content).
+  domain: ai-enablement
+  parent: CORE-RESEARCH
+  signals:
+  - cross-modal validation
+  - multimodal consistency
+  - modality alignment
+  - caption validation
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-500
+  - RIU-021
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: REFLECT
+  default_lens: null
+- id: RIU-504
+  name: AI Video Generation Model Selection
+  description: Team needs to select and integrate AI video generation models (text-to-video, image-to-video) with cost, quality,
+    and latency tradeoffs.
+  domain: ai-enablement
+  parent: CORE-RESEARCH
+  signals:
+  - video generation
+  - text-to-video
+  - image-to-video
+  - AI video
+  - Seedance
+  - Kling
+  - Veo
+  - Runway
+  - Sora
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-500
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: RESEARCH
+  default_lens: null
+- id: RIU-505
+  name: Voice Input Modality Selection
+  description: System needs voice/speech input but options range from consumer apps (Wispr Flow) to self-hosted models (Whisper)
+    with different API availability, privacy, and cost profiles.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - voice input
+  - speech-to-text
+  - voice interface
+  - Wispr Flow
+  - Whisper
+  - speech recognition
+  - dictation
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-502
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: RESEARCH
+  default_lens: null
+- id: RIU-510
+  name: Multi-Agent Workflow Design
+  description: Complex task requires coordination between multiple specialized agents.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - multi-agent
+  - agent coordination
+  - workflow orchestration
+  - complex workflow
+  - agent handoff
+  - agents working together
+  - agents stepping on each other
+  - design a multi-agent workflow
+  - coordinate between agents
+  blocks_external: true
+  requires_local: true
+  escalates_to:
+  - RIU-001
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-511
+  name: Agent State Management Pattern
+  description: Agent execution requires persistent state across steps or sessions.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - agent state
+  - checkpointing
+  - session persistence
+  - state recovery
+  - long-running agent
+  - state between steps
+  - share state between agents
+  - pass context between agents
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-510
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: CREATE
+  default_lens: null
+- id: RIU-512
+  name: Agent Failure Recovery Pattern
+  description: Agent failure must not halt workflow; graceful degradation required.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - agent failure
+  - graceful degradation
+  - retry logic
+  - fallback
+  - fault tolerance
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-510
+  - RIU-062
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-513
+  name: Inter-Agent Communication Protocol
+  description: Agents need to exchange information with clear contracts and validation.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - agent communication
+  - message passing
+  - inter-agent
+  - agent protocol
+  - agents talk to each other
+  - message bus between agents
+  - agent messaging
+  blocks_external: true
+  requires_local: true
+  escalates_to:
+  - RIU-510
+  - RIU-011
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-514
+  name: Agent Capability Boundary Enforcement
+  description: Agents must operate within defined capability boundaries to prevent scope creep or unsafe actions.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - agent boundaries
+  - capability limits
+  - action validation
+  - scope enforcement
+  - agent constraints
+  - agent shouldn't do this
+  - prevent agent from acting outside scope
+  - agent doing things it shouldn't
+  - client isolation
+  - tenant boundary
+  - deployment boundary
+  - per-client config
+  - instance isolation
+  - data never leaves
+  blocks_external: true
+  requires_local: true
+  escalates_to:
+  - RIU-029
+  - RIU-510
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-520
+  name: Prompt Version Control & Lifecycle
+  description: Prompts evolve over time; need versioning, testing, and deployment management.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - prompt versioning
+  - prompt management
+  - prompt lifecycle
+  - prompt changes
+  - prompt deployment
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-022
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: CREATE
+  default_lens: null
+- id: RIU-521
+  name: LLM Model Version Management
+  description: Model versions change; need to track, test, and manage model transitions.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - model versioning
+  - model upgrade
+  - model migration
+  - model deprecation
+  - LLM version
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-252
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-522
+  name: Token Budget Management
+  description: LLM costs scale with token usage; need budgeting, monitoring, and optimization.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - token budget
+  - LLM cost
+  - token optimization
+  - cost management
+  - usage limits
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-085
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: REFLECT
+  default_lens: null
+- id: RIU-523
+  name: LLM Response Caching Strategy
+  description: Repeated similar queries waste tokens; caching can reduce cost and latency.
+  domain: ai-enablement
+  parent: CORE-RESEARCH
+  signals:
+  - LLM caching
+  - response cache
+  - semantic cache
+  - repeated queries
+  - latency optimization
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-035
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: CREATE
+  default_lens: null
+- id: RIU-524
+  name: LLM Output Quality Monitoring
+  description: LLM output quality can drift; need ongoing monitoring without manual review of every response.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - output quality
+  - quality monitoring
+  - LLM drift
+  - response quality
+  - quality degradation
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-021
+  - RIU-061
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: REFLECT
+  default_lens: null
+- id: RIU-530
+  name: AI System Risk Classification
+  description: AI system needs risk classification for regulatory compliance and governance.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - risk classification
+  - EU AI Act
+  - AI regulation
+  - compliance requirement
+  - high-risk AI
+  blocks_external: true
+  requires_local: true
+  escalates_to:
+  - RIU-012
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-531
+  name: Algorithmic Bias Detection
+  description: AI system may exhibit bias; need systematic detection and documentation.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - bias detection
+  - fairness
+  - discrimination
+  - protected attributes
+  - algorithmic bias
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-021
+  - RIU-530
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: REFLECT
+  default_lens: null
+- id: RIU-532
+  name: AI Explainability Framework
+  description: AI decisions need explanation for users, auditors, or regulators.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - explainability
+  - AI transparency
+  - decision explanation
+  - interpretability
+  - right to explanation
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-034
+  - RIU-530
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-533
+  name: Fundamental Rights Impact Assessment (FRIA)
+  description: High-risk AI system requires fundamental rights impact assessment per EU AI Act.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - FRIA
+  - fundamental rights
+  - human rights
+  - impact assessment
+  - high-risk AI
+  blocks_external: true
+  requires_local: true
+  escalates_to:
+  - RIU-530
+  - RIU-012
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-534
+  name: AI Audit Trail Requirements
+  description: AI system requires audit trail for compliance, debugging, or accountability.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - audit trail
+  - logging requirements
+  - compliance logging
+  - accountability
+  - audit requirements
+  blocks_external: true
+  requires_local: true
+  escalates_to:
+  - RIU-012
+  - RIU-061
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-535
+  name: AI System Documentation Package
+  description: AI system requires comprehensive documentation for compliance, handoff, or audit.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - AI documentation
+  - compliance documentation
+  - system documentation
+  - technical documentation
+  - audit documentation
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-530
+  - RIU-102
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: CREATE
+  default_lens: null
+- id: RIU-540
+  name: Validation Gate Design
+  description: Quality checkpoint needed before proceeding to next phase or deployment.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - quality gate
+  - validation checkpoint
+  - approval gate
+  - review required
+  - quality check
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: REFLECT
+  default_lens: null
+- id: RIU-541
+  name: Compliance Audit Preparation
+  description: External or internal audit requires evidence gathering and preparation.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - audit preparation
+  - compliance audit
+  - evidence gathering
+  - audit readiness
+  - regulatory audit
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-534
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: REFLECT
+  default_lens: null
+- id: RIU-542
+  name: Observability Stack Design
+  description: System needs comprehensive observability but stack is undefined or incomplete.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - observability design
+  - monitoring stack
+  - metrics design
+  - logging design
+  - tracing design
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-061
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: REFLECT
+  default_lens: null
+- id: RIU-543
+  name: Drift Detection Configuration
+  description: System behavior may drift over time; need automated detection.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - drift detection
+  - model drift
+  - data drift
+  - behavior drift
+  - distribution shift
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-542
+  - RIU-524
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: REFLECT
+  default_lens: null
+- id: RIU-550
+  name: No-Code AI App Generation
+  description: Team needs to build AI-powered applications without traditional coding, using platforms like Lovable or v0.dev
+    that generate full-stack apps from natural language.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - no-code
+  - low-code
+  - AI app builder
+  - Lovable
+  - v0.dev
+  - vibe coding
+  - natural language to app
+  blocks_external: true
+  requires_local: true
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: RESEARCH
+  default_lens: null
+- id: RIU-121
+  name: Webhook Reliability Pattern (Retries + Idempotency)
+  description: Webhooks fail under retries/duplicates; consumers break.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - webhooks
+  - event-driven
+  - real-time updates
+  - retry logic
+  - idempotency
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-015
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-122
+  name: Batch Pipeline Safety Pattern (Checkpointing)
+  description: Batch jobs fail mid-run; partial results corrupt downstream.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - batch processing
+  - data pipeline
+  - checkpointing
+  - resumability
+  - idempotent writes
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-015
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-200
+  name: Customer Problem Narrative (JTBD + Constraints)
+  description: Customer describes symptoms, not root cause; narrative fragmented.
+  domain: ai-enablement
+  parent: CORE-RESEARCH
+  signals:
+  - customer problem
+  - JTBD
+  - problem narrative
+  - symptom mapping
+  - root cause
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-001
+  - RIU-002
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: RESEARCH
+  default_lens: null
+- id: RIU-290
+  name: Internal Demo Narrative (Problem→Value→Limits)
+  description: Need crisp internal alignment on what was built and what wasn't.
+  domain: ai-enablement
+  parent: CORE-RESEARCH
+  signals:
+  - demo
+  - internal alignment
+  - value proposition
+  - limitations
+  - next decisions
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-001
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: CREATE
+  default_lens: null
+- id: RIU-320
+  name: Third-Party API Integration Pattern
+  description: Need to integrate external API with unknown reliability/rate limits.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - third-party API
+  - external integration
+  - rate limiting
+  - circuit breaker
+  - fallback handling
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-015
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-321
+  name: Database Migration Strategy
+  description: Need to migrate data/schema without downtime or data loss.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - database migration
+  - schema change
+  - data migration
+  - zero downtime
+  - rollback plan
+  blocks_external: true
+  requires_local: true
+  escalates_to:
+  - RIU-015
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-322
+  name: Authentication/Authorization Integration
+  description: Need to integrate auth system (SSO/OAuth/SAML) with existing application.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - authentication
+  - authorization
+  - SSO
+  - OAuth
+  - SAML
+  - session management
+  blocks_external: true
+  requires_local: true
+  escalates_to:
+  - RIU-015
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-323
+  name: Message Queue Integration Pattern
+  description: Need to integrate message queue (SQS/Kafka/RabbitMQ) for async processing.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - message queue
+  - async processing
+  - SQS
+  - Kafka
+  - RabbitMQ
+  - consumer pattern
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-015
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-324
+  name: Caching Strategy Design
+  description: Need to add caching to improve performance without introducing stale data issues.
+  domain: ai-enablement
+  parent: CORE-RESEARCH
+  signals:
+  - caching
+  - performance
+  - cache invalidation
+  - TTL
+  - cache warming
+  - stale data
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-015
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-400
+  name: KB Content Audit (Coverage + Gaps)
+  description: Customer knowledge base exists but quality/coverage unknown.
+  domain: ai-enablement
+  parent: CORE-RESEARCH
+  signals:
+  - knowledge base
+  - content audit
+  - coverage gaps
+  - duplication
+  - stale content
+  - KB quality
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-001
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: RESEARCH
+  default_lens: null
+- id: RIU-401
+  name: Taxonomy Design
+  description: Domain has accumulated concepts, categories, or entities with no consistent organizing structure. Teams use
+    inconsistent terminology, duplicate categories exist, and there is no shared mental model for classification.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - taxonomy
+  - classification
+  - categorization
+  - organizing
+  - ontology
+  - hierarchy
+  - domain model
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-001
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-108
+  name: Agent Security & Access Control
+  description: Agent needs permissions to act but must be constrained to prevent misuse.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - security
+  - permissions
+  - access control
+  - identity
+  - authentication
+  - authorization
+  - guardrails
+  - policy
+  - least privilege
+  - agent identity
+  blocks_external: true
+  requires_local: true
+  escalates_to:
+  - RIU-001
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-607
+  name: Context Compaction for Long Engagements
+  description: Long-running multi-session engagements approach context window limits, risking loss of canonical facts and
+    continuity.
+  domain: ai-enablement
+  parent: CORE-RESEARCH
+  signals:
+  - context window limit
+  - session break
+  - multi-phase engagement
+  - context compaction
+  - memory flush
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: CREATE
+  default_lens: null
+- id: RIU-608
+  name: Workflow Definition for Multi-Agent Engagements
+  description: Multi-agent engagements have implicit workflows that are not auditable, leading to missed gates and unclear
+    agent assignments.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - multi-agent engagement
+  - workflow formalization
+  - quality gates
+  - agent assignment
+  - engagement phases
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null

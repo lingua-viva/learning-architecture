@@ -1,7 +1,29 @@
 # Learning Architecture — Claude Code Project Instructions
 
 ## What This Is
-Claudia Canu Fautré's professional portfolio of educational design frameworks, case studies, and methods. This is a **learning design portfolio**, not a code repository.
+Claudia Canu Fautré's professional portfolio of educational design frameworks, case studies, and methods — powered by Mission Canvas, a governed agent OS.
+
+## Architecture
+
+This repo has two layers:
+
+### 1. Portfolio Layer (Claudia's education work)
+- `case-studies/` — 3 case studies with maturity labels
+- `methods/` — 2 validated methods (AI workflow, assessment)
+- `resume-cv/` — Professional CV
+- `publication-policy.md` — Privacy and transparency rules
+
+### 2. Engine Layer (Mission Canvas)
+- `src/` — Python runtime (governed pipeline, gateway, integrity)
+- `ontology/` — 137-node classification system
+- `knowledge/` — Evidence-tiered library (148 entries, 526 citations)
+- `lenses/` — Interpretive filters + Claudia's person lens + Malaguzzi voice guide
+- `memory/` — Path-structured persistence (Redis + NDJSON)
+- `agents/` — 6 intent agents + orchestrator
+- `skills/` — Education skills + morphable capability layer
+- `config/` — Three-tier governance
+- `runtime/` — Node.js message broker + voice hub
+- `tests/` — Gateway, ontology, memory, knowledge, integration
 
 ## Palette Connection
 
@@ -25,58 +47,39 @@ This repo is governed by Palette methodology from `~/pretendhome/palette/`. All 
    - No student names or individual data
    - No colleague names
    - No proprietary school documents
-   - Every artifact must have a maturity label: `observed`, `designed`, `proposed`, `piloted`, `validated`
+   - Every artifact must have a maturity label
 
 4. **Use Palette's evidence bar**:
    - Claims must be traceable to evidence
    - Numbers must be real and defensible
-   - Maturity labels must be honest — don't present `proposed` work as `validated`
+   - Maturity labels must be honest
 
 ### Commit Convention
 ```
 <type>(<scope>): <description>
 
 Types: feat, fix, docs, refactor
-Scopes: case-study, method, resume, meta
-```
-
-### Push Protocol
-```bash
-cd ~/learning-architecture
-git add <specific files>
-git commit -m "<type>(<scope>): <description>"
-git push origin main
-```
-
-## Repository Structure
-
-```
-learning-architecture/
-├── case-studies/
-│   ├── 01-structural-coherence/    # 6-layer diagnostic framework
-│   ├── 02-ai-classroom/           # AI for continuity opportunity
-│   └── 03-lingua-viva/            # K-5 curriculum integration
-├── methods/
-│   ├── assessment-philosophy.md    # Evidence-based assessment (validated)
-│   └── teacher-ai-workflow.md      # Daily AI practice (validated)
-├── resume-cv/
-│   └── Claudia_CanuFautre_Resume.docx
-├── publication-policy.md
-├── README.md
-└── CLAUDE.md                       # This file
+Scopes: case-study, method, resume, engine, lens, skill, meta
 ```
 
 ## Key Rules
 
-1. **Privacy first.** Never commit identifiable student data, institution names, or colleague names. See `publication-policy.md`.
+1. **Privacy first.** Never commit identifiable student data, institution names, or colleague names.
 2. **Honest maturity labels.** Every framework/method gets a label. Don't inflate.
-3. **Palette source of truth.** Claudia's profile, job search data, and career strategy live in Palette (`~/pretendhome/palette/skills/talent/`). This repo is the public-facing portfolio — it should be consistent with but not duplicate the Palette files.
-4. **Evidence-based claims only.** If you cite a number (93% improvement, 200+ students), it must be real and defensible.
+3. **Palette source of truth.** Claudia's profile lives in Palette. This repo is the public-facing portfolio.
+4. **Evidence-based claims only.** If you cite a number, it must be real and defensible.
 5. **Glass-box.** Every design decision should be traceable. No black boxes.
+6. **Engine integrity.** Don't modify `config/core.md` without explicit human approval (Tier 1, immutable).
+
+## Running Tests
+```bash
+pip install -e .
+pytest -q tests/
+```
 
 ## Do NOT
 - Commit personally identifiable information about children
 - Name the school (use generic description)
 - Present proposed work as validated
-- Duplicate Palette files here — reference them
+- Modify Tier 1 governance rules without human approval
 - Push without checking publication policy

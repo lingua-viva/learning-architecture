@@ -1,0 +1,103 @@
+# SKILL BUILDER — The skill that creates skills
+# THIS IS THE DIFFERENTIATOR.
+#
+# Hermes: 175K stars, users build skills manually
+# OpenClaw: 900+ skills in a marketplace, includes malicious ones
+# Mission Canvas: the user describes what they need and the system builds
+#   a governed, ontology-mapped skill in real time.
+#
+# When a user says "I need to handle contract review," the skill-builder:
+#   1. Classifies the task through the ontology (LEGAL-004: Contract Analysis)
+#   2. Identifies relevant core skills (protect + research + decide + create)
+#   3. Generates a new SkillDefinition chaining them in the right order
+#   4. Validates governance rules (what can be researched externally)
+#   5. Stores as a user-local capability
+#
+# The user now has a contract review skill tailored to their practice area,
+# their governance preferences, and their model routing choices.
+# Not a generic one built for 100,000 users.
+#
+# This is Palette as a skill designer by nature.
+
+name: skill-builder
+description: >
+  The master meta-skill that creates new skills from user description.
+  Uses Mission Canvas itself (ontology classification, knowledge retrieval,
+  governance validation) to design the skill structure.
+trigger_patterns:
+  - "build a skill"
+  - "create a skill"
+  - "I need to handle"
+  - "set up a workflow"
+  - "automate"
+  - "make a tool for"
+  - "custom skill"
+
+ontology_mapping:
+  primary: "CORE-CREATE"
+  secondary: "CORE-REFLECT"
+
+model_routing:
+  classify: "ollama/qwen2.5:3b"      # Classify the user's need
+  design: "ollama/qwen2.5:3b"        # Design the skill structure
+  validate: "ollama/qwen2.5:3b"      # Validate governance rules
+
+governance:
+  blocks_external: false
+  requires_local: false
+  pii_sanitizer: active
+  one_way_door: false                  # Skills are reversible (can be deleted)
+
+pipeline:
+  steps:
+    - name: classify_need
+      description: "Classify the user's described need against the ontology"
+      action: "ontology.classify(user_description)"
+      output: "classification_result"
+
+    - name: identify_core_skills
+      description: "Determine which core skills are needed"
+      action: "map classification to core skill set"
+      output: "required_skills[]"
+
+    - name: determine_governance
+      description: "Set governance rules based on domain classification"
+      action: "inherit governance from ontology node"
+      output: "governance_rules"
+
+    - name: generate_definition
+      description: "Generate the SkillDefinition YAML"
+      action: "template fill from classification + skills + governance"
+      output: "skill_definition.yaml"
+
+    - name: validate
+      description: "Validate the generated skill against ontology integrity"
+      action: "ontology_validator.check_skill(skill_definition)"
+      output: "validation_result"
+
+    - name: store
+      description: "Store as user-local skill"
+      action: "write to skills/community/{skill_name}.yaml"
+      output: "skill_path"
+
+skill_definition_template: |
+  # Auto-generated skill: {{ name }}
+  name: {{ name }}
+  description: {{ description }}
+  trigger_patterns: {{ trigger_patterns }}
+  ontology_mapping:
+    primary: {{ primary_node }}
+    domains: {{ domains }}
+  model_routing:
+    reason: {{ reason_model }}
+    synthesize: {{ synthesize_model }}
+  governance:
+    blocks_external: {{ blocks_external }}
+    requires_local: {{ requires_local }}
+    pii_sanitizer: active
+  memory_integration:
+    record_path: true
+    record_decision: {{ has_decisions }}
+  core_skills_chained: {{ chained_skills }}
+  generated_by: skill-builder
+  generated_at: {{ timestamp }}

@@ -1,0 +1,270 @@
+domain: work
+version: '1.0'
+description: Professional work patterns — planning, executing, reviewing, communicating.
+  Any industry.
+nodes:
+- id: MC-WORK-001
+  name: Scope Definition
+  description: What are we building, why, for whom. Convergence brief, assumptions,
+    non-goals.
+  domain: work
+  signals:
+  - scope
+  - convergence brief
+  - what are we building
+  - assumptions
+  - non-goals
+  - project definition
+  - engagement start
+  default_intent: DECIDE
+  artifacts:
+  - convergence_brief
+  - assumptions_list
+  - non_goals
+  failure_modes:
+    silent:
+    - scope creep via untracked asks
+    loud:
+    - stakeholder disagreement on goals
+    clustered:
+    - multi-team engagements with unclear owner
+  success_conditions:
+    execution: brief published and accepted as current baseline
+    outcome: fewer scope re-litigations and faster decision velocity
+  reversibility: two_way
+  parent: INTENT-DECIDE
+  produces:
+  - convergence_brief
+  - assumptions_list
+  - non_goals
+  requires: []
+  suggests_next:
+  - MC-WORK-002
+  - MC-WORK-005
+  - MC-WORK-003
+  - MC-WORK-006
+- id: MC-WORK-002
+  name: Stakeholder Mapping
+  description: Who decides, who reviews, who executes. RACI matrix, escalation paths.
+  domain: work
+  signals:
+  - stakeholder
+  - raci
+  - who decides
+  - approval
+  - decision maker
+  - escalation
+  default_intent: CREATE
+  artifacts:
+  - stakeholder_map
+  - raci_matrix
+  failure_modes:
+    silent:
+    - hidden decision maker not mapped
+    loud:
+    - approval bottleneck discovered late
+  dependencies:
+  - MC-WORK-001
+  reversibility: two_way
+  parent: INTENT-CREATE
+  success_conditions:
+    execution: stakeholder map published
+    outcome: no hidden decision makers discovered late
+    safety: escalation paths tested
+  produces:
+  - stakeholder_map
+  - raci_matrix
+  requires:
+  - convergence_brief
+  suggests_next:
+  - MC-WORK-003
+  - MC-WORK-008
+- id: MC-WORK-003
+  name: Decision Making
+  description: Evaluate options, assess reversibility, commit. One-way door detection.
+  domain: work
+  signals:
+  - decision
+  - tradeoff
+  - options
+  - reversibility
+  - one-way door
+  - commit
+  default_intent: DECIDE
+  artifacts:
+  - decision_record
+  - tradeoff_matrix
+  failure_modes:
+    silent:
+    - undocumented assumption drives implicit decision
+    loud:
+    - irreversible mistake discovered after commitment
+  reversibility: varies
+  parent: INTENT-DECIDE
+  success_conditions:
+    execution: decision recorded with rationale
+    outcome: fewer decision reversals
+    safety: one-way doors explicitly flagged
+  produces:
+  - decision_record
+  - tradeoff_matrix
+  requires: []
+  suggests_next:
+  - MC-WORK-004
+  - MC-GOV-003
+- id: MC-WORK-004
+  name: Status Communication
+  description: Update stakeholders on progress, risks, and decisions needed.
+  domain: work
+  signals:
+  - status update
+  - progress report
+  - risk register
+  - executive update
+  default_intent: CREATE
+  artifacts:
+  - status_update
+  - risk_register
+  failure_modes:
+    silent:
+    - information hiding — bad news not surfaced
+    loud:
+    - surprise escalation from unreported risk
+  reversibility: two_way
+  parent: INTENT-CREATE
+  success_conditions:
+    execution: status update sent to stakeholders
+    outcome: no surprise escalations
+    safety: risks surfaced before they materialize
+  produces:
+  - status_update
+  - risk_register
+  requires: []
+  suggests_next:
+  - MC-WORK-008
+- id: MC-WORK-005
+  name: Task Decomposition
+  description: Break complex work into bounded, dependency-aware steps.
+  domain: work
+  signals:
+  - task breakdown
+  - decompose
+  - work breakdown
+  - steps
+  - subtasks
+  - dependency graph
+  default_intent: CREATE
+  artifacts:
+  - task_breakdown
+  - dependency_graph
+  failure_modes:
+    silent:
+    - hidden dependency between parallel tasks
+    clustered:
+    - parallel work collision from uncoordinated teams
+  reversibility: two_way
+  parent: INTENT-CREATE
+  success_conditions:
+    execution: tasks decomposed with dependencies mapped
+    outcome: parallel work doesn't collide
+    safety: hidden dependencies identified
+  produces:
+  - task_breakdown
+  - dependency_graph
+  requires:
+  - convergence_brief
+  suggests_next:
+  - MC-WORK-002
+- id: MC-WORK-006
+  name: Quality Review
+  description: Evaluate output against acceptance criteria. Gap analysis.
+  domain: work
+  signals:
+  - quality review
+  - acceptance criteria
+  - gap analysis
+  - review checklist
+  - quality gate
+  default_intent: REFLECT
+  artifacts:
+  - review_checklist
+  - gap_analysis
+  failure_modes:
+    silent:
+    - rubber stamp — review passes without scrutiny
+    loud:
+    - scope dispute at review gate
+  dependencies:
+  - MC-WORK-001
+  reversibility: two_way
+  parent: INTENT-REFLECT
+  produces:
+  - review_checklist
+  - gap_analysis
+  requires:
+  - convergence_brief
+  suggests_next:
+  - MC-WORK-007
+- id: MC-WORK-007
+  name: Knowledge Capture
+  description: Extract and store what was learned for future use. Lessons, patterns,
+    insights.
+  domain: work
+  signals:
+  - lessons learned
+  - knowledge capture
+  - what did we learn
+  - pattern
+  - insight
+  - retrospective
+  default_intent: REFLECT
+  artifacts:
+  - lessons_learned
+  - pattern_library_entry
+  failure_modes:
+    silent:
+    - knowledge lost to context window
+    loud:
+    - wrong lesson extracted
+  success_conditions:
+    outcome: future queries benefit from captured knowledge
+  reversibility: two_way
+  parent: INTENT-REFLECT
+  produces:
+  - lessons_learned
+  - pattern_library_entry
+  requires: []
+  suggests_next: []
+- id: MC-WORK-008
+  name: Handoff
+  description: Transfer responsibility with full context. No context loss.
+  domain: work
+  signals:
+  - handoff
+  - transfer
+  - hand over
+  - context transfer
+  - responsibility transfer
+  default_intent: CREATE
+  artifacts:
+  - handoff_document
+  - context_package
+  failure_modes:
+    silent:
+    - context loss during transfer
+    loud:
+    - responsibility gap — nobody owns the next step
+  dependencies:
+  - MC-WORK-004
+  reversibility: two_way
+  parent: INTENT-CREATE
+  success_conditions:
+    execution: handoff document delivered
+    outcome: receiving party productive within 24 hours
+    safety: no context lost in transfer
+  produces:
+  - handoff_document
+  - context_package
+  requires:
+  - stakeholder_map
+  suggests_next: []

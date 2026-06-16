@@ -1,0 +1,244 @@
+domain: deployment
+version: '1.0'
+description: Getting systems to production and keeping them running. POC, onboarding,
+  workshops, monitoring.
+nodes:
+- id: MC-DEPLOY-001
+  name: POC Execution
+  description: Prove value with minimal scope. Scoped success criteria, measurement
+    plan.
+  domain: deployment
+  signals:
+  - POC
+  - proof of concept
+  - pilot
+  - prototype
+  - prove value
+  - minimal viable
+  default_intent: CREATE
+  artifacts:
+  - poc_scope
+  - success_criteria
+  - measurement_plan
+  failure_modes:
+    silent:
+    - success theater — POC passes but doesn't represent real use
+    loud:
+    - POC scope creep — becomes full project
+  success_conditions:
+    execution: POC delivered within agreed scope
+    outcome: decision made (go/no-go)
+    safety: no production impact during POC
+  reversibility: two_way
+  parent: INTENT-CREATE
+  produces:
+  - poc_scope
+  - poc_success_criteria
+  - measurement_plan
+  requires: []
+  suggests_next:
+  - MC-DEPLOY-002
+  - MC-DATA-006
+- id: MC-DEPLOY-002
+  name: Customer Onboarding
+  description: Get a customer team to first value. Time-to-value measurement.
+  domain: deployment
+  signals:
+  - onboarding
+  - getting started
+  - first value
+  - time to value
+  - customer setup
+  - onboard
+  default_intent: CREATE
+  artifacts:
+  - onboarding_plan
+  - time_to_value_metric
+  failure_modes:
+    silent:
+    - user abandonment — team stops using without telling you
+    loud:
+    - integration failure during setup
+    clustered:
+    - champion leaves — institutional knowledge lost
+  success_conditions:
+    execution: customer team actively using system
+    outcome: time to first value under target
+  reversibility: two_way
+  parent: INTENT-CREATE
+  produces:
+  - onboarding_plan
+  - time_to_value_metric
+  requires: []
+  suggests_next:
+  - MC-DEPLOY-003
+  - MC-DEPLOY-004
+  - MC-WORK-001
+- id: MC-DEPLOY-003
+  name: Workshop Delivery
+  description: Run interactive sessions that change behavior, not just inform.
+  domain: deployment
+  signals:
+  - workshop
+  - training session
+  - enablement
+  - hands-on
+  - interactive session
+  default_intent: CREATE
+  artifacts:
+  - workshop_agenda
+  - hands_on_exercise
+  - feedback_survey
+  failure_modes:
+    silent:
+    - no behavior change — attendees return to old workflow
+    loud:
+    - attendees confused — material too complex or too basic
+  success_conditions:
+    outcome: behavior change measured at 30 days
+  reversibility: two_way
+  parent: INTENT-CREATE
+  produces:
+  - workshop_agenda
+  - hands_on_exercise
+  - feedback_survey
+  requires: []
+  suggests_next:
+  - MC-DEPLOY-004
+- id: MC-DEPLOY-004
+  name: Churn Prevention
+  description: Detect and address disengagement before renewal decision.
+  domain: deployment
+  signals:
+  - churn
+  - disengagement
+  - renewal risk
+  - customer health
+  - adoption decline
+  default_intent: DIAGNOSE
+  artifacts:
+  - health_score
+  - intervention_plan
+  failure_modes:
+    silent:
+    - silent churn — customer decides to leave without escalating
+    loud:
+    - angry escalation — problems accumulated without early detection
+  dependencies:
+  - MC-DEPLOY-002
+  reversibility: two_way
+  parent: INTENT-DIAGNOSE
+  success_conditions:
+    execution: health score computed for all accounts
+    outcome: at-risk accounts identified before renewal
+    safety: no false alarms on healthy accounts
+  produces:
+  - health_score
+  - intervention_plan
+  requires:
+  - onboarding_plan
+  suggests_next:
+  - MC-DEPLOY-006
+- id: MC-DEPLOY-005
+  name: System Monitoring
+  description: Observe production behavior, detect anomalies, maintain reliability.
+  domain: deployment
+  signals:
+  - monitoring
+  - observability
+  - alerts
+  - anomaly
+  - uptime
+  - incident
+  default_intent: DIAGNOSE
+  artifacts:
+  - dashboard
+  - alert_rules
+  - incident_log
+  failure_modes:
+    silent:
+    - alert fatigue — real issues lost in noise
+    loud:
+    - missed incident — outage not detected
+  reversibility: two_way
+  parent: INTENT-DIAGNOSE
+  success_conditions:
+    execution: monitoring deployed and alerting
+    outcome: anomalies detected within SLA
+    safety: false positive rate below 5%
+  produces:
+  - dashboard
+  - alert_rules
+  - incident_log
+  requires: []
+  suggests_next:
+  - MC-DEPLOY-004
+  - MC-DATA-001
+- id: MC-DEPLOY-006
+  name: Use Case Expansion
+  description: Identify the next governed workflow after first value is proven.
+  domain: deployment
+  signals:
+  - expansion
+  - next use case
+  - additional workflow
+  - upsell
+  - cross-sell
+  - growth
+  default_intent: DECIDE
+  artifacts:
+  - use_case_map
+  - expansion_plan
+  - adoption_path
+  failure_modes:
+    silent:
+    - tool stays single-use — no expansion despite value
+    loud:
+    - new workflow lacks boundary review — governance gap
+  dependencies:
+  - MC-DEPLOY-002
+  - MC-DEPLOY-004
+  reversibility: two_way
+  parent: INTENT-DECIDE
+  produces:
+  - use_case_map
+  - expansion_plan
+  - adoption_path
+  requires:
+  - health_score
+  suggests_next:
+  - MC-DEPLOY-001
+  - MC-WORK-003
+- id: MC-DEPLOY-007
+  name: Documentation
+  description: Produce accurate, maintainable docs. User guides, API reference, runbooks.
+  domain: deployment
+  signals:
+  - documentation
+  - docs
+  - user guide
+  - API reference
+  - runbook
+  - README
+  default_intent: CREATE
+  artifacts:
+  - user_guide
+  - api_reference
+  - runbook
+  failure_modes:
+    silent:
+    - docs drift from reality — documentation becomes stale
+    loud:
+    - missing critical doc — user blocked without reference
+  reversibility: two_way
+  parent: INTENT-CREATE
+  success_conditions:
+    execution: docs written and published
+    outcome: users find answers without support tickets
+    safety: docs match current system behavior
+  produces:
+  - user_guide
+  - api_reference
+  - runbook
+  requires: []
+  suggests_next: []

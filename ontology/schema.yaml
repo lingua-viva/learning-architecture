@@ -1,0 +1,99 @@
+# Mission Canvas Ontology Schema
+# The ontology is the external symbolic verifier that escapes the No-Escape Theorem.
+# Every node is a problem type. Every edge is a relationship.
+# Path records through this graph ARE the memory.
+
+version: "1.0"
+description: >
+  Node and edge type definitions for the Mission Canvas ontology.
+  This schema defines the directed graph structure that classifies every query
+  before any model fires. The ontology is Option 2 from the Price of Meaning paper:
+  an external symbolic verifier that eliminates semantic interference by pre-classifying
+  problems into known positions on a known map.
+
+node_schema:
+  required_fields:
+    - id            # Unique identifier (e.g., "LEGAL-001", "CORE-PROTECT")
+    - name          # Human-readable name
+    - description   # What this node classifies
+    - domain        # Which domain this belongs to (core, legal, medical, finance, founder)
+    - parent        # Parent node ID (null for root nodes)
+
+  optional_fields:
+    - signals       # List of keywords/phrases that activate this node
+    - blocks_external  # If true, no external API calls allowed (default: false)
+    - requires_local   # If true, must use local model only (default: false)
+    - escalates_to     # List of node IDs this can escalate to
+    - resolves_to      # List of node IDs this resolves to
+    - contradicts      # List of node IDs this contradicts
+    - co_occurs_with   # List of node IDs frequently co-occurring
+    - evidence_tier    # Required evidence tier (1=primary, 2=secondary, 3=community)
+    - path_weight      # Default weight for path recording (0.0-1.0, default 1.0)
+    - default_intent   # Which intent handles this by default
+    - default_model    # Preferred model for this node
+    - default_lens     # Auto-applied lens when this node activates
+
+edge_types:
+  parent_child:
+    description: "Hierarchical containment. Child is a specialization of parent."
+    direction: "parent → child"
+    cardinality: "one-to-many"
+
+  requires:
+    description: "This node requires another node to be resolved first."
+    direction: "source → target"
+    cardinality: "many-to-many"
+
+  contradicts:
+    description: "These nodes represent conflicting classifications. Only one should be active."
+    direction: "bidirectional"
+    cardinality: "many-to-many"
+
+  resolves_to:
+    description: "After processing, this node typically leads to resolution at target node."
+    direction: "source → target"
+    cardinality: "many-to-many"
+
+  escalates_to:
+    description: "When confidence is low or complexity is high, escalate to target node."
+    direction: "source → target"
+    cardinality: "many-to-many"
+
+  co_occurs_with:
+    description: "These nodes frequently appear together in the same query."
+    direction: "bidirectional"
+    cardinality: "many-to-many"
+
+confidence_model:
+  description: >
+    Confidence is NOT the model's self-reported confidence.
+    It is the empirical confidence derived from path history.
+    A node with 50 successful path records at 0.9+ confidence is more trustworthy
+    than a node with 2 records at 0.95. Path count matters.
+
+  scoring:
+    base_confidence: 0.5    # Starting confidence for new queries
+    path_boost: 0.05        # Per matching path record (capped at 0.4 total boost)
+    knowledge_boost: 0.1    # If knowledge library has entries for this node
+    signal_match_boost: 0.1 # Per signal matched (capped at 0.3 total boost)
+    max_confidence: 0.99    # Never 1.0 — epistemic humility
+
+  thresholds:
+    high: 0.85              # No external call needed
+    medium: 0.60            # External call recommended
+    low: 0.40               # External call required
+    gap: 0.30               # Gap signal logged, proposal generated
+
+intents:
+  - id: PROTECT
+    description: "Local-only execution, full PII blocking, zero external"
+  - id: RESEARCH
+    description: "Governed external research via Perplexity"
+  - id: DECIDE
+    description: "Reversibility analysis, one-way door detection"
+  - id: CREATE
+    description: "Artifact generation with provenance"
+  - id: DIAGNOSE
+    description: "Root cause isolation, 5-whys"
+  - id: REFLECT
+    description: "Self-audit, lesson extraction"

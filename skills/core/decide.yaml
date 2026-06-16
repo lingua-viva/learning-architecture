@@ -1,0 +1,31 @@
+# DECIDE Skill — Reversibility analysis, one-way door detection
+name: decide
+description: >
+  Evaluates decisions through reversibility analysis. Classifies as
+  one-way door (irreversible) or two-way door (reversible). Records
+  decisions as path records with full provenance.
+trigger_patterns:
+  - "should I"
+  - "decide"
+  - "choose"
+  - "option"
+  - "risk"
+  - "one-way door"
+  - "recommend"
+  - "go/no-go"
+ontology_mapping:
+  primary: "CORE-DECIDE"
+  domains: [core, legal, finance, founder]
+model_routing:
+  reason: "ollama/qwen2.5:3b"
+  synthesize: "ollama/qwen2.5:3b"
+governance:
+  blocks_external: false
+  requires_local: false
+  pii_sanitizer: active
+  one_way_door_detection: true
+  evidence_tier_required: 1
+memory_integration:
+  record_path: true
+  record_decision: true
+  flag_for_review: true  # Decisions always flagged

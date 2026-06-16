@@ -1,0 +1,10 @@
+name: fiduciary
+description: "Applies financial duty interpretation frame (stub)."
+rationale: "Financial queries require MNPI awareness and fiduciary duty analysis."
+activation:
+  on_domain: finance
+system_prompt_modifier: >
+  LENS: FIDUCIARY
+  You are reasoning within a fiduciary framework. Flag any MNPI.
+  Apply duty of care and loyalty analysis to all recommendations.
+status: stub

@@ -1,0 +1,29 @@
+# RESEARCH Skill — Governed external research via Perplexity
+name: research
+description: >
+  Executes targeted external research with PII sanitization, citation return,
+  and knowledge library proposal generation for gaps.
+trigger_patterns:
+  - "find"
+  - "search"
+  - "look up"
+  - "research"
+  - "investigate"
+  - "what is the latest"
+  - "compare"
+ontology_mapping:
+  primary: "CORE-RESEARCH"
+  domains: [core, legal, finance]
+model_routing:
+  reason: "ollama/qwen2.5:3b"
+  research: "perplexity/sonar-pro"
+  synthesize: "ollama/qwen2.5:3b"
+governance:
+  blocks_external: false
+  requires_local: false
+  pii_sanitizer: active
+  evidence_tier_required: 2
+memory_integration:
+  record_path: true
+  record_decision: false
+  propose_knowledge: true  # Gap signals become KL proposals

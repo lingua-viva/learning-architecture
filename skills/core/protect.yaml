@@ -1,0 +1,29 @@
+# PROTECT Skill — Local-only execution, full PII blocking, zero external
+name: protect
+description: >
+  Handles sensitive, privileged, or personal queries with absolute data containment.
+  Nothing leaves the machine. Ever.
+trigger_patterns:
+  - "confidential"
+  - "privileged"
+  - "private"
+  - "sensitive"
+  - "protect"
+  - "NDA"
+  - "internal only"
+ontology_mapping:
+  primary: "CORE-PROTECT"
+  domains: [legal, medical, finance]
+model_routing:
+  reason: "ollama/qwen2.5:3b"
+  synthesize: "ollama/qwen2.5:3b"
+  external: null  # NEVER
+governance:
+  blocks_external: true
+  requires_local: true
+  pii_sanitizer: active
+  evidence_tier_required: 1
+memory_integration:
+  record_path: true
+  record_decision: true
+  flag_for_review: false

@@ -1,0 +1,60 @@
+# Legal Base Skill — Professional legal workflow
+# Chains: protect + research + decide with legal governance
+# Seeded with: Heppner ruling, Delaware fiduciary duty, privilege doctrine
+
+name: legal-base
+description: >
+  Professional legal workflow combining privilege protection,
+  public law research, and governed decision-making.
+  Inherits LEGAL domain governance: sensitive queries blocked from external,
+  public law queries routed to Perplexity with PII sanitization.
+
+trigger_patterns:
+  - "legal"
+  - "law"
+  - "attorney"
+  - "privilege"
+  - "fiduciary"
+  - "contract"
+  - "litigation"
+  - "compliance"
+
+ontology_mapping:
+  primary: "LEGAL-001"
+  domains: [legal]
+  auto_nodes:
+    - "LEGAL-001"   # Privilege Risk Assessment
+    - "LEGAL-003"   # Public Law Research
+    - "LEGAL-005"   # Fiduciary Duty Analysis
+    - "LEGAL-010"   # Heppner Ruling
+
+model_routing:
+  protect: "ollama/qwen2.5:3b"       # Local for privilege
+  research: "perplexity/sonar-pro"    # External for public law
+  decide: "ollama/qwen2.5:3b"        # Local for decisions
+  synthesize: "ollama/qwen2.5:3b"
+
+governance:
+  blocks_external: "node-dependent"   # LEGAL-001 blocks; LEGAL-003 allows
+  requires_local: "node-dependent"
+  pii_sanitizer: active
+  privilege_protection: true
+  one_way_door_detection: true
+  evidence_tier_required: 1
+
+core_skills_chained:
+  - protect
+  - research
+  - decide
+  - create
+
+seeded_knowledge:
+  - id: "KL-LEGAL-001"
+    title: "Heppner v. Alyeska Pipeline (SDNY 2026)"
+    summary: "AI-generated legal research that includes fabricated citations constitutes professional negligence"
+  - id: "KL-LEGAL-002"
+    title: "Delaware Fiduciary Duty Framework"
+    summary: "Duty of care, loyalty, good faith. Caremark, Revlon, Stone v. Ritter"
+  - id: "KL-LEGAL-003"
+    title: "Attorney-Client Privilege Doctrine"
+    summary: "Communications between attorney and client for legal advice are privileged"

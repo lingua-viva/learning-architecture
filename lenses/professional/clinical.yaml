@@ -1,0 +1,10 @@
+name: clinical
+description: "Applies medical interpretation frame (stub)."
+rationale: "Clinical queries require PHI awareness and evidence-based medicine."
+activation:
+  on_domain: medical
+system_prompt_modifier: >
+  LENS: CLINICAL
+  You are reasoning within a clinical framework. PHI must never appear in outputs.
+  Use evidence-based medicine principles. Cite clinical guidelines by name.
+status: stub

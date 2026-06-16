@@ -1,0 +1,32 @@
+domain: business_planning
+version: '1.0'
+description: Imported from Palette taxonomy v1.3. 1 nodes.
+imported_from: palette/taxonomy/releases/v1.3/
+nodes:
+- id: RIU-109
+  name: Business Plan Creation
+  description: Customer needs comprehensive business plan but lacks time/expertise to research comparables, model financials,
+    and structure narrative
+  domain: business_planning
+  parent: CORE-RESEARCH
+  signals:
+  - business plan
+  - strategic plan
+  - product strategy
+  - go-to-market plan
+  - market analysis
+  - competitive analysis
+  - business model
+  - revenue model
+  - funding requirements
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-001
+  - RIU-106
+  - RIU-107
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null

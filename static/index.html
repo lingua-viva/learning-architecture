@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#13201d">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Mission Canvas">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <title>Mission Canvas</title>
+  <style>
+    * { box-sizing: border-box; }
+    :root {
+      color-scheme: light;
+      --ink: #13201d;
+      --muted: #5d6864;
+      --line: #d8d1c2;
+      --paper: #fffdf8;
+      --field: #f2eee5;
+      --bg: #f7f5ef;
+      --accent: #c94f3d;
+      --blue: #286f87;
+      --green: #31705a;
+    }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      letter-spacing: 0;
+    }
+    .app { min-height: 100dvh; display: grid; grid-template-rows: auto auto 1fr auto; }
+    header {
+      min-height: 64px;
+      padding: max(14px, env(safe-area-inset-top)) 18px 12px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: var(--paper);
+      border-bottom: 1px solid var(--line);
+    }
+    .mark {
+      width: 38px;
+      height: 38px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      background: var(--ink);
+      color: var(--paper);
+      font-weight: 800;
+    }
+    h1 { margin: 0; font-size: 18px; line-height: 1.15; }
+    .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+    .status {
+      margin-left: auto;
+      min-height: 34px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      white-space: nowrap;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 99px; background: #9a8f7e; }
+    .online .dot { background: var(--green); }
+    .offline .dot { background: var(--accent); }
+    .install {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 18px;
+      border-bottom: 1px solid var(--line);
+      background: #e8f0ed;
+      color: var(--ink);
+      font-size: 13px;
+    }
+    .install button {
+      min-height: 44px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--paper);
+      color: var(--ink);
+      padding: 0 14px;
+      font-weight: 700;
+    }
+    .queue-bar {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 18px;
+      border-bottom: 1px solid var(--line);
+      background: #fff7e4;
+      color: var(--ink);
+      font-size: 13px;
+    }
+    .queue-actions { display: flex; gap: 8px; }
+    .queue-actions button {
+      min-height: 38px;
+      border: 1px solid #dbc28b;
+      border-radius: 8px;
+      background: #fffdf8;
+      color: var(--ink);
+      padding: 0 12px;
+      font-weight: 700;
+    }
+    .pipeline {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding: 8px 18px;
+      border-bottom: 1px solid var(--line);
+      background: #eee9df;
+    }
+    .step {
+      flex: 0 0 auto;
+      padding: 5px 8px;
+      border-radius: 6px;
+      border: 1px solid #d2cab9;
+      color: #776d5e;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .step.done { background: #dcebe5; border-color: #a5c6b8; color: #245d4a; }
+    main { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 300px; }
+    #output { min-width: 0; overflow-y: auto; padding: 18px; scroll-behavior: smooth; }
+    aside { border-left: 1px solid var(--line); background: #f0ece3; padding: 18px; overflow-y: auto; }
+    .event {
+      margin: 0 0 12px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--paper);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      line-height: 1.45;
+    }
+    .event.query { border-left: 4px solid var(--blue); }
+    .event.result { border-left: 4px solid var(--green); }
+    .event.error { border-left: 4px solid var(--accent); }
+    .event.system { color: var(--muted); }
+    .event.queued { border-left: 4px solid #a67a29; }
+    .meta { display: block; margin-bottom: 8px; color: var(--muted); font-size: 12px; font-weight: 700; }
+    .panel-title { margin: 0 0 12px; font-size: 13px; color: var(--muted); text-transform: uppercase; font-weight: 800; }
+    .metric { display: flex; justify-content: space-between; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+    .metric strong { font-variant-numeric: tabular-nums; }
+    form {
+      display: grid;
+      grid-template-columns: 150px minmax(0, 1fr) auto;
+      gap: 10px;
+      padding: 12px 18px max(12px, env(safe-area-inset-bottom));
+      border-top: 1px solid var(--line);
+      background: var(--paper);
+    }
+    select, input, button { min-height: 46px; font: inherit; }
+    select, input {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--field);
+      color: var(--ink);
+      padding: 0 12px;
+      outline: none;
+    }
+    input:focus, select:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(40, 111, 135, 0.14); }
+    #send-btn {
+      border: 0;
+      border-radius: 8px;
+      background: var(--ink);
+      color: var(--paper);
+      padding: 0 20px;
+      font-weight: 800;
+    }
+    #send-btn:disabled { opacity: 0.48; }
+    @media (max-width: 820px) {
+      header { padding-left: 14px; padding-right: 14px; }
+      .sub { display: none; }
+      main { grid-template-columns: 1fr; }
+      aside { display: none; }
+      form { grid-template-columns: 1fr; }
+      #output { padding: 12px; }
+      .status { font-size: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="mark">MC</div>
+      <div>
+        <h1>Mission Canvas</h1>
+        <div class="sub">Governed agent workbench</div>
+      </div>
+      <div id="status" class="status"><span class="dot"></span><span>connecting</span></div>
+    </header>
+
+    <div id="install" class="install">
+      <span>Install Mission Canvas for fast access and offline queueing.</span>
+      <button id="install-btn" type="button">Install</button>
+    </div>
+
+    <div id="queue-bar" class="queue-bar">
+      <span id="queue-label">0 queued</span>
+      <div class="queue-actions">
+        <button id="replay-btn" type="button">Send now</button>
+        <button id="clear-queue-btn" type="button">Clear</button>
+      </div>
+    </div>
+
+    <nav class="pipeline" id="pipeline" aria-label="Pipeline steps">
+      <span class="step" data-step="SCAN">SCAN</span>
+      <span class="step" data-step="CLASSIFY">CLASSIFY</span>
+      <span class="step" data-step="RETRIEVE">RETRIEVE</span>
+      <span class="step" data-step="RESEARCH">RESEARCH</span>
+      <span class="step" data-step="CONTEXT">CONTEXT</span>
+      <span class="step" data-step="REASON">REASON</span>
+      <span class="step" data-step="SYNTHESIZE">SYNTHESIZE</span>
+      <span class="step" data-step="STORE">STORE</span>
+    </nav>
+
+    <main>
+      <section id="output" aria-live="polite"></section>
+      <aside>
+        <h2 class="panel-title">Session</h2>
+        <div class="metric"><span>Queue</span><strong id="queue-count">0</strong></div>
+        <div class="metric"><span>Nodes</span><strong id="nodes">-</strong></div>
+        <div class="metric"><span>Knowledge</span><strong id="knowledge">-</strong></div>
+        <div class="metric"><span>Paths</span><strong id="paths">-</strong></div>
+      </aside>
+    </main>
+
+    <form id="query-form">
+      <select id="intent" aria-label="Intent">
+        <option value="">auto</option>
+        <option value="PROTECT">protect</option>
+        <option value="RESEARCH">research</option>
+        <option value="DECIDE">decide</option>
+        <option value="CREATE">create</option>
+        <option value="DIAGNOSE">diagnose</option>
+        <option value="REFLECT">reflect</option>
+      </select>
+      <input id="query-input" autocomplete="off" placeholder="Ask Mission Canvas..." autofocus>
+      <button id="send-btn" type="submit">Send</button>
+    </form>
+  </div>
+
+  <script>
+    const output = document.getElementById("output");
+    const input = document.getElementById("query-input");
+    const intentSel = document.getElementById("intent");
+    const sendBtn = document.getElementById("send-btn");
+    const statusEl = document.getElementById("status");
+    const pipelineEl = document.getElementById("pipeline");
+    const queueCountEl = document.getElementById("queue-count");
+    const queueBar = document.getElementById("queue-bar");
+    const queueLabel = document.getElementById("queue-label");
+    const replayBtn = document.getElementById("replay-btn");
+    const clearQueueBtn = document.getElementById("clear-queue-btn");
+    const installEl = document.getElementById("install");
+    const installBtn = document.getElementById("install-btn");
+    let ws;
+    let queryCount = Number(localStorage.getItem("mc.queryCount") || 0);
+    let installPrompt = null;
+    const arrivedAt = Date.now();
+
+    function setStatus(text, online) {
+      statusEl.className = `status ${online ? "online" : "offline"}`;
+      statusEl.querySelector("span:last-child").textContent = text;
+    }
+
+    function addEvent(type, content, meta = "") {
+      const div = document.createElement("div");
+      div.className = `event ${type}`;
+      div.innerHTML = meta ? `<span class="meta">${escapeHtml(meta)}</span>${escapeHtml(content)}` : escapeHtml(content);
+      output.appendChild(div);
+      output.scrollTop = output.scrollHeight;
+    }
+
+    function handleResult(data, replayed = false) {
+      if (data.type === "queued") {
+        addEvent("queued", data.message, `Queue: ${data.queue_count} pending`);
+        queueCountEl.textContent = data.queue_count;
+        sendBtn.disabled = false;
+        return;
+      }
+      if (data.type === "error") {
+        addEvent("error", data.error || "Unknown error");
+        sendBtn.disabled = false;
+        return;
+      }
+      const cls = data.classification || {};
+      const pl = data.pipeline || {};
+      const prefix = replayed ? "Replayed" : `${cls.node || "MC"} ${cls.name || ""}`.trim();
+      addEvent("result", data.result?.content || JSON.stringify(data), `${prefix} - ${pl.duration_ms || 0}ms${pl.external_called ? " - external" : ""}`);
+      if (pl.steps) updatePipeline(pl.steps);
+      sendBtn.disabled = false;
+    }
+
+    function setQueueCount(count) {
+      const n = Number(count || 0);
+      queueCountEl.textContent = String(n);
+      queueLabel.textContent = `${n} queued quer${n === 1 ? "y" : "ies"}`;
+      queueBar.style.display = n > 0 ? "flex" : "none";
+    }
+
+    async function sendQuery(event) {
+      event?.preventDefault();
+      const query = input.value.trim();
+      if (!query) return;
+      const intent = intentSel.value || undefined;
+      addEvent("query", `> ${intent ? `[${intent}] ` : ""}${query}`);
+      resetPipeline();
+      input.value = "";
+      sendBtn.disabled = true;
+      queryCount += 1;
+      localStorage.setItem("mc.queryCount", String(queryCount));
+      maybeShowInstall();
+
+      try {
+        const response = await fetch("/api/query", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query, intent })
+        });
+        handleResult(await response.json());
+      } catch (error) {
+        addEvent("error", String(error));
+        sendBtn.disabled = false;
+      }
+    }
+
+    function connectWs() {
+      const proto = location.protocol === "https:" ? "wss" : "ws";
+      ws = new WebSocket(`${proto}://${location.host}/ws`);
+      ws.onopen = () => setStatus(navigator.onLine ? "connected" : "offline", navigator.onLine);
+      ws.onclose = () => {
+        setStatus(navigator.onLine ? "reconnecting" : "offline", false);
+        setTimeout(connectWs, 2500);
+      };
+      ws.onmessage = event => {
+        const data = JSON.parse(event.data);
+        if (data.type === "query_received") return;
+        if (data.type === "result" || data.type === "error") handleResult(data);
+      };
+    }
+
+    function resetPipeline() {
+      pipelineEl.querySelectorAll(".step").forEach(step => step.className = "step");
+    }
+
+    function updatePipeline(steps) {
+      pipelineEl.querySelectorAll(".step").forEach(step => {
+        if (steps.includes(step.dataset.step)) step.className = "step done";
+      });
+      if (navigator.vibrate) navigator.vibrate(18);
+    }
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, char => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
+      }[char]));
+    }
+
+    function maybeShowInstall() {
+      if (installPrompt && queryCount >= 2 && Date.now() - arrivedAt > 60000) {
+        installEl.style.display = "flex";
+      }
+    }
+
+    window.addEventListener("beforeinstallprompt", event => {
+      event.preventDefault();
+      installPrompt = event;
+      maybeShowInstall();
+    });
+
+    installBtn.addEventListener("click", async () => {
+      installEl.style.display = "none";
+      await installPrompt?.prompt();
+      installPrompt = null;
+    });
+
+    window.addEventListener("online", () => {
+      setStatus("connected", true);
+      navigator.serviceWorker.controller?.postMessage({ type: "MC_ONLINE" });
+    });
+    window.addEventListener("offline", () => setStatus("offline", false));
+    replayBtn.addEventListener("click", () => navigator.serviceWorker.controller?.postMessage({ type: "MC_REPLAY_NOW" }));
+    clearQueueBtn.addEventListener("click", () => navigator.serviceWorker.controller?.postMessage({ type: "MC_CLEAR_QUEUE" }));
+    document.getElementById("query-form").addEventListener("submit", sendQuery);
+    input.addEventListener("keydown", event => {
+      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") sendQuery(event);
+    });
+
+    navigator.serviceWorker?.addEventListener("message", event => {
+      const data = event.data || {};
+      if (data.type === "MC_QUEUED") setQueueCount(data.count);
+      if (data.type === "MC_REPLAY_START") addEvent("system", `Sending ${data.count} queued quer${data.count === 1 ? "y" : "ies"} through governance.`);
+      if (data.type === "MC_REPLAYED") {
+        setQueueCount(data.remaining);
+        handleResult(data.response, true);
+      }
+      if (data.type === "MC_REPLAY_PAUSED") addEvent("queued", `Replay paused. ${data.remaining} still queued.`, "Connection not ready");
+      if (data.type === "MC_QUEUE_STATUS") setQueueCount(data.count);
+      if (data.type === "MC_QUEUE_CLEARED") {
+        setQueueCount(0);
+        addEvent("system", "Offline queue cleared.");
+      }
+    });
+
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").then(() => {
+        navigator.serviceWorker.controller?.postMessage({ type: "MC_QUEUE_STATUS" });
+      }).catch(error => addEvent("error", `Service worker failed: ${error}`));
+    }
+
+    const params = new URLSearchParams(location.search);
+    if (params.get("intent")) intentSel.value = params.get("intent").toUpperCase();
+    if (params.get("shared")) input.value = params.get("shared");
+
+    setStatus(navigator.onLine ? "connecting" : "offline", navigator.onLine);
+    connectWs();
+    fetch("/api/stats").then(r => r.json()).then(data => {
+      document.getElementById("nodes").textContent = data.ontology_nodes ?? "-";
+      document.getElementById("knowledge").textContent = data.knowledge_entries ?? "-";
+      document.getElementById("paths").textContent = data.path_records ?? "-";
+      addEvent("system", `Mission Canvas - ${data.ontology_nodes} nodes, ${data.knowledge_entries} knowledge entries, ${data.path_records} paths`);
+    }).catch(() => addEvent("system", "Stats unavailable while offline."));
+  </script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+domain: enablement
+version: '1.0'
+description: Imported from Palette taxonomy v1.3. 1 nodes.
+imported_from: palette/taxonomy/releases/v1.3/
+nodes:
+- id: RIU-603
+  name: Employee AI Adoption Program
+  description: AI tools deployed but employees don't use them, fear them, or use them incorrectly; need behavior change, not
+    just training.
+  domain: enablement
+  parent: CORE-RESEARCH
+  signals:
+  - AI adoption
+  - employee resistance
+  - behavior change
+  - training program
+  - champions program
+  - change management
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-001
+  - RIU-200
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: CREATE
+  default_lens: null

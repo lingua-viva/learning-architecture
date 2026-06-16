@@ -1,0 +1,218 @@
+# Core Domain — Domain-Agnostic Problem Types
+# These are the 6 intents as ontology nodes. Every query maps to at least one.
+# The core domain is the trunk. All other domains are branches.
+
+domain: core
+version: "1.0"
+description: >
+  The 6 universal intents that classify every query before any model fires.
+  These are not prompts. They are positions on the map. When a model receives
+  a classification of CORE-PROTECT, it knows: local only, no external calls,
+  PII blocking active. The classification IS the context.
+
+nodes:
+  - id: "CORE-PROTECT"
+    name: "Protect"
+    description: >
+      Query involves sensitive, privileged, or personal information that must
+      never leave the local machine. Triggers local-only execution with full
+      PII blocking. Zero external API calls.
+    domain: core
+    parent: null
+    signals:
+      - "confidential"
+      - "privileged"
+      - "private"
+      - "secret"
+      - "sensitive"
+      - "personal"
+      - "client"
+      - "patient"
+      - "not for sharing"
+      - "internal only"
+      - "off the record"
+      - "between us"
+      - "NDA"
+      - "trade secret"
+      - "proprietary"
+    blocks_external: true
+    requires_local: true
+    escalates_to: []
+    resolves_to: ["CORE-DECIDE"]
+    evidence_tier: 1
+    path_weight: 1.0
+    default_intent: PROTECT
+    default_model: "ollama/qwen2.5:3b"
+    default_lens: "protection"
+
+  - id: "CORE-RESEARCH"
+    name: "Research"
+    description: >
+      Query requires information retrieval beyond what the local knowledge
+      library contains. Triggers governed external research via Perplexity
+      with PII sanitization and targeted query formulation.
+    domain: core
+    parent: null
+    signals:
+      - "find"
+      - "search"
+      - "look up"
+      - "what is"
+      - "who is"
+      - "latest"
+      - "current"
+      - "recent"
+      - "news"
+      - "research"
+      - "investigate"
+      - "explore"
+      - "compare"
+      - "market"
+      - "competitors"
+      - "trends"
+    blocks_external: false
+    requires_local: false
+    escalates_to: ["CORE-DIAGNOSE"]
+    resolves_to: ["CORE-DECIDE", "CORE-CREATE"]
+    evidence_tier: 2
+    path_weight: 1.0
+    default_intent: RESEARCH
+    default_model: "perplexity/sonar-pro"
+    default_lens: "precision"
+
+  - id: "CORE-DECIDE"
+    name: "Decide"
+    description: >
+      Query requires making or evaluating a decision. Triggers reversibility
+      analysis, one-way door detection, and decision trail recording.
+      Every decision is stored as a path record with full provenance.
+    domain: core
+    parent: null
+    signals:
+      - "should I"
+      - "decide"
+      - "choose"
+      - "option"
+      - "tradeoff"
+      - "risk"
+      - "irreversible"
+      - "one-way door"
+      - "commit"
+      - "approve"
+      - "reject"
+      - "go/no-go"
+      - "recommend"
+      - "best approach"
+      - "weigh"
+      - "evaluate"
+    blocks_external: false
+    requires_local: false
+    escalates_to: ["CORE-RESEARCH"]
+    resolves_to: []
+    evidence_tier: 1
+    path_weight: 1.0
+    default_intent: DECIDE
+    default_model: "ollama/qwen2.5:3b"
+    default_lens: "synthesis"
+
+  - id: "CORE-CREATE"
+    name: "Create"
+    description: >
+      Query requires generating an artifact — code, document, plan, design,
+      analysis. Triggers artifact generation with provenance tracking.
+      Every created artifact records which knowledge entries and path records
+      informed its creation.
+    domain: core
+    parent: null
+    signals:
+      - "write"
+      - "create"
+      - "generate"
+      - "build"
+      - "draft"
+      - "compose"
+      - "design"
+      - "make"
+      - "produce"
+      - "outline"
+      - "template"
+      - "format"
+      - "code"
+      - "implement"
+    blocks_external: false
+    requires_local: false
+    escalates_to: []
+    resolves_to: []
+    evidence_tier: 3
+    path_weight: 1.0
+    default_intent: CREATE
+    default_model: "mistral/mistral-large-latest"
+    default_lens: null
+
+  - id: "CORE-DIAGNOSE"
+    name: "Diagnose"
+    description: >
+      Query requires root cause analysis, debugging, or problem isolation.
+      Triggers 5-whys decomposition and structural diagnosis.
+      Diagnosis paths are particularly valuable as memory — they record
+      which paths led to identifying the root cause.
+    domain: core
+    parent: null
+    signals:
+      - "why"
+      - "broken"
+      - "failing"
+      - "error"
+      - "bug"
+      - "not working"
+      - "wrong"
+      - "issue"
+      - "problem"
+      - "root cause"
+      - "debug"
+      - "troubleshoot"
+      - "diagnose"
+      - "stuck"
+      - "blocked"
+    blocks_external: false
+    requires_local: false
+    escalates_to: ["CORE-RESEARCH"]
+    resolves_to: ["CORE-DECIDE", "CORE-CREATE"]
+    evidence_tier: 2
+    path_weight: 1.0
+    default_intent: DIAGNOSE
+    default_model: "perplexity/sonar-pro"
+    default_lens: "critique"
+
+  - id: "CORE-REFLECT"
+    name: "Reflect"
+    description: >
+      Query requires metacognitive evaluation — what did we learn, what
+      could be better, what patterns are emerging. Triggers self-audit
+      and lesson extraction. Reflection paths feed the self-improvement loop.
+    domain: core
+    parent: null
+    signals:
+      - "reflect"
+      - "review"
+      - "lesson"
+      - "learned"
+      - "improve"
+      - "retrospective"
+      - "what went well"
+      - "what went wrong"
+      - "pattern"
+      - "meta"
+      - "self-assess"
+      - "audit"
+      - "health check"
+      - "how are we doing"
+    blocks_external: false
+    requires_local: true
+    escalates_to: []
+    resolves_to: ["CORE-DECIDE"]
+    evidence_tier: 3
+    path_weight: 0.8
+    default_intent: REFLECT
+    default_model: "ollama/qwen2.5:3b"
+    default_lens: "reflection"

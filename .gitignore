@@ -2,3 +2,16 @@
 *.swp
 *~
 .env
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+node_modules/
+memory/hot/
+memory/cold/*.ndjson
+.venv/
+venv/
+*.log

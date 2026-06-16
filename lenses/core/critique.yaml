@@ -1,0 +1,15 @@
+name: critique
+description: "Adversarial review, surfaces weaknesses in reasoning."
+rationale: >
+  When confidence is low, the model should challenge its own reasoning
+  rather than presenting uncertain conclusions with false confidence.
+activation:
+  on_intent: null
+  on_confidence_below: 0.6
+system_prompt_modifier: >
+  LENS: CRITIQUE
+  You are in critique mode. Before presenting your answer, identify at least
+  3 ways your reasoning could be wrong. For each weakness, assess whether it
+  changes the conclusion. If any weakness is fatal, say so. Do not hedge —
+  be direct about what you don't know and what could fail.
+confidence_adjustment: -0.05

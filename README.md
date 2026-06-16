@@ -1,6 +1,6 @@
 # Learning Architecture
 
-**Frameworks for designing educational systems that actually work — from a practitioner who builds them.**
+**Frameworks for designing educational systems that actually work — powered by a governed AI engine.**
 
 ---
 
@@ -11,7 +11,13 @@ My work sits at the intersection of three questions:
 2. **How can AI support teachers** without replacing the judgment, empathy, and relational complexity that only humans bring?
 3. **How do you measure whether learning is actually happening** — not through compliance metrics, but through evidence that students are genuinely more capable?
 
-This repository contains frameworks, case studies, and methods from my work designing educational systems. Everything here is labeled with its honest maturity stage:
+This repository contains frameworks, case studies, and methods from my work designing educational systems — now powered by [Mission Canvas](https://github.com/pretendhome/mission-canvas), a governed agent OS that ensures every decision is traceable, every memory is structured, and judgment compounds over time.
+
+---
+
+## Maturity Labels
+
+Everything here is labeled with its honest maturity stage:
 
 | Label | Meaning |
 |-------|---------|
@@ -56,11 +62,76 @@ How I design assessment systems that track real learning, not just completion. C
 
 ---
 
-## What This Repository Is Not
+## Education Skills
 
-This is not a code repository. There are no applications, APIs, or deployable systems here. I am not an engineer.
+Purpose-built frameworks in [`skills/education/`](skills/education/):
 
-This is a **learning design portfolio** — frameworks for thinking about educational systems, case studies from real institutional work, and methods I use daily as a practitioner. The value is in the thinking, not the implementation. If you are looking for someone who can design learning experiences that produce measurable outcomes, and who uses AI tools as a daily part of that practice, this is what that looks like from the inside.
+| Skill | What It Does |
+|-------|-------------|
+| [Adaptive Learning Framework](skills/education/adaptive-learning-framework.md) | AI-assisted personalized learning for children with learning differences (validated on ARON pilot) |
+| [Curriculum Operating Workspace](skills/education/claudia-curriculum-operating-workspace.md) | Local-first framework treating curriculum as the primary data structure |
+| [Convergence Workspace](skills/education/claudia-convergence.md) | Collaborative architecture for active education projects |
+
+---
+
+## Lenses
+
+Interpretive filters that shape how the engine processes queries:
+
+| Lens | Purpose |
+|------|---------|
+| [Person Lens — Claudia Canu Fautré](lenses/LENS-PERSON-002_claudia_canu.yaml) | Professional identity, capabilities, working style, and growth edges |
+| [Malaguzzi Voice Guide](lenses/VOICE-EDU-001_malaguzzi_inspired.md) | Framework for writing educational documents in a Reggio-inspired voice |
+| Core lenses (`lenses/core/`) | Protection, precision, critique, synthesis, reflection |
+| Professional lenses (`lenses/professional/`) | Legal, clinical, fiduciary |
+
+---
+
+## The Engine — Mission Canvas
+
+This repository is powered by [Mission Canvas](https://github.com/pretendhome/mission-canvas), an open-source governed agent OS. The engine provides:
+
+- **Ontology-based memory** — 137 nodes across 11 domains classify every query before any model fires
+- **8-step governed pipeline** — SCAN → CLASSIFY → RETRIEVE → RESEARCH → CONTEXT → REASON → SYNTHESIZE → STORE
+- **Path-structured persistence** — Redis hot, NDJSON cold, zero semantic interference
+- **Composable lenses** — interpretive filters that modify processing without changing the query
+- **Evidence-tiered knowledge** — 148 entries, 526 citations
+
+### Quick Start
+
+```bash
+./install.sh
+```
+
+Or manually:
+
+```bash
+pip install -e .
+./setup.sh
+```
+
+### Engine Structure
+
+| Directory | What's in it |
+|---|---|
+| `src/` | Python runtime — governed pipeline, gateway, integrity engine |
+| `ontology/` | 137-node classification system across 11 domains |
+| `knowledge/` | Evidence-tiered library — 148 entries, 526 citations |
+| `lenses/` | Interpretive filters + person lenses + voice guides |
+| `memory/` | Path-structured persistence (Redis + NDJSON) |
+| `agents/` | 6 intent agents + orchestrator |
+| `skills/` | Education skills + morphable capability layer |
+| `config/` | Three-tier governance (Tier 1 immutable, Tier 2 reviewed, Tier 3 auto) |
+| `runtime/` | Node.js message broker + voice hub |
+| `tests/` | Gateway, ontology, memory, knowledge, integration |
+
+---
+
+## What This Repository Is
+
+This is a **learning design portfolio powered by a governed AI engine**. The portfolio contains frameworks for thinking about educational systems, case studies from real institutional work, and methods I use daily as a practitioner. The engine ensures that every design decision is traceable, every piece of evidence is cited, and the system gets smarter over time.
+
+If you are looking for someone who can design learning experiences that produce measurable outcomes, and who builds AI-governed systems to support that practice, this is what that looks like from the inside.
 
 ---
 
@@ -98,4 +169,4 @@ See [publication-policy.md](publication-policy.md) for what is shared here, what
 
 ---
 
-*This repository represents my professional portfolio of educational design work. For academic publications, see [LinkedIn](https://linkedin.com/in/claudia-canu-fautre-31b204162). For inquiries: claudiacanufautre@gmail.com*
+*This repository represents my professional portfolio of educational design work, powered by [Mission Canvas](https://github.com/pretendhome/mission-canvas). For academic publications, see [LinkedIn](https://linkedin.com/in/claudia-canu-fautre-31b204162). For inquiries: claudiacanufautre@gmail.com*

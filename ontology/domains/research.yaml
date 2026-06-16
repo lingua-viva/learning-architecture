@@ -1,0 +1,26 @@
+domain: research
+version: '1.0'
+description: Imported from Palette taxonomy v1.3. 1 nodes.
+imported_from: palette/taxonomy/releases/v1.3/
+nodes:
+- id: RIU-106
+  name: Comparable Organization Research
+  description: Customer claims "no one does this" or uses weak analogies; need credible comparables with financial data to
+    validate business model
+  domain: research
+  parent: CORE-RESEARCH
+  signals:
+  - comparable organizations
+  - case studies
+  - who else does this
+  - market validation
+  - proven models
+  - similar businesses
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: RESEARCH
+  default_lens: null

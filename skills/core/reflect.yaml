@@ -1,0 +1,29 @@
+# REFLECT Skill — Self-audit, lesson extraction
+name: reflect
+description: >
+  Metacognitive evaluation. What did we learn? What patterns are emerging?
+  Reflection paths feed the self-improvement loop.
+trigger_patterns:
+  - "reflect"
+  - "review"
+  - "lesson"
+  - "improve"
+  - "retrospective"
+  - "what went well"
+  - "audit"
+  - "health check"
+ontology_mapping:
+  primary: "CORE-REFLECT"
+  domains: [core]
+model_routing:
+  reason: "ollama/qwen2.5:3b"
+  synthesize: "ollama/qwen2.5:3b"
+governance:
+  blocks_external: false
+  requires_local: true
+  pii_sanitizer: active
+  evidence_tier_required: 3
+memory_integration:
+  record_path: true
+  record_decision: false
+  feed_self_improvement: true

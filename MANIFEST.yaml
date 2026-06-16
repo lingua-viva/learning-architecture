@@ -1,0 +1,67 @@
+name: mission-canvas
+version: 1.0.0
+license: Apache-2.0
+product_url: https://missioncanvas.ai
+repo_url: https://github.com/pretendhome/mission-canvas
+
+ontology:
+  version: "1.0"
+  nodes: 137
+  domains: [core, legal, ai-enablement, strategy, financial, safety, research, enablement, business_planning, financial_modeling, knowledge_management]
+
+knowledge:
+  version: "1.0"
+  entries: 148
+  citations: 526
+  evidence_tiers: [1, 2, 3]
+
+memory:
+  backend: "redis+ndjson"
+  hot_store: "redis://localhost:6379"
+  cold_store: "ndjson (memory/data/)"
+
+skills:
+  core: 6
+  professional: 4
+  meta: 1
+  community: 0
+
+lenses:
+  core: 5
+  professional: 3
+
+agents:
+  intent: 6
+  orchestrator: 1
+  total: 7
+
+pipeline:
+  steps: 8
+  invariants:
+    - "Entry gate scans BEFORE classification"
+    - "Sensitive classification blocks external architecturally"
+    - "STORE always fires — memory compounds with every query"
+    - "Exit gate scans all inbound responses"
+
+governance:
+  tiers: 3
+  tier_1_rules: 8
+
+tests:
+  total: 65
+  pipeline: 0
+  gateway_pii: 14
+  ontology: 17
+  memory: 8
+  knowledge: 12
+  perplexity: 14
+
+system:
+  ports:
+    api: 7891
+    broker: 7899
+    hub: 7890
+  models:
+    local: "ollama/qwen2.5:3b"
+    research: "perplexity/sonar-pro"
+    create: "mistral/mistral-large-latest"

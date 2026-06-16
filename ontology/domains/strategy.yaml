@@ -1,0 +1,71 @@
+domain: strategy
+version: '1.0'
+description: Imported from Palette taxonomy v1.3. 3 nodes.
+imported_from: palette/taxonomy/releases/v1.3/
+nodes:
+- id: RIU-600
+  name: Multi-Brand AI Strategy Framework
+  description: Organization has multiple brands with different customer bases, operations, and strategies; needs AI approach
+    that preserves brand autonomy while enabling shared learning.
+  domain: strategy
+  parent: CORE-RESEARCH
+  signals:
+  - multi-brand organization
+  - brand autonomy
+  - shared platform
+  - federated AI governance
+  - brand-specific AI needs
+  blocks_external: true
+  requires_local: true
+  escalates_to:
+  - RIU-001
+  - RIU-002
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-601
+  name: AI Operating Model Design
+  description: Organization needs to structure AI decision rights, team topology, and budget allocation between central and
+    federated teams.
+  domain: strategy
+  parent: CORE-RESEARCH
+  signals:
+  - operating model
+  - AI team structure
+  - decision rights
+  - center of excellence
+  - budget allocation
+  blocks_external: true
+  requires_local: true
+  escalates_to:
+  - RIU-001
+  - RIU-002
+  - RIU-600
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-602
+  name: AI Use Case Prioritization Matrix
+  description: Multiple AI use cases proposed; need structured way to score, rank, and select based on business impact, feasibility,
+    and risk.
+  domain: strategy
+  parent: CORE-RESEARCH
+  signals:
+  - use case prioritization
+  - which AI project first
+  - portfolio management
+  - too many AI ideas
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-001
+  - RIU-004
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null

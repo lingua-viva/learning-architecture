@@ -1,0 +1,16 @@
+# Medical Base Skill — PHI protection + clinical decision support (stub)
+name: medical-base
+description: "HIPAA-compliant clinical decision support. PHI never leaves local."
+trigger_patterns: ["medical", "clinical", "patient", "diagnosis", "treatment", "HIPAA"]
+ontology_mapping:
+  primary: "CORE-PROTECT"
+  domains: [medical]
+model_routing:
+  protect: "ollama/qwen2.5:3b"
+  research: "perplexity/sonar-pro"
+governance:
+  blocks_external: "node-dependent"
+  pii_sanitizer: active
+  phi_protection: true
+core_skills_chained: [protect, research, decide]
+status: stub

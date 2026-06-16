@@ -1,0 +1,30 @@
+# CREATE Skill — Artifact generation with provenance
+name: create
+description: >
+  Generates artifacts (documents, code, plans, designs) with full provenance
+  tracking — which knowledge entries and path records informed creation.
+trigger_patterns:
+  - "write"
+  - "create"
+  - "generate"
+  - "build"
+  - "draft"
+  - "design"
+  - "code"
+  - "implement"
+ontology_mapping:
+  primary: "CORE-CREATE"
+  domains: [core]
+model_routing:
+  reason: "ollama/qwen2.5:3b"
+  create: "mistral/mistral-large-latest"
+  synthesize: "ollama/qwen2.5:3b"
+governance:
+  blocks_external: false
+  requires_local: false
+  pii_sanitizer: active
+  evidence_tier_required: 3
+memory_integration:
+  record_path: true
+  record_decision: false
+  record_artifact: true

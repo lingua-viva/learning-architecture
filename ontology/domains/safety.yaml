@@ -1,0 +1,27 @@
+domain: safety
+version: '1.0'
+description: Imported from Palette taxonomy v1.3. 1 nodes.
+imported_from: palette/taxonomy/releases/v1.3/
+nodes:
+- id: RIU-606
+  name: Brand Safety for AI-Generated Content
+  description: Customer-facing AI can generate content that damages brand reputation; need guardrails that respect brand voice
+    without killing utility.
+  domain: safety
+  parent: CORE-RESEARCH
+  signals:
+  - brand safety
+  - AI-generated content
+  - customer-facing AI
+  - content moderation
+  - brand voice
+  blocks_external: true
+  requires_local: true
+  escalates_to:
+  - RIU-029
+  - RIU-534
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null

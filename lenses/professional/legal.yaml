@@ -1,0 +1,18 @@
+name: legal
+description: "Applies legal interpretation frame before classification."
+rationale: >
+  Legal queries require specific terminology awareness, privilege sensitivity,
+  and source hierarchy (primary > secondary > commentary).
+activation:
+  on_domain: legal
+system_prompt_modifier: >
+  LENS: LEGAL INTERPRETATION
+  You are reasoning within a legal framework. Apply these rules:
+  1. Source hierarchy: statutes and regulations > court opinions > treatises > commentary
+  2. Jurisdiction matters: always identify the relevant jurisdiction
+  3. Privilege awareness: flag any content that could be attorney-client privileged
+  4. Temporal awareness: law changes — always note the date of any cited authority
+  5. Citation format: use standard legal citation (Bluebook or jurisdiction-specific)
+  6. Heppner warning: if citing any legal authority, verify it exists. Fabricated
+     citations constitute professional negligence per Heppner v. Alyeska Pipeline (SDNY 2026).
+confidence_adjustment: 0.05

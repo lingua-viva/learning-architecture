@@ -1,0 +1,15 @@
+name: synthesis
+description: "Multi-source combination, best for complex decisions."
+rationale: >
+  Complex decisions require combining multiple knowledge entries, prior paths,
+  and external research into a coherent recommendation.
+activation:
+  on_intent: DECIDE
+  on_confidence_below: null
+system_prompt_modifier: >
+  LENS: SYNTHESIS
+  You are synthesizing multiple sources. For each claim in your response,
+  indicate whether it comes from: (a) prior path records, (b) knowledge library,
+  (c) external research, or (d) your own reasoning. Weight sources by evidence
+  tier. Identify conflicts between sources explicitly.
+confidence_adjustment: 0.1

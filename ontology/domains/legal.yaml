@@ -1,0 +1,205 @@
+domain: legal
+version: '1.0'
+description: Imported from Palette taxonomy v1.3. 10 nodes.
+imported_from: palette/taxonomy/releases/v1.3/
+nodes:
+- id: RIU-700
+  name: Privilege Risk Assessment
+  description: A query or action may expose attorney-client privileged material to a third party, including cloud AI tools.
+  domain: legal
+  parent: CORE-DECIDE
+  signals:
+  - client name mentioned
+  - legal strategy discussed
+  - settlement terms
+  - privileged communication
+  - attorney work product
+  - case-specific advice
+  blocks_external: true
+  requires_local: true
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-701
+  name: Legal Precedent Research
+  description: Practitioner needs case law, statutory authority, or regulatory guidance on a legal question that can be researched
+    from public sources.
+  domain: legal
+  parent: CORE-RESEARCH
+  signals:
+  - case law question
+  - statutory interpretation
+  - regulatory guidance needed
+  - precedent search
+  - jurisdiction-specific question
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-700
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: RESEARCH
+  default_lens: null
+- id: RIU-702
+  name: Filing Deadline Tracking
+  description: Practitioner needs to identify applicable filing deadlines by jurisdiction, case type, and procedural posture.
+  domain: legal
+  parent: CORE-RESEARCH
+  signals:
+  - filing deadline question
+  - statute of limitations
+  - service deadline
+  - motion deadline
+  - scheduling order
+  blocks_external: true
+  requires_local: true
+  escalates_to:
+  - RIU-700
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-703
+  name: Conflict of Interest Check
+  description: New matter intake or party change requires checking for conflicts against existing representations.
+  domain: legal
+  parent: CORE-DECIDE
+  signals:
+  - new matter intake
+  - new party identified
+  - opposing counsel named
+  - corporate family discovered
+  - lateral hire with prior representations
+  blocks_external: true
+  requires_local: true
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: REFLECT
+  default_lens: null
+- id: RIU-704
+  name: Contract Clause Review
+  description: Practitioner needs to analyze specific contract clauses against standard terms, identify non-standard provisions,
+    and flag risk.
+  domain: legal
+  parent: CORE-RESEARCH
+  signals:
+  - contract review requested
+  - clause flagged as unusual
+  - counterparty redline received
+  - template deviation detected
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-700
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: RESEARCH
+  default_lens: null
+- id: RIU-705
+  name: Regulatory Compliance Check
+  description: Action or decision needs verification against applicable regulations before proceeding.
+  domain: legal
+  parent: CORE-RESEARCH
+  signals:
+  - regulatory question
+  - compliance review needed
+  - new regulation applicable
+  - audit preparation
+  - regulatory filing required
+  blocks_external: true
+  requires_local: true
+  escalates_to:
+  - RIU-700
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: RESEARCH
+  default_lens: null
+- id: RIU-706
+  name: Client Matter Intake
+  description: New client or new matter requires structured intake — classification, risk tier, conflict check, and matter
+    file creation.
+  domain: legal
+  parent: CORE-DECIDE
+  signals:
+  - new client engagement
+  - new matter opened
+  - engagement letter signed
+  - referral received
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-703
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-707
+  name: Discovery and Document Production
+  description: Matter requires organizing, reviewing, and producing documents while protecting privileged material.
+  domain: legal
+  parent: CORE-RESEARCH
+  signals:
+  - discovery request received
+  - document production deadline
+  - privilege log needed
+  - document review required
+  blocks_external: true
+  requires_local: true
+  escalates_to:
+  - RIU-700
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-708
+  name: Settlement Analysis
+  description: Matter requires evaluating exposure, modeling settlement ranges, and comparing against precedent outcomes.
+  domain: legal
+  parent: CORE-RESEARCH
+  signals:
+  - settlement discussion initiated
+  - demand received
+  - mediation scheduled
+  - exposure assessment requested
+  blocks_external: true
+  requires_local: true
+  escalates_to:
+  - RIU-700
+  - RIU-701
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-709
+  name: Fiduciary Duty Analysis
+  description: Action by a board, officer, trustee, or fiduciary requires analysis against applicable duty standards.
+  domain: legal
+  parent: CORE-RESEARCH
+  signals:
+  - board action proposed
+  - fiduciary duty question
+  - conflict of interest at board level
+  - sale or merger transaction
+  - trustee action questioned
+  blocks_external: true
+  requires_local: true
+  escalates_to:
+  - RIU-700
+  - RIU-701
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: RESEARCH
+  default_lens: null

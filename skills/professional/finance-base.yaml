@@ -1,0 +1,16 @@
+# Finance Base Skill — MNPI protection + fiduciary analysis (stub)
+name: finance-base
+description: "Material Non-Public Information protection + market research."
+trigger_patterns: ["finance", "MNPI", "insider", "securities", "fiduciary", "investment"]
+ontology_mapping:
+  primary: "CORE-PROTECT"
+  domains: [finance]
+model_routing:
+  protect: "ollama/qwen2.5:3b"
+  research: "perplexity/sonar-pro"
+governance:
+  blocks_external: "node-dependent"
+  pii_sanitizer: active
+  mnpi_protection: true
+core_skills_chained: [protect, research, decide]
+status: stub

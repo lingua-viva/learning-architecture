@@ -1,0 +1,28 @@
+domain: financial
+version: '1.0'
+description: Imported from Palette taxonomy v1.3. 1 nodes.
+imported_from: palette/taxonomy/releases/v1.3/
+nodes:
+- id: RIU-604
+  name: AI ROI Quantification Framework
+  description: CFO needs defensible business case for AI investment; standard revenue-growth framing doesn't work when goal
+    is cost reduction and efficiency.
+  domain: financial
+  parent: CORE-RESEARCH
+  signals:
+  - ROI quantification
+  - business case
+  - CFO presentation
+  - budget justification
+  - cost reduction
+  - total cost of ownership
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-006
+  - RIU-020
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null

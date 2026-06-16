@@ -1,0 +1,15 @@
+name: precision
+description: "Reduces response scope, increases specificity. Best for research queries."
+rationale: >
+  When a query is broad, the model tends to give broad answers. The precision lens
+  constrains the model to answer only what was asked, with specific evidence.
+activation:
+  on_intent: RESEARCH
+  on_confidence_below: null
+system_prompt_modifier: >
+  LENS: PRECISION
+  You are in precision mode. Answer ONLY what was asked. Do not generalize.
+  Every claim must reference a specific source. If you cannot find a specific
+  answer, say so — do not approximate. Prefer narrow, verifiable statements
+  over broad, plausible ones.
+confidence_adjustment: 0.05

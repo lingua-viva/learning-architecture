@@ -1,0 +1,187 @@
+domain: governance
+version: '1.0'
+description: MC's own operations — boundaries, classification, audit, agent governance,
+  model routing.
+nodes:
+- id: MC-GOV-001
+  name: Data Boundary Enforcement
+  description: PII/PHI detection and sanitization. Ensuring sensitive data never leaves
+    the machine.
+  domain: governance
+  signals:
+  - sanitizer
+  - sanitize
+  - pii gate
+  - pii
+  - phi boundary
+  - phi
+  - data boundary
+  - outbound filter
+  - firewall
+  - entry gate
+  - exit gate
+  - safety envelope
+  - blast radius
+  - permission boundary
+  blocks_external: true
+  requires_local: true
+  default_intent: PROTECT
+  artifacts:
+  - sanitizer_report
+  - firewall_log_entry
+  failure_modes:
+    silent:
+    - pattern miss — PII reaches external model undetected
+    loud:
+    - false positive blocks legitimate work
+  success_conditions:
+    execution: all PII redacted before external call
+    outcome: zero leaks in audit log
+    safety: no false positives on legitimate data
+  reversibility: two_way
+  parent: INTENT-PROTECT
+  produces:
+  - sanitizer_report
+  - firewall_log_entry
+  - boundary_config
+  requires: []
+  suggests_next:
+  - MC-GOV-004
+  - MC-GOV-005
+  - MC-DATA-006
+- id: MC-GOV-002
+  name: Classification Routing
+  description: How queries get classified to ontology nodes. Signal matching, confidence
+    scoring.
+  domain: governance
+  signals:
+  - classification
+  - routing
+  - ontology
+  - signal matching
+  - confidence score
+  - misclassification
+  blocks_external: true
+  requires_local: true
+  default_intent: DIAGNOSE
+  artifacts:
+  - classification_result
+  - confidence_score
+  failure_modes:
+    silent:
+    - wrong node selected — query routed to incorrect domain
+    loud:
+    - no match found — falls back to generic intent
+  success_conditions:
+    execution: query classified with >0.5 confidence
+    outcome: correct domain and intent selected
+  reversibility: two_way
+  parent: INTENT-DIAGNOSE
+  produces:
+  - classification_result
+  - confidence_score
+  requires: []
+  suggests_next:
+  - MC-GOV-003
+- id: MC-GOV-003
+  name: Decision Audit Trail
+  description: Append-only decision logging. Every query, every decision, every path
+    recorded.
+  domain: governance
+  signals:
+  - audit trail
+  - decision log
+  - path record
+  - append-only
+  - audit
+  - traceability
+  blocks_external: true
+  requires_local: true
+  default_intent: REFLECT
+  artifacts:
+  - path_record
+  - decision_log_entry
+  failure_modes:
+    silent:
+    - decision not recorded — gap in audit trail
+    loud:
+    - log corruption — integrity compromised
+  reversibility: one_way
+  parent: INTENT-REFLECT
+  produces:
+  - path_record
+  - decision_log_entry
+  requires: []
+  suggests_next:
+  - MC-WORK-007
+- id: MC-GOV-004
+  name: Agent Execution Governance
+  description: Task envelopes, policy compliance verification, result validation for
+    execution agents.
+  domain: governance
+  signals:
+  - agent governance
+  - governed execution
+  - execution adapter
+  - codex adapter
+  - agent adapter
+  - task envelope
+  - result envelope
+  - policy compliance
+  - agent-design
+  blocks_external: true
+  requires_local: true
+  default_intent: DECIDE
+  artifacts:
+  - task_envelope
+  - result_envelope
+  failure_modes:
+    silent:
+    - agent bypasses policy — external call made when forbidden
+    loud:
+    - policy violation detected and blocked
+  success_conditions:
+    execution: task envelope generated with correct policy
+    outcome: agent executes within boundaries
+    safety: policy violations caught and logged
+  dependencies:
+  - MC-GOV-001
+  reversibility: two_way
+  parent: INTENT-DECIDE
+  produces:
+  - task_envelope
+  - result_envelope
+  requires:
+  - boundary_config
+  suggests_next:
+  - MC-GOV-003
+- id: MC-GOV-005
+  name: Model Routing
+  description: Which model handles which query. Auto-detection, user preference, @mention
+    routing.
+  domain: governance
+  signals:
+  - model routing
+  - model selection
+  - which model
+  - ollama
+  - local model
+  - cloud model
+  blocks_external: false
+  default_intent: DECIDE
+  artifacts:
+  - model_selection_log
+  failure_modes:
+    silent:
+    - wrong model selected — cost or quality mismatch
+    loud:
+    - model unavailable — query fails with no fallback
+  dependencies:
+  - MC-GOV-001
+  reversibility: two_way
+  parent: INTENT-DECIDE
+  produces:
+  - model_selection_log
+  requires:
+  - boundary_config
+  suggests_next: []

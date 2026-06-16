@@ -1,0 +1,12 @@
+{
+  "source_query_hash": "testhash",
+  "proposed_title": "The court held that AI citations must be verified per Heppner ruling.",
+  "proposed_content": "The court held that AI citations must be verified per Heppner ruling.",
+  "ontology_node": "RIU-701",
+  "citations": [
+    "https://example.com/heppner"
+  ],
+  "evidence_tier": 2,
+  "confidence": 0.7,
+  "timestamp": 1780621311.8312504
+}

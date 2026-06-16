@@ -1,0 +1,15 @@
+# Founder Base Skill — Board/pipeline/strategy protection + GTM research
+name: founder-base
+description: "Protect board communications and pipeline data. Research GTM freely."
+trigger_patterns: ["board", "pipeline", "strategy", "fundraise", "cap table", "investor", "GTM"]
+ontology_mapping:
+  primary: "CORE-PROTECT"
+  domains: [founder]
+model_routing:
+  protect: "ollama/qwen2.5:3b"
+  research: "perplexity/sonar-pro"
+governance:
+  blocks_external: "node-dependent"
+  pii_sanitizer: active
+core_skills_chained: [protect, research, decide, create]
+status: stub

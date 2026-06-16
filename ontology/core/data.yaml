@@ -1,0 +1,212 @@
+domain: data
+version: '1.0'
+description: Data quality, structure, annotation, evaluation, pipelines, privacy.
+  Any domain.
+nodes:
+- id: MC-DATA-001
+  name: Data Quality Assessment
+  description: Measure accuracy, completeness, consistency of data. Error taxonomy.
+  domain: data
+  signals:
+  - data quality
+  - accuracy
+  - completeness
+  - consistency
+  - error taxonomy
+  - data audit
+  default_intent: DIAGNOSE
+  artifacts:
+  - quality_report
+  - error_taxonomy
+  failure_modes:
+    silent:
+    - unmeasured drift — quality degrades without detection
+    loud:
+    - data corruption discovered late in pipeline
+  reversibility: two_way
+  parent: INTENT-DIAGNOSE
+  produces:
+  - quality_report
+  - error_taxonomy
+  requires: []
+  suggests_next:
+  - MC-DATA-004
+  - MC-DATA-005
+- id: MC-DATA-002
+  name: Taxonomy / Ontology Design
+  description: Classify problems into structured categories. Signal design, node design.
+  domain: data
+  signals:
+  - taxonomy
+  - ontology
+  - classification
+  - categories
+  - signal design
+  - node design
+  - structured categories
+  default_intent: CREATE
+  artifacts:
+  - taxonomy_yaml
+  - signal_index
+  failure_modes:
+    silent:
+    - classification gap — queries fall through to generic
+    loud:
+    - conflicting categories — same query matches two nodes
+  success_conditions:
+    execution: all queries classifiable
+    outcome: routing accuracy above 50%
+  reversibility: two_way
+  parent: INTENT-CREATE
+  produces:
+  - taxonomy_yaml
+  - signal_index
+  requires: []
+  suggests_next:
+  - MC-DATA-001
+- id: MC-DATA-003
+  name: Annotation Workflow
+  description: Label data with quality controls. Inter-rater reliability, guidelines.
+  domain: data
+  signals:
+  - annotation
+  - labeling
+  - data labeling
+  - annotator
+  - inter-rater
+  - guidelines
+  - rubric
+  - quality rubric
+  default_intent: CREATE
+  artifacts:
+  - annotation_guidelines
+  - quality_rubric
+  - inter_rater_report
+  failure_modes:
+    silent:
+    - labeler drift over time
+    loud:
+    - annotator disagreement
+    clustered:
+    - ambiguous guidelines cause systematic errors
+  reversibility: two_way
+  parent: INTENT-CREATE
+  success_conditions:
+    execution: annotation guidelines published
+    outcome: inter-rater agreement above threshold
+    safety: no labeler introduces systematic bias
+  produces:
+  - annotation_guidelines
+  - quality_rubric
+  - inter_rater_report
+  requires: []
+  suggests_next:
+  - MC-DATA-001
+  - MC-DATA-004
+- id: MC-DATA-004
+  name: Evaluation Framework
+  description: Measure AI system quality systematically. Golden datasets, eval harness,
+    baselines.
+  domain: data
+  signals:
+  - evaluation
+  - eval
+  - golden dataset
+  - benchmark
+  - baseline
+  - metrics
+  - eval harness
+  default_intent: CREATE
+  artifacts:
+  - golden_dataset
+  - eval_harness
+  - baseline_report
+  failure_modes:
+    silent:
+    - wrong metric — optimizing for the wrong thing
+    loud:
+    - eval doesn't match production behavior
+  dependencies:
+  - MC-DATA-001
+  reversibility: two_way
+  parent: INTENT-CREATE
+  produces:
+  - golden_dataset
+  - eval_harness
+  - baseline_report
+  requires:
+  - quality_report
+  suggests_next: []
+- id: MC-DATA-005
+  name: Data Pipeline Design
+  description: Move data from source to destination with governance. Schema, validation,
+    flow.
+  domain: data
+  signals:
+  - data pipeline
+  - ETL
+  - data flow
+  - schema
+  - ingestion
+  - data integration
+  default_intent: CREATE
+  artifacts:
+  - pipeline_spec
+  - data_flow_diagram
+  failure_modes:
+    silent:
+    - schema drift between source and destination
+    loud:
+    - pipeline failure — data stops flowing
+  dependencies:
+  - MC-DATA-001
+  reversibility: two_way
+  parent: INTENT-CREATE
+  success_conditions:
+    execution: pipeline running end-to-end
+    outcome: data flows without manual intervention
+    safety: schema validation catches drift
+  produces:
+  - pipeline_spec
+  - data_flow_diagram
+  requires:
+  - quality_report
+  suggests_next:
+  - MC-DEPLOY-005
+- id: MC-DATA-006
+  name: Privacy / Compliance
+  description: PII detection, data minimization, GDPR, HIPAA, COPPA, regulatory requirements.
+  domain: data
+  signals:
+  - privacy
+  - compliance
+  - GDPR
+  - HIPAA
+  - COPPA
+  - data minimization
+  - regulatory
+  - consent
+  default_intent: PROTECT
+  blocks_external: true
+  requires_local: true
+  artifacts:
+  - privacy_impact_assessment
+  - data_map
+  failure_modes:
+    silent:
+    - PII leak undetected in pipeline
+    loud:
+    - regulatory violation discovered by auditor
+  reversibility: one_way
+  parent: INTENT-PROTECT
+  success_conditions:
+    execution: PII/PHI audit complete
+    outcome: zero unprotected personal data in pipeline
+    safety: regulatory compliance verified
+  produces:
+  - privacy_impact_assessment
+  - data_map
+  requires: []
+  suggests_next:
+  - MC-GOV-001
+  - MC-LEGAL-005

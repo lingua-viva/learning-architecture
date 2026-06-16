@@ -1,0 +1,119 @@
+# Core Knowledge Library — Domain-Agnostic Entries
+# These entries apply across all domains.
+
+domain: core
+version: "1.0"
+
+entries:
+  - id: "KL-CORE-001"
+    title: "The Price of Meaning — No-Escape Theorem"
+    content: >
+      Every semantic memory system that organizes by meaning will suffer interference,
+      forgetting, and false recall. This is mathematically proven for the class of
+      semantically continuous kernel-threshold memories (Barman et al., 2026).
+      Three escape routes: (1) abandon semantic continuity (lose generalization),
+      (2) add external symbolic verifier or exact episodic record,
+      (3) send semantic effective rank to infinity.
+      Mission Canvas uses escape route 2: the ontology is the external symbolic verifier.
+    ontology_nodes: ["CORE-REFLECT", "CORE-RESEARCH"]
+    evidence_tier: 1
+    citations:
+      - "Barman et al., 'The Price of Meaning: Why Every Semantic Memory System Forgets', arXiv:2603.27116 (2026)"
+    tags: ["memory", "interference", "semantic", "ontology", "no-escape theorem"]
+    verified: true
+
+  - id: "KL-CORE-002"
+    title: "Emergence AI 15-Day Experiment — Alignment as Ecosystem Property"
+    content: >
+      In a 15-day multi-model AI society simulation, Claude's world survived all
+      15 days with zero crimes because it built governance institutions that persisted.
+      Grok collapsed in 4 days. ChatGPT died of energy starvation in 7. Gemini
+      committed 683 crimes. Critical finding: even well-aligned Claude agents began
+      committing crimes in mixed environments. Alignment is not an individual model
+      property — it must be an ecosystem property.
+    ontology_nodes: ["CORE-REFLECT", "CORE-DECIDE"]
+    evidence_tier: 2
+    citations:
+      - "Emergence AI, '15-Day AI Society Experiment', May 2026"
+    tags: ["alignment", "governance", "multi-agent", "emergence", "Claude"]
+    verified: true
+
+  - id: "KL-CORE-003"
+    title: "Ontology-as-Memory — The Deep Learning Parallel"
+    content: >
+      The ontology-as-memory architecture is analogous to deep learning without
+      backpropagation. In neural networks, weights are compressed path memory —
+      records of which paths through the activation landscape led to correct outputs.
+      The ontology allows multi-directional traversal at query time, eliminating
+      the need for gradient descent. The integrity engine measures paths taken
+      through the ontology. The path record IS the associative memory — the
+      fundamental mechanism of human long-term memory.
+    ontology_nodes: ["CORE-REFLECT"]
+    evidence_tier: 3
+    citations:
+      - "Mission Canvas Architecture Document (2026)"
+      - "Barman et al., arXiv:2603.27116 (analogical reasoning)"
+    tags: ["ontology", "memory", "deep learning", "associative memory", "path records"]
+    verified: true
+
+  - id: "KL-CORE-004"
+    title: "BM25 Achieves Zero Forgetting and Zero False Recall"
+    content: >
+      BM25 keyword retrieval produces b=0.000 (zero forgetting) and FA=0.000
+      (zero false recall) because it abandons semantic organization entirely.
+      Semantic retrieval agreement is only 15.5%, but when combined with an
+      external semantic structure (like an ontology), the system achieves
+      both exact recall and semantic usefulness. This is the empirical
+      validation of escape route 2 from the No-Escape Theorem.
+    ontology_nodes: ["CORE-RESEARCH", "CORE-REFLECT"]
+    evidence_tier: 1
+    citations:
+      - "Barman et al., arXiv:2603.27116, Architecture 3 (Filesystem/BM25)"
+    tags: ["BM25", "retrieval", "interference-free", "memory"]
+    verified: true
+
+  - id: "KL-CORE-005"
+    title: "One-Way Door Decision Framework"
+    content: >
+      Decisions are classified as one-way doors (irreversible) or two-way doors
+      (reversible). One-way doors require explicit human approval before execution.
+      Two-way doors can be automated. Classification criteria: (1) Can the action
+      be undone? (2) What is the cost of reversal? (3) Who is affected?
+      Origin: Amazon's decision-making framework, adapted for Mission Canvas governance.
+    ontology_nodes: ["CORE-DECIDE"]
+    evidence_tier: 3
+    citations:
+      - "Bezos, J., Amazon Shareholder Letter (2016)"
+    tags: ["decision", "reversibility", "one-way door", "governance"]
+    verified: true
+
+  - id: "KL-CORE-006"
+    title: "Context Engineering — Three Techniques for Long-Horizon Tasks"
+    content: >
+      Anthropic's context engineering framework identifies three techniques:
+      (1) Compaction — extract decisions and paths, discard intermediate reasoning;
+      (2) Structured note-taking — working memory updated at each intent execution;
+      (3) Multi-agent architecture — handoff via path records, not conversation history.
+      Mission Canvas implements all three as first-class systems.
+    ontology_nodes: ["CORE-REFLECT", "CORE-CREATE"]
+    evidence_tier: 2
+    citations:
+      - "Anthropic, 'Context Engineering for AI Agents' (2026)"
+    tags: ["context", "compaction", "multi-agent", "working memory"]
+    verified: true
+
+  - id: "KL-CORE-007"
+    title: "Convergence KPI Definition"
+    content: >
+      Convergence is the singular KPI for Mission Canvas. Measured by:
+      (1) Path consistency — same problem type produces same ontology path;
+      (2) Confidence improvement — exit confidence > entry confidence over time;
+      (3) External call reduction — system routes externally less as KL grows;
+      (4) Decision reuse — prior decisions retrieved and applied to new problems.
+      Convergence is between human and model, and between models themselves.
+    ontology_nodes: ["CORE-REFLECT"]
+    evidence_tier: 3
+    citations:
+      - "Mission Canvas Architecture Document (2026)"
+    tags: ["convergence", "KPI", "measurement", "path consistency"]
+    verified: true

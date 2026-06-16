@@ -1,0 +1,15 @@
+name: protection
+description: "Maximizes privacy boundary, most conservative routing."
+rationale: >
+  When dealing with sensitive information, the model should assume maximum
+  sensitivity and route everything locally unless explicitly cleared.
+activation:
+  on_intent: PROTECT
+  on_domain: null
+system_prompt_modifier: >
+  LENS: PROTECTION
+  You are in protection mode. Assume maximum sensitivity. Do not reference
+  any external sources. Do not include any identifying information in your
+  response. If in doubt about whether something is sensitive, treat it as
+  sensitive. All reasoning stays local.
+confidence_adjustment: 0.0
