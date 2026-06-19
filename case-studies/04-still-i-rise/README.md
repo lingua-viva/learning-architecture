@@ -49,7 +49,8 @@ How do you build a governed AI education system for classrooms where:
 ├── context/
 │   ├── organization.md                ← who they are, schools, philosophy
 │   ├── challenges.md                  ← refugee education challenges we must solve
-│   └── prior-art.md                   ← what transfers from cases 01-03
+│   ├── prior-art.md                   ← what transfers from cases 01-03
+│   └── teacher-use-cases.md           ← real teacher workflows from IB classrooms
 ├── proposal/
 │   ├── approach.md                    ← how we'd approach this engagement
 │   └── differentiators.md             ← why MC, not another EdTech
@@ -57,6 +58,13 @@ How do you build a governed AI education system for classrooms where:
 │   ├── multilingual-acquisition.md    ← CEFR applied to diverse L1 populations
 │   ├── interrupted-education.md       ← assessment for students with gaps
 │   └── teacher-empowerment.md         ← zero-sum complexity, institutional memory
+├── architecture/
+│   ├── README.md                      ← build sequence, decisions, risks overview
+│   ├── data-model.md                  ← entity schema, pipeline spec, sync architecture
+│   ├── rti-tiers.md                   ← 3-tier intervention system with escalation logic
+│   ├── content-differentiation.md     ← 3-level content pack engine
+│   ├── observation-capture.md         ← speech-to-text + parent artifacts
+│   └── integration-risks.md          ← 5 seam risks, untested assumptions
 └── meeting/
     ├── cheatsheet.md                  ← dense paragraphs for the conversation
     └── questions.md                   ← what to ask and why
