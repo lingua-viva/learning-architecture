@@ -39,6 +39,13 @@ ALLOWLIST: set[str] = {
     "generativelanguage.googleapis.com",
     # Local inference
     "ollama", "host.docker.internal",
+    # Still I Rise Product A: teacher-facing reply channel only.
+    # Never carries student observation content externally — the
+    # ontology gate (blocks_external/requires_local on LV-TCH-*/LV-STU-*)
+    # keeps observation text local; this host is used only to post
+    # already-teacher-approved, non-PII acknowledgement replies back to
+    # the teacher's own Slack channel. See src/education/slack_bot.py.
+    "slack.com",
 }
 
 # Private network ranges (always allowed)

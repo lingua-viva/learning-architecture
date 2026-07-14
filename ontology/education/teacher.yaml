@@ -1,0 +1,202 @@
+# Lingua Viva — Education Ontology: Teacher Domain
+# Source: Real Toddle workflow (portfolio posts, progress reports, gradebook)
+
+domain: teacher
+version: '1.0'
+description: >
+  Teacher workflow support — observation, grouping, routine design,
+  and narrative reporting. All nodes assume Toddle as the platform.
+
+nodes:
+- id: LV-TCH-001
+  name: Observation Capture
+  description: >
+    Support structured observation of student language use during
+    inquiry activities. Outputs are formatted for Toddle portfolio
+    posts with student tagging. Must capture observable language
+    behaviors, not interpretations.
+  domain: teacher
+  parent: CORE-CREATE
+  signals:
+  - observation
+  - anecdotal
+  - I noticed
+  - student said
+  - language sample
+  - capture
+  - document
+  - just watched
+  - self-correct
+  blocks_external: true
+  requires_local: true
+  default_intent: CREATE
+  produces:
+  - observation_note
+  - portfolio_post_draft
+  requires:
+  - ib_unit_plan
+  suggests_next:
+  - LV-ASS-004
+  - LV-TCH-002
+  failure_modes:
+    silent:
+    - Observation captures activity completion not language evidence
+    loud:
+    - Student name included in output without privacy gate
+
+- id: LV-TCH-002
+  name: Flexible Grouping
+  description: >
+    Suggest student groupings based on CEFR-mapped proficiency levels
+    and unit requirements. Must account for mixed native/L2 classrooms.
+    Groupings are teacher decisions — system suggests, never assigns.
+  domain: teacher
+  parent: CORE-DECIDE
+  signals:
+  - grouping
+  - group students
+  - mixed ability
+  - pair work
+  - collaborative
+  - who should work together
+  blocks_external: true
+  requires_local: true
+  default_intent: DECIDE
+  produces:
+  - grouping_suggestion
+  requires:
+  - cefr_evidence_map
+  suggests_next:
+  - LV-CUR-002
+  failure_modes:
+    silent:
+    - Grouping based on behavior not proficiency
+    loud:
+    - System auto-assigns groups without teacher decision gate
+
+- id: LV-TCH-003
+  name: Routine & Scaffold Bank
+  description: >
+    Provide Italian language routines and scaffolds appropriate to
+    grade level. G1: oral routines, chunking, songs. G3: analisi
+    grammaticale structures, reading comprehension frames. G5: essay
+    structures, tense usage patterns, transition words.
+  domain: teacher
+  parent: CORE-CREATE
+  signals:
+  - routine
+  - scaffold
+  - sentence frame
+  - word wall
+  - chunking
+  - oral routine
+  - writing frame
+  - give me frames
+  - language routine
+  blocks_external: false
+  default_intent: CREATE
+  produces:
+  - scaffold_bank
+  - routine_sequence
+  requires: []
+  suggests_next:
+  - LV-CUR-002
+  - LV-CUR-004
+  failure_modes:
+    silent:
+    - Scaffold provided at wrong CEFR level for target students
+    loud:
+    - Routine uses English scaffolding in an Italian-medium context
+
+- id: LV-TCH-004
+  name: Narrative Report Support
+  description: >
+    Help teachers write progress report narratives for Toddle. Uses
+    observation evidence + gradebook indicators to draft per-unit and
+    per-subject comments. Output must sound like the teacher's voice,
+    never like AI. Must reference specific learning evidence.
+  domain: teacher
+  parent: CORE-CREATE
+  signals:
+  - progress report
+  - write comment
+  - narrative
+  - report card
+  - unit comment
+  - subject comment
+  blocks_external: true
+  requires_local: true
+  default_intent: CREATE
+  produces:
+  - narrative_draft
+  requires:
+  - observation_note
+  - progress_snapshot
+  suggests_next:
+  - LV-PAR-002
+  failure_modes:
+    silent:
+    - Narrative is generic and could apply to any student
+    - AI voice detectable in output
+    loud:
+    - Narrative contradicts gradebook indicator evidence
+
+- id: LV-TCH-005
+  name: Institutional Memory
+  description: >
+    Capture and retrieve grade-team knowledge: what worked last year,
+    which activities to repeat/modify, unit timing insights. Enables
+    the 50/50 principle — standardized framework + teacher flexibility.
+  domain: teacher
+  parent: CORE-REFLECT
+  signals:
+  - what worked
+  - last year
+  - previous unit
+  - we tried
+  - lesson learned
+  - carry forward
+  blocks_external: false
+  default_intent: REFLECT
+  produces:
+  - lessons_learned
+  - unit_retrospective
+  requires: []
+  suggests_next:
+  - LV-CUR-001
+  - LV-CUR-006
+  failure_modes:
+    silent:
+    - Memory captured without context (works for one teacher, not another)
+    loud:
+    - Institutional knowledge contradicts current curriculum requirements
+
+- id: LV-TCH-006
+  name: New Teacher Onboarding
+  description: >
+    Package the Lingua Viva framework for a new Italian teacher joining
+    mid-year or at start of year. Covers: 4-framework integration,
+    Toddle workflow, assessment scale, CEFR expectations by grade,
+    Reggio documentation approach.
+  domain: teacher
+  parent: CORE-CREATE
+  signals:
+  - new teacher
+  - onboarding
+  - how does this work
+  - orientation
+  - getting started
+  blocks_external: false
+  default_intent: CREATE
+  produces:
+  - onboarding_package
+  - quick_start_guide
+  requires: []
+  suggests_next:
+  - LV-CUR-003
+  - LV-ASS-004
+  failure_modes:
+    silent:
+    - Onboarding presents ideal system not actual current practice
+    loud:
+    - New teacher receives contradictory guidance from system vs colleagues

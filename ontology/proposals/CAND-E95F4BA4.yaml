@@ -1,0 +1,107 @@
+candidate_id: CAND-E95F4BA4
+status: ENRICHED
+created_at: 1784009634.8940065
+updated_at: 1784009673.2109957
+original_query: what are the achievement levels for criterion B reading?
+query_hash: 9426a1da9ea59ec4
+fallback_node: CORE-RESEARCH
+fallback_confidence: 0.3
+signals:
+- achievement
+- levels
+- criterion
+- reading
+- subject
+- guide
+queries:
+- 9426a1da9ea59ec4
+- b6215fcf2976b83a
+domain: core
+perplexity_findings:
+- content: "For MYP **Language Acquisition – Criterion B (Reading)**, there are **achievement\
+    \ levels from 0 to 8**, grouped in four bands with specific descriptors for reading\
+    \ performance.[6][8]\n\n**Standard banding (Years 1–3, simple texts)**[1][6] \
+    \ \n- **Level 0** – The student does not reach a standard described by any of\
+    \ the descriptors below.[6]  \n- **Levels 1–2 (limited)** – The student:  \n \
+    \ - identifies **minimal stated information** (facts, opinions, messages) in a\
+    \ variety of **simple authentic texts**[6]  \n  - identifies **basic conventions**\
+    \ in simple authentic texts[6]  \n  - identifies **basic connections** in simple\
+    \ authentic texts[6]  \n- **Levels 3–4 (adequate)** – The student:  \n  - identifies\
+    \ **some stated information** in a variety of simple authentic texts[6]  \n  -\
+    \ identifies basic conventions in simple authentic texts[6]  \n  - identifies\
+    \ basic connections in simple authentic texts[6]  \n- **Levels 5–6 (substantial)**\
+    \ – The student:  \n  - identifies **most stated information**, including supporting\
+    \ details, in simple authentic texts[6]  \n  - **interprets conventions** in simple\
+    \ authentic texts[6]  \n  - **interprets connections** in simple authentic texts[6]\
+    \  \n- **Levels 7–8 (excellent)** – The student:  \n  - identifies **explicit\
+    \ and implicit information** (facts, opinions, messages, supporting details) in\
+    \ a **wide variety** of simple authentic texts[6][1]  \n  - **analyses conventions**\
+    \ in simple authentic texts[6]  \n  - **analyses connections** in simple authentic\
+    \ texts[6]  \n\n**Proficient level (Years 4–5, complex texts)**  \nIn later years,\
+    \ the same 0–8 scale applies, but descriptors shift from **simple** to **complex\
+    \ authentic texts**:[8]  \n- **1–2:** minimal stated information; basic conventions;\
+    \ basic connections in **complex texts**[8]  \n- **3–4:** some stated information;\
+    \ basic conventions; basic connections in complex texts[8]  \n- **5–6:** most\
+    \ stated information and supporting details; interprets conventions in complex\
+    \ texts[8]  \n- **7–8:** identifies explicit and implicit information"
+  citations:
+  - https://www.scribd.com/document/942769003/MYP-1-TERM-2
+  - https://boyd.sd38.bc.ca/files/boyd/2022-02/Language%20Acquisition.pdf
+  - https://es.scribd.com/document/650162311/READING-TASKS-MYP-MODEL
+  - https://community.tisbrain.net/files/2023-24-MYP-Assessment-Criteria-Language-Acquisition.pdf
+  - https://www.studocu.com/latam/document/universidad-interamericana-de-puerto-rico/educacion/ib-rubric-in-blank-language-acquisition/51127760?origin=related-document
+  - https://www.scribd.com/document/859806630/Year-7-MYP-Phase-2-Criterion-A-B-reading-and-listening-1
+  - https://www.mioc.hr/wp/wp-content/uploads/2024/09/Croatian-B_Lang.Aquisition__Course_Descripiton_MYP45_2024_25.pdf
+  - https://www.rfs.edu.ps/uploads/files/MYP%20Documents/Language%20Acquisition%20Years%204%20&%205.pdf
+  - https://pt.slideshare.net/slideshow/assesment-criteria-phase2/23902930
+  - https://leighacademywilmington.org.uk/wp-content/uploads/2023/03/MYP-ASSESSMENT-GUIDANCE-FOR-PARENTS-MARCH-2023-UPDATE.pdf
+  - https://romyp.weebly.com/myp-assessment-criterion.html
+  gaps: []
+  contradictions: []
+- content: 'In the **MYP subject guides**, Criterion B is typically split into **four
+    achievement bands**: **1–2**, **3–4**, **5–6**, and **7–8**, with **0** used when
+    the student does not meet any descriptor.[2][3][4][7]
+
+
+    The exact wording depends on the subject, but the bands are consistently described
+    as:
+
+    - **1–2:** limited achievement[2][3][4][6]
+
+    - **3–4:** adequate achievement[2][3][4][6]
+
+    - **5–6:** substantial achievement[2][3][4][6]
+
+    - **7–8:** excellent achievement[2][3][4][6]
+
+
+    For example, in the MYP science rubric for Criterion B, the descriptors progress
+    from **state/outline** at lower levels to **describe/explain** and more complete,
+    logical, and safe methods at higher levels.[6][9] In mathematics, Criterion B
+    is described as **Investigating patterns**, and the same four-band structure is
+    used.[3]
+
+
+    What I could not fully verify from the results is whether you mean a specific
+    **subject guide** from one subject group, because each guide gives its own Criterion
+    B criteria statements even though the achievement bands are the same across MYP
+    subjects.[3][4][7]'
+  citations:
+  - https://www.aia.vic.edu.au/uploads/Academics/MYP/AIA_MYP_ASSESSMENT_GUIDE_2020.pdf
+  - https://core-docs.s3.us-east-1.amazonaws.com/documents/asset/uploaded_file/4307/swa/3684681/MS-_Criterion_B.pdf
+  - https://www.leighacademyhalley.org.uk/wp-content/uploads/2022/02/21-22-MYP-Subject-Information-Mathematics.pdf
+  - https://resources.finalsite.net/images/v1761695547/wwwopsorg/cdoqbjrv9sfoejpncguh/Individuals_and_Societies_Objectives.pdf
+  - https://fr.scribd.com/document/910864255/What-is-This-Subject
+  - https://www.montgomeryschoolsmd.org/siteassets/schools/high-schools/r-w/springbrookhs/uploadedfiles/ib/science-myp20objectives20and20assessment20criteria2020year20520only.pdf
+  - https://leighstationersacademy.org.uk/wp-content/uploads/2024/08/Middle-Years-Programme-MYP_-Assessment-Recording-and-Reporting-Policy-2024-25-.pdf
+  - https://www.scribd.com/document/383552250/criterion-b-samples
+  - https://www.scribd.com/document/432874353/Myp-Science-4-5-Criterion-b-Rubric
+  - https://www.youtube.com/watch?v=2mVMpEh15JE
+  gaps: []
+  contradictions: []
+knowledge_refs: []
+path_records: []
+hit_count: 4
+avg_confidence: 0.0
+resolution: null
+evaluation_notes: ''

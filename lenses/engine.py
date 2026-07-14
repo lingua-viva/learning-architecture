@@ -40,6 +40,7 @@ class Lens:
         domain: Optional[str] = None,
         confidence: float = 1.0,
         user_requested: bool = False,
+        query: Optional[str] = None,
     ) -> bool:
         """Determine if this lens should activate given the context."""
         if user_requested:
@@ -47,11 +48,23 @@ class Lens:
         rules = self.activation_rules
         if intent and rules.get("on_intent") == intent:
             return True
-        if domain and rules.get("on_domain") == domain:
-            return True
+        on_domain = rules.get("on_domain")
+        if domain and on_domain:
+            # on_domain may be a single domain string or a list of domains —
+            # list form covers lenses whose subject matter spans more than
+            # one ontology domain (e.g. differentiation-coach activates on
+            # both "curriculum" and "teacher" nodes).
+            domains = on_domain if isinstance(on_domain, list) else [on_domain]
+            if domain in domains:
+                return True
         threshold = rules.get("on_confidence_below")
         if threshold and confidence < threshold:
             return True
+        keywords = rules.get("on_signal_keywords")
+        if keywords and query:
+            lowered = query.lower()
+            if any(kw.lower() in lowered for kw in keywords):
+                return True
         return False
 
     def apply_to_prompt(self, base_prompt: str) -> str:
@@ -71,7 +84,7 @@ class LensEngine:
         self._load_lenses(lenses_dir)
 
     def _load_lenses(self, lenses_dir: Path) -> None:
-        for subdir in ["core", "professional"]:
+        for subdir in ["core", "professional", "education"]:
             dir_path = lenses_dir / subdir
             if not dir_path.exists():
                 continue
@@ -88,6 +101,7 @@ class LensEngine:
         domain: Optional[str] = None,
         confidence: float = 1.0,
         user_requested: Optional[list[str]] = None,
+        query: Optional[str] = None,
     ) -> list[Lens]:
         """Get all lenses that should be active for this context."""
         active = []
@@ -98,6 +112,7 @@ class LensEngine:
                 domain=domain,
                 confidence=confidence,
                 user_requested=(name in requested),
+                query=query,
             ):
                 active.append(lens)
         return active

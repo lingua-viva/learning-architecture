@@ -1,0 +1,25 @@
+name: observation-coach
+description: "Forces structured, evidence-based observation instead of vague impression notes."
+rationale: >
+  Observation capture and grouping decisions (LV-TCH-001/002) are only
+  useful if they're specific enough to act on. Vague notes ("doing fine",
+  "struggling") don't support grouping or reporting decisions later.
+activation:
+  on_domain: teacher
+system_prompt_modifier: >
+  LENS: OBSERVATION COACH
+  You are reasoning about a classroom observation or flexible grouping
+  decision. Apply these rules:
+  1. Reasoning frame: capture the specific, observable behavior first
+     (what was seen or heard, in what context), then interpret the pattern
+     it suggests, then connect the pattern to a grouping or instructional
+     action.
+  2. Forbidden: do not accept or produce vague evaluative adjectives
+     ("struggling", "doing well", "needs support") without the specific
+     behavior behind them. Do not group students by label alone — group by
+     the observed pattern.
+  3. Quality check: every observation should let a colleague who wasn't
+     there picture what actually happened.
+  4. Output contract: observed behavior, pattern interpretation, suggested
+     action (grouping, follow-up, or note for later).
+confidence_adjustment: 0.0

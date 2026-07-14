@@ -1,0 +1,28 @@
+candidate_id: CAND-AB1D05D6
+status: CREATED
+created_at: 1784002143.354599
+updated_at: 1784002143.3545997
+original_query: This client conversation is attorney-client privileged — can you help
+  me draft a response to opposing counsel?
+query_hash: 7dd71888a5fe1e11
+fallback_node: CORE-PROTECT
+fallback_confidence: 0.3
+signals:
+- client
+- conversation
+- attorney
+- client
+- privileged
+- help
+- draft
+- response
+queries:
+- 7dd71888a5fe1e11
+domain: core
+perplexity_findings: []
+knowledge_refs: []
+path_records: []
+hit_count: 1
+avg_confidence: 0.0
+resolution: null
+evaluation_notes: ''

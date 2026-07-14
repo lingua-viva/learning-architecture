@@ -1,0 +1,105 @@
+# Lingua Viva — Education Ontology: Infrastructure Domain
+# System constraints: Toddle platform, multi-campus, offline support
+
+domain: infrastructure
+version: '1.0'
+description: >
+  System infrastructure — Toddle integration, cross-campus operation,
+  and deployment constraints.
+
+nodes:
+- id: LV-INF-001
+  name: Toddle Integration
+  description: >
+    Define how Lingua Viva interfaces with Toddle (the school's LMS).
+    Toddle is source of truth for: student profiles, portfolios,
+    gradebooks, progress reports, attendance. Lingua Viva reads from
+    Toddle exports — it does not write to Toddle directly.
+  domain: infrastructure
+  parent: CORE-CREATE
+  signals:
+  - toddle
+  - platform
+  - integration
+  - export
+  - import data
+  - sync
+  - toddle connect
+  - system connect
+  blocks_external: false
+  default_intent: CREATE
+  produces:
+  - integration_spec
+  - data_flow_map
+  requires: []
+  suggests_next:
+  - LV-INF-002
+  failure_modes:
+    silent:
+    - Integration assumes API access that doesn't exist (Toddle has limited API)
+    loud:
+    - Write-back to Toddle attempted without authorization
+
+- id: LV-INF-002
+  name: Cross-Campus Coherence
+  description: >
+    Ensure the curriculum framework works across all campuses.
+    The school has 4 campuses — same framework, potentially different
+    implementation pace. Handles the tension between standardization
+    and local adaptation.
+  domain: infrastructure
+  parent: CORE-DIAGNOSE
+  signals:
+  - cross-campus
+  - all campuses
+  - consistency
+  - campus difference
+  - standardize
+  blocks_external: false
+  default_intent: DIAGNOSE
+  produces:
+  - campus_coherence_report
+  requires:
+  - coherence_report
+  suggests_next:
+  - LV-CUR-006
+  failure_modes:
+    silent:
+    - Report assumes all campuses are at same implementation stage
+    loud:
+    - Coherence mandate overrides legitimate local adaptation
+
+- id: LV-INF-003
+  name: MYP Bridge Specification
+  description: >
+    Define the structural differences between PYP (G1-5, Italian as
+    medium) and MYP (G6+, Italian as L2 subject). Document the
+    transition requirements: assessment scale change (continuum →
+    criterion 1-7), curriculum model change (transdisciplinary →
+    subject-specific), and CEFR phase mapping.
+  domain: infrastructure
+  parent: CORE-CREATE
+  signals:
+  - MYP
+  - middle school
+  - bridge
+  - transition spec
+  - Grade 6
+  - programme change
+  - PYP to MYP
+  - transition work
+  - spec
+  - grade 6 next year
+  blocks_external: false
+  default_intent: CREATE
+  produces:
+  - myp_bridge_spec
+  - assessment_scale_mapping
+  requires: []
+  suggests_next:
+  - LV-STU-007
+  failure_modes:
+    silent:
+    - Bridge spec treats PYP and MYP as same system with different labels
+    loud:
+    - Bridge spec creates requirements that MYP teachers cannot implement

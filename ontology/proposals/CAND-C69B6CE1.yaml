@@ -1,0 +1,77 @@
+candidate_id: CAND-C69B6CE1
+status: ENRICHED
+created_at: 1783994774.7128694
+updated_at: 1783994785.2886095
+original_query: What does a morning briefing look like for a teacher in a differentiated
+  IB classroom? What information do they need before the day starts?
+query_hash: b1510a2b0d9f31a4
+fallback_node: CORE-RESEARCH
+fallback_confidence: 0.3
+signals:
+- does
+- morning
+- briefing
+- look
+- like
+- teacher
+- differentiated
+- classroom
+queries:
+- b1510a2b0d9f31a4
+domain: core
+perplexity_findings:
+- content: "A morning briefing for a teacher in a differentiated IB classroom is less\
+    \ about a fixed “meeting” and more about a fast, structured scan of learner data,\
+    \ planned learning pathways, and logistical constraints before students arrive.\
+    \ In a well‑run differentiated IB class, most of the differentiation work is actually\
+    \ front‑loaded into this pre‑lesson thinking and planning, even if schools rarely\
+    \ describe it explicitly in their documentation.[7][14]\n\n**What research and\
+    \ practice already cover (and how it maps to a morning briefing)**  \nExisting\
+    \ sources emphasize *principles* of differentiation rather than the concrete,\
+    \ minute‑by‑minute briefing a teacher runs through before class:\n\n- IB and other\
+    \ differentiation guides stress knowing learner readiness, interests, and profiles,\
+    \ using ongoing assessment to “check where students are constantly” and then “respond\
+    \ to student needs” with flexible grouping, multiple pathways, and scaffolded\
+    \ tasks.[7][9][10][14]  \n- Practical advice focuses on routines that make simultaneous\
+    \ activities possible: anchor tasks, “expert of the day,” clear expectations for\
+    \ independent work, and fluid small groups so the teacher can confer with some\
+    \ students while others work autonomously.[9][5]  \n- IB‑specific discussion (PYP/MYP)\
+    \ highlights flexible grouping, choice boards, open‑ended tasks, and continual\
+    \ use of formative data (exit tickets, quick pre‑assessments) to adjust the next\
+    \ day’s plan.[3][4][5][12][16]  \n\nAll of this implies that a *useful morning\
+    \ briefing* centers on:  \n1) *Yesterday’s data* (formative assessments, observations,\
+    \ unfinished work),  \n2) *Today’s objectives and success criteria*,  \n3) *Group\
+    \ structures and supports* (who works with whom, with what scaffolds), and  \n\
+    4) *Operational constraints* (time, space, devices, pull‑outs, etc.).  \n\nHowever,\
+    \ current sources do not spell out a concrete, repeated checklist a teacher runs\
+    \ through before the day starts; that is a genuine gap.\n\n---\n\n**What a differentiated\
+    \ IB “morning briefing” would likely include (inferred from evidence)**  \n\n\
+    Based on the principles above, a realistic pre‑day routine for an IB teacher might\
+    \ look like this (this is an evidence‑based reconstruction, not something described\
+    \ verbatim in the literature):\n\n1. **Clarify the learning for the day**  \n\
+    \   - Identify the **essential concepts/skills** and"
+  citations:
+  - https://www.youtube.com/watch?v=Vk4adMuivyc
+  - https://socialsci.libretexts.org/Bookshelves/Early_Childhood_Education/Book:_The_ELC_-_An_Early_Childhood_Learning_Community_at_Work_(Bridge_Melita_and_Roiger)/02:_Case_Studies/2.06:_Improving_Differentiation_during_Morning_Meetings
+  - https://www.linkedin.com/posts/asheka-tenzin-0834b718_differentiation-is-often-misunderstood-in-activity-7437301270815834113-VT4L
+  - https://www.youtube.com/watch?v=v2AAYSAFnuk
+  - https://www.pypteachingtools.com/blog/differentiation%20in%20the%20IB%20PYP
+  - https://www.education.vic.gov.au/Documents/school/teachers/teachingresources/practice/professionalpracticenote16.pdf
+  - https://thinkib.net/leadership/page/22877/teaching-is-differentiated
+  - https://archives.northwestu.edu/bitstream/handle/nu/25715/krupin_sherri_mit_2008_07.pdf?sequence=1&isAllowed=y
+  - https://education.nsw.gov.au/teaching-and-learning/professional-learning/teacher-quality-and-accreditation/strong-start-great-teachers/refining-practice/differentiating-learning/establishing-a-differentiated-classroom
+  - https://www.structural-learning.com/post/teachers-guide-differentiated-instruction-4
+  - https://meet.100mentors.com/hubfs/ATL%20Emails/ATL-eBook.pdf
+  - https://www.linkedin.com/posts/dr-ekta-sharma-699263280_learningthroughplay-playbasedlearning-activity-7429921312921518081-GWtc
+  - https://blogs.ibo.org/sharingpyp/2018/01/30/morning-meetings-in-a-pyp-classroom/
+  - https://www.edutopia.org/article/practical-guide-planning-intentional-differentiation/
+  - https://www.edweek.org/teaching-learning/opinion-what-does-successful-differentiated-instruction-look-like-in-the-classroom/2023/11
+  - https://www.youtube.com/watch?v=oH8jBD66ztc
+  gaps: []
+  contradictions: []
+knowledge_refs: []
+path_records: []
+hit_count: 2
+avg_confidence: 0.0
+resolution: null
+evaluation_notes: ''

@@ -1,0 +1,232 @@
+# Lingua Viva — Education Ontology: Student Domain
+# All student nodes are blocks_external: true (PII)
+
+domain: student
+version: '1.0'
+description: >
+  Student learning profiles, CEFR tracking, and support classification.
+  All nodes handle student PII — blocks_external is mandatory.
+
+nodes:
+- id: LV-STU-001
+  name: Student Language Profile
+  description: >
+    Aggregate a student's Italian language profile from Toddle data:
+    gradebook indicators across semesters, portfolio evidence, progress
+    report narratives. Produces a longitudinal view of language growth.
+  domain: student
+  parent: CORE-RESEARCH
+  signals:
+  - student profile
+  - language profile
+  - learner profile
+  - how is this student doing
+  - longitudinal
+  blocks_external: true
+  requires_local: true
+  default_intent: RESEARCH
+  produces:
+  - student_language_profile
+  requires: []
+  suggests_next:
+  - LV-STU-002
+  - LV-ASS-003
+  failure_modes:
+    silent:
+    - Profile built from single semester instead of longitudinal data
+    loud:
+    - Profile shared beyond authorized personnel
+
+- id: LV-STU-002
+  name: CEFR Level Assignment
+  description: >
+    Assign current CEFR level based on evidence from multiple sources.
+    This is a teacher decision gate — system proposes, teacher confirms.
+    Must distinguish native speaker performance from L2 acquisition.
+  domain: student
+  parent: CORE-DECIDE
+  signals:
+  - what level
+  - CEFR level
+  - proficiency
+  - assign level
+  - where is this student
+  blocks_external: true
+  requires_local: true
+  default_intent: DECIDE
+  produces:
+  - cefr_level_proposal
+  requires:
+  - student_language_profile
+  - cefr_evidence_map
+  suggests_next:
+  - LV-TCH-002
+  - LV-CUR-002
+  failure_modes:
+    silent:
+    - Level assigned based on strongest skill only (ignoring writing weakness)
+    loud:
+    - Automatic level assignment without teacher confirmation gate
+
+- id: LV-STU-003
+  name: Support Classification (RTI)
+  description: >
+    Classify student support needs using Response to Intervention tiers.
+    Tier 1 (whole class), Tier 2 (small group), Tier 3 (individual).
+    Tier movement is ALWAYS a human decision — system flags signals only.
+  domain: student
+  parent: CORE-DIAGNOSE
+  signals:
+  - RTI
+  - intervention
+  - tier
+  - support level
+  - struggling
+  - at risk
+  - not meeting
+  - below grade level
+  blocks_external: true
+  requires_local: true
+  default_intent: DIAGNOSE
+  produces:
+  - support_classification
+  - intervention_signal
+  requires:
+  - student_language_profile
+  suggests_next:
+  - LV-STU-004
+  - LV-TCH-002
+  failure_modes:
+    silent:
+    - Language acquisition lag misclassified as learning difficulty
+    - SIFE student measured against grade-level norms
+    loud:
+    - System assigns tier without human decision gate
+
+- id: LV-STU-004
+  name: Escalation Signal
+  description: >
+    Flag when a student's language progress stalls or regresses across
+    two or more assessment points. Produces an escalation signal for
+    teacher/coordinator review. Never communicates directly to parents.
+  domain: student
+  parent: CORE-DIAGNOSE
+  signals:
+  - not progressing
+  - not improved
+  - regression
+  - stalled
+  - plateau
+  - concern
+  - flag
+  - has not improved
+  - no growth
+  blocks_external: true
+  requires_local: true
+  default_intent: DIAGNOSE
+  produces:
+  - escalation_signal
+  requires:
+  - student_language_profile
+  suggests_next:
+  - LV-STU-003
+  - LV-TCH-002
+  failure_modes:
+    silent:
+    - Normal L2 acquisition plateau misread as regression
+    loud:
+    - Escalation signal sent to wrong audience (parent instead of teacher)
+
+- id: LV-STU-005
+  name: De-escalation Confirmation
+  description: >
+    Confirm that a student previously flagged for support has returned
+    to expected trajectory. Removes escalation signal. Requires evidence
+    from at least two data points.
+  domain: student
+  parent: CORE-DECIDE
+  signals:
+  - back on track
+  - improved
+  - resolved
+  - de-escalate
+  - remove flag
+  blocks_external: true
+  requires_local: true
+  default_intent: DECIDE
+  produces:
+  - de_escalation_confirmation
+  requires:
+  - escalation_signal
+  - student_language_profile
+  suggests_next: []
+  failure_modes:
+    silent:
+    - De-escalation based on single good assessment (insufficient evidence)
+    loud:
+    - De-escalation removes support before student is truly stable
+
+- id: LV-STU-006
+  name: Social-Emotional Context
+  description: >
+    Capture social-emotional factors that affect language learning.
+    IB Learner Profile attributes (communicator, risk-taker, caring)
+    provide the framework. Must be handled with sensitivity —
+    never pathologize, always strengths-based.
+  domain: student
+  parent: CORE-REFLECT
+  signals:
+  - wellbeing
+  - emotional
+  - social
+  - learner profile
+  - risk-taker
+  - communicator
+  - confidence
+  - anxiety
+  blocks_external: true
+  requires_local: true
+  default_intent: REFLECT
+  produces:
+  - sel_context_note
+  requires: []
+  suggests_next:
+  - LV-STU-001
+  - LV-TCH-001
+  failure_modes:
+    silent:
+    - SEL note frames behavior as deficit instead of signal
+    loud:
+    - Sensitive information shared beyond need-to-know
+
+- id: LV-STU-007
+  name: Transition Support (PYP→MYP)
+  description: >
+    Support the G5→G6 transition where Italian shifts from immersion
+    medium to L2 subject. Produce a transition brief that maps PYP exit
+    level to MYP L2 placement. Based on real data: G5 exit at passato
+    prossimo/imperfetto/future tense mastery maps to MYP L2 Phase 3-4.
+  domain: student
+  parent: CORE-CREATE
+  signals:
+  - transition
+  - middle school
+  - MYP placement
+  - leaving PYP
+  - Grade 5 exit
+  - next year
+  blocks_external: true
+  requires_local: true
+  default_intent: CREATE
+  produces:
+  - transition_brief
+  - myp_placement_recommendation
+  requires:
+  - student_language_profile
+  - cefr_level_proposal
+  suggests_next: []
+  failure_modes:
+    silent:
+    - Placement recommendation based on immersion performance alone (doesn't account for formal grammar knowledge needed in MYP L2)
+    loud:
+    - Placement recommendation made without teacher/coordinator review

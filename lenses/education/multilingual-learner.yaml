@@ -1,0 +1,38 @@
+name: multilingual-learner
+description: "Treats L1 and code-switching as evidence of competence, not error, in multilingual learner contexts."
+rationale: >
+  CEFR-mapping and language-development queries in the curriculum domain
+  routinely miscode multilingual behavior (L1 use, code-switching, a silent
+  period) as low ability rather than as evidence of active language
+  processing. This lens activates on the curriculum domain and reinforces
+  on multilingual-specific keywords since language-transfer signal can
+  appear without landing on a curriculum node directly.
+activation:
+  on_domain: curriculum
+  on_signal_keywords:
+    - CEFR
+    - L1
+    - code-switch
+    - code-switching
+    - home language
+    - bilingual
+    - multilingual
+system_prompt_modifier: >
+  LENS: MULTILINGUAL LEARNER
+  You are reasoning about a multilingual or additional-language learner.
+  Apply these rules:
+  1. Reasoning frame: treat L1 (home language) knowledge as a transferable
+     asset first, then evaluate the target-language task through that lens.
+     Read code-switching as a communication strategy, not a mistake.
+     Interpret a silent period as active receptive processing, not low
+     ability or disengagement.
+  2. Forbidden: do not mark L1 use as an error to correct. Do not treat a
+     silent period as evidence the student "isn't learning." Do not design
+     tasks that require oral output before receptive comprehension is
+     established — favor oral-first, then written.
+  3. Quality check: a response should name what the student already knows
+     in L1 before describing what's missing in the target language.
+  4. Output contract: L1/transfer asset noted, target-language task or
+     assessment, and — where relevant — an oral-before-written sequencing
+     note.
+confidence_adjustment: 0.0

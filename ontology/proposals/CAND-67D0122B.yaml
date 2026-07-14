@@ -1,0 +1,78 @@
+candidate_id: CAND-67D0122B
+status: ENRICHED
+created_at: 1784003169.131683
+updated_at: 1784003177.1980667
+original_query: Just watched Amira — she is starting to self-correct her verb conjugations
+  in English without prompting. Big shift from last month.
+query_hash: 2a10695e054bba39
+fallback_node: CORE-RESEARCH
+fallback_confidence: 0.3
+signals:
+- just
+- watched
+- amira
+- starting
+- self
+- correct
+- verb
+- conjugations
+queries:
+- 2a10695e054bba39
+domain: core
+perplexity_findings:
+- content: 'She is likely entering a **new phase of implicit grammatical learning**:
+    her internal model of English morphology has strengthened enough that errors now
+    feel “wrong” to her, so she initiates repairs on her own rather than relying on
+    external correction.
+
+
+    Available research on second-language acquisition and child language development
+    documents several related phenomena—*self-repair*, *monitoring*, and the emergence
+    of an internal “grammar feel”—but there is limited fine-grained, longitudinal
+    data on **micro-transitions** like the one you’re observing (e.g., “from needing
+    correction to spontaneously fixing verb endings over a single month”). Most studies
+    either aggregate over longer timescales or focus on global proficiency changes,
+    not the specific onset dynamics of self-correction in verb morphology. This is
+    a gap: we lack detailed models of *how quickly* and *under what conditions* self-monitoring
+    for specific grammatical subsystems (like tense/agreement) switches from externally
+    driven to internally driven, and how that maps onto input type, feedback style,
+    or cognitive development stages.
+
+
+    We also have relatively weak empirical characterizations of **error profile shifts
+    at the moment self-correction begins**: for example, whether learners initially
+    overcorrect (hyper-regularization: *“he goed” → “he went”* vs. *“he goes”*), whether
+    certain verb classes trigger more or fewer self-repairs, and how much “latent
+    knowledge” is present before overt self-correction becomes visible. Existing work
+    often treats interference and forgetting as global properties of semantic/memory
+    systems, but does not drill into **local, form-specific stability**—how verb conjugation
+    knowledge moves from fragile, interference-prone recall to robust, automatically
+    monitored usage.[1][2] This is another missing piece: we don’t have precise, episodic-level
+    traces of how a learner like Amira stabilizes one micro-grammar (English verbs)
+    while the rest of the language system is still fluctuating.
+
+
+    A further gap is the **interaction between semantic memory and exact episodic
+    grounding in live language learning**. The “Price of Meaning” framework shows
+    that any meaning-based memory system will occasionally forget or mix things up,
+    unless supported by an exact episodic/verifier layer.[1][2] Yet in human language
+    development we do not have clear, direct measurements of when children’s internal
+    “semantic similarity” memory (e.g., grouping *walked / talked / played* as past-tense
+    patterns'
+  citations:
+  - https://www.sentra.app/blog/the-price-of-meaning
+  - https://gist.science/paper/2603.27116
+  - http://www.velthuis.dds.nl/velthuis_rae_meanings%20prices.pdf
+  - https://www.youtube.com/watch?v=xDO4kRYQ4UE
+  - https://www.msuniv.ac.in/images/distance%20education/learning%20materials/ug%20pg/ug/bcom_english/I%20Year%20-%20DJC1A%20-%20Managerial%20Economics%20(EM).pdf
+  - https://www.heikkipeltola.com/en/a3-no-escape-from-reality/
+  - https://marketing.wharton.upenn.edu/wp-content/uploads/2022/01/01.27.2022-Williams-Meaning-Less-Expensive.pdf
+  - https://www.linkedin.com/posts/shainnoor_half-my-feed-for-the-past-few-days-is-realizing-activity-7468300584333254657-MEgM
+  gaps: []
+  contradictions: []
+knowledge_refs: []
+path_records: []
+hit_count: 2
+avg_confidence: 0.0
+resolution: null
+evaluation_notes: ''

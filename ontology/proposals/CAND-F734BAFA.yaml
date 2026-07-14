@@ -1,0 +1,118 @@
+candidate_id: CAND-F734BAFA
+status: ENRICHED
+created_at: 1783989372.0586057
+updated_at: 1784007963.2259684
+original_query: orient
+query_hash: ded579862da80bf4
+fallback_node: CORE-RESEARCH
+fallback_confidence: 0.3
+signals:
+- orient
+queries:
+- ded579862da80bf4
+domain: core
+perplexity_findings:
+- content: '[Perplexity error: HTTP Error 401: Unauthorized. Falling back to local
+    knowledge.]'
+  citations: []
+  gaps:
+  - perplexity_error:HTTPError
+  contradictions: []
+- content: "**“Orient” is both a verb meaning to direct or position something, and\
+    \ a (mostly dated) noun referring to the East, especially Asia; existing sources\
+    \ cover usage and etymology well, but have notable gaps in contemporary discourse,\
+    \ regional variation, and legal/critical contexts.**\n\nBelow are the main *missing\
+    \ or weakly covered* areas in current reference-style sources, relative to what\
+    \ the system already knows:\n\n1. **Contemporary sociolinguistic and critical\
+    \ usage (including “Oriental” as a racialized term)**  \n   - Standard dictionaries\
+    \ note that *Orient* is “old-fashioned” or “older use,” but do not systematically\
+    \ distinguish **neutral geographical use** from **racialized or pejorative connotations**\
+    \ in modern English, particularly in North America.[1][2][5][9]  \n   - They do\
+    \ not integrate the impact of **Edward Said’s “Orientalism”** and subsequent scholarship\
+    \ on how *the Orient* functions as a discourse category rather than a neutral\
+    \ geographic label; Wikipedia gives only a brief historical broadening of the\
+    \ term without engaging with critical theory.[8]  \n   - There is no clear guidance\
+    \ on **current acceptability** of *Orient* or *Oriental* in different English-speaking\
+    \ regions (e.g., UK vs US vs East Asian English), nor on **institutional language\
+    \ policies** (government style guides, media standards). This is a gap in secondary,\
+    \ usage-oriented sources.\n\n2. **Non-English languages: semantic range and historical\
+    \ change**  \n   - French and German sources (Larousse, Le Robert) describe **Orient**\
+    \ as the part of the sky where the sun rises and as a macro-region including Asia\
+    \ and parts of North Africa, but give limited detail on **diachronic change**\
+    \ (e.g., how *Proche/Moyen/Extrême-Orient* evolved conceptually and politically).[3][6]\
+    \  \n   - Korean and other bilingual dictionaries mainly focus on the **verb “orient”**\
+    \ in English (adjust, adapt, face a direction) and give minimal context on the\
+    \ **noun as a geopolitical concept** or its ideological baggage.[7][9]  \n   -\
+    \ There is little comparative analysis of how *Orient* vs *Asia* vs region-specific\
+    \ terms (East Asia, Middle East, Near East) are used in law, education, and media\
+    \ in non-English jurisdictions. These would require primary sources (statutes,\
+    \ curricular"
+  citations:
+  - https://www.vocabulary.com/dictionary/orient
+  - https://www.merriam-webster.com/dictionary/orient
+  - https://www.larousse.fr/dictionnaires/francais/orient/56469
+  - https://www.oxfordlearnersdictionaries.com/definition/english/orient_1
+  - https://www.dictionary.com/browse/orient
+  - https://dictionnaire.lerobert.com/definition/orient
+  - https://www.ldoceonline.com/ko/dictionary/english-korean/orient
+  - https://en.wikipedia.org/wiki/Orient
+  - https://dictionary.cambridge.org/us/dictionary/english/orient
+  - https://www.yourdictionary.com/orient
+  - https://en.wiktionary.org/wiki/orient
+  - https://www.britannica.com/dictionary/orient
+  - https://en.wikipedia.org/wiki/Orient_Watch
+  gaps: []
+  contradictions: []
+- content: "In current English, **“orient” is mainly used as a verb (“to position/align”\
+    \ or “to familiarize/adapt”)**, while its older noun/adjective sense referring\
+    \ to “the Orient” (Asia/the East) is now widely viewed as dated or potentially\
+    \ offensive and is avoided in contemporary formal writing.[2][4][6][9][10][13]\n\
+    \nAuthoritative dictionaries converge on a small core of *active* uses:\n- **Verb,\
+    \ transitive/intransitive**:  \n  - *Position / align*: to place something in\
+    \ a particular direction, often relative to compass points or a reference frame.[4][6][11][13]\
+    \  \n  - *Familiarize / adapt*: to help someone understand or adapt to a new situation,\
+    \ place, or environment (“orient new employees”).[4][5][6][10][13]  \n  - *Targeting*:\
+    \ to design or adapt something for a specific audience or purpose (“a product\
+    \ oriented to beginners”).[4][5][10][13]  \n- **Reflexive “orient yourself”**:\
+    \  \n  - To determine one’s location/direction relative to surroundings.[2][5][10]\
+    \  \n  - To become mentally or socially adjusted to new circumstances.[5][6][10]\n\
+    \nWhat is *largely missing* or underdeveloped in standard references:\n\n1. **Pragmatics\
+    \ & register of “the Orient” / “Oriental”.**  \n   Dictionaries note that “the\
+    \ Orient” is an *older* or *archaic* term for Asia/the East and “orient” as “east”\
+    \ is poetic/dated.[2][4][6][9][11][12]  \n   - They only briefly flag obsolescence;\
+    \ they do not systematically distinguish:  \n     - academic contexts after *Orientalism*\
+    \ (Said) where the term is critically analyzed rather than used descriptively;\
+    \  \n     - legal/institutional usage where “Oriental” has been explicitly deprecated\
+    \ or replaced in statutes and policies (e.g., “Asian” or “Asian American”).  \n\
+    \   - There is little canonical guidance in these entries on *current sociolinguistic\
+    \ norms* (e.g., which varieties of English still use “the Orient” non-pejoratively,\
+    \ how it is perceived by different groups, or corpus-based evidence of decline).\n\
+    \n2. **Technical uses in science and engineering.**  \n   Some dictionaries"
+  citations:
+  - https://www.orientwatchusa.com/
+  - https://www.vocabulary.com/dictionary/orient
+  - https://www.larousse.fr/dictionnaires/francais/orient/56469
+  - https://www.merriam-webster.com/dictionary/orient
+  - https://www.oxfordlearnersdictionaries.com/definition/english/orient_1
+  - https://www.dictionary.com/browse/orient
+  - https://dictionnaire.lerobert.com/definition/orient
+  - https://www.ei-navi.jp/dictionary/content/orient/
+  - https://en.wikipedia.org/wiki/Orient
+  - https://dictionary.cambridge.org/us/dictionary/english/orient
+  - https://www.thefreedictionary.com/orient
+  - https://en.wiktionary.org/wiki/orient
+  - https://www.britannica.com/dictionary/orient
+  - https://en.wikipedia.org/wiki/Orient_Watch
+  gaps: []
+  contradictions:
+  - "[2][4][6][9][11][12]  \n   - They only briefly flag obsolescence; they do not\
+    \ systematically distinguish:  \n     - academic contexts after *Orientalism*\
+    \ (Said) where the term is critically analyzed rather than used descriptively;\
+    \  \n     - legal/institutional usage where “Oriental” has been explicitly deprecated\
+    \ or replaced in statutes and policies (e"
+knowledge_refs: []
+path_records: []
+hit_count: 6
+avg_confidence: 0.0
+resolution: null
+evaluation_notes: ''

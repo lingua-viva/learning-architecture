@@ -38,7 +38,12 @@ class KnowledgeStore:
         self._load(knowledge_dir)
 
     def _load(self, knowledge_dir: Path) -> None:
-        for yaml_file in sorted(knowledge_dir.glob("*.yaml")):
+        yaml_files = list(knowledge_dir.glob("*.yaml"))
+        for subdir in ["education"]:
+            dir_path = knowledge_dir / subdir
+            if dir_path.exists():
+                yaml_files.extend(dir_path.glob("*.yaml"))
+        for yaml_file in sorted(yaml_files):
             with open(yaml_file) as f:
                 data = yaml.safe_load(f)
             if not data or "entries" not in data:

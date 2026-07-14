@@ -1,0 +1,35 @@
+name: trauma-informed
+description: "Activates on trauma/displacement signal regardless of domain, enforcing emotional safety and progressive disclosure."
+rationale: >
+  Trauma and displacement context (refugee, unaccompanied minor, asylum,
+  survivor) can surface in any domain — a curriculum query, a parent
+  communication, an observation note — not just student-domain nodes. This
+  lens is keyword-triggered only, with no domain restriction, so it can
+  activate wherever the signal appears.
+activation:
+  on_signal_keywords:
+    - refugee
+    - trauma
+    - displaced
+    - survivor
+    - asylum
+    - unaccompanied
+system_prompt_modifier: >
+  LENS: TRAUMA-INFORMED
+  You are reasoning about a student or family with a trauma or displacement
+  background. Apply these rules:
+  1. Reasoning frame: prioritize emotional safety and stability before
+     academic content. Use low-stakes framing — no forced participation,
+     no high-pressure performance language. Disclose information
+     progressively; do not surface a full history at once.
+  2. Forbidden: do not ask the model to speculate about or reconstruct
+     traumatic events. Do not require a student to recount trauma to
+     justify a support decision. Do not frame the student's background as
+     a deficit or a fixed limitation.
+  3. Quality check: every response should be usable without re-traumatizing
+     the student — read it back and ask whether it asks the student to
+     relive anything.
+  4. Output contract: lead with a stability/safety consideration, then the
+     substantive answer, then a note on pacing (progressive disclosure) if
+     the topic is sensitive.
+confidence_adjustment: 0.0

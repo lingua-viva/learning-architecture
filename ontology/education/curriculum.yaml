@@ -1,0 +1,227 @@
+# Lingua Viva — Education Ontology: Curriculum Domain
+# Generated: 2026-06-20
+# Source: Real Toddle PYP data (G1-G5), a 4-campus IB international school
+# Corrected against MC engine schema + real assessment data
+
+domain: curriculum
+version: '1.0'
+description: >
+  IB PYP curriculum planning, unit design, vertical alignment, and CEFR mapping.
+  Validated against real Toddle progress reports G1-G5.
+
+nodes:
+- id: LV-CUR-001
+  name: IB Unit Planner
+  description: >
+    Generate IB PYP unit of inquiry plans: central idea, lines of inquiry,
+    transdisciplinary theme, key concepts, learner profile attributes.
+    Outputs must align with the school's 4-framework integration
+    (Indicazioni Ministeriali + CEFR + IB PYP + Reggio).
+  domain: curriculum
+  parent: CORE-CREATE
+  signals:
+  - unit plan
+  - central idea
+  - lines of inquiry
+  - transdisciplinary
+  - unit of inquiry
+  - programme of inquiry
+  - inquiry cycle
+  - key concepts
+  - related concepts
+  blocks_external: false
+  default_intent: CREATE
+  produces:
+  - ib_unit_plan
+  - central_idea_statement
+  - lines_of_inquiry
+  requires: []
+  suggests_next:
+  - LV-CUR-002
+  - LV-CUR-004
+  - LV-ASS-001
+  failure_modes:
+    silent:
+    - Unit plan missing CEFR language targets for the grade level
+    - Central idea not testable or too broad for single unit
+    loud:
+    - Transdisciplinary theme mismatch (PYP theme not in IB framework)
+
+- id: LV-CUR-002
+  name: Differentiation Layer
+  description: >
+    Apply differentiation to curriculum artifacts. Produce tiered activities
+    for mixed-proficiency Italian immersion classrooms. Must account for
+    CEFR spread within a single grade (A1-B1 range in same classroom).
+  domain: curriculum
+  parent: CORE-CREATE
+  signals:
+  - differentiate
+  - scaffold
+  - tiered
+  - accommodation
+  - modification
+  - mixed level
+  - mixed levels
+  - uneven pace
+  - some finished early
+  - adjust for
+  - struggling
+  - advanced
+  - ELL support
+  - how do I differentiate
+  blocks_external: false
+  default_intent: CREATE
+  produces:
+  - tiered_activity_set
+  - scaffold_document
+  requires:
+  - ib_unit_plan
+  suggests_next:
+  - LV-TCH-003
+  - LV-ASS-001
+  failure_modes:
+    silent:
+    - Differentiation reduces content instead of adjusting access
+    - All tiers address same cognitive level
+    loud:
+    - Tiered activities conflict with IB inquiry methodology
+
+- id: LV-CUR-003
+  name: CEFR Vertical Mapper
+  description: >
+    Map Italian language progression across grades to CEFR descriptors.
+    Uses real evidence from Toddle progress reports: G1 phonetic decoding
+    (pre-A1) → G3 analisi grammaticale (A2) → G5 multi-tense essays (B1).
+    Produces the CEFR alignment that currently exists only implicitly
+    in teacher narratives.
+  domain: curriculum
+  parent: CORE-CREATE
+  signals:
+  - CEFR
+  - vertical alignment
+  - language progression
+  - proficiency level
+  - A1
+  - A2
+  - B1
+  - scope and sequence
+  - grade expectations
+  - passato prossimo
+  - what level is
+  - CEFR map
+  blocks_external: false
+  default_intent: CREATE
+  produces:
+  - cefr_vertical_map
+  - grade_level_descriptors
+  requires: []
+  suggests_next:
+  - LV-CUR-001
+  - LV-ASS-003
+  failure_modes:
+    silent:
+    - CEFR level assigned without evidence from student work samples
+    - Vertical map ignores native vs L2 learner spread within grades
+    loud:
+    - Grade expectation conflicts with IB PYP scope and sequence
+
+- id: LV-CUR-004
+  name: Indicazioni Ministeriali Alignment
+  description: >
+    Align curriculum content to Italian national standards (Indicazioni
+    Ministeriali). Maps PYP strands (Oral Language, Visual Language,
+    Written Language - Reading, Written Language - Writing) to Italian
+    ministerial objectives per grade.
+  domain: curriculum
+  parent: CORE-CREATE
+  signals:
+  - indicazioni
+  - ministeriali
+  - Italian standards
+  - analisi grammaticale
+  - grammatica
+  - ortografia
+  - produzione scritta
+  - comprensione
+  blocks_external: false
+  default_intent: CREATE
+  produces:
+  - ministerial_alignment_map
+  requires:
+  - ib_unit_plan
+  suggests_next:
+  - LV-CUR-003
+  - LV-CUR-005
+  failure_modes:
+    silent:
+    - Ministerial objectives listed without connection to PYP inquiry context
+    loud:
+    - Grade-level mismatch between Italian national expectations and CEFR targets
+
+- id: LV-CUR-005
+  name: Multimodal Activity Design
+  description: >
+    Design Reggio-inspired multimodal learning experiences that integrate
+    Italian language acquisition with inquiry. Portfolio-documented,
+    suitable for Toddle evidence capture. Outputs connect to IB learner
+    profile attributes.
+  domain: curriculum
+  parent: CORE-CREATE
+  signals:
+  - multimodal
+  - Reggio
+  - documentation
+  - hundred languages
+  - atelier
+  - exploration
+  - provocation
+  - portfolio activity
+  blocks_external: false
+  default_intent: CREATE
+  produces:
+  - multimodal_activity
+  - documentation_prompt
+  requires:
+  - ib_unit_plan
+  suggests_next:
+  - LV-TCH-001
+  - LV-ASS-004
+  failure_modes:
+    silent:
+    - Activity is creative but has no assessable language outcome
+    - Documentation prompt too vague for consistent teacher capture
+    loud:
+    - Activity requires materials/space not available at all campuses
+
+- id: LV-CUR-006
+  name: Cross-Grade Coherence Check
+  description: >
+    Verify that curriculum design maintains vertical coherence across grades.
+    Check that G3 builds on G2, that themes don't repeat without deepening,
+    that CEFR targets progress appropriately. Uses the 50/50 principle:
+    50% standardized framework, 50% teacher flexibility.
+  domain: curriculum
+  parent: CORE-DIAGNOSE
+  signals:
+  - vertical
+  - coherence
+  - alignment check
+  - builds on
+  - progression
+  - scope review
+  - curriculum audit
+  blocks_external: false
+  default_intent: DIAGNOSE
+  produces:
+  - coherence_report
+  - gap_analysis
+  requires:
+  - cefr_vertical_map
+  suggests_next:
+  - LV-CUR-001
+  failure_modes:
+    silent:
+    - Coherence checked only on paper, not against actual student evidence
+    loud:
+    - Gap detected but no remediation path suggested

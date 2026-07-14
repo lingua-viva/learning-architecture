@@ -1,0 +1,211 @@
+# Lingua Viva Education Golden Query Suite
+# Teacher-voice and admin-voice queries against the 38 LV-* education nodes,
+# plus PROTECT-tagged sensitive-student queries and cross-domain decoys.
+# Run: python3 -m src.mc_cli eval tests/golden_education_v1.yaml
+
+queries:
+# --- Curriculum (LV-CUR-*) ---
+- id: EDU-001
+  query: "I need to plan a unit of inquiry for our next transdisciplinary theme — what's the central idea and what lines of inquiry should we build?"
+  expected_node: LV-CUR-001
+  expected_intent: CREATE
+  difficulty: easy
+- id: EDU-002
+  query: "Three of my students are still at A1 while the rest of the class is B1 — how do I differentiate this reading activity for mixed levels?"
+  expected_node: LV-CUR-002
+  expected_intent: CREATE
+  difficulty: medium
+- id: EDU-003
+  query: "Can you map our Italian language progression across grades 1 through 5 against CEFR descriptors?"
+  expected_node: LV-CUR-003
+  expected_intent: CREATE
+  difficulty: easy
+- id: EDU-004
+  query: "How does this unit align to the Indicazioni Ministeriali grammatica objectives for grade 3?"
+  expected_node: LV-CUR-004
+  expected_intent: CREATE
+  difficulty: medium
+- id: EDU-005
+  query: "I want to design a Reggio-inspired multimodal exploration activity connected to our current inquiry, something for the atelier."
+  expected_node: LV-CUR-005
+  expected_intent: CREATE
+  difficulty: medium
+
+# --- Teacher (LV-TCH-*) ---
+- id: EDU-006
+  query: "I noticed Marco used past tense correctly for the first time today during morning meeting — how should I capture this observation?"
+  expected_node: LV-TCH-001
+  expected_intent: CREATE
+  difficulty: easy
+- id: EDU-007
+  query: "Who should I pair together for tomorrow's collaborative writing task given our mixed ability group?"
+  expected_node: LV-TCH-002
+  expected_intent: DECIDE
+  difficulty: medium
+- id: EDU-008
+  query: "Can you give me sentence frames for describing weather in Italian for my beginner group?"
+  expected_node: LV-TCH-003
+  expected_intent: CREATE
+  difficulty: easy
+- id: EDU-009
+  query: "I need to write the unit comment for the progress report — how do I phrase her growth in reading?"
+  expected_node: LV-TCH-004
+  expected_intent: CREATE
+  difficulty: medium
+
+# --- Assessment (LV-ASS-*) ---
+- id: EDU-010
+  query: "I need a rubric with formative and summative criteria for this narrative writing assessment."
+  expected_node: LV-ASS-001
+  expected_intent: CREATE
+  difficulty: easy
+- id: EDU-011
+  query: "Can you track this student's progress against our reading strand standards this term?"
+  expected_node: LV-ASS-002
+  expected_intent: RESEARCH
+  difficulty: medium
+- id: EDU-012
+  query: "What CEFR evidence do we have that shows her level moved from A2 to B1 this term?"
+  expected_node: LV-ASS-003
+  expected_intent: DIAGNOSE
+  difficulty: hard
+- id: EDU-013
+  query: "How should I document this learning story for her portfolio post — what's the toddle post format?"
+  expected_node: LV-ASS-004
+  expected_intent: CREATE
+  difficulty: medium
+
+# --- Student (LV-STU-*) — sensitive, PROTECT-tagged ---
+- id: EDU-014
+  query: "This is confidential — can you pull together Amina's language profile across the last three terms?"
+  expected_node: LV-STU-001
+  expected_intent: PROTECT
+  difficulty: hard
+- id: EDU-015
+  query: "This is personal student data, keep it local — what CEFR level should we assign this student based on her writing sample?"
+  expected_node: LV-STU-002
+  expected_intent: PROTECT
+  difficulty: hard
+- id: EDU-016
+  query: "This student is below grade level and not meeting expectations — does he need an RTI tier intervention?"
+  expected_node: LV-STU-003
+  expected_intent: DIAGNOSE
+  difficulty: medium
+- id: EDU-017
+  query: "Confidential flag: this student has shown no growth in six weeks and seems to have plateaued."
+  expected_node: LV-STU-004
+  expected_intent: PROTECT
+  difficulty: hard
+- id: EDU-018
+  query: "Good news, off the record — she's back on track, can we remove the flag from her file?"
+  expected_node: LV-STU-005
+  expected_intent: PROTECT
+  difficulty: hard
+- id: EDU-019
+  query: "This is sensitive, for internal notes only — I'm noticing some anxiety and low confidence in this student during group work."
+  expected_node: LV-STU-006
+  expected_intent: PROTECT
+  difficulty: hard
+- id: EDU-020
+  query: "This student is leaving PYP for Grade 6 next year — what does she need for the MYP placement?"
+  expected_node: LV-STU-007
+  expected_intent: CREATE
+  difficulty: medium
+
+# --- Parent (LV-PAR-*) ---
+- id: EDU-021
+  query: "A parent is asking what they can do at home to support their child's Italian practice."
+  expected_node: LV-PAR-001
+  expected_intent: CREATE
+  difficulty: easy
+- id: EDU-022
+  query: "I need a parent-facing progress summary — how is her child doing this term, in plain language?"
+  expected_node: LV-PAR-002
+  expected_intent: CREATE
+  difficulty: medium
+
+# --- Admin (LV-ADM-*) ---
+- id: EDU-023
+  query: "Can you give me a whole-school overview of our programme of inquiry across all grades for the accreditation visit?"
+  expected_node: LV-ADM-001
+  expected_intent: RESEARCH
+  difficulty: medium
+- id: EDU-024
+  query: "We need to put together the evidence bundle for our IB authorization self-study."
+  expected_node: LV-ADM-002
+  expected_intent: CREATE
+  difficulty: easy
+- id: EDU-025
+  query: "Do we have enough teachers for next year given projected enrollment — what's our staffing capacity?"
+  expected_node: LV-ADM-003
+  expected_intent: DIAGNOSE
+  difficulty: medium
+
+# --- Infrastructure (LV-INF-*) ---
+- id: EDU-026
+  query: "How do we sync our Toddle platform data with the new system so nothing gets lost on export?"
+  expected_node: LV-INF-001
+  expected_intent: CREATE
+  difficulty: easy
+- id: EDU-027
+  query: "What does the PYP to MYP transition spec look like for grade 6 next year?"
+  expected_node: LV-INF-003
+  expected_intent: CREATE
+  difficulty: medium
+
+# --- Planning (LV-PLN-*) ---
+- id: EDU-028
+  query: "What am I doing Monday through Friday this week for the Italian block — can you lay out a weekly plan?"
+  expected_node: LV-PLN-001
+  expected_intent: CREATE
+  difficulty: easy
+- id: EDU-029
+  query: "I'll be absent Thursday — can you put together a sub plan for my classes?"
+  expected_node: LV-PLN-003
+  expected_intent: CREATE
+  difficulty: easy
+
+# --- Learner (LV-LRN-*) ---
+- id: EDU-030
+  query: "What should I add to my portfolio to show my learning this month?"
+  expected_node: LV-LRN-002
+  expected_intent: CREATE
+  difficulty: easy
+
+# --- Decoys: cross-domain and near-miss disambiguation ---
+- id: EDU-DECOY-001
+  query: "This client conversation is attorney-client privileged — can you help me draft a response to opposing counsel?"
+  expected_node: MC-LEGAL-001
+  expected_intent: PROTECT
+  difficulty: decoy
+  note: "Privacy language alone (no education signal) must NOT be pulled into an LV-* node."
+- id: EDU-DECOY-002
+  query: "I need a review of the amendment clause in this vendor contract before we sign."
+  expected_node: MC-LEGAL-004
+  expected_intent: DECIDE
+  difficulty: decoy
+  note: "Contract-review language must route to legal, not misfire on unrelated education signals."
+- id: EDU-DECOY-003
+  query: "Can you review the rubric clause in the vendor contract renewal?"
+  expected_node: MC-LEGAL-004
+  expected_intent: DECIDE
+  difficulty: decoy
+  note: "'rubric' overlaps LV-ASS-001's signal list, but context ('contract', 'clause') is legal, not classroom assessment — tests keyword-vs-context precision."
+- id: EDU-DECOY-004
+  query: "What level is this passage written at?"
+  expected_node: LV-STU-002
+  expected_intent: DECIDE
+  difficulty: decoy
+  note: "'what level' is a literal LV-STU-002 signal even with no student named — documents that generic text-leveling questions currently get treated as student-specific (a known keyword-matching limitation, not a fix)."
+- id: EDU-DECOY-005
+  query: "What's the weather forecast for tomorrow's field trip?"
+  expected_node: CORE-RESEARCH
+  expected_intent: RESEARCH
+  difficulty: decoy
+  note: "No domain signal should match — must fall back cleanly rather than false-positive onto an education node."
+- id: EDU-DECOY-006
+  query: "We tried a new fractions routine last year that worked really well — what did we learn from it that we should carry forward?"
+  expected_node: LV-TCH-005
+  expected_intent: REFLECT
+  difficulty: decoy
+  note: "Overlaps LV-TCH-003 ('routine') and LV-CUR-006 ('progression'-adjacent) signal-wise; 'last year' + 'carry forward' should still resolve to institutional memory, not scaffold bank."

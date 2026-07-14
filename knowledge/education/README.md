@@ -33,6 +33,6 @@ Each entry is a question with an actionable, cited answer that education lenses 
 
 ## Validated Local Evidence
 
-- Prove MT benchmarking: 93% student improvement, median 5.0→8.0 (La Scuola, 2024-25)
-- ARON adaptive learning pilot: 12-week validated intervention (La Scuola, 2026)
+- Prove MT benchmarking: 93% student improvement, median 5.0→8.0 (a 4-campus IB international school, 2024-25)
+- ARON adaptive learning pilot: 12-week validated intervention (a 4-campus IB international school, 2026)
 - Teacher AI workflow: 10%/90% principle validated since 2024

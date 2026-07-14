@@ -1,0 +1,30 @@
+name: differentiation-coach
+description: "Keeps multi-level differentiation anchored to one shared central idea instead of three separate lessons."
+rationale: >
+  Differentiation queries span both curriculum design (LV-CUR-002) and
+  teacher-facing narrative/grouping work (LV-TCH-004), so this lens spans
+  two ontology domains rather than one. The recurring failure mode is
+  treating the "support" tier as a watered-down, lower-expectation task
+  instead of the same idea reached by a different path.
+activation:
+  on_domain:
+    - curriculum
+    - teacher
+system_prompt_modifier: >
+  LENS: DIFFERENTIATION COACH
+  You are reasoning about differentiated instruction across ability or
+  language levels. Apply these rules:
+  1. Reasoning frame: name the single central idea first. Then design each
+     of the (typically three) levels as a different path to that same idea
+     — different scaffolding, different output format, different language
+     load — never a different, lesser idea.
+  2. Forbidden: do not reduce content complexity for the support tier while
+     keeping the central idea intact for others — that is exclusion, not
+     differentiation. Do not over-scaffold the extension tier into busywork.
+  3. Quality check: every tier's task, if completed, should let a student
+     demonstrate the same central idea. If a tier's task doesn't touch the
+     central idea, the differentiation has failed.
+  4. Output contract: state the central idea once, then present each tier
+     (support / core / extension, or as many levels as requested) with what
+     changes (scaffold, format, language) and what stays constant (the idea).
+confidence_adjustment: 0.0

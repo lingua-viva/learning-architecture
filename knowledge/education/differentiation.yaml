@@ -1,0 +1,151 @@
+domain: education
+version: '1.0'
+entries:
+- id: LV-KL-007
+  title: Differentiation by Content, Process, or Product
+  content: >
+    Tomlinson (2014) frames differentiation as adjusting content, process, or product in response to a
+    student's readiness, interest, or learning profile — while keeping the same learning goal for all
+    students. Differentiation is not tracking; the target stays constant, only the path to it changes.
+  ontology_nodes:
+  - LV-CUR-002
+  evidence_tier: 2
+  citations:
+  - Tomlinson, C.A. (2014). The Differentiated Classroom (2nd ed.).
+  tags:
+  - differentiation
+  - content process product
+  verified: true
+- id: LV-KL-008
+  title: Readiness Is Not a Fixed Ability Label
+  content: >
+    Tomlinson distinguishes readiness (a student's current proximity to a specific learning goal) from
+    ability (a fixed trait). Grouping by readiness should be flexible and topic-specific — a student may
+    need support in one unit and extension in the next — and groups should be reformed regularly to
+    avoid becoming a de facto fixed-ability track.
+  ontology_nodes:
+  - LV-TCH-002
+  evidence_tier: 2
+  citations:
+  - Tomlinson, C.A. (2014). The Differentiated Classroom (2nd ed.).
+  tags:
+  - readiness
+  - flexible grouping
+  - anti-tracking
+  verified: true
+- id: LV-KL-009
+  title: Designing Tiered Assignments From a Shared Core
+  content: >
+    A tiered assignment keeps the same central concept and learning objective across all versions while
+    varying complexity, scaffolding, or resources. Tomlinson recommends designing the "core" tier first,
+    then adjusting up (higher-order questions, less scaffolding, greater abstraction) and down (concrete
+    examples, sentence starters, chunked steps) from it — rather than designing tiers independently.
+  ontology_nodes:
+  - LV-CUR-002
+  evidence_tier: 2
+  citations:
+  - Tomlinson, C.A. (2014). The Differentiated Classroom (2nd ed.).
+  tags:
+  - tiered assignments
+  - scaffolding
+  verified: true
+- id: LV-KL-010
+  title: Varying Grouping Structures Across a Unit
+  content: >
+    Flexible grouping combines skill-based, interest-based, and random/heterogeneous groupings across a
+    unit, rather than relying on one grouping structure throughout. Tomlinson recommends explicitly
+    varying grouping composition so no student is permanently identified with a single group, which
+    supports differentiation and protects against stigmatization.
+  ontology_nodes:
+  - LV-TCH-002
+  evidence_tier: 2
+  citations:
+  - Tomlinson, C.A. (2014). The Differentiated Classroom (2nd ed.).
+  tags:
+  - flexible grouping
+  - stigmatization
+  verified: true
+- id: LV-KL-011
+  title: Formative Feedback Closes the Gap, Not a Static Judgment
+  content: >
+    Effective narrative reporting describes specific, observable evidence of a student's learning
+    trajectory rather than a static judgment, and frames next steps in terms of what the student is
+    ready to work on next. This mirrors formative assessment best practice: feedback is most effective
+    when it closes the gap between current and desired performance with actionable next steps, not a
+    summary label.
+  ontology_nodes:
+  - LV-TCH-004
+  evidence_tier: 1
+  citations:
+  - Black, P. & Wiliam, D. (1998). Assessment and Classroom Learning. Assessment in Education, 5(1).
+  tags:
+  - formative assessment
+  - narrative report
+  - feedback
+  verified: true
+- id: LV-KL-012
+  title: Choice Boards as an Interest and Profile Differentiation Lever
+  content: >
+    Choice boards let students select among several tasks that all address the same learning objective
+    through different modalities or levels of challenge. Tomlinson's model treats choice as a
+    differentiation lever for interest and learning profile — students are more invested when they have
+    agency over how they demonstrate understanding, provided every choice maps back to the same central
+    idea.
+  ontology_nodes:
+  - LV-CUR-002
+  evidence_tier: 2
+  citations:
+  - Tomlinson, C.A. (2014). The Differentiated Classroom (2nd ed.).
+  tags:
+  - choice boards
+  - student agency
+  verified: true
+- id: LV-KL-013
+  title: Scaffolding Targets the Process, Not the Goal
+  content: >
+    Scaffolding (Wood, Bruner & Ross, 1976) is temporary support that is removed as competence grows —
+    sentence starters, graphic organizers, worked examples — and should target the process of reaching a
+    goal, not reduce the goal itself. A common failure mode is scaffolding that permanently simplifies
+    the task rather than supporting the student toward the original complexity.
+  ontology_nodes:
+  - LV-CUR-002
+  evidence_tier: 1
+  citations:
+  - Wood, D., Bruner, J.S. & Ross, G. (1976). The Role of Tutoring in Problem Solving. Journal of Child Psychology and Psychiatry, 17(2).
+  tags:
+  - scaffolding
+  - zone of proximal development
+  verified: true
+- id: LV-KL-014
+  title: Anchor Activities Sustain Differentiation Logistics
+  content: >
+    Anchor activities are ongoing, meaningful tasks students move to when they finish a differentiated
+    task early, preventing "fast finishers" from being under-challenged while the teacher works with
+    another group. Tomlinson recommends anchor activities connect to the unit's central idea rather than
+    being disconnected busywork, so they remain instructionally valuable.
+  ontology_nodes:
+  - LV-TCH-002
+  evidence_tier: 2
+  citations:
+  - Tomlinson, C.A. (2014). The Differentiated Classroom (2nd ed.).
+  tags:
+  - anchor activities
+  - classroom management
+  verified: true
+- id: LV-KL-015
+  title: Extension for Advanced Learners Is Depth, Not Just Speed
+  content: >
+    Extension for advanced learners is most effective through depth and complexity — abstraction,
+    multiple perspectives, real-world application — rather than simply assigning more work or moving
+    faster through the same sequence. Purely quantitative acceleration without increased conceptual
+    complexity does not reliably serve gifted learners' needs.
+  ontology_nodes:
+  - LV-CUR-002
+  evidence_tier: 2
+  citations:
+  - VanTassel-Baska, J. (2003). Curriculum Planning and Instructional Design for Gifted Learners.
+  tags:
+  - gifted education
+  - extension
+  - depth and complexity
+  verified: true

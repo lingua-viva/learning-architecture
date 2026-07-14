@@ -1,0 +1,182 @@
+# Lingua Viva — Education Ontology: Assessment Domain
+# Source: Real Toddle assessment structure (PYP standards-based, not 1-7)
+# Scale: Beginning → Developing → Accomplished → Exemplary (G4-G5)
+#        Extending → Establishing → Consolidating (G1-G3)
+
+domain: assessment
+version: '1.0'
+description: >
+  Assessment design, portfolio documentation, CEFR evidence extraction.
+  Aligned to Toddle's actual structure: standards-based indicators per
+  subject strand, narrative comments per unit and per subject.
+
+nodes:
+- id: LV-ASS-001
+  name: Assessment Design
+  description: >
+    Design formative and summative assessments aligned to IB PYP strands.
+    Must produce rubrics using the school's actual scale
+    (Beg/Dev/Acc/Exe for G4-5, Ext/Est/Con for G1-3).
+    Connected to Toddle gradebook structure.
+  domain: assessment
+  parent: CORE-CREATE
+  signals:
+  - assessment
+  - rubric
+  - formative
+  - summative
+  - criteria
+  - indicator
+  - evaluate
+  - benchmark
+  blocks_external: false
+  default_intent: CREATE
+  produces:
+  - assessment_rubric
+  - success_criteria
+  requires:
+  - ib_unit_plan
+  suggests_next:
+  - LV-ASS-003
+  - LV-ASS-004
+  failure_modes:
+    silent:
+    - Rubric uses generic descriptors instead of school's actual scale
+    - Assessment doesn't connect to Toddle gradebook strands
+    loud:
+    - Assessment measures content knowledge without language production
+
+- id: LV-ASS-002
+  name: Standards Indicator Tracker
+  description: >
+    Track student progress on PYP subject standards across semesters.
+    Maps to Toddle's gradebook structure: Subject → Strand → Indicator.
+    Italian strands: Oral Language, Visual Language, Written Language
+    (Reading), Written Language (Writing), Language Use & Analysis (G5).
+  domain: assessment
+  parent: CORE-RESEARCH
+  signals:
+  - standards
+  - progress
+  - indicator
+  - gradebook
+  - strand
+  - subject standard
+  - track
+  blocks_external: true
+  requires_local: true
+  default_intent: RESEARCH
+  produces:
+  - progress_snapshot
+  - strand_comparison
+  requires: []
+  suggests_next:
+  - LV-ASS-003
+  - LV-PAR-002
+  failure_modes:
+    silent:
+    - Progress tracked without noting scale change between G3 and G4
+    loud:
+    - Student data referenced without anonymization
+
+- id: LV-ASS-003
+  name: CEFR Evidence Extractor
+  description: >
+    Extract CEFR-level evidence from teacher narrative comments and
+    portfolio artifacts. Maps observed language behaviors to CEFR
+    can-do statements. Example: "writes multi-paragraph essays with
+    topic sentences and transition words" → B1 Written Production.
+  domain: assessment
+  parent: CORE-DIAGNOSE
+  signals:
+  - CEFR evidence
+  - level mapping
+  - can-do
+  - proficiency evidence
+  - language level
+  - what level
+  blocks_external: true
+  requires_local: true
+  default_intent: DIAGNOSE
+  produces:
+  - cefr_evidence_map
+  - proficiency_indicator
+  requires:
+  - progress_snapshot
+  suggests_next:
+  - LV-CUR-003
+  - LV-PAR-002
+  failure_modes:
+    silent:
+    - CEFR level inferred from single data point instead of pattern
+    - Native speaker performance conflated with L2 acquisition evidence
+    loud:
+    - CEFR level assigned contradicts observable evidence in narrative
+
+- id: LV-ASS-004
+  name: Portfolio Documentation Guide
+  description: >
+    Guide teachers on what to document, how to tag it in Toddle, and
+    how documentation connects to assessment. Aligned to Reggio
+    documentation principles: making learning visible, not proving
+    compliance. Outputs connect to Toddle portfolio posts.
+  domain: assessment
+  parent: CORE-CREATE
+  signals:
+  - portfolio
+  - documentation
+  - evidence
+  - learning story
+  - toddle post
+  - tag student
+  - make visible
+  - how should I document
+  - portfolio post
+  blocks_external: false
+  default_intent: CREATE
+  produces:
+  - documentation_guide
+  - tagging_protocol
+  requires:
+  - ib_unit_plan
+  suggests_next:
+  - LV-TCH-001
+  failure_modes:
+    silent:
+    - Documentation protocol too rigid (contradicts Reggio philosophy)
+    loud:
+    - Portfolio evidence not linked to any assessment strand
+
+- id: LV-ASS-005
+  name: Inter-Rater Calibration
+  description: >
+    Calibrate assessment consistency across teachers and grades.
+    Ensure that "Accomplished" in G3 Italian means the same thing
+    across campuses. Uses exemplar student work samples.
+  domain: assessment
+  parent: CORE-DECIDE
+  signals:
+  - calibration
+  - consistency
+  - moderation
+  - inter-rater
+  - exemplar
+  - anchor
+  - what does accomplished mean
+  - what does establishing mean
+  - scale meaning
+  blocks_external: true
+  requires_local: true
+  default_intent: DECIDE
+  produces:
+  - calibration_protocol
+  - exemplar_set
+  requires:
+  - assessment_rubric
+  suggests_next:
+  - LV-CUR-006
+  failure_modes:
+    silent:
+    - Calibration uses hypothetical examples instead of real student work
+    loud:
+    - Calibration reveals fundamental disagreement on scale meaning

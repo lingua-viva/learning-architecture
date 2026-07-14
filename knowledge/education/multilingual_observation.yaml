@@ -1,0 +1,127 @@
+domain: education
+version: '1.0'
+entries:
+- id: LV-KL-024
+  title: Common Underlying Proficiency — L1 Skills Transfer
+  content: >
+    Cummins (1984) established that cognitive-academic skills developed in a student's first language
+    transfer to an additional language via a Common Underlying Proficiency — literacy, reasoning, and
+    metacognitive strategies built in L1 are not lost or separate but form the foundation additional-
+    language learning draws on. This is the evidence base for treating L1 knowledge as an asset rather
+    than an obstacle to target-language learning.
+  ontology_nodes:
+  - LV-STU-001
+  evidence_tier: 1
+  citations:
+  - Cummins, J. (1984). Bilingualism and Special Education — Issues in Assessment and Pedagogy.
+  tags:
+  - L1 transfer
+  - common underlying proficiency
+  - Cummins
+  verified: true
+- id: LV-KL-025
+  title: BICS vs. CALP — Conversational Fluency Is Not Academic Proficiency
+  content: >
+    Cummins distinguishes Basic Interpersonal Communicative Skills (BICS, typically developed in 1-2
+    years) from Cognitive Academic Language Proficiency (CALP, typically requiring 5-7 years to reach
+    grade-level parity). A student who sounds conversationally fluent may still need significant
+    academic-language support — conflating the two is a common source of under-identifying language
+    support needs.
+  ontology_nodes:
+  - LV-STU-002
+  evidence_tier: 1
+  citations:
+  - Cummins, J. (1984). Bilingualism and Special Education — Issues in Assessment and Pedagogy.
+  tags:
+  - BICS
+  - CALP
+  - academic language
+  verified: true
+- id: LV-KL-026
+  title: Code-Switching Is a Communicative Competence, Not an Error
+  content: >
+    Sociolinguistic research on code-switching and translanguaging treats alternating between languages
+    within a single utterance or task as a deliberate, rule-governed communicative strategy that draws
+    on a learner's full linguistic repertoire, not a sign of confusion or incomplete acquisition in
+    either language. Translanguaging pedagogy deliberately invites this practice as a scaffold for
+    meaning-making.
+  ontology_nodes:
+  - LV-CUR-003
+  evidence_tier: 1
+  citations:
+  - García, O. (2009). Bilingual Education in the 21st Century — A Global Perspective.
+  - Cummins, J. (1984). Bilingualism and Special Education — Issues in Assessment and Pedagogy.
+  tags:
+  - code-switching
+  - translanguaging
+  - communicative competence
+  verified: true
+- id: LV-KL-027
+  title: Tiered Vocabulary — Tier 2 Words Are the Highest-Leverage Target
+  content: >
+    Beck, McKeown & Kucan (2013) organize vocabulary into three tiers: Tier 1 (basic, everyday words),
+    Tier 2 (high-utility academic words appearing across domains — the highest-leverage instructional
+    target), and Tier 3 (domain-specific technical terms). Explicit, repeated, contextualized instruction
+    in Tier 2 words has the strongest evidence for improving academic language proficiency.
+  ontology_nodes:
+  - LV-CUR-003
+  evidence_tier: 2
+  citations:
+  - Beck, I.L., McKeown, M.G. & Kucan, L. (2013). Bringing Words to Life (2nd ed.).
+  tags:
+  - vocabulary instruction
+  - tiered words
+  - academic language
+  verified: true
+- id: LV-KL-028
+  title: Oral Language Precedes Written Output for Emerging Multilingual Learners
+  content: >
+    Second-language-acquisition research supports sequencing oral comprehension and production ahead of
+    written output for emerging multilingual learners, since oral fluency typically develops faster than
+    literacy in an additional language and provides a scaffold for later written work — consistent with
+    the CEFR's separate reception/production scales by modality.
+  ontology_nodes:
+  - LV-CUR-003
+  evidence_tier: 1
+  citations:
+  - Cummins, J. (1984). Bilingualism and Special Education — Issues in Assessment and Pedagogy.
+  - Council of Europe (2020). Common European Framework of Reference for Languages — Companion Volume.
+  tags:
+  - oral-first sequencing
+  - emerging multilingual learners
+  verified: true
+- id: LV-KL-029
+  title: Structured Observation Separates Recorded Behavior From Interpretation
+  content: >
+    Effective classroom observation protocols separate the recorded behavior (what was said or done,
+    verbatim or near-verbatim where possible) from the interpretation of that behavior, so the same
+    observation can support multiple later purposes — grouping, reporting, or referral. Vague evaluative
+    notes without the underlying behavior lose evidentiary value once the moment can no longer be
+    recalled precisely.
+  ontology_nodes:
+  - LV-TCH-001
+  evidence_tier: 2
+  citations:
+  - Danielson, C. (2013). The Framework for Teaching Evaluation Instrument.
+  tags:
+  - observation protocol
+  - evidence-based notes
+  verified: true
+- id: LV-KL-030
+  title: Balancing Language-Homogeneous and Heterogeneous Grouping
+  content: >
+    Flexible grouping for multilingual learners should vary between language-homogeneous groupings
+    (allowing L1 peer support for complex content) and heterogeneous groupings (providing target-language
+    models and integration), rather than defaulting to permanent separation by language proficiency
+    level. Isolating multilingual learners from grade-level peers across all activities limits
+    target-language exposure and social integration.
+  ontology_nodes:
+  - LV-TCH-002
+  evidence_tier: 2
+  citations:
+  - Hamayan, E., Marler, B., Sanchez-Lopez, C. & Damico, J. (2013). Special Education Considerations for English Language Learners.
+  tags:
+  - grouping
+  - multilingual learners
+  - social integration
+  verified: true

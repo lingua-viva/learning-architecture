@@ -1,0 +1,89 @@
+domain: education
+version: '1.0'
+entries:
+- id: LV-KL-016
+  title: RTI Three-Tier Intervention Framework
+  content: >
+    Fuchs & Fuchs (2006) describe Response to Intervention as a three-tier framework: Tier 1 (universal,
+    high-quality core instruction for all students), Tier 2 (targeted small-group intervention for
+    students not responding to Tier 1), and Tier 3 (intensive, individualized intervention, often the
+    entry point for special education evaluation). Movement between tiers should be based on
+    progress-monitoring data collected over a defined period, not a single data point.
+  ontology_nodes:
+  - LV-STU-003
+  evidence_tier: 1
+  citations:
+  - Fuchs, D. & Fuchs, L.S. (2006). Introduction to Response to Intervention. Reading Research Quarterly, 41(1).
+  tags:
+  - RTI
+  - MTSS
+  - tiered intervention
+  verified: true
+- id: LV-KL-017
+  title: Progress-Monitoring Frequency and Decision Rules
+  content: >
+    RTI progress monitoring typically occurs weekly to biweekly for Tier 2/3 students, with a minimum of
+    6-8 data points before a tier-change decision is made, to distinguish a genuine trend from normal
+    variability. A single low data point should never trigger tier escalation — the decision rule is
+    based on the trend line relative to a target growth rate.
+  ontology_nodes:
+  - LV-STU-003
+  evidence_tier: 1
+  citations:
+  - Fuchs, D. & Fuchs, L.S. (2006). Introduction to Response to Intervention. Reading Research Quarterly, 41(1).
+  tags:
+  - progress monitoring
+  - data-based decisions
+  verified: true
+- id: LV-KL-018
+  title: Escalation Signal Criteria — Safety vs. Instructional Concern
+  content: >
+    Escalation protocols distinguish immediate-safety concerns (requiring same-day adult notification)
+    from academic or behavioral concerns that warrant increased monitoring but not immediate escalation.
+    The distinguishing criteria are imminence and severity of risk — school-wide MTSS behavioral
+    frameworks route safety signals to a faster pathway than instructional signals.
+  ontology_nodes:
+  - LV-STU-004
+  evidence_tier: 2
+  citations:
+  - OSEP Technical Assistance Center on PBIS. Tiered Behavioral Escalation Guidance.
+  tags:
+  - escalation
+  - safety
+  - MTSS behavior
+  verified: true
+- id: LV-KL-019
+  title: SIFE Students Need Own-Baseline Comparison, Not Grade-Level Norms
+  content: >
+    Hamayan et al. (2013) caution against comparing a SIFE (Students with Interrupted Formal Education)
+    student's performance to grade-level or same-age peer norms, since interrupted schooling — not
+    ability — explains the gap. Recommended practice is to establish the student's own baseline and
+    track growth against it, using portfolio and performance-based evidence rather than norm-referenced
+    testing alone in the first 1-2 years.
+  ontology_nodes:
+  - LV-ASS-004
+  evidence_tier: 2
+  citations:
+  - Hamayan, E., Marler, B., Sanchez-Lopez, C. & Damico, J. (2013). Special Education Considerations for English Language Learners.
+  tags:
+  - SIFE
+  - assessment equity
+  - portfolio evidence
+  verified: true
+- id: LV-KL-020
+  title: Inter-Rater Calibration Using CEFR Benchmarked Samples
+  content: >
+    The CEFR Companion Volume's illustrative descriptors and benchmarked samples are designed to support
+    inter-rater calibration — raters compare their judgment of a work sample against anchor descriptors
+    and benchmarked exemplars to converge on consistent level assignment. Regular calibration sessions
+    across a teaching team are the standard mechanism for keeping CEFR level assignment reliable.
+  ontology_nodes:
+  - LV-ASS-005
+  evidence_tier: 1
+  citations:
+  - Council of Europe (2020). Common European Framework of Reference for Languages — Companion Volume.
+  tags:
+  - inter-rater reliability
+  - CEFR
+  - calibration
+  verified: true

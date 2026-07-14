@@ -1,0 +1,331 @@
+"""
+Content Differentiation Engine — Product B core
+
+Teacher inputs an IB unit (subject, topic, ATL skills, duration, CEFR
+band). This engine generates three tiered content packs — foundational,
+on_track, extended — plus a teacher guide, using a deterministic,
+rule-based Template & Rules Engine (no LLM call, no cache-miss fallback
+to a cloud model). This matches content-differentiation.md's own
+architecture ("Template & Rules Engine... Local Model Runtime used only
+on cache miss") simplified for the Friday vertical slice: this build
+ships the rule-based tier always, with no model-runtime fallback yet.
+
+Schemas (LessonInput, tier structure) follow
+architecture/content-differentiation.md Section 3, trimmed to what a
+first pilot needs. `StudentLens` reuses the dict shape returned by
+`student_lens.StudentLensStore.get_lens()` rather than re-declaring a
+parallel type — RTI tier data flows from the same lens Product A writes.
+
+RESEARCH (mandatory per build rules before writing any student-facing
+content generation logic): ran
+  mc research "Trauma-informed pedagogy for refugee students: what
+  language patterns should be avoided in educational AI systems, and
+  what frameworks exist for safe assessment?"
+Findings (with citations, see BUILD_JOURNAL.md Turn 4) — avoid: vague or
+threatening ambiguity, forced disclosure/personalization of the
+student's own history, labeling/outing students as "refugee" or
+"trauma survivor," pathologizing/deficit-focused/diagnostic language.
+Favor: safety, transparency, choice (explicit opt-out / alternative-topic
+options on any personal-reflection task), and affirming, strengths-based
+framing. TRAUMA_SAFE_RULES below encodes these as generation-time checks,
+not just documentation.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+from dataclasses import dataclass, field, asdict
+from datetime import datetime, timezone
+from typing import Optional
+
+CEFR_ORDER = ["A1", "A1+", "A2", "A2+", "B1", "B1+", "B2", "C1", "C2"]
+
+TIERS = ("foundational", "on_track", "extended")
+
+# Trauma-informed guardrails, grounded in Perplexity research (see module
+# docstring + BUILD_JOURNAL.md Turn 4). Any generated task that invites
+# personal reflection must carry an explicit alternative/opt-out; no
+# generated text may use these labels or phrasings.
+TRAUMA_UNSAFE_LABELS = (
+    "refugee student", "refugee children", "trauma survivor",
+    "traumatized", "displaced child", "your trauma", "what happened to you",
+)
+PERSONAL_REFLECTION_OPT_OUT = (
+    "You may write about your own experience, or choose a fictional "
+    "story or a general/news example instead — whichever feels right to you."
+)
+
+# Foundational-tier sentence-length ceiling, per content-differentiation.md
+# Stage 2 Language Adaptation ("simplified syntax for A1/A2, < 10-word
+# sentences").
+FOUNDATIONAL_MAX_SENTENCE_WORDS = 10
+
+
+class TraumaSafetyError(ValueError):
+    """Raised if generated content violates a trauma-informed guardrail.
+    This should never trigger from the templates below — it exists as a
+    hard check so future template edits can't silently reintroduce
+    unsafe language."""
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _cache_key(lesson: "LessonInput") -> str:
+    raw = "|".join(
+        [
+            lesson.subject,
+            lesson.unit_title,
+            lesson.topic,
+            lesson.cefr_target,
+            ",".join(sorted(lesson.atl_skills)),
+        ]
+    )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _check_trauma_safety(text: str) -> None:
+    lowered = text.lower()
+    for label in TRAUMA_UNSAFE_LABELS:
+        if label in lowered:
+            raise TraumaSafetyError(f"Unsafe label detected in generated content: {label!r}")
+
+
+@dataclass
+class LessonInput:
+    """
+    Product B input schema. Mirrors content-differentiation.md
+    Section 3.1 LessonInput, trimmed of fields the offline vertical
+    slice doesn't need yet (id/created_at auto-generated).
+    """
+
+    ib_programme: str  # "MYP" | "DP" | "PYP"
+    subject: str
+    unit_title: str
+    topic: str
+    atl_skills: list[str]
+    cefr_target: str  # CEFRBand, e.g. "B1"
+    duration_minutes: int
+    language_of_instruction: str = "en"
+    created_by: str = ""
+    created_at: str = field(default_factory=_now_iso)
+
+    def validate(self) -> list[str]:
+        errors = []
+        if self.ib_programme not in ("MYP", "DP", "PYP"):
+            errors.append("ib_programme must be one of MYP, DP, PYP")
+        if not self.subject.strip():
+            errors.append("subject is required")
+        if not self.unit_title.strip():
+            errors.append("unit_title is required")
+        if not self.topic.strip():
+            errors.append("topic is required")
+        if self.cefr_target not in CEFR_ORDER:
+            errors.append(f"cefr_target must be one of {CEFR_ORDER}")
+        if self.duration_minutes <= 0:
+            errors.append("duration_minutes must be positive")
+        return errors
+
+
+def _cefr_shift(band: str, steps: int) -> str:
+    """Move a CEFR band up/down by `steps` positions, clamped to range."""
+    idx = CEFR_ORDER.index(band) if band in CEFR_ORDER else CEFR_ORDER.index("B1")
+    new_idx = max(0, min(len(CEFR_ORDER) - 1, idx + steps))
+    return CEFR_ORDER[new_idx]
+
+
+def _simplify_sentence(sentence: str, max_words: int) -> str:
+    words = sentence.split()
+    if len(words) <= max_words:
+        return sentence
+    return " ".join(words[:max_words]).rstrip(",.;:") + "."
+
+
+def _extract_key_terms(topic: str, max_terms: int = 5) -> list[str]:
+    words = re.findall(r"[A-Za-z][A-Za-z\-]+", topic)
+    seen: list[str] = []
+    for w in words:
+        lw = w.lower()
+        if lw in ("the", "and", "of", "a", "an", "to", "in", "for") or len(lw) < 4:
+            continue
+        if lw not in [s.lower() for s in seen]:
+            seen.append(w)
+    return seen[:max_terms]
+
+
+def _generate_tier(
+    tier: str, lesson: LessonInput, key_terms: list[str]
+) -> dict:
+    tier_cefr = {
+        "foundational": _cefr_shift(lesson.cefr_target, -1),
+        "on_track": lesson.cefr_target,
+        "extended": _cefr_shift(lesson.cefr_target, +1),
+    }[tier]
+
+    objective_verb = {
+        "foundational": "identify and describe",
+        "on_track": "explain and analyze",
+        "extended": "evaluate and construct an argument about",
+    }[tier]
+    learning_objective = f"Students will {objective_verb} {lesson.topic.lower()}."
+    if tier == "foundational":
+        learning_objective = _simplify_sentence(
+            learning_objective, FOUNDATIONAL_MAX_SENTENCE_WORDS
+        )
+
+    vocabulary_list = [
+        {
+            "term": term,
+            "tier_definition_style": (
+                "one simple sentence, visual support recommended"
+                if tier == "foundational"
+                else "standard definition"
+                if tier == "on_track"
+                else "definition + example of use in argument"
+            ),
+        }
+        for term in key_terms
+    ]
+
+    if tier == "foundational":
+        tasks = [
+            {
+                "type": "guided_practice",
+                "prompt": f"Look at the pictures and words about {lesson.topic.lower()}. "
+                "Point to or say one word you know.",
+                "chunk_minutes": min(10, lesson.duration_minutes),
+                "opt_out_offered": False,
+            },
+            {
+                "type": "comprehension_check",
+                "prompt": "Choose the picture that matches the sentence.",
+                "chunk_minutes": min(10, lesson.duration_minutes),
+                "opt_out_offered": False,
+            },
+        ]
+    elif tier == "on_track":
+        tasks = [
+            {
+                "type": "guided_practice",
+                "prompt": f"In pairs, discuss what you already know about {lesson.topic.lower()}.",
+                "chunk_minutes": min(15, lesson.duration_minutes),
+                "opt_out_offered": False,
+            },
+            {
+                "type": "reflection",
+                "prompt": f"Write 3-4 sentences connecting {lesson.topic.lower()} to a story, "
+                "article, or example you know. " + PERSONAL_REFLECTION_OPT_OUT,
+                "chunk_minutes": min(15, lesson.duration_minutes),
+                "opt_out_offered": True,
+            },
+        ]
+    else:  # extended
+        tasks = [
+            {
+                "type": "open_inquiry",
+                "prompt": f"Formulate a research question about {lesson.topic.lower()} "
+                "and outline what evidence would answer it.",
+                "chunk_minutes": min(20, lesson.duration_minutes),
+                "opt_out_offered": False,
+            },
+            {
+                "type": "extended_writing",
+                "prompt": f"Write an argument essay about {lesson.topic.lower()}, using at "
+                "least two pieces of evidence. " + PERSONAL_REFLECTION_OPT_OUT,
+                "chunk_minutes": min(25, lesson.duration_minutes),
+                "opt_out_offered": True,
+            },
+        ]
+
+    for task in tasks:
+        _check_trauma_safety(task["prompt"])
+    _check_trauma_safety(learning_objective)
+
+    return {
+        "tier": tier,
+        "cefr_target": tier_cefr,
+        "learning_objective": learning_objective,
+        "vocabulary_list": vocabulary_list,
+        "tasks": tasks,
+    }
+
+
+@dataclass
+class ContentPack:
+    pack_id: str
+    lesson: dict
+    generated_at: str
+    content_version: str
+    tiers: dict  # {"foundational": {...}, "on_track": {...}, "extended": {...}}
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+class ContentDifferentiator:
+    """
+    Generates 3-tier content packs from a validated LessonInput.
+    Pure function of the input — no external calls, no randomness,
+    same lesson always produces the same pack (cache-key stable, per
+    content-differentiation.md's SHA256(subject|unit|topic|cefr|atl)
+    cache key design).
+    """
+
+    CONTENT_VERSION = "0.1.0"
+
+    def generate(self, lesson: LessonInput) -> ContentPack:
+        errors = lesson.validate()
+        if errors:
+            raise ValueError(f"Invalid LessonInput: {errors}")
+
+        key_terms = _extract_key_terms(lesson.topic)
+        tiers = {tier: _generate_tier(tier, lesson, key_terms) for tier in TIERS}
+
+        return ContentPack(
+            pack_id=_cache_key(lesson),
+            lesson=asdict(lesson),
+            generated_at=_now_iso(),
+            content_version=self.CONTENT_VERSION,
+            tiers=tiers,
+        )
+
+    def assign_tier_for_student(self, student_lens: dict) -> str:
+        """
+        Map a student's lens (as returned by
+        student_lens.StudentLensStore.get_lens()) to a content tier.
+        RTI tier is the primary signal per rti-tiers.md (RTI tiers are
+        the intervention-intensity axis; CEFR is the parallel language
+        spine that can pull a student up/down within that).
+        """
+        rti_tier = student_lens.get("rti_current_tier", 1)
+        cefr_snapshot = student_lens.get("cefr_snapshot", {})
+        levels = [v for v in cefr_snapshot.values() if v]
+        weakest = min(
+            levels, key=lambda lvl: CEFR_ORDER.index(lvl) if lvl in CEFR_ORDER else 0
+        ) if levels else None
+
+        if rti_tier == 3:
+            return "foundational"
+        if rti_tier == 2:
+            # Tier 2 students get foundational unless CEFR evidence shows
+            # they're keeping pace (B1+), in which case on_track.
+            if weakest and CEFR_ORDER.index(weakest) >= CEFR_ORDER.index("B1"):
+                return "on_track"
+            return "foundational"
+        # RTI tier 1 (universal): CEFR decides between on_track / extended
+        if weakest and CEFR_ORDER.index(weakest) >= CEFR_ORDER.index("B2"):
+            return "extended"
+        return "on_track"
+
+    def assign_packs_for_roster(
+        self, pack: ContentPack, roster: list[dict]
+    ) -> dict[str, str]:
+        """Given a content pack and a roster of student lens dicts,
+        return {student_id: tier}."""
+        return {
+            student["student_id"]: self.assign_tier_for_student(student)
+            for student in roster
+        }

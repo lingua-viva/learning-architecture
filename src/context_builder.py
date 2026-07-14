@@ -49,6 +49,7 @@ class ContextBuilder:
         prior_paths: list[dict],
         research_result: Optional[dict] = None,
         lens_modifier: Optional[str] = None,
+        document_entries: Optional[list[dict]] = None,
     ) -> tuple[str, str, list[str]]:
         """
         Build system prompt and user message for the model.
@@ -71,7 +72,7 @@ class ContextBuilder:
         # 2. Build the context block
         context_block = self._build_context_block(
             classification, knowledge_entries, prior_paths,
-            research_result, gap_signals,
+            research_result, gap_signals, document_entries,
         )
 
         # 3. Assemble system prompt: lens + agent prompt + context
@@ -121,6 +122,7 @@ class ContextBuilder:
         prior_paths: list[dict],
         research_result: Optional[dict],
         gap_signals: list[str],
+        document_entries: Optional[list[dict]] = None,
     ) -> str:
         """
         Build the structured context block.
@@ -211,6 +213,27 @@ class ContextBuilder:
         else:
             lines.append("\n## No knowledge entries found for this node.")
             gap_signals.append(f"no_knowledge_at_node:{riu_id}")
+
+        # --- Retrieved Documents ---
+        # Chunks from ingested source documents (e.g. IB curriculum PDFs),
+        # already PII-redacted by DocumentParser. A chunk flagged
+        # needs_review means it contained a Layer-3-style signal word
+        # (e.g. "confidential") and was redacted but not blocked — surface
+        # that to the model so it treats the excerpt with appropriate care
+        # rather than presenting it as fully verified.
+        if document_entries:
+            lines.append(f"\n## Retrieved Document Excerpts ({len(document_entries)} chunks)")
+            for doc in document_entries:
+                page_start = doc.get("page_start", "?")
+                page_end = doc.get("page_end", page_start)
+                loc = f"{doc.get('source_file', '?')} p.{page_start}"
+                if page_end != page_start:
+                    loc += f"-{page_end}"
+                review_flag = " [NEEDS HUMAN REVIEW]" if doc.get("needs_review") else ""
+                lines.append(f"  [{loc} — {doc.get('section', '?')}]{review_flag}")
+                text = doc.get("text", "")
+                truncated = text[:500] + "..." if len(text) > 500 else text
+                lines.append(f"    {truncated}")
 
         # --- Prior Paths ---
         if prior_paths:

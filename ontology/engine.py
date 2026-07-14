@@ -102,11 +102,17 @@ class OntologyEngine:
             domains_dir = Path(__file__).parent / "domains"
 
         self._load_schema()
-        # Load core ontology first (MC-native), then legacy domains, then customer extensions
+        # Load core ontology first (MC-native), then legacy domains, then
+        # the education domain pack, then customer extensions
         core_dir = Path(__file__).parent / "core"
         if core_dir.exists():
             self._load_domains(core_dir)
         self._load_domains(domains_dir)
+        # Load education domain pack if present (LV-* nodes: curriculum,
+        # student, teacher, parent, assessment, infrastructure, admin, learner)
+        education_dir = Path(__file__).parent / "education"
+        if education_dir.exists():
+            self._load_domains(education_dir)
         # Load customer extensions if present
         customers_dir = Path(__file__).parent / "customers"
         if customers_dir.exists():

@@ -1,0 +1,114 @@
+# Lingua Viva — Gap Nodes (Architecture Gaps Identified 2026-06-20)
+# Generated through MC pipeline: [MC-DATA-002] Taxonomy / Ontology Design
+# Intent: CREATE | Lens: architect
+# Fills: 3 admin gaps, 3 teacher gaps, 2 student gaps
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ADMINISTRATIVE LAYER
+# ═══════════════════════════════════════════════════════════════════════════════
+
+domain: admin
+version: '1.0'
+description: >
+  Administrative oversight — accreditation, programme coherence, capacity.
+  These nodes serve coordinators and heads of school, not classroom teachers.
+
+nodes:
+- id: LV-ADM-001
+  name: Programme of Inquiry Overview
+  description: >
+    Display the full K-5 Programme of Inquiry map: all transdisciplinary
+    themes × all grade levels × current unit status. This is the IB
+    accreditation artifact — evaluators check that the PoI is coherent,
+    vertically aligned, and actually being taught. Connects to Toddle
+    unit planning data.
+  domain: admin
+  parent: CORE-RESEARCH
+  signals:
+  - programme of inquiry
+  - PoI
+  - all units
+  - whole school view
+  - IB evaluation
+  - accreditation
+  - overview
+  - school map
+  blocks_external: false
+  default_intent: RESEARCH
+  produces:
+  - poi_overview_map
+  - unit_coverage_report
+  requires: []
+  suggests_next:
+  - LV-CUR-006
+  - LV-ADM-002
+  failure_modes:
+    silent:
+    - PoI shows planned units but not actual implementation status
+    loud:
+    - PoI reveals gap (theme × grade with no unit) before accreditation visit
+
+- id: LV-ADM-002
+  name: Accreditation Evidence Bundle
+  description: >
+    Package evidence for IB evaluation visits. Collects: PoI map,
+    sample unit plans, assessment exemplars, teacher collaboration
+    evidence, student portfolio samples, CEFR progression data.
+    Must demonstrate all 4 framework integrations in practice.
+  domain: admin
+  parent: CORE-CREATE
+  signals:
+  - accreditation
+  - IB visit
+  - evaluation
+  - evidence bundle
+  - self-study
+  - authorization
+  blocks_external: true
+  requires_local: true
+  default_intent: CREATE
+  produces:
+  - accreditation_bundle
+  - evidence_index
+  requires:
+  - poi_overview_map
+  - coherence_report
+  suggests_next: []
+  failure_modes:
+    silent:
+    - Bundle shows exemplary work from one teacher, not systemic evidence
+    loud:
+    - Evidence contradicts what the PoI claims is happening
+
+- id: LV-ADM-003
+  name: Capacity & Staffing Check
+  description: >
+    Assess whether staffing supports the curriculum targets. Key question:
+    do we have enough qualified Italian teachers for the CEFR goals at
+    each grade? Tracks teacher:student ratios, language qualifications,
+    and coverage gaps across campuses.
+  domain: admin
+  parent: CORE-DIAGNOSE
+  signals:
+  - staffing
+  - capacity
+  - enough teachers
+  - hiring
+  - coverage
+  - teacher ratio
+  - next year staffing
+  - do we have enough
+  blocks_external: true
+  requires_local: true
+  default_intent: DIAGNOSE
+  produces:
+  - capacity_report
+  - staffing_gap_list
+  requires: []
+  suggests_next:
+  - LV-INF-002
+  failure_modes:
+    silent:
+    - Report counts headcount without assessing qualification match
+    loud:
+    - Capacity gap identified with no hiring timeline

@@ -1,0 +1,84 @@
+candidate_id: CAND-4DA96F8F
+status: ENRICHED
+created_at: 1783994911.5851715
+updated_at: 1783994916.8689752
+original_query: 'Still I Rise nonprofit school network Kenya Colombia India Italy:
+  what are the primary spoken languages among the refugee student population, and
+  what languages does the organization publish materials in?'
+query_hash: b0b03b49f68e91d7
+fallback_node: CORE-RESEARCH
+fallback_confidence: 0.3
+signals:
+- still
+- rise
+- nonprofit
+- school
+- network
+- kenya
+- colombia
+- india
+queries:
+- b0b03b49f68e91d7
+domain: core
+perplexity_findings:
+- content: 'Still I Rise’s **Kenya** school materials indicate that refugee students
+    are commonly from **Congo/DRC, Somalia, South Sudan, Burundi, Ethiopia, Uganda,
+    and Rwanda**, which implies a mix of **French, Swahili/Kiswahili, English, Arabic,
+    Somali, and other local languages** among the refugee population rather than one
+    single dominant home language.[6][10][1] The clearest language claim in the organization’s
+    own Kenya language policy is that many refugee students are already *bilingual
+    or trilingual*, and that some have learned **English** and **Kiswahili** before
+    enrollment; it also says **French** is common among refugee students and is taught
+    as a compulsory second language.[1]
+
+
+    What I could verify most directly is:
+
+    - In Kenya, **English** is the school’s language of instruction, while **Kiswahili**
+    and **French** are compulsory second languages.[5][1]
+
+    - The refugee student body in Kenya is drawn from multiple countries, with documented
+    representation from the DRC, Somalia, South Sudan, Burundi, Ethiopia, Uganda,
+    and Rwanda.[10][6]
+
+    - The organization explicitly teaches or uses **English, Kiswahili, French, and
+    Arabic** in different programs and contexts.[1][9][12]
+
+
+    I could **not** verify a single authoritative source that lists the *primary spoken
+    languages of the refugee student population across all Still I Rise schools* in
+    **Kenya, Colombia, India, and Italy** together. The available sources are mostly
+    Kenya-specific, and the only school-level language data I found outside Kenya
+    describes program languages rather than refugee home languages.[1][9][12]
+
+
+    For publication language, the organization’s public materials visible in the results
+    are published in **English** and **Italian**: the site includes English-language
+    pages and reports, and it also publishes Italian-language pages and documents,
+    such as “Relazione attività.”[7][9][12] I could not verify from the retrieved
+    sources whether it publishes *all* materials in both languages or whether some
+    materials also appear in additional languages.'
+  citations:
+  - https://www.stillirise.org/uploads/2023/09/LANGUAGE-POLICY-2025.docx.pdf
+  - https://italicsmag.com/2020/04/04/still-i-rise-a-world-class-education-for-refugees/
+  - https://www.morocolor.it/en/news/posts/bridging-a-systemic-gap-still-i-rise-for-the-education-of-refugee-and-vulnerable-children/
+  - https://www.lusha.com/business/271b9cd77bec53c0/
+  - https://www.doris.school/schools/kenya/still-i-rise-international-school
+  - https://24886661.fs1.hubspotusercontent-eu1.net/hubfs/24886661/WBSP/WBSP22_Toolkits/Toolkits23_Top10/%5BCC%5D%20Still%20I%20Rise%20International%20School.pdf
+  - https://www.stillirise.org/en/news/meet-the-team-nicolo-govoni/
+  - https://www.youtube.com/watch?v=mapRSSLGFFw
+  - https://www.stillirise.org/uploads/2024/05/SIR-Relazione-attivita-2022-ENG-1-2.pdf
+  - https://www.stillirise.org/en/news/kenya-ib/
+  - https://www.pressenza.com/2022/01/international-school-awards-2021-still-i-rise-international-school-of-nairobi-wins-a-special-commendation/
+  - https://www.stillirise.org/uploads/2024/05/SIR-Impact-Report_21-ENG-RZ.pdf
+  - https://a4id.org/case_study/establishing-the-worlds-first-free-of-cost-international-school-for-refugee-children-in-kenya/
+  - https://flashstart.com/case-study/stillirise/
+  - https://www.youtube.com/watch?v=NKXV_ZVfb1k
+  gaps: []
+  contradictions: []
+knowledge_refs: []
+path_records: []
+hit_count: 2
+avg_confidence: 0.0
+resolution: null
+evaluation_notes: ''

@@ -12,6 +12,7 @@ build/
 node_modules/
 memory/hot/
 memory/cold/*.ndjson
+case-studies/04-still-i-rise/data/
 .venv/
 venv/
 *.log

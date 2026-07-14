@@ -1,0 +1,77 @@
+# Lingua Viva — Student-Facing Gap Nodes
+# Generated through MC pipeline: [MC-DATA-002] Taxonomy / Ontology Design
+# Intent: CREATE | Lens: architect
+# Fills: self-assessment, portfolio ownership
+# All blocks_external: true (student data)
+
+domain: learner
+version: '1.0'
+description: >
+  Student-facing nodes. Age-appropriate, IB Learner Profile aligned.
+  These are the only nodes where the end user is a child (ages 6-11).
+  Language must be simple, visual, and encouraging. Never deficit-framed.
+
+nodes:
+- id: LV-LRN-001
+  name: Self-Assessment Prompt
+  description: >
+    Generate age-appropriate self-reflection prompts for students.
+    Connected to IB Learner Profile attributes (inquirer, communicator,
+    risk-taker, etc.) and current unit of inquiry. G1-2: visual/oral
+    ("show me with your thumb"). G3-5: written with sentence starters
+    ("I used to think... now I think...").
+  domain: learner
+  parent: CORE-REFLECT
+  signals:
+  - self-assessment
+  - how did I do
+  - reflect
+  - what did I learn
+  - learner profile
+  - I think I
+  blocks_external: true
+  requires_local: true
+  default_intent: REFLECT
+  produces:
+  - self_assessment_prompt
+  - reflection_frame
+  requires:
+  - ib_unit_plan
+  suggests_next:
+  - LV-LRN-002
+  failure_modes:
+    silent:
+    - Prompt is too abstract for the grade level
+    - Reflection becomes compliance rather than genuine thinking
+    loud:
+    - Prompt asks child to self-rate against rubric (not age-appropriate for PYP)
+
+- id: LV-LRN-002
+  name: Portfolio Ownership
+  description: >
+    Help students understand and engage with their own Toddle portfolio.
+    Age-appropriate prompts: "What would you like to add?" "What are you
+    proud of?" "Tell me about this piece." Supports student agency in
+    documenting their own learning (Reggio principle: child as protagonist).
+  domain: learner
+  parent: CORE-CREATE
+  signals:
+  - my portfolio
+  - what should I add to my portfolio
+  - I am proud of
+  - my work
+  - show my learning
+  blocks_external: true
+  requires_local: true
+  default_intent: CREATE
+  produces:
+  - portfolio_prompt
+  - student_reflection_artifact
+  requires: []
+  suggests_next:
+  - LV-ASS-004
+  failure_modes:
+    silent:
+    - Portfolio selection is teacher-directed, not student-owned
+    loud:
+    - System asks child to evaluate quality (assessment, not ownership)

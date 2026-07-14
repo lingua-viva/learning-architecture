@@ -410,7 +410,7 @@ class HealthCheck:
 
         try:
             # Look for most recent golden result
-            results_dir = Path(str(self.root).replace("mission-canvas", "palette")) / "tests" / "results"
+            results_dir = self.root / "tests" / "results"
             if not results_dir.exists():
                 issues.append("No golden dataset results found (run 'mc eval' first)")
                 return passed, total, issues
@@ -509,15 +509,11 @@ class HealthCheck:
             issues.append("No Node.js sanitizer tests found")
 
         # Check 3: Golden dataset exists
-        golden = Path(str(self.root).replace("mission-canvas", "palette")) / "tests" / "golden_dataset_v1.yaml"
+        golden = self.root / "tests" / "golden_education_v1.yaml"
         if golden.exists():
             passed += 1
         else:
-            # Try alternative location
-            if (self.root / "tests" / "golden_dataset_v1.yaml").exists():
-                passed += 1
-            else:
-                issues.append("Golden dataset not found")
+            issues.append("Golden dataset not found (expected tests/golden_education_v1.yaml)")
 
         return passed, total, issues
 

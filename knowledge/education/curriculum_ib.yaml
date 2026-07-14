@@ -1,0 +1,109 @@
+domain: education
+version: '1.0'
+entries:
+- id: LV-KL-001
+  title: IB PYP Central Idea Requirement
+  content: >
+    Every PYP unit of inquiry must be built around a single central idea — a transferable, conceptual
+    statement broad enough to explore across disciplines and specific enough to be assessed. Central
+    ideas are not topics; they state a relationship or generalization. IBO guidance requires central
+    ideas to be developed collaboratively during planning and revisited throughout the unit so that
+    lines of inquiry, learning experiences, and summative assessment all trace back to it.
+  ontology_nodes:
+  - LV-CUR-001
+  evidence_tier: 1
+  citations:
+  - "IBO (2018). Primary Years Programme: From Principles into Practice."
+  tags:
+  - IB PYP
+  - central idea
+  - unit planning
+  verified: true
+- id: LV-KL-002
+  title: CEFR Six-Level Proficiency Framework
+  content: >
+    The CEFR Companion Volume (2020) describes six proficiency levels (A1, A2, B1, B2, C1, C2) organized
+    around can-do descriptors across reception, production, interaction, and mediation. The 2020 update
+    adds mediation scales (explaining, relaying, collaborating) and plurilingual/pluricultural competence
+    descriptors. Levels describe what a learner can do, not a deficit relative to a native-speaker norm.
+  ontology_nodes:
+  - LV-CUR-003
+  evidence_tier: 1
+  citations:
+  - Council of Europe (2020). Common European Framework of Reference for Languages — Companion Volume.
+  tags:
+  - CEFR
+  - language proficiency
+  - mediation
+  verified: true
+- id: LV-KL-003
+  title: Vertical Coherence Across an IB Continuum
+  content: >
+    Vertical coherence in an IB continuum school requires conceptual understandings and skills to build
+    cumulatively from PYP through MYP, with explicit hand-off points (e.g., PYP exhibition to MYP
+    personal project). IBO guidance recommends collaborative planning across grade-level teams, with a
+    shared scope-and-sequence document, to prevent unintended repetition and unaddressed gaps.
+  ontology_nodes:
+  - LV-CUR-006
+  evidence_tier: 1
+  citations:
+  - "IBO (2018). Primary Years Programme: From Principles into Practice."
+  - "IBO. Middle Years Programme: From Principles into Practice."
+  tags:
+  - vertical alignment
+  - IB continuum
+  - scope and sequence
+  verified: true
+- id: LV-KL-004
+  title: Universal Design for Learning — Multiple Means of Representation
+  content: >
+    Universal Design for Learning (CAST, 2018) recommends providing multiple means of representation,
+    action/expression, and engagement so a single activity design serves a range of learners without
+    separate parallel tracks. In practice this means pairing verbal/text instructions with visual, oral,
+    and kinesthetic options for both input and output, rather than treating multimodal design as an
+    add-on for a subset of students.
+  ontology_nodes:
+  - LV-CUR-005
+  evidence_tier: 1
+  citations:
+  - CAST (2018). Universal Design for Learning Guidelines version 2.2.
+  tags:
+  - UDL
+  - multimodal design
+  - accessibility
+  verified: true
+- id: LV-KL-005
+  title: Dual Alignment — IB PYP and National Curriculum
+  content: >
+    Schools running a dual IB PYP / national curriculum (e.g., Italy's Indicazioni Nazionali) must map
+    central ideas and lines of inquiry to the national curriculum's disciplinary objectives to satisfy
+    both accreditation bodies. IBO's PYP guidance explicitly supports this dual-alignment model, provided
+    the transdisciplinary structure is preserved rather than the unit reduced to a national-standards
+    checklist.
+  ontology_nodes:
+  - LV-CUR-004
+  evidence_tier: 1
+  citations:
+  - "IBO (2018). Primary Years Programme: From Principles into Practice."
+  tags:
+  - dual alignment
+  - national curriculum
+  - accreditation
+  verified: true
+- id: LV-KL-006
+  title: Concept-Based Curriculum Design
+  content: >
+    Concept-based curriculum design (Erickson & Lanning) organizes learning around transferable
+    conceptual understandings rather than isolated facts, so knowledge transfers to new contexts. In an
+    IB PYP unit, the central idea and key concepts (e.g., Form, Function, Connection) drive activity
+    design, and factual content is selected because it serves the concept — not the reverse.
+  ontology_nodes:
+  - LV-CUR-001
+  evidence_tier: 2
+  citations:
+  - Erickson, H.L. & Lanning, L.A. (2014). Transitioning to Concept-Based Curriculum and Instruction.
+  tags:
+  - concept-based curriculum
+  - transfer
+  - key concepts
+  verified: true

@@ -1,0 +1,115 @@
+# Lingua Viva — Teacher Planning Gap Nodes
+# Generated through MC pipeline: [MC-DATA-002] Taxonomy / Ontology Design
+# Intent: CREATE | Lens: architect
+# Fills: weekly planning, collaborative planning, sub cover
+
+domain: planning
+version: '1.0'
+description: >
+  Day-to-day and week-to-week teacher planning. Sits between the unit
+  level (LV-CUR) and the observation level (LV-TCH). This is where
+  teachers actually live — not in 6-week unit arcs but Monday-Friday rhythm.
+
+nodes:
+- id: LV-PLN-001
+  name: Weekly Planning Support
+  description: >
+    Help an Italian teacher plan a specific week within an active unit.
+    Takes: current unit plan, where we are in the sequence, CEFR targets
+    for this grade, available routines/scaffolds. Produces: 5-day outline
+    with language focus, key vocabulary, and Toddle documentation moments.
+  domain: planning
+  parent: CORE-CREATE
+  signals:
+  - this week
+  - Monday
+  - what do I do
+  - weekly plan
+  - day by day
+  - next week
+  - plan for tomorrow
+  - lesson plan
+  - schedule
+  blocks_external: false
+  default_intent: CREATE
+  produces:
+  - weekly_plan
+  - daily_language_focus
+  requires:
+  - ib_unit_plan
+  suggests_next:
+  - LV-TCH-003
+  - LV-TCH-001
+  - LV-CUR-002
+  failure_modes:
+    silent:
+    - Weekly plan is generic and not connected to current unit arc
+    - Daily focus repeats same structure all week (no progression)
+    loud:
+    - Plan requires more time than available in the school day
+
+- id: LV-PLN-002
+  name: Collaborative Planning
+  description: >
+    Support grade-level team planning (e.g. G3 Arancioni + Verdi teachers
+    planning together). Surfaces: what each section is doing, where they
+    align, where they intentionally differ. Maintains the 50/50 principle —
+    shared framework with individual teacher adaptation.
+  domain: planning
+  parent: CORE-CREATE
+  signals:
+  - team planning
+  - co-planning
+  - my co-teacher
+  - grade level meeting
+  - align with
+  - what is the other class doing
+  - other section
+  - parallel planning
+  - what are they doing
+  blocks_external: false
+  default_intent: CREATE
+  produces:
+  - team_alignment_brief
+  - shared_resources_list
+  requires:
+  - weekly_plan
+  suggests_next:
+  - LV-TCH-005
+  - LV-CUR-006
+  failure_modes:
+    silent:
+    - Collaboration reduces to identical plans (kills teacher autonomy)
+    loud:
+    - Sections diverge so far that students transferring between them are lost
+
+- id: LV-PLN-003
+  name: Substitute Context Pack
+  description: >
+    Generate instant context for a substitute teacher covering an Italian
+    class. Includes: current unit, this week's plan, active routines,
+    key vocabulary on the wall, which students need scaffolding, what
+    the class expects (Reggio: the sub must respect the existing rhythm).
+  domain: planning
+  parent: CORE-CREATE
+  signals:
+  - substitute
+  - cover
+  - sub plan
+  - I am absent
+  - someone covering
+  - emergency plan
+  blocks_external: true
+  requires_local: true
+  default_intent: CREATE
+  produces:
+  - sub_context_pack
+  requires:
+  - weekly_plan
+  - routine_sequence
+  suggests_next: []
+  failure_modes:
+    silent:
+    - Pack lists activities without explaining why (sub does busywork)
+    loud:
+    - Pack exposes student support levels to an unauthorized person

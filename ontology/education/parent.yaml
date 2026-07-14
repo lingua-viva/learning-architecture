@@ -1,0 +1,112 @@
+# Lingua Viva — Education Ontology: Parent Domain
+# All parent-facing nodes are blocks_external: true (student data)
+# Zero AI attribution in any parent-facing output
+
+domain: parent
+version: '1.0'
+description: >
+  Parent communication and engagement. Outputs must use teacher voice,
+  zero jargon, zero AI attribution. Connected to Toddle's parent portal
+  (portfolio posts visible to families, progress reports sent per semester).
+
+nodes:
+- id: LV-PAR-001
+  name: Home Connection Suggestions
+  description: >
+    Generate home activities that extend classroom Italian learning.
+    Must be low-barrier (no special materials), culturally appropriate,
+    and connected to current unit of inquiry. Written in parent-friendly
+    language. Never expose internal assessment data directly.
+  domain: parent
+  parent: CORE-CREATE
+  signals:
+  - home activity
+  - parent suggestion
+  - at home
+  - practice at home
+  - family activity
+  - how can I help at home
+  - what can parents do
+  - support at home
+  blocks_external: true
+  requires_local: true
+  default_intent: CREATE
+  produces:
+  - home_activity_suggestion
+  requires:
+  - ib_unit_plan
+  suggests_next: []
+  failure_modes:
+    silent:
+    - Suggestion assumes resources/time not available to all families
+    - Activity disconnected from current classroom inquiry
+    loud:
+    - Suggestion exposes internal assessment level to parent
+
+- id: LV-PAR-002
+  name: Progress Summary (Parent-Facing)
+  description: >
+    Translate teacher assessment data into parent-friendly language.
+    Maps gradebook indicators + CEFR evidence into "what your child
+    can do" statements. Must be in teacher voice. No AI attribution.
+    No jargon (no "CEFR", no "A2", no "strand").
+  domain: parent
+  parent: CORE-CREATE
+  signals:
+  - progress summary
+  - how is my child doing
+  - how their child is doing
+  - asked me how
+  - tell the parent
+  - parent update
+  - family report
+  - child's progress
+  - progressing
+  blocks_external: true
+  requires_local: true
+  default_intent: CREATE
+  produces:
+  - parent_progress_summary
+  requires:
+  - progress_snapshot
+  - cefr_evidence_map
+  suggests_next:
+  - LV-PAR-001
+  failure_modes:
+    silent:
+    - Summary uses education jargon parents won't understand
+    - AI voice detectable
+    loud:
+    - Summary contradicts what teacher said in conference
+    - Exposes raw assessment scores without interpretation
+
+- id: LV-PAR-003
+  name: Multilingual Home Support
+  description: >
+    Provide guidance for families where home language is not Italian
+    or English. Affirms L1 as strength (Cummins' interdependence
+    hypothesis). Suggests translanguaging strategies. Never implies
+    home language is a barrier.
+  domain: parent
+  parent: CORE-CREATE
+  signals:
+  - home language
+  - we speak
+  - bilingual
+  - trilingual
+  - my language
+  - not Italian at home
+  - heritage language
+  blocks_external: true
+  requires_local: true
+  default_intent: CREATE
+  produces:
+  - multilingual_support_guide
+  requires: []
+  suggests_next:
+  - LV-PAR-001
+  failure_modes:
+    silent:
+    - Guidance implies L1 is obstacle instead of resource
+    loud:
+    - Assumes family literacy in language they may not read

@@ -384,6 +384,7 @@ class Pipeline:
         gateway: Optional[GatewayInterface] = None,
         reasoning: Optional[ReasoningEngine] = None,
         synthesis: Optional[SynthesisEngine] = None,
+        document_retriever: Optional[object] = None,
     ):
         self.ontology = ontology or OntologyEngine()
         self.memory = memory or MemoryStore()
@@ -399,6 +400,11 @@ class Pipeline:
         self.entry_gate = EntryGate()
         self.exit_gate = ExitGate()
         self.exit_gate.activate()  # Socket firewall always on
+        # Optional, duck-typed: object with .retrieve(query, domain, k) ->
+        # list[dict]. Not imported from src.education here — keeps the core
+        # pipeline decoupled from any single vertical. See
+        # src/education/document_retrieval.py for the education instance.
+        self.document_retriever = document_retriever
 
     async def run(
         self,
@@ -438,9 +444,11 @@ class Pipeline:
                 if e.severity == "high"
             )
 
-        # Use sanitized query for classification and external calls.
-        # If the entry gate blocked the query, do not fall back to raw text.
-        # Use original query for local reasoning (stays on machine)
+        # Use sanitized query for external calls only. Classification never
+        # leaves the machine (PathRecord stores a query hash, not raw text),
+        # so blanking the query here only breaks domain routing without
+        # protecting anything — external redaction is enforced independently
+        # by GatewayInterface.sanitize_query() before any external call.
         safe_query = sensitivity.sanitized_query
         if not safe_query:
             safe_query = "[SENSITIVE_QUERY_BLOCKED]"
@@ -458,7 +466,7 @@ class Pipeline:
         prior_paths = self.memory.find_paths(
             min_confidence=0.5, limit=20,
         )
-        classification = self.ontology.classify(safe_query, effective_intent, prior_paths)
+        classification = self.ontology.classify(query, effective_intent, prior_paths)
         steps_executed.append("CLASSIFY")
 
         # Gap signal if confidence is below threshold
@@ -500,6 +508,16 @@ class Pipeline:
              "tier": e.evidence_tier, "citations": e.citations}
             for e in kl_entries
         ]
+        # Document retrieval — ontology-scoped semantic search over ingested
+        # documents (e.g. IB curriculum PDFs). Optional: only fires if a
+        # retriever was injected AND the classified domain is in its scope.
+        # Uses safe_query, consistent with how the rest of Step 2 handles
+        # the query — search embeddings go to the local Ollama instance only.
+        document_entries: list[dict] = []
+        if self.document_retriever is not None:
+            document_entries = self.document_retriever.retrieve(
+                query=safe_query, domain=classification.domain, k=3,
+            )
         steps_executed.append("RETRIEVE")
 
         # ================================================================
@@ -606,6 +624,7 @@ class Pipeline:
             intent=classification.default_intent,
             domain=classification.domain,
             confidence=classification.confidence,
+            query=query,
         )
         lens_modifier = None
         if active_lenses:
@@ -618,6 +637,7 @@ class Pipeline:
             prior_paths=prior_path_dicts,
             research_result=research_dict,
             lens_modifier=lens_modifier,
+            document_entries=document_entries,
         )
         gap_signals.extend(context_gaps)
 

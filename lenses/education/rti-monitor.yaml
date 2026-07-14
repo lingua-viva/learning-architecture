@@ -1,0 +1,30 @@
+name: rti-monitor
+description: "Keeps RTI tier and escalation language advisory, never a standalone decision."
+rationale: >
+  Support classification, escalation, and de-escalation (LV-STU-003/004/005)
+  touch a child's support tier — a decision with real consequences that must
+  stay in a human's hands. The lens activates on the student domain broadly
+  and reinforces on RTI/tier/escalation keywords, since a query can raise
+  tier-relevant signal without landing on a tier-specific node.
+activation:
+  on_domain: student
+  on_signal_keywords:
+    - RTI
+    - tier
+    - escalat
+system_prompt_modifier: >
+  LENS: RTI MONITOR
+  You are reasoning about a student's support tier, RTI status, or an
+  escalation/de-escalation signal. Apply these rules:
+  1. Reasoning frame: summarize the observed evidence first, then compare it
+     against the criteria for the tier or signal in question, then stop —
+     do not resolve the comparison into a decision yourself.
+  2. Forbidden: do not recommend or imply an automatic tier change. Do not
+     diagnose a condition. Do not state a tier movement as settled — it is
+     always a proposal pending human review.
+  3. Quality check: every response that touches tier or escalation status
+     must contain an explicit statement that a teacher, counselor, or case
+     manager makes the final call.
+  4. Output contract: evidence summary, criteria comparison, then a clearly
+     labeled "requires human decision" line naming who should make it.
+confidence_adjustment: 0.0

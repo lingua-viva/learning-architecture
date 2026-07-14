@@ -15,6 +15,7 @@ Usage:
     mc codex task <intent> "..." # Generate governed Codex task envelope
     mc codex result <task_id> <json-file> # Store Codex result envelope
     mc codex history [query]    # Show Codex execution audit records
+    mc ingest <path.pdf> --type=curriculum|organizational  # Ingest a document
 """
 
 import asyncio
@@ -43,17 +44,95 @@ INTENTS = {
     "reflect": "REFLECT",
 }
 
+# Governed RAG: the local document store for ingested education documents.
+# Path convention matches case-studies/04-still-i-rise/.gitignore's `data/`
+# entry — no ingested document content or embeddings are ever committed.
+DOCUMENT_STORE_PATH = (
+    Path(__file__).parent.parent
+    / "case-studies" / "04-still-i-rise" / "data" / "documents.db"
+)
+
+# Restriction enforced HERE, not in DocumentParser: its Layer 2 person-name
+# pattern requires a title prefix ("Dr. Smith") and will not reliably catch
+# a bare given name ("Amina") with no surrounding context — exactly the
+# shape of raw student-record data. See src/education/document_parser.py
+# module docstring for the full reasoning.
+ALLOWED_DOC_TYPES = {"curriculum", "organizational"}
+BLOCKED_DOC_TYPES = {"student-records"}
+
+
+def _document_retriever():
+    """
+    Build a DocumentRetriever bound to the store, if anything has been
+    ingested yet. Returns None (not an empty store) when no ingestion has
+    happened — avoids creating an empty SQLite file as a side effect of
+    every ordinary query, and avoids paying an embedding-call cost on
+    every query for a store that would return nothing anyway.
+    """
+    if not DOCUMENT_STORE_PATH.exists():
+        return None
+    from src.education.document_store import DocumentStore
+    from src.education.document_retrieval import DocumentRetriever
+    return DocumentRetriever(DocumentStore(DOCUMENT_STORE_PATH))
+
+
+def run_ingest(path_arg: str, doc_type: str):
+    """Parse, redact, and store a local PDF in the education document store."""
+    from src.education.document_parser import DocumentParser
+    from src.education.document_store import DocumentStore, EmbeddingUnavailableError
+
+    if doc_type in BLOCKED_DOC_TYPES:
+        print(f"Refused: document type '{doc_type}' is not supported by this ingestion path.")
+        print("Reason: PII redaction does not reliably catch bare student given names")
+        print("(no title prefix) — see src/education/document_parser.py module docstring.")
+        return 1
+    if doc_type not in ALLOWED_DOC_TYPES:
+        print(f"Unknown document type '{doc_type}'. Allowed: {', '.join(sorted(ALLOWED_DOC_TYPES))}")
+        return 1
+
+    path = Path(path_arg)
+    parser = DocumentParser()
+    try:
+        chunks = parser.parse(path)
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"Parse failed: {exc}")
+        return 1
+
+    if not chunks:
+        print(f"No content extracted from {path.name} — nothing to ingest.")
+        return 1
+
+    store = DocumentStore(DOCUMENT_STORE_PATH)
+    try:
+        added = store.add_chunks(chunks)
+    except EmbeddingUnavailableError as exc:
+        print(f"Ingestion failed: {exc}")
+        return 1
+    finally:
+        store.close()
+
+    total_redactions = sum(len(c.redactions) for c in chunks)
+    needs_review = sum(1 for c in chunks if c.needs_review)
+    tables = sum(1 for c in chunks if c.is_table)
+
+    print(f"Ingested {path.name}: {added} chunks ({tables} table, {added - tables} prose)")
+    print(f"Redactions applied: {total_redactions}")
+    if needs_review:
+        print(f"NEEDS REVIEW: {needs_review} chunk(s) flagged — human glance recommended before trusting.")
+    print(f"Store: {DOCUMENT_STORE_PATH}")
+    return 0
+
 
 def run_eval(golden_path: str = None, dry_run: bool = False):
     """Run golden dataset evaluation against MC pipeline."""
     import yaml
 
-    default_path = Path(__file__).parent.parent / "tests" / "golden_mc_v1.yaml"
+    default_path = Path(__file__).parent.parent / "tests" / "golden_education_v1.yaml"
     path = Path(golden_path) if golden_path else default_path
 
     if not path.exists():
         print(f"Golden dataset not found: {path}")
-        print("Create one at tests/golden_mc_v1.yaml or specify: mc eval <path.yaml>")
+        print("Create one at tests/golden_education_v1.yaml or specify: mc eval <path.yaml>")
         return 1
 
     with open(path) as f:
@@ -107,6 +186,20 @@ def run_eval(golden_path: str = None, dry_run: bool = False):
 
     pct = (100 * correct / total) if total > 0 else 0
     print(f"\nNode accuracy: {correct}/{total} ({pct:.1f}%)")
+
+    results_dir = Path(__file__).parent.parent / "tests" / "results"
+    results_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = time.strftime("%Y%m%dT%H%M%S")
+    results_path = results_dir / f"golden_results_{timestamp}.json"
+    with open(results_path, "w") as f:
+        json.dump({
+            "timestamp": timestamp,
+            "golden_path": str(path),
+            "correct": correct,
+            "total": total,
+            "accuracy": (correct / total) if total > 0 else 0,
+        }, f, indent=2)
+    print(f"Results written to {results_path}")
     return 0
 
 
@@ -425,7 +518,7 @@ async def run_intent(intent_name: str, query: str):
         print(f"Available: {', '.join(INTENTS.keys())}")
         return 1
 
-    pipeline = Pipeline()
+    pipeline = Pipeline(document_retriever=_document_retriever())
     result = await pipeline.run(query, intent=intent, session_id=session_id)
     if session_id:
         increment_session()
@@ -484,6 +577,15 @@ def main():
             print("Usage: mc codex task|result|history|tasks ...")
             return 1
         return asyncio.run(run_codex(sys.argv[2].lower(), sys.argv[3:]))
+    elif cmd == "ingest":
+        if len(sys.argv) < 3:
+            print("Usage: mc ingest <path.pdf> --type=curriculum|organizational")
+            return 1
+        doc_type = "curriculum"
+        for arg in sys.argv[3:]:
+            if arg.startswith("--type="):
+                doc_type = arg.split("=", 1)[1]
+        return run_ingest(sys.argv[2], doc_type)
     elif cmd == "start":
         return run_start()
     elif cmd == "stop":

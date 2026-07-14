@@ -1,0 +1,56 @@
+domain: education
+version: '1.0'
+entries:
+- id: LV-KL-021
+  title: SAMHSA Six Principles of Trauma-Informed Practice
+  content: >
+    SAMHSA's trauma-informed approach (2014) rests on six principles: safety, trustworthiness/
+    transparency, peer support, collaboration/mutuality, empowerment/voice/choice, and cultural/
+    historical/gender awareness. In a classroom setting this translates to predictable routines,
+    avoiding forced disclosure, and giving students choice in how they participate.
+  ontology_nodes:
+  - LV-STU-006
+  evidence_tier: 1
+  citations:
+  - SAMHSA (2014). SAMHSA's Concept of Trauma and Guidance for a Trauma-Informed Approach.
+  tags:
+  - trauma-informed practice
+  - SAMHSA
+  - safety
+  verified: true
+- id: LV-KL-022
+  title: Compounding Factors in Refugee Student Education
+  content: >
+    Research on refugee student education identifies interrupted schooling, language transition, and
+    family separation/reunification stress as compounding factors that affect both academic readiness
+    and emotional regulation. Best practice favors low-stakes initial assessment, gradual academic
+    ramp-up, and avoiding requiring students to narrate their migration history as a precondition for
+    support.
+  ontology_nodes:
+  - LV-STU-006
+  evidence_tier: 2
+  citations:
+  - UNHCR (2019). Education Guidance — Refugee Education 2030.
+  tags:
+  - refugee education
+  - displacement
+  - low-stakes assessment
+  verified: true
+- id: LV-KL-023
+  title: The Silent Period Is a Normal Acquisition Phase, Not a Deficit Signal
+  content: >
+    Krashen's Input Hypothesis (1985) and subsequent second-language-acquisition research describe a
+    "silent period" — a phase where a learner actively processes receptive input before producing
+    output. This is a normal, time-limited phase, particularly common in young learners and newly
+    arrived multilingual students, and should not be coded as low engagement, low ability, or a need for
+    escalation.
+  ontology_nodes:
+  - LV-STU-001
+  evidence_tier: 1
+  citations:
+  - Krashen, S. (1985). The Input Hypothesis — Issues and Implications.
+  tags:
+  - silent period
+  - second language acquisition
+  - engagement misread
+  verified: true

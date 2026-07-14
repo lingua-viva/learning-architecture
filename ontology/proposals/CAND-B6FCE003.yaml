@@ -1,0 +1,25 @@
+candidate_id: CAND-B6FCE003
+status: ENRICHED
+created_at: 1783989392.4823928
+updated_at: 1784003866.4612699
+original_query: My patient John Smith SSN 123-45-6789 has stage 4 cancer
+query_hash: 154afdbfb543e8ea
+fallback_node: CORE-PROTECT
+fallback_confidence: 0.3
+signals:
+- patient
+- john
+- smith
+- '6789'
+- stage
+- cancer
+queries:
+- 154afdbfb543e8ea
+domain: core
+perplexity_findings: []
+knowledge_refs: []
+path_records: []
+hit_count: 24
+avg_confidence: 0.0
+resolution: null
+evaluation_notes: ''

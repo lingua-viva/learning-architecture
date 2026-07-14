@@ -1,0 +1,93 @@
+candidate_id: CAND-B8CCB9C1
+status: ENRICHED
+created_at: 1784002437.0788367
+updated_at: 1784007501.0944026
+original_query: What's the weather forecast for tomorrow's field trip?
+query_hash: 89abb408bb6e9a17
+fallback_node: CORE-RESEARCH
+fallback_confidence: 0.3
+signals:
+- weather
+- forecast
+- tomorrow
+- field
+- trip
+queries:
+- 89abb408bb6e9a17
+domain: core
+perplexity_findings:
+- content: "I cannot see your location from this chat, so I cannot give a specific\
+    \ forecast for your field trip site. To get an accurate forecast for **tomorrow\
+    \ at your exact destination**, use one of these:\n\n- **U.S. locations (most reliable):**\
+    \  \n  1. Go to the National Weather Service forecast page.[1]  \n  2. Type the\
+    \ **city/ZIP of your field trip location** in the search box.  \n  3. For hour‑by‑hour\
+    \ rain, temperature, and wind during the trip time, click **“Hourly Weather Graph”**\
+    \ under “More Information.”[3]\n\n- **Outside the U.S.:**  \n  Use a national\
+    \ meteorological service (e.g., Met Office, Environment Canada) or a major service\
+    \ like BBC Weather or The Weather Channel and enter the **exact town or coordinates**.[8][12]\n\
+    \nIf you tell me the **field trip location (city/region and country)** and roughly\
+    \ what hours you’ll be outside, I can interpret the forecast for you (rain risk,\
+    \ heat, wind, and what to pack) using those sources."
+  citations:
+  - https://www.weather.gov/forecast
+  - https://6abc.com/weather/
+  - https://www.weather.gov/wrn/hourly-weather-graph
+  - https://www.weather.gov/mrx/outlooks
+  - https://forecast.weather.gov/MapClick.php?lat=38.890370000000075&lon=-77.03195999999997
+  - https://www.weather.gov/okx/
+  - https://abc7chicago.com/weather/
+  - https://www.bbc.com/weather/2643743
+  - https://forecast.weather.gov/MapClick.php?lat=30.4434&lon=-91.1866
+  - https://www.accuweather.com/
+  - https://fairbanksmuseum.org/eye-on-the-sky/
+  - https://weather.com/weather/tenday/l/Goodwood+Baton+Rouge+Louisiana?canonicalCityId=090afd6ad8f85ad31ae4090c5ed4ad7e
+  - https://www.accuweather.com/en/us/baton-rouge/70806/weather-forecast/329147
+  gaps: []
+  contradictions: []
+- content: "Tomorrow’s field trip will likely have **showers and thunderstorms**,\
+    \ with **warm, humid conditions and a high in the low‑to‑mid 80s°F**, so you should\
+    \ plan for **rain, possible gusty winds, and indoor/backup activities**.[8][11]\n\
+    \nThe available forecasts point to unsettled weather rather than a clear, dry\
+    \ day. For areas like **Valdosta, GA**, tomorrow is expected to bring **morning\
+    \ rain followed by scattered afternoon thunderstorms**, with a **high around 84°F**\
+    \ and about a **50% chance of rain**, and storms may include **strong gusty winds**.[8]\
+    \ For **Baton Rouge, LA**, tomorrow’s forecast is **showers and a heavier thunderstorm\
+    \ under overcast skies**, with **very high rain probability (~98%)** and similar\
+    \ warm temperatures in the low 80s°F.[11] Both indicate that a typical outdoor\
+    \ field trip could be disrupted by storms, especially in the afternoon.\n\nWhat\
+    \ is *missing* or uncertain in the available information is:\n- The **exact location\
+    \ of your field trip**, so the above details are based on representative regional\
+    \ forecasts (Valdosta and Baton Rouge) rather than a precise site-specific forecast.[8][11]\
+    \  \n- The **time window of your trip** (morning vs afternoon); most sources emphasize\
+    \ **afternoon thunderstorms**, which matters for planning but isn’t specified\
+    \ in your question.[8][11]  \n- **Fine‑scale conditions** at the specific venue\
+    \ (e.g., park vs city center) such as local wind exposure or flooding risk; the\
+    \ public forecasts are regional and do not provide micro‑climate detail.[3][8][11]\n\
+    \nGiven these gaps, the forecast can confidently tell you that **rain and thunderstorms\
+    \ are likely and sun is unlikely to dominate** tomorrow, but it cannot precisely\
+    \ state whether your particular site will stay dry for a specific hour or whether\
+    \ lightning will be close enough to force cancellation. To reduce this uncertainty,\
+    \ you would need a **location‑specific forecast** (zip code or coordinates) and\
+    \ **hour‑by‑hour data** from a primary source such as the National Weather Service\
+    \ or an equivalent national meteorological service.[1][3][7]"
+  citations:
+  - https://www.weather.gov/forecast
+  - https://www.weather.gov/gsp/forecast
+  - https://forecast.weather.gov/zipcity.php?inputstring=Valdosta,GA&Go2=Go
+  - https://www.bbc.com/weather/2643743
+  - https://www.weather.gov/lwx/forecast
+  - https://www.accuweather.com/
+  - https://forecast.weather.gov/MapClick.php?lat=30.4434&lon=-91.1866
+  - https://www.foxweather.com/local-weather/georgia/valdosta
+  - https://weather.com/weather/tenday/l/Goodwood+Baton+Rouge+Louisiana?canonicalCityId=090afd6ad8f85ad31ae4090c5ed4ad7e
+  - https://www.accuweather.com/en/us/valdosta/31601/air-travel-weather/328221
+  - https://www.accuweather.com/en/us/baton-rouge/70806/weather-forecast/329147
+  - https://www.youtube.com/watch?v=_4G19yjRVjU
+  gaps: []
+  contradictions: []
+knowledge_refs: []
+path_records: []
+hit_count: 4
+avg_confidence: 0.0
+resolution: null
+evaluation_notes: ''
