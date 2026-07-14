@@ -568,6 +568,227 @@ async def run_intent(intent_name: str, query: str):
     return 0
 
 
+def run_onboard(args: list[str]) -> int:
+    """Handle integration onboarding interview commands."""
+    from src.integration_onboarding import (
+        IntegrationOnboarding,
+        PHASE_PATTERN,
+        PHASE_SCOPE,
+        PHASE_GOVERNANCE,
+        PHASE_ASSEMBLY,
+        PHASE_VERIFY,
+        PHASE_DONE,
+        PHASE_NAMES,
+    )
+
+    if not args:
+        print("\nUsage:")
+        print("  mc onboard start \"<purpose_text>\"")
+        print("  mc onboard status")
+        print("  mc onboard decide <BRIDGE|CAPTURE> \"<reasoning>\"")
+        print("  mc onboard scope <platform> <channels_csv_or_-> <destination>")
+        print("  mc onboard governance <CONSERVATIVE|WIDEN> \"<rationale>\"")
+        print("  mc onboard assemble")
+        print("  mc onboard verify <pass|fail> \"<smoke_query>\" [\"<notes>\"]")
+        print("  mc onboard list")
+        print("  mc onboard load <onboarding_id>\n")
+        return 1
+
+    subcmd = args[0].lower()
+
+    def get_current_id():
+        path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "..", "scratch", "onboarding", ".current_onboarding")
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                return f.read().strip()
+        ids = IntegrationOnboarding.list_all()
+        if ids:
+            return ids[-1]
+        return None
+
+    def set_current_id(oid):
+        path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "..", "scratch", "onboarding", ".current_onboarding")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(oid)
+
+    def print_options(options):
+        for opt in options:
+            star = " (recommended)" if opt.get("recommended") else ""
+            print(f"     [{opt['id']}]{star} {opt['description']}")
+            print(f"         Offers: {opt['offers']}\n")
+
+    if subcmd == "list":
+        ids = IntegrationOnboarding.list_all()
+        current = get_current_id()
+        print("\nActive Onboarding Interviews:")
+        for oid in ids:
+            star = "*" if oid == current else " "
+            print(f"  {star} {oid}")
+        print()
+        return 0
+
+    if subcmd == "start":
+        if len(args) < 2:
+            print("Usage: mc onboard start \"<purpose_text>\"")
+            return 1
+        purpose_text = args[1]
+
+        onboarding = IntegrationOnboarding()
+        oid = onboarding.start(purpose_text)
+        set_current_id(oid)
+        print(f"\n✓ Started onboarding interview: {oid}")
+        print("  Purpose captured. Progressed to Pattern Selection phase.\n")
+
+        decision = onboarding.get_pattern_decision()
+        print(f"👉 {decision['signal_note']}\n")
+        print("   Options:")
+        print_options(decision["options"])
+        print("   To decide, run:")
+        print("     mc onboard decide <option_id> \"<your reasoning>\"\n")
+        return 0
+
+    oid = get_current_id()
+    if not oid:
+        print("\n✗ No active onboarding interview. Start one with: mc onboard start \"<purpose>\"\n")
+        return 1
+
+    onboarding = IntegrationOnboarding()
+    if not onboarding.load(oid):
+        print(f"\n✗ Failed to load onboarding interview {oid}\n")
+        return 1
+
+    if subcmd == "load":
+        if len(args) < 2:
+            print("Usage: mc onboard load <onboarding_id>")
+            return 1
+        target_oid = args[1]
+        if target_oid in IntegrationOnboarding.list_all():
+            set_current_id(target_oid)
+            print(f"\n✓ Active onboarding interview set to: {target_oid}\n")
+            return 0
+        else:
+            print(f"\n✗ Onboarding interview {target_oid} not found.\n")
+            return 1
+
+    elif subcmd == "status":
+        print("\n==========================================")
+        print(f"Onboarding ID: {onboarding.onboarding_id}")
+        phase = onboarding.state["current_phase"]
+        print(f"Current Phase: {PHASE_NAMES.get(phase, 'Unknown')}")
+        print("==========================================\n")
+
+        if phase == PHASE_PATTERN:
+            decision = onboarding.get_pattern_decision()
+            print(f"👉 {decision['signal_note']}\n")
+            print("   Options:")
+            print_options(decision["options"])
+            print("   To decide, run:")
+            print("     mc onboard decide <option_id> \"<your reasoning>\"\n")
+        elif phase == PHASE_SCOPE:
+            print("Current status: Scope.")
+            print("Run 'mc onboard scope <platform> <channels_csv_or_-> <destination>' to proceed.\n")
+        elif phase == PHASE_GOVERNANCE:
+            decision = onboarding.get_governance_decision()
+            print("👉 Governance options:")
+            print_options(decision["options"])
+            print("   To decide, run:")
+            print("     mc onboard governance <option_id> \"<rationale>\"\n")
+        elif phase == PHASE_ASSEMBLY:
+            print("Current status: Assembly.")
+            print("Run 'mc onboard assemble' to generate integration_config + bridge_wiring_record.\n")
+        elif phase == PHASE_VERIFY:
+            print("Current status: Verify.")
+            print("Run 'mc onboard verify <pass|fail> \"<smoke_query>\"' after testing the wired bot.\n")
+        elif phase == PHASE_DONE:
+            print("Current status: Complete. Artifacts generated:")
+            print(f"  Config: {onboarding.state['artifacts']['integration_config']}")
+            print(f"  Wiring Record: {onboarding.state['artifacts']['bridge_wiring_record']}\n")
+        return 0
+
+    elif subcmd == "decide":
+        if len(args) < 3:
+            print("Usage: mc onboard decide <option_id> \"<reasoning>\"")
+            return 1
+        option_id = args[1]
+        reasoning = " ".join(args[2:])
+        ok, msg = onboarding.decide_pattern(option_id, reasoning)
+        if ok:
+            print(f"\n✓ {msg}\n")
+            print("👉 Next: run 'mc onboard scope <platform> <channels_csv_or_-> <destination>'\n")
+            return 0
+        else:
+            print(f"\n✗ {msg}\n")
+            return 1
+
+    elif subcmd == "scope":
+        if len(args) < 4:
+            print("Usage: mc onboard scope <platform> <channels_csv_or_-> <destination>")
+            return 1
+        platform = args[1]
+        channels_raw = args[2]
+        channels = [] if channels_raw == "-" else [c.strip() for c in channels_raw.split(",") if c.strip()]
+        destination = args[3]
+        ok, msg = onboarding.set_scope(platform, channels, destination)
+        if ok:
+            print(f"\n✓ {msg}\n")
+            decision = onboarding.get_governance_decision()
+            print("👉 Governance options:")
+            print_options(decision["options"])
+            print("   To decide, run:")
+            print("     mc onboard governance <option_id> \"<rationale>\"\n")
+            return 0
+        else:
+            print(f"\n✗ {msg}\n")
+            return 1
+
+    elif subcmd == "governance":
+        if len(args) < 3:
+            print("Usage: mc onboard governance <CONSERVATIVE|WIDEN> \"<rationale>\"")
+            return 1
+        option_id = args[1]
+        rationale = " ".join(args[2:])
+        ok, msg = onboarding.decide_governance(option_id, rationale)
+        if ok:
+            print(f"\n✓ {msg}\n")
+            print("👉 Next: run 'mc onboard assemble'\n")
+            return 0
+        else:
+            print(f"\n✗ {msg}\n")
+            return 1
+
+    elif subcmd == "assemble":
+        ok, msg = onboarding.run_assembly()
+        if ok:
+            print(f"\n✓ {msg}")
+            print(f"  Config: {onboarding.state['artifacts']['integration_config']}")
+            print(f"  Wiring Record: {onboarding.state['artifacts']['bridge_wiring_record']}\n")
+            print("👉 Next: run 'mc onboard verify <pass|fail> \"<smoke_query>\" [\"<notes>\"]' after testing the wired bot.\n")
+            return 0
+        else:
+            print(f"\n✗ {msg}\n")
+            return 1
+
+    elif subcmd == "verify":
+        if len(args) < 3:
+            print("Usage: mc onboard verify <pass|fail> \"<smoke_query>\" [\"<notes>\"]")
+            return 1
+        result = args[1]
+        smoke_query = args[2]
+        notes = " ".join(args[3:]) if len(args) > 3 else ""
+        ok, msg = onboarding.run_verify(smoke_query, result, notes)
+        if ok:
+            print(f"\n✓ {msg}\n")
+            return 0
+        else:
+            print(f"\n✗ {msg}\n")
+            return 1
+
+    else:
+        print(f"\nUnknown onboard subcommand: {subcmd}\n")
+        return 1
+
+
 def main():
     if len(sys.argv) < 2:
         print(__doc__)
@@ -620,6 +841,8 @@ def main():
         return run_start()
     elif cmd == "stop":
         return run_stop()
+    elif cmd == "onboard":
+        return run_onboard(sys.argv[2:])
     elif cmd == "open":
         import subprocess
         import platform
