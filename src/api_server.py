@@ -206,7 +206,7 @@ class MCHandler(BaseHTTPRequestHandler):
         pass
 
 
-def serve(port: int = 7891):
+def serve(port: int = 7896):
     """Start the API server."""
     _init()
     server = HTTPServer(("127.0.0.1", port), MCHandler)
@@ -219,5 +219,5 @@ def serve(port: int = 7891):
 
 
 if __name__ == "__main__":
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 7891
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else 7896
     serve(port)

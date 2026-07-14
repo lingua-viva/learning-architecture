@@ -293,7 +293,7 @@ def _start_web_server():
     import threading
     try:
         from src.web import start_web_server
-        thread = threading.Thread(target=start_web_server, args=(7891,), daemon=True)
+        thread = threading.Thread(target=start_web_server, args=(7896,), daemon=True)
         thread.start()
         return True
     except Exception:
@@ -306,7 +306,7 @@ def run_session(subcmd: str):
         web_ok = _start_web_server()
         print(f"Session started: {sid[:8]}...")
         if web_ok:
-            print(f"  Web UI: http://localhost:7891")
+            print(f"  Web UI: http://localhost:7896")
         return 0
     elif subcmd == "end":
         summary = end_session()
@@ -363,6 +363,33 @@ def run_cron(subcmd: str):
     return 1
 
 
+def _self_invoke(*args: str) -> list:
+    """
+    Build an argv that re-runs THIS program with the given args.
+
+    Frozen (PyInstaller .exe): sys.executable is the mc binary itself →
+    [mc, *args]. Source: sys.executable is python → [python, mc_cli.py, *args].
+    This is what lets `mc start` spawn the web server without a system
+    python3 — the old code called ["python3", "src/api_server.py"], which
+    does not exist inside the packaged binary, so the server silently never
+    came up. Same fix as mission-canvas/src/mc_cli.py's _self_invoke.
+    """
+    if getattr(sys, "frozen", False):
+        return [sys.executable, *args]
+    return [sys.executable, str(Path(__file__)), *args]
+
+
+def run_serve(port: int = 7896):
+    """
+    Run the web UI server in the foreground (blocking). FastAPI + WebSocket,
+    serves static/index.html at / and the /api/* + ws endpoints. Launched as
+    a subprocess by run_start(); also usable directly as `mc serve`.
+    """
+    from src.web import start_web_server
+    start_web_server(port)
+    return 0
+
+
 def run_start():
     import subprocess
     root = str(Path(__file__).parent.parent)
@@ -371,13 +398,13 @@ def run_start():
 
     print("Starting Mission Canvas services...")
 
-    # API server
+    # Web server — re-exec self (works whether frozen or from source)
     p = subprocess.Popen(
-        ["python3", f"{root}/src/api_server.py", "7891"],
+        _self_invoke("serve", "7896"),
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
     pids.append(str(p.pid))
-    print(f"  API server: PID {p.pid} on :7891")
+    print(f"  Web server: PID {p.pid} on :7896")
 
     # Broker + Hub (if Node available)
     import shutil
@@ -586,6 +613,9 @@ def main():
             if arg.startswith("--type="):
                 doc_type = arg.split("=", 1)[1]
         return run_ingest(sys.argv[2], doc_type)
+    elif cmd == "serve":
+        port = int(sys.argv[2]) if len(sys.argv) > 2 else 7896
+        return run_serve(port)
     elif cmd == "start":
         return run_start()
     elif cmd == "stop":
@@ -593,7 +623,7 @@ def main():
     elif cmd == "open":
         import subprocess
         import platform
-        url = "http://127.0.0.1:7891"
+        url = "http://127.0.0.1:7896"
         if platform.system() == "Darwin":
             subprocess.Popen(["open", url], stderr=subprocess.DEVNULL)
         else:

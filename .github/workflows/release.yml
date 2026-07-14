@@ -1,0 +1,84 @@
+name: Release Binary
+on:
+  push:
+    tags: ['v*']
+
+# Cloned from mission-canvas/.github/workflows/release.yml — same build-from-spec
+# approach (keeps CI binaries identical to local ones). Do not redesign from
+# scratch; only adapt names/deps/env-vars to this repo.
+#
+# Binary is named 'sir' (Still I Rise), not 'mc' — see mc.spec / install.sh for
+# the collision rationale (this fork and Mission Canvas both install to
+# ~/.local/bin/<name>).
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            arch: arm64
+            name: sir-darwin-arm64
+          - os: ubuntu-latest
+            arch: x86_64
+            name: sir-linux-x86_64
+          - os: windows-latest
+            arch: x86_64
+            name: sir-windows-x86_64.exe
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install pyinstaller pyyaml redis fastapi uvicorn websockets pdfplumber sqlite-vec platformdirs
+
+      # Build from mc.spec — the single source of truth for the bundle (datas,
+      # hidden imports incl. src.web, strip). Building from the spec keeps CI
+      # binaries identical to local ones.
+      - name: Build binary (mc.spec)
+        shell: bash
+        run: |
+          pyinstaller mc.spec --clean --noconfirm
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            cp dist/sir.exe "dist/${{ matrix.name }}"
+          else
+            cp dist/sir "dist/${{ matrix.name }}"
+          fi
+
+      # Fail the build before publishing if the binary can't even render status.
+      # PYTHONUTF8=0 forces cp1252 so the encoding fixes are genuinely exercised.
+      - name: Smoke test
+        shell: bash
+        env:
+          PYTHONUTF8: '0'
+          STILL_I_RISE_HOME: ${{ runner.temp }}/sir_smoke
+        run: |
+          "dist/${{ matrix.name }}" status
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: dist/${{ matrix.name }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: binaries/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: binaries/*
+          generate_release_notes: true

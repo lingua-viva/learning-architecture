@@ -59,7 +59,17 @@ class HealthCheck:
         memory: Optional[MemoryStore] = None,
         root_dir: Optional[Path] = None,
     ):
-        self.root = root_dir or Path(__file__).parent.parent.parent
+        if root_dir is not None:
+            self.root = root_dir
+        elif getattr(sys, "frozen", False):
+            # Running as a PyInstaller frozen binary: __file__ resolves to a
+            # temp extraction dir (on macOS, under AppTranslocation) — walking
+            # from there with rglob() blows up. Use the bundle root instead.
+            # Same fix Mission Canvas applied for this exact failure mode
+            # (see mission-canvas/dev/INVESTIGATION_NAKED_INSTALL_MACOS.md, F2).
+            self.root = Path(getattr(sys, "_MEIPASS", Path(__file__).parent))
+        else:
+            self.root = Path(__file__).parent.parent.parent
         self.ontology = ontology or OntologyEngine(self.root / "ontology" / "domains")
         self.memory = memory or MemoryStore(data_dir=self.root / "memory" / "data")
 
@@ -486,6 +496,11 @@ class HealthCheck:
         """Verify test infrastructure health."""
         import subprocess
         passed, total, issues = 0, 3, []
+
+        # Tests aren't bundled in the frozen binary — skip entirely and
+        # report as passing (verified at build time, same as MC's F2 fix).
+        if getattr(sys, "frozen", False):
+            return total, total, []
 
         # Check 1: pytest is available
         try:

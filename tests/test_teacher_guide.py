@@ -8,7 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.education.content_differentiator import ContentDifferentiator, LessonInput
-from src.education.teacher_guide import TeacherGuideGenerator
+from src.education.teacher_guide import TeacherGuideGenerator, build_cross_level_groups
 
 
 def make_pack():
@@ -83,3 +83,94 @@ def test_to_markdown_is_printable_text():
     assert "## Class Breakdown" in md
     assert "## Distribution Instructions" in md
     assert "## Cross-Level Collaboration" in md
+
+
+# --- Conflict-aware grouping (re-ground audit fix: social-emotional
+# grouping, not just academic level) ----------------------------------------
+
+def test_build_groups_pairs_one_per_tier_with_no_conflicts():
+    roster = [
+        {"student_id": "f1", "display_name": "Foundational One"},
+        {"student_id": "o1", "display_name": "OnTrack One"},
+        {"student_id": "e1", "display_name": "Extended One"},
+    ]
+    assignments = {"f1": "foundational", "o1": "on_track", "e1": "extended"}
+    groups, unplaced = build_cross_level_groups(roster, assignments)
+    assert len(groups) == 1
+    assert set(groups[0].student_ids) == {"f1", "o1", "e1"}
+    assert unplaced == []
+
+
+def test_build_groups_respects_avoid_pairing_with():
+    roster = [
+        {"student_id": "f1", "display_name": "F1", "avoid_pairing_with": ["o1"]},
+        {"student_id": "o1", "display_name": "O1"},
+        {"student_id": "o2", "display_name": "O2"},
+        {"student_id": "e1", "display_name": "E1"},
+    ]
+    assignments = {"f1": "foundational", "o1": "on_track", "o2": "on_track", "e1": "extended"}
+    groups, unplaced = build_cross_level_groups(roster, assignments)
+    assert len(groups) == 1
+    # f1 must not be grouped with o1 (declared conflict) — should skip to o2
+    assert "o1" not in groups[0].student_ids
+    assert "o2" in groups[0].student_ids
+    # o1 has no remaining tier partners, left unplaced rather than force-paired
+    assert "o1" in unplaced
+
+
+def test_build_groups_conflict_is_symmetric():
+    """A conflict declared by the on_track student (not the foundational
+    one) still blocks the pairing — it's about the pair, not who reported it."""
+    roster = [
+        {"student_id": "f1", "display_name": "F1"},
+        {"student_id": "o1", "display_name": "O1", "avoid_pairing_with": ["f1"]},
+        {"student_id": "e1", "display_name": "E1"},
+    ]
+    assignments = {"f1": "foundational", "o1": "on_track", "e1": "extended"}
+    groups, unplaced = build_cross_level_groups(roster, assignments)
+    assert len(groups) == 1
+    assert "o1" not in groups[0].student_ids
+    assert "o1" in unplaced
+
+
+def test_build_groups_never_force_pairs_when_all_conflict():
+    roster = [
+        {"student_id": "f1", "display_name": "F1", "avoid_pairing_with": ["o1"]},
+        {"student_id": "o1", "display_name": "O1"},
+    ]
+    assignments = {"f1": "foundational", "o1": "on_track"}
+    groups, unplaced = build_cross_level_groups(roster, assignments)
+    assert groups == []
+    assert set(unplaced) == {"f1", "o1"}
+
+
+def test_build_groups_never_silently_drops_a_student_with_missing_tier():
+    """A roster student whose assignments entry is missing or names a tier
+    outside TIERS never entered by_tier and would previously vanish from
+    both `groups` and `unplaced` — silently absent from the printed guide.
+    They must now surface in `unplaced` instead."""
+    roster = [
+        {"student_id": "f1", "display_name": "F1"},
+        {"student_id": "o1", "display_name": "O1"},
+        {"student_id": "ghost", "display_name": "Ghost"},
+    ]
+    assignments = {"f1": "foundational", "o1": "on_track"}  # "ghost" has no entry
+    groups, unplaced = build_cross_level_groups(roster, assignments)
+    all_ids = {sid for g in groups for sid in g.student_ids} | set(unplaced)
+    assert "ghost" in all_ids
+    assert "ghost" in unplaced
+
+
+def test_teacher_guide_markdown_includes_groups_section():
+    pack = make_pack()
+    roster = [
+        {"student_id": "f1", "display_name": "F1", "rti_current_tier": 3, "cefr_snapshot": {}},
+        {"student_id": "o1", "display_name": "O1", "rti_current_tier": 1, "cefr_snapshot": {}},
+        {"student_id": "e1", "display_name": "E1", "rti_current_tier": 1, "cefr_snapshot": {"reading": "B2"}},
+    ]
+    engine = ContentDifferentiator()
+    assignments = engine.assign_packs_for_roster(pack, roster)
+    guide = TeacherGuideGenerator().generate(pack, roster, assignments)
+    md = guide.to_markdown()
+    assert "Suggested Groups" in md
+    assert len(guide.groups) == 1

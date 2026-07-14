@@ -1,0 +1,62 @@
+name: Install Test (Linux)
+
+# End-to-end test of the curl surface: run install.sh on a real Linux runner,
+# exactly as `curl -fsSL .../install.sh | sh` would, and assert the install
+# actually works — the binary lands, the web UI comes up, and sir is
+# functional.
+#
+# Cloned from mission-canvas/.github/workflows/install-test.yml. Do not
+# redesign from scratch; only adapt names/paths to this repo. No docker-build
+# job here — unlike Mission Canvas, this repo ships no Dockerfile.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'install.sh'
+      - 'src/web.py'
+      - '.github/workflows/install-test.yml'
+
+jobs:
+  curl-install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Run the repo's install.sh (the version under test), capturing output.
+      # It downloads the latest released binary, starts the server, and polls.
+      - name: Run install.sh
+        run: |
+          set -o pipefail
+          sh ./install.sh 2>&1 | tee install.log
+
+      - name: Assert binary installed
+        run: |
+          test -x "$HOME/.local/bin/sir" || { echo "FAIL: sir not at ~/.local/bin/sir"; exit 1; }
+          echo "OK: sir binary installed"
+
+      - name: Assert web UI came up during install
+        run: |
+          if grep -q "Web UI is live" install.log; then
+            echo "OK: web UI came up during install"
+          else
+            echo "FAIL: install.sh did not report 'Web UI is live'"
+            echo "----- install.log -----"; cat install.log
+            exit 1
+          fi
+
+      - name: Assert sir status works under C locale
+        env:
+          LC_ALL: C
+          LANG: C
+        run: |
+          "$HOME/.local/bin/sir" status
+          echo "status exit: $?"
+
+      - name: Assert sir health runs to completion (not crash)
+        run: |
+          # health may exit non-zero on WARN-level health; we only require it
+          # runs to completion and prints a Health line, not that it's 100%.
+          out=$("$HOME/.local/bin/sir" health 2>&1 || true)
+          echo "$out"
+          echo "$out" | grep -q "Health:" || { echo "FAIL: health did not run"; exit 1; }
+          echo "OK: health ran to completion"

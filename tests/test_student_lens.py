@@ -213,3 +213,36 @@ def test_list_lenses_filters_deleted_and_by_campus(store):
     assert kenya == []
     colombia = store.list_lenses(campus="colombia")
     assert len(colombia) == 1
+
+
+def test_avoid_pairing_with_defaults_empty(store):
+    sid = store.create_lens(display_name="A")
+    lens = store.get_lens(sid)
+    assert lens["avoid_pairing_with"] == []
+
+
+def test_create_lens_accepts_avoid_pairing_with(store):
+    b = store.create_lens(display_name="B")
+    sid = store.create_lens(display_name="A", avoid_pairing_with=[b])
+    lens = store.get_lens(sid)
+    assert lens["avoid_pairing_with"] == [b]
+
+
+def test_set_avoid_pairing_with_replaces_not_appends(store):
+    b = store.create_lens(display_name="B")
+    c = store.create_lens(display_name="C")
+    sid = store.create_lens(display_name="A")
+
+    store.set_avoid_pairing_with(sid, [b])
+    assert store.get_lens(sid)["avoid_pairing_with"] == [b]
+
+    store.set_avoid_pairing_with(sid, [c])
+    assert store.get_lens(sid)["avoid_pairing_with"] == [c]
+
+    store.set_avoid_pairing_with(sid, [])
+    assert store.get_lens(sid)["avoid_pairing_with"] == []
+
+
+def test_set_avoid_pairing_with_unknown_student_raises(store):
+    with pytest.raises(LensNotFoundError):
+        store.set_avoid_pairing_with("nonexistent", ["x"])

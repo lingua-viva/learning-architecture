@@ -20,6 +20,7 @@ import json
 import logging
 import os
 import re
+import sys
 import time
 from collections import defaultdict
 from datetime import datetime
@@ -29,8 +30,17 @@ from typing import Any, Dict, List, Optional, Tuple
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-DATA_DIR = Path(__file__).parent / "data"
-DATA_DIR.mkdir(exist_ok=True)
+# When frozen (PyInstaller onefile), __file__ lives in the transient _MEIxxxx
+# extraction dir — not writable across runs and its parents may be absent,
+# which crashed the binary at import time. Use a persistent, writable user
+# dir when frozen; the source tree's own data/ dir otherwise. parents=True
+# covers a missing parent. Same pattern as mission-canvas/sanitizer/app.py.
+if getattr(sys, "frozen", False):
+    _sir_home = os.environ.get("STILL_I_RISE_HOME") or str(Path.home() / ".still-i-rise")
+    DATA_DIR = Path(_sir_home) / "data"
+else:
+    DATA_DIR = Path(__file__).parent / "data"
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 FIREWALL_LOG = DATA_DIR / "firewall_log.ndjson"
 
 # ─── PII Patterns ────────────────────────────────────────────────────────────

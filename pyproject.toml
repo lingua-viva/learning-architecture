@@ -1,5 +1,5 @@
 [project]
-name = "mission-canvas"
+name = "still-i-rise"
 version = "1.0.0"
 description = "The Governed Agent OS. Your judgment compounds here."
 requires-python = ">=3.11"

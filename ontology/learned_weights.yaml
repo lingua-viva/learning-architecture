@@ -22,4 +22,5 @@ weights:
   RIU-015: {}
   LV-CUR-001: {}
   MC-DATA-003: {}
+  LV-PLN-003: {}
 description: Auto-learned from path outcomes. Do not edit manually.

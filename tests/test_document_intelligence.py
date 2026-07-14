@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import asyncio
 
 from src.education.document_parser import DocumentParser
-from src.education.document_store import DocumentStore
+from src.education.document_store import DocumentStore, EmbeddingUnavailableError
 from src.education.document_retrieval import DocumentRetriever
 from src.pipeline import Pipeline, ReasonResult
 
@@ -105,13 +105,49 @@ def test_retriever_gates_by_ontology_domain(tmp_path):
         store.add_chunks(chunks)
         retriever = DocumentRetriever(store, domains={"curriculum"})
 
+        # Spy on DocumentStore.search to prove the gate short-circuits
+        # before any embedding call, not just that the return value is [].
+        call_count = 0
+        real_search = store.search
+
+        def counting_search(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            return real_search(*args, **kwargs)
+
+        store.search = counting_search
+
         # In scope: real search happens.
         in_scope = retriever.retrieve("achievement levels", domain="curriculum", k=2)
         assert len(in_scope) == 2
+        assert call_count == 1
 
         # Out of scope: gated off before any embedding call.
         out_of_scope = retriever.retrieve("achievement levels", domain="legal", k=2)
         assert out_of_scope == []
+        assert call_count == 1  # unchanged — search() was never invoked
+    finally:
+        store.close()
+
+
+def test_retriever_degrades_safely_when_embedding_unavailable(tmp_path):
+    """DocumentRetriever.retrieve() must swallow EmbeddingUnavailableError and
+    return [] rather than propagating it — a governed query should still
+    complete even if the local embedding endpoint happens to be down (see
+    module docstring in document_retrieval.py)."""
+    chunks = DocumentParser().parse(FIXTURE)
+    store = DocumentStore(tmp_path / "test.db")
+    try:
+        store.add_chunks(chunks)
+        retriever = DocumentRetriever(store, domains={"curriculum"})
+
+        def failing_search(*args, **kwargs):
+            raise EmbeddingUnavailableError("Ollama unreachable (forced for test)")
+
+        store.search = failing_search
+
+        result = retriever.retrieve("achievement levels", domain="curriculum", k=2)
+        assert result == []
     finally:
         store.close()
 

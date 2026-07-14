@@ -50,6 +50,18 @@ lifetime and skips duplicates. A production deployment should persist
 this (e.g. a small local seen-events table) — noted as a follow-up, not
 built here, since the vertical slice runs as a single long-lived process
 where in-memory tracking is sufficient for a first pilot week.
+
+UX pass (post-review): the meeting's ideal is pure speech, no forms —
+requiring `[student:id]` on every single message was flagged as a tiny
+but real friction against that ideal. Fix: a per-(channel, user)
+continuation window (`CONTINUATION_WINDOW_SECONDS`, default 10 min).
+The tag is still required to start an observation about a student
+(never guess); once given, untagged follow-up messages from the same
+teacher in the same channel within the window continue that same
+student's observation, so a teacher can dictate several notes about one
+child back-to-back without re-tagging each one. Any new tag switches
+students immediately. This is additive — no existing behavior changed
+for a single tagged message or a genuine cold start.
 """
 
 from __future__ import annotations
@@ -70,6 +82,19 @@ STUDENT_TAG_RE = re.compile(r"^\s*\[student:([\w\-]+)\]\s*(.*)$", re.IGNORECASE 
 # minutes old, to prevent replay attacks (Slack's documented signing
 # scheme).
 MAX_REQUEST_AGE_SECONDS = 60 * 5
+
+# UX pass (post-review, "ALIGNED (minor)"): a teacher dictating several
+# observations back-to-back about the same student shouldn't have to
+# repeat the [student:id] tag on every message — that's the "tiny
+# structural friction vs. the meeting's pure-speech ideal" the review
+# flagged. This is a continuation *window*, not a relaxation of the
+# "never guess" invariant: the tag is still required to START an
+# observation about a student; once given, untagged follow-ups from the
+# same (channel, user) within the window are treated as continuing that
+# same student's observation. Any new tag immediately switches/refreshes
+# the window. A cold start (no prior tag in this window) still requires
+# the tag, exactly as before.
+CONTINUATION_WINDOW_SECONDS = 60 * 10
 
 ACK_SAVED = "✓ Observation saved."
 ACK_NEEDS_STUDENT_TAG = (
@@ -138,16 +163,33 @@ def extract_transcript(event: dict) -> Optional[str]:
           "locale": "en-US",
           "preview": {"content": "...", "has_more": bool},
       }
+
+    Slack's webhook body is an external boundary — any field can arrive
+    with the wrong type (hand-crafted request, a client bug, a future API
+    change). Every shape below degrades to "no transcript found" rather
+    than raising, matching this module's own "never crash on malformed
+    input" boundary rule used elsewhere (signature/timestamp parsing).
     """
-    text = (event.get("text") or "").strip()
-    if text:
-        return text
-    for f in event.get("files", []) or []:
-        transcription = f.get("transcription") or {}
+    raw_text = event.get("text")
+    if isinstance(raw_text, str) and raw_text.strip():
+        return raw_text.strip()
+
+    files = event.get("files")
+    if not isinstance(files, list):
+        return None
+    for f in files:
+        if not isinstance(f, dict):
+            continue
+        transcription = f.get("transcription")
+        if not isinstance(transcription, dict):
+            continue
         if transcription.get("status") == "complete":
-            content = (transcription.get("preview") or {}).get("content", "").strip()
-            if content:
-                return content
+            preview = transcription.get("preview")
+            if not isinstance(preview, dict):
+                continue
+            content = preview.get("content")
+            if isinstance(content, str) and content.strip():
+                return content.strip()
     return None
 
 
@@ -167,7 +209,10 @@ class SlackObservationBot:
         default_factory=lambda: (lambda channel, text: None)
     )
     default_template_type: str = "literacy"
+    continuation_window_seconds: float = CONTINUATION_WINDOW_SECONDS
+    now: Callable[[], float] = field(default_factory=lambda: time.time)
     _seen_event_ids: set = field(default_factory=set, repr=False)
+    _last_student_by_sender: dict = field(default_factory=dict, repr=False)
 
     def handle_request(self, headers: dict, raw_body: str) -> dict:
         """Verify signature, parse JSON, dispatch. `headers` keys are
@@ -180,7 +225,19 @@ class SlackObservationBot:
 
         import json
 
-        payload = json.loads(raw_body)
+        try:
+            payload = json.loads(raw_body)
+        except (TypeError, ValueError):
+            # A verified signature only proves the sender is Slack — it
+            # says nothing about body well-formedness. A malformed body
+            # must not crash the handler (the caller likely has no
+            # exception handling of its own, and an uncaught error here
+            # would surface as a 500, which makes Slack retry delivery
+            # indefinitely with no useful outcome — same failure shape
+            # the LensNotFoundError branch below is written to avoid).
+            return {"ok": False, "skipped": "invalid_json_body"}
+        if not isinstance(payload, dict):
+            return {"ok": False, "skipped": "invalid_payload_shape"}
         return self.handle_event_payload(payload)
 
     def handle_event_payload(self, payload: dict) -> dict:
@@ -200,6 +257,10 @@ class SlackObservationBot:
             self._seen_event_ids.add(event_id)
 
         event = payload.get("event", {})
+        if not isinstance(event, dict):
+            # Malformed payload shape (e.g. hand-crafted request) — degrade
+            # rather than crash on the impending .get() calls.
+            return {"ok": True, "skipped": "non_observation_event"}
         if event.get("type") != "message" or event.get("subtype") is not None:
             # Ignore edits/deletes/bot-echoes/join-messages etc. — only
             # plain new messages are observations.
@@ -209,7 +270,10 @@ class SlackObservationBot:
 
     def _handle_message_event(self, event: dict) -> dict:
         channel = event.get("channel")
-        teacher_id = self.teacher_channel_map.get(channel)
+        # channel_id must be a string to be a valid dict key/lookup — a
+        # malformed payload (e.g. channel as a nested object) must degrade
+        # to "unregistered" rather than crash on an unhashable-type lookup.
+        teacher_id = self.teacher_channel_map.get(channel) if isinstance(channel, str) else None
         if not teacher_id:
             # Not a registered teacher observation channel — ignore
             # silently rather than replying (avoids noise in unrelated
@@ -220,7 +284,27 @@ class SlackObservationBot:
         if not transcript:
             return {"ok": True, "skipped": "no_transcript_available"}
 
+        sender_id = event.get("user")
+        # A missing/empty sender identity (malformed or unusual payload —
+        # e.g. some relayed/bot-adjacent message subtypes omit `user`)
+        # must never share a continuation-window slot: two different
+        # senders who both lack a `user` field would otherwise collide on
+        # the same cache key and silently inherit each other's student
+        # context, which is exactly the guess this window is not allowed
+        # to make. Treat a missing sender as no cache key at all.
+        sender_key = (channel, sender_id) if isinstance(sender_id, str) and sender_id else None
         student_id, observation_text = parse_student_tag(transcript)
+        now = self.now()
+
+        if not student_id:
+            # Untagged: only reuse a prior student_id if it's still
+            # within the continuation window — otherwise this is a cold
+            # start and the tag is genuinely required (never guess).
+            cached = self._last_student_by_sender.get(sender_key) if sender_key is not None else None
+            if cached and (now - cached[1]) <= self.continuation_window_seconds:
+                student_id = cached[0]
+                observation_text = transcript
+
         if not student_id:
             self.post_message(channel, ACK_NEEDS_STUDENT_TAG)
             return {"ok": True, "skipped": "missing_student_tag"}
@@ -238,8 +322,17 @@ class SlackObservationBot:
             # nothing was saved rather than silently dropping the message
             # or letting the exception propagate (which would cause Slack
             # to retry delivery indefinitely with no useful ack).
+            # Deliberately does NOT (re)write the continuation cache: a
+            # bad/typo'd tag must not poison follow-up untagged messages
+            # into repeatedly failing against a phantom student instead of
+            # being asked to retag (hardening sweep 2026-07-14 finding).
             self.post_message(channel, ACK_UNKNOWN_STUDENT)
             return {"ok": True, "skipped": "unknown_student_id"}
+
+        # Capture succeeded — only now is it safe to (re)start/refresh the
+        # continuation window for this sender.
+        if sender_key is not None:
+            self._last_student_by_sender[sender_key] = (student_id, now)
 
         if result["escalations"]:
             self.post_message(channel, ACK_ESCALATION)

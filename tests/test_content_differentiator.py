@@ -153,3 +153,113 @@ def test_assign_packs_for_roster():
     ]
     assignments = engine.assign_packs_for_roster(pack, roster)
     assert assignments == {"s1": "foundational", "s2": "extended"}
+
+
+# --- Adaptation path (re-ground audit fix: adapt existing content, don't
+# generate from scratch) ---------------------------------------------------
+
+SAMPLE_SOURCE_CHUNKS = [
+    {
+        "text": (
+            "Multiplication is repeated addition of the same number. "
+            "For example, 3 times 4 means adding 3 four times: 3 + 3 + 3 + 3 = 12. "
+            "Arrays can show multiplication visually as rows and columns. "
+            "The multiplication table helps students memorize basic facts. "
+            "Word problems apply multiplication to real-world sharing and grouping situations."
+        ),
+        "source_file": "myp_math_guide.pdf",
+        "section": "MULTIPLICATION FOUNDATIONS",
+        "page_start": 4,
+        "page_end": 4,
+    }
+]
+
+
+def test_generate_without_source_chunks_is_unchanged():
+    """No source_chunks -> identical to the original template path."""
+    engine = ContentDifferentiator()
+    pack = engine.generate(make_lesson())
+    assert pack.source_mode == "generated"
+    assert pack.source_provenance is None
+
+
+def test_generate_with_source_chunks_adapts_instead_of_generates():
+    engine = ContentDifferentiator()
+    pack = engine.generate(make_lesson(topic="Multiplication"), source_chunks=SAMPLE_SOURCE_CHUNKS)
+
+    assert pack.source_mode == "adapted"
+    assert pack.source_provenance == [
+        {
+            "source_file": "myp_math_guide.pdf",
+            "section": "MULTIPLICATION FOUNDATIONS",
+            "page_start": 4,
+            "page_end": 4,
+        }
+    ]
+    for tier in pack.tiers.values():
+        assert "source_excerpt" in tier
+        assert "multiplication" in tier["source_excerpt"].lower()
+
+    # Same source material at every tier — only how much/how it's
+    # scaffolded should differ, not the underlying content.
+    foundational_len = len(pack.tiers["foundational"]["source_excerpt"])
+    extended_len = len(pack.tiers["extended"]["source_excerpt"])
+    assert foundational_len <= extended_len
+
+
+def test_adapted_foundational_tier_respects_sentence_length():
+    engine = ContentDifferentiator()
+    pack = engine.generate(make_lesson(topic="Multiplication"), source_chunks=SAMPLE_SOURCE_CHUNKS)
+    guided_reading = pack.tiers["foundational"]["tasks"][0]["prompt"]
+    # every simplified sentence embedded in the excerpt must respect the
+    # foundational word ceiling
+    excerpt = pack.tiers["foundational"]["source_excerpt"]
+    for sentence in excerpt.split(". "):
+        assert len(sentence.split()) <= 10 + 1  # +1 tolerance for trailing punctuation joins
+
+
+def test_empty_source_chunks_falls_back_to_template_generation():
+    engine = ContentDifferentiator()
+    pack = engine.generate(make_lesson(), source_chunks=[])
+    assert pack.source_mode == "generated"
+
+    pack2 = engine.generate(make_lesson(), source_chunks=[{"text": ""}])
+    assert pack2.source_mode == "generated"
+
+
+def test_adapted_content_passes_trauma_safety():
+    engine = ContentDifferentiator()
+    pack = engine.generate(make_lesson(topic="Multiplication"), source_chunks=SAMPLE_SOURCE_CHUNKS)
+    for tier in pack.tiers.values():
+        _check_trauma_safety(tier["learning_objective"])
+        for task in tier["tasks"]:
+            _check_trauma_safety(task["prompt"])
+
+
+def test_generate_from_documents_uses_retriever_and_adapts():
+    class FakeRetriever:
+        def __init__(self, chunks):
+            self.chunks = chunks
+            self.calls = []
+
+        def retrieve(self, query, domain, k=3):
+            self.calls.append((query, domain, k))
+            return self.chunks
+
+    engine = ContentDifferentiator()
+    retriever = FakeRetriever(SAMPLE_SOURCE_CHUNKS)
+    pack = engine.generate_from_documents(
+        make_lesson(topic="Multiplication"), retriever, domain="curriculum"
+    )
+    assert pack.source_mode == "adapted"
+    assert retriever.calls == [("Multiplication", "curriculum", 5)]
+
+
+def test_generate_from_documents_falls_back_when_retrieval_empty():
+    class EmptyRetriever:
+        def retrieve(self, query, domain, k=3):
+            return []
+
+    engine = ContentDifferentiator()
+    pack = engine.generate_from_documents(make_lesson(), EmptyRetriever(), domain="curriculum")
+    assert pack.source_mode == "generated"

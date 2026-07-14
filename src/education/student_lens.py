@@ -170,6 +170,7 @@ class StudentLensStore:
                 home_languages TEXT NOT NULL DEFAULT '[]',
                 learning_differences TEXT NOT NULL DEFAULT '[]',
                 trauma_flag INTEGER NOT NULL DEFAULT 0,
+                avoid_pairing_with TEXT NOT NULL DEFAULT '[]',
                 rti_current_tier INTEGER NOT NULL DEFAULT 1,
                 rti_tier_history TEXT NOT NULL DEFAULT '[]',
                 cefr_snapshot TEXT NOT NULL DEFAULT '{}',
@@ -223,6 +224,7 @@ class StudentLensStore:
         home_languages: Optional[list[str]] = None,
         learning_differences: Optional[list[str]] = None,
         trauma_flag: bool = False,
+        avoid_pairing_with: Optional[list[str]] = None,
         rti_current_tier: int = 1,
     ) -> str:
         """Create a new student lens. Returns the student_id."""
@@ -237,10 +239,11 @@ class StudentLensStore:
             INSERT INTO students (
                 student_id, display_name, campus, grade_level,
                 home_languages, learning_differences, trauma_flag,
+                avoid_pairing_with,
                 rti_current_tier, rti_tier_history, cefr_snapshot,
                 cefr_trajectory_30d, sel_summary, profile_version,
                 created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
             """,
             (
                 student_id,
@@ -250,6 +253,7 @@ class StudentLensStore:
                 json.dumps(home_languages or []),
                 json.dumps(learning_differences or []),
                 int(trauma_flag),
+                json.dumps(avoid_pairing_with or []),
                 rti_current_tier,
                 json.dumps(
                     [{"tier": rti_current_tier, "from": now, "to": None, "trigger": None}]
@@ -270,6 +274,26 @@ class StudentLensStore:
         )
         self._conn.commit()
         return student_id
+
+    def set_avoid_pairing_with(self, student_id: str, avoid_ids: list[str]) -> None:
+        """
+        Teacher-set social-emotional grouping constraint ("kids cannot
+        work if near a kid with conflict" — meeting notes, not academic
+        data). This is a roster/relationship fact a teacher sets directly,
+        not something derived from an observation, so it bypasses
+        append_observation()'s recalculation path entirely. Full replace,
+        not append — a teacher correcting/clearing a stale conflict is a
+        normal, expected action (unlike an observation, this is not an
+        append-only log).
+        """
+        row = self._get_student_row(student_id)
+        if row is None:
+            raise LensNotFoundError(student_id)
+        self._conn.execute(
+            "UPDATE students SET avoid_pairing_with = ?, updated_at = ? WHERE student_id = ?",
+            (json.dumps(avoid_ids or []), _now_iso(), student_id),
+        )
+        self._conn.commit()
 
     # ------------------------------------------------------------------
     # Append observation (the only way a lens changes)
@@ -453,6 +477,7 @@ class StudentLensStore:
         d["home_languages"] = json.loads(d["home_languages"])
         d["learning_differences"] = json.loads(d["learning_differences"])
         d["trauma_flag"] = bool(d["trauma_flag"])
+        d["avoid_pairing_with"] = json.loads(d["avoid_pairing_with"])
         d["rti_tier_history"] = json.loads(d["rti_tier_history"])
         d["cefr_snapshot"] = json.loads(d["cefr_snapshot"])
         d["sel_summary"] = json.loads(d["sel_summary"])

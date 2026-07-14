@@ -207,3 +207,184 @@ def test_non_message_subtype_events_ignored(tmp_path):
     result = bot.handle_event_payload(payload)
     assert result == {"ok": True, "skipped": "non_observation_event"}
     assert log == []
+
+
+# --- continuation window (UX pass) ---
+
+def test_untagged_followup_within_window_continues_same_student(tmp_path):
+    bot, store, log = make_bot(tmp_path)
+    store.create_lens(student_id="s1", display_name="Test Student")
+
+    tagged = {
+        "type": "event_callback",
+        "event_id": "Ev10",
+        "event": {"type": "message", "channel": "C123", "user": "U1", "text": "[student:s1] Reads well today"},
+    }
+    followup = {
+        "type": "event_callback",
+        "event_id": "Ev11",
+        "event": {"type": "message", "channel": "C123", "user": "U1", "text": "Also finished her worksheet"},
+    }
+    bot.handle_event_payload(tagged)
+    result = bot.handle_event_payload(followup)
+
+    assert result["ok"] is True
+    assert "capture_result" in result
+    assert log == [("C123", ACK_SAVED), ("C123", ACK_SAVED)]
+
+
+def test_untagged_message_outside_window_still_requires_tag(tmp_path):
+    clock = {"t": 1000.0}
+    bot, store, log = make_bot(tmp_path)
+    bot.now = lambda: clock["t"]
+    store.create_lens(student_id="s1", display_name="Test Student")
+
+    tagged = {
+        "type": "event_callback",
+        "event_id": "Ev12",
+        "event": {"type": "message", "channel": "C123", "user": "U1", "text": "[student:s1] Reads well today"},
+    }
+    bot.handle_event_payload(tagged)
+
+    clock["t"] += bot.continuation_window_seconds + 1  # past the window
+    followup = {
+        "type": "event_callback",
+        "event_id": "Ev13",
+        "event": {"type": "message", "channel": "C123", "user": "U1", "text": "Also finished her worksheet"},
+    }
+    result = bot.handle_event_payload(followup)
+
+    assert result["skipped"] == "missing_student_tag"
+    assert log[-1] == ("C123", ACK_NEEDS_STUDENT_TAG)
+
+
+def test_new_tag_switches_student_immediately(tmp_path):
+    bot, store, log = make_bot(tmp_path)
+    store.create_lens(student_id="s1", display_name="Student One")
+    store.create_lens(student_id="s2", display_name="Student Two")
+
+    events = [
+        {"type": "message", "channel": "C123", "user": "U1", "text": "[student:s1] First note"},
+        {"type": "message", "channel": "C123", "user": "U1", "text": "[student:s2] Switching to a different student"},
+        {"type": "message", "channel": "C123", "user": "U1", "text": "Untagged follow-up should belong to s2"},
+    ]
+    results = []
+    for i, event in enumerate(events):
+        results.append(bot.handle_event_payload({"type": "event_callback", "event_id": f"EvSwitch{i}", "event": event}))
+
+    assert all(r["ok"] for r in results)
+    assert log == [("C123", ACK_SAVED)] * 3
+
+
+def test_untagged_message_from_different_user_still_requires_tag(tmp_path):
+    bot, store, log = make_bot(tmp_path)
+    store.create_lens(student_id="s1", display_name="Test Student")
+
+    bot.handle_event_payload({
+        "type": "event_callback",
+        "event_id": "Ev20",
+        "event": {"type": "message", "channel": "C123", "user": "U1", "text": "[student:s1] Reads well today"},
+    })
+    result = bot.handle_event_payload({
+        "type": "event_callback",
+        "event_id": "Ev21",
+        "event": {"type": "message", "channel": "C123", "user": "U2", "text": "Untagged from a different sender"},
+    })
+
+    assert result["skipped"] == "missing_student_tag"
+    assert log[-1] == ("C123", ACK_NEEDS_STUDENT_TAG)
+
+
+# --- hardening sweep 2026-07-14: malformed-payload boundary crashes ---
+
+def test_extract_transcript_survives_non_string_text():
+    for bad in [{"x": 1}, 42, ["a", "b"], True]:
+        assert extract_transcript({"text": bad}) is None
+
+
+def test_extract_transcript_survives_malformed_file_shapes():
+    assert extract_transcript({"text": "", "files": [{"transcription": {"status": "complete", "preview": {"content": 42}}}]}) is None
+    assert extract_transcript({"text": "", "files": [{"transcription": {"status": "complete", "preview": {"content": None}}}]}) is None
+    assert extract_transcript({"text": "", "files": {"not": "a list"}}) is None
+    assert extract_transcript({"text": "", "files": "oops"}) is None
+    assert extract_transcript({"text": "", "files": ["oops"]}) is None
+    assert extract_transcript({"text": "", "files": [{"transcription": "oops"}]}) is None
+    assert extract_transcript({"text": "", "files": [{"transcription": {"status": "complete", "preview": "oops"}}]}) is None
+
+
+def test_handle_event_payload_survives_non_dict_event(tmp_path):
+    bot, _, log = make_bot(tmp_path)
+    for bad_event in [None, [], "oops", 42]:
+        result = bot.handle_event_payload({"type": "event_callback", "event_id": f"bad-{bad_event!r}", "event": bad_event})
+        assert result == {"ok": True, "skipped": "non_observation_event"}
+    assert log == []
+
+
+def test_handle_message_event_survives_unhashable_channel(tmp_path):
+    bot, _, log = make_bot(tmp_path)
+    result = bot.handle_event_payload({
+        "type": "event_callback",
+        "event_id": "Ev30",
+        "event": {"type": "message", "channel": {"nested": "object"}, "text": "[student:s1] hi"},
+    })
+    assert result == {"ok": True, "skipped": "unregistered_channel"}
+    assert log == []
+
+
+def test_handle_request_survives_invalid_json_body(tmp_path):
+    bot, _, log = make_bot(tmp_path)
+    ts = str(time.time())
+    body = "{not valid json"
+    sig = make_signature(ts, body)
+    result = bot.handle_request({"x-slack-request-timestamp": ts, "x-slack-signature": sig}, body)
+    assert result == {"ok": False, "skipped": "invalid_json_body"}
+    assert log == []
+
+
+def test_handle_request_survives_non_dict_json_body(tmp_path):
+    bot, _, log = make_bot(tmp_path)
+    ts = str(time.time())
+    body = "[1, 2, 3]"
+    sig = make_signature(ts, body)
+    result = bot.handle_request({"x-slack-request-timestamp": ts, "x-slack-signature": sig}, body)
+    assert result == {"ok": False, "skipped": "invalid_payload_shape"}
+    assert log == []
+
+
+def test_missing_user_key_does_not_cross_contaminate_between_senders(tmp_path):
+    bot, store, log = make_bot(tmp_path)
+    store.create_lens(student_id="s1", display_name="Test Student")
+
+    bot.handle_event_payload({
+        "type": "event_callback",
+        "event_id": "Ev40",
+        "event": {"type": "message", "channel": "C123", "text": "[student:s1] tagged note, no user key"},
+    })
+    result = bot.handle_event_payload({
+        "type": "event_callback",
+        "event_id": "Ev41",
+        "event": {"type": "message", "channel": "C123", "text": "untagged, also no user key"},
+    })
+
+    assert result["skipped"] == "missing_student_tag"
+    assert log[-1] == ("C123", ACK_NEEDS_STUDENT_TAG)
+
+
+def test_unknown_student_tag_does_not_poison_continuation_window(tmp_path):
+    bot, store, log = make_bot(tmp_path)
+    # Note: "s404" is never created — a typo'd or not-yet-provisioned tag.
+    bot.handle_event_payload({
+        "type": "event_callback",
+        "event_id": "Ev50",
+        "event": {"type": "message", "channel": "C123", "user": "U1", "text": "[student:s404] typo'd tag"},
+    })
+    result = bot.handle_event_payload({
+        "type": "event_callback",
+        "event_id": "Ev51",
+        "event": {"type": "message", "channel": "C123", "user": "U1", "text": "untagged follow-up after the bad tag"},
+    })
+
+    # The follow-up must be asked to retag, not silently retried against
+    # the same phantom student_id from the failed capture.
+    assert result["skipped"] == "missing_student_tag"
+    assert log == [("C123", ACK_UNKNOWN_STUDENT), ("C123", ACK_NEEDS_STUDENT_TAG)]

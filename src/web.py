@@ -8,7 +8,7 @@ Architecture:
     MC Process (single Python)
     ├── CLI Loop (stdin/stdout)
     ├── Session (shared state)
-    └── FastAPI + WebSocket Server (localhost:7891)
+    └── FastAPI + WebSocket Server (localhost:7896)
 
 Start: automatically launched as daemon thread when mc session starts.
 """
@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
 import time
 from pathlib import Path
 from typing import Optional
@@ -270,11 +271,20 @@ def _ensure_pipeline():
         Pipeline = P
 
 
-def start_web_server(port: int = 7891):
+def start_web_server(port: int = 7896):
     """Start the web server. Called from a daemon thread in mc_cli.py."""
     _ensure_pipeline()
     broadcaster.governance_context = load_governance_context()
     uvicorn.run(app, host="127.0.0.1", port=port, log_level="error")
+
+
+if __name__ == "__main__":
+    # Standalone/detached launch — e.g. `python3 -m src.web 7893 &` from an
+    # installer. Mirrors src/api_server.py's own __main__ pattern; without
+    # this, start_web_server() could only ever run as a daemon thread inside
+    # `mc session start`'s foreground process, which dies with its parent.
+    _port = int(sys.argv[1]) if len(sys.argv) > 1 else 7896
+    start_web_server(_port)
 
 
 FALLBACK_HTML = """<!DOCTYPE html>
