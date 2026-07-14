@@ -1,0 +1,14 @@
+onboarding_id: IO-20260714-ead72c
+purpose: Generic capture-only bot for archiving.
+pattern: CAPTURE
+pattern_reasoning: reasoning here
+scope:
+  platform: slack
+  channels: []
+  output_destination: local_store
+governance:
+  blocks_external: true
+  requires_local: true
+  rationale: No external routing needed for this integration.
+  approved: true
+generated_at: '2026-07-14T14:17:10.540332'

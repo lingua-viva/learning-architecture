@@ -1,0 +1,75 @@
+onboarding_id: IO-20260714-9b8762
+current_phase: 6
+purpose:
+  description: Append-only capture of transcripts, no dialogue, local store only.
+  captured_at: '2026-07-14T14:17:10.448929'
+pattern:
+  options:
+  - id: BRIDGE
+    description: 'Conversational Bridge: real-time back-and-forth query/answer, modeled
+      on bridges/<platform>_bridge.py (BaseBridge contract, channel allowlist, mention-requirement,
+      thread replies). This repo ships bridges for: slack, discord, email, signal,
+      teams, whatsapp, telegram.'
+    offers: Fits a case where users ask questions and expect an answer in the thread.
+    recommended: false
+  - id: CAPTURE
+    description: 'Governed Capture: append-only structured capture with a fixed governance
+      boundary, modeled on src/education/slack_bot.py (Events API webhook receiver,
+      signed-request verification, tag-based capture, never echoes content back, never
+      calls an external model).'
+    offers: Fits a case where the bot observes and records, and never engages in dialogue.
+    recommended: true
+  decision: CAPTURE
+  reasoning: This is observation-only, never conversational.
+  signal_note: 'Signals detected favoring governed capture: capture, log, transcript,
+    append-only, store.'
+scope:
+  platform: slack
+  channels:
+  - '#classroom-1'
+  output_destination: local_store
+governance:
+  options:
+  - id: CONSERVATIVE
+    description: "blocks_external: true, requires_local: true \u2014 no data from\
+      \ this integration leaves the local boundary."
+    offers: The safe default. Correct unless the case has an explicit, named reason
+      to widen it.
+    recommended: true
+  - id: WIDEN
+    description: "blocks_external: false \u2014 this integration may route specific,\
+      \ named data externally under an explicit condition you must state."
+    offers: Only correct if the case genuinely requires external routing (e.g. an
+      external model answering conversational queries). Requires a named boundary,
+      not a guess.
+    recommended: false
+  blocks_external: true
+  requires_local: true
+  decision: CONSERVATIVE
+  rationale: No data needs to leave the local boundary for this case.
+  approved: true
+  _crosses_boundary_hint: false
+artifacts:
+  integration_config: /home/mical/learning-architecture/scratch/onboarding/IO-20260714-9b8762/integration_config.yaml
+  bridge_wiring_record: /home/mical/learning-architecture/scratch/onboarding/IO-20260714-9b8762/BRIDGE_WIRING_RECORD.md
+verify:
+  smoke_query: does the bot record a tagged message
+  result: pass
+  notes: verified manually
+decision_log:
+- phase: PATTERN
+  decision: CAPTURE
+  reasoning: This is observation-only, never conversational.
+  decided_at: '2026-07-14T14:17:10.453420'
+- phase: SCOPE
+  decision: local_store
+  reasoning: platform=slack, channels=['#classroom-1'], destination=local_store
+  decided_at: '2026-07-14T14:17:10.456553'
+- phase: GOVERNANCE
+  decision: CONSERVATIVE
+  reasoning: No data needs to leave the local boundary for this case.
+  decided_at: '2026-07-14T14:17:10.460800'
+- phase: VERIFY
+  decision: pass
+  reasoning: verified manually
+  decided_at: '2026-07-14T14:17:10.476584'

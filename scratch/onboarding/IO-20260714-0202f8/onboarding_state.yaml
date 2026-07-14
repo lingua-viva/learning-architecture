@@ -1,0 +1,45 @@
+onboarding_id: IO-20260714-0202f8
+current_phase: 1
+purpose:
+  description: We just need to capture and record transcript observations, append-only,
+    no dialogue.
+  captured_at: '2026-07-14T14:17:10.434036'
+pattern:
+  options:
+  - id: BRIDGE
+    description: 'Conversational Bridge: real-time back-and-forth query/answer, modeled
+      on bridges/<platform>_bridge.py (BaseBridge contract, channel allowlist, mention-requirement,
+      thread replies). This repo ships bridges for: slack, discord, email, signal,
+      teams, whatsapp, telegram.'
+    offers: Fits a case where users ask questions and expect an answer in the thread.
+    recommended: false
+  - id: CAPTURE
+    description: 'Governed Capture: append-only structured capture with a fixed governance
+      boundary, modeled on src/education/slack_bot.py (Events API webhook receiver,
+      signed-request verification, tag-based capture, never echoes content back, never
+      calls an external model).'
+    offers: Fits a case where the bot observes and records, and never engages in dialogue.
+    recommended: true
+  decision: null
+  reasoning: null
+  signal_note: 'Signals detected favoring governed capture: capture, log, record,
+    transcript, observation, append-only.'
+scope:
+  platform: null
+  channels: []
+  output_destination: null
+governance:
+  options: []
+  blocks_external: null
+  requires_local: null
+  decision: null
+  rationale: null
+  approved: false
+artifacts:
+  integration_config: ''
+  bridge_wiring_record: ''
+verify:
+  smoke_query: ''
+  result: null
+  notes: ''
+decision_log: []

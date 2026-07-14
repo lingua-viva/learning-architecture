@@ -1,0 +1,15 @@
+onboarding_id: IO-20260714-9b8762
+purpose: Append-only capture of transcripts, no dialogue, local store only.
+pattern: CAPTURE
+pattern_reasoning: This is observation-only, never conversational.
+scope:
+  platform: slack
+  channels:
+  - '#classroom-1'
+  output_destination: local_store
+governance:
+  blocks_external: true
+  requires_local: true
+  rationale: No data needs to leave the local boundary for this case.
+  approved: true
+generated_at: '2026-07-14T14:17:10.470323'

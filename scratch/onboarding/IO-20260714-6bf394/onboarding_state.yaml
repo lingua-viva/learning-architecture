@@ -1,0 +1,44 @@
+onboarding_id: IO-20260714-6bf394
+current_phase: 1
+purpose:
+  description: Listing check purpose text unique.
+  captured_at: '2026-07-14T14:17:10.572135'
+pattern:
+  options:
+  - id: BRIDGE
+    description: 'Conversational Bridge: real-time back-and-forth query/answer, modeled
+      on bridges/<platform>_bridge.py (BaseBridge contract, channel allowlist, mention-requirement,
+      thread replies). This repo ships bridges for: slack, discord, email, signal,
+      teams, whatsapp, telegram.'
+    offers: Fits a case where users ask questions and expect an answer in the thread.
+    recommended: false
+  - id: CAPTURE
+    description: 'Governed Capture: append-only structured capture with a fixed governance
+      boundary, modeled on src/education/slack_bot.py (Events API webhook receiver,
+      signed-request verification, tag-based capture, never echoes content back, never
+      calls an external model).'
+    offers: Fits a case where the bot observes and records, and never engages in dialogue.
+    recommended: false
+  decision: null
+  reasoning: null
+  signal_note: "No strong signal either way in the purpose text \u2014 operator judgment\
+    \ required."
+scope:
+  platform: null
+  channels: []
+  output_destination: null
+governance:
+  options: []
+  blocks_external: null
+  requires_local: null
+  decision: null
+  rationale: null
+  approved: false
+artifacts:
+  integration_config: ''
+  bridge_wiring_record: ''
+verify:
+  smoke_query: ''
+  result: null
+  notes: ''
+decision_log: []
