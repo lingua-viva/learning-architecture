@@ -28,6 +28,16 @@ from pathlib import Path
 # Ensure mission-canvas root is on path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+# Force UTF-8 stdout/stderr. Windows consoles (and PyInstaller binaries
+# without PYTHONUTF8=1 set) default to the system codepage — cp1252 here —
+# which can't encode symbols like "→" used in CLI output, crashing every
+# command that prints one. Linux/macOS already default to UTF-8, which is
+# why this only ever surfaced on Windows.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
+
 from ontology.engine import OntologyEngine
 from memory.store import MemoryStore
 from knowledge import KnowledgeStore
