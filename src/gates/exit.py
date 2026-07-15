@@ -245,7 +245,7 @@ class ExitGate:
         """Log to session memory and persistent NDJSON file."""
         self._session_log.append(event)
         try:
-            with open(self._log_file, "a") as f:
+            with open(self._log_file, "a", encoding="utf-8") as f:
                 f.write(json.dumps(event.to_dict()) + "\n")
         except OSError:
             pass  # Don't crash the app if logging fails

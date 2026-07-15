@@ -42,13 +42,13 @@ class LearnedWeights:
 
     def _load(self) -> None:
         if self._path.exists():
-            with open(self._path) as f:
+            with open(self._path, encoding="utf-8") as f:
                 data = yaml.safe_load(f) or {}
             self._weights = data.get("weights", {})
 
     def _save(self) -> None:
         data = {"weights": self._weights, "description": "Auto-learned from path outcomes. Do not edit manually."}
-        with open(self._path, "w") as f:
+        with open(self._path, "w", encoding="utf-8") as f:
             yaml.dump(data, f, default_flow_style=False, sort_keys=False)
 
     def get_weight(self, node_id: str, signal: str) -> float:

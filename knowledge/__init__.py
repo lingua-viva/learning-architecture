@@ -44,7 +44,7 @@ class KnowledgeStore:
             if dir_path.exists():
                 yaml_files.extend(dir_path.glob("*.yaml"))
         for yaml_file in sorted(yaml_files):
-            with open(yaml_file) as f:
+            with open(yaml_file, encoding="utf-8") as f:
                 data = yaml.safe_load(f)
             if not data or "entries" not in data:
                 continue

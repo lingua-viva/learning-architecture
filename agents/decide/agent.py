@@ -108,5 +108,5 @@ class DecideAgent:
 
     def _persist(self, record: DecisionRecord) -> None:
         """Append to decisions NDJSON."""
-        with open(self._decisions_file, "a") as f:
+        with open(self._decisions_file, "a", encoding="utf-8") as f:
             f.write(json.dumps(record.to_dict()) + "\n")

@@ -113,5 +113,5 @@ class DiagnoseAgent:
 
     def _persist(self, record: DiagnosisRecord) -> None:
         """Append to diagnoses NDJSON."""
-        with open(self._diagnoses_file, "a") as f:
+        with open(self._diagnoses_file, "a", encoding="utf-8") as f:
             f.write(json.dumps(record.to_dict()) + "\n")

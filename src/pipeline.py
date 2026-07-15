@@ -216,7 +216,7 @@ def _read_provider_config() -> Optional[dict]:
     the same as "no config" — every caller already handles `None`.
     """
     try:
-        with open(_provider_config_path()) as f:
+        with open(_provider_config_path(), encoding="utf-8") as f:
             data = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError, OSError):
         return None

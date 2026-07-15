@@ -67,7 +67,7 @@ def load_taxonomy() -> list[dict]:
         return []
 
     print(f"Loading taxonomy: {tax_file}")
-    with open(tax_file) as f:
+    with open(tax_file, encoding="utf-8") as f:
         data = yaml.safe_load(f)
 
     return data.get("rius", [])
@@ -96,7 +96,7 @@ def load_knowledge_library() -> list[dict]:
         return []
 
     print(f"Loading knowledge library: {kl_file}")
-    with open(kl_file) as f:
+    with open(kl_file, encoding="utf-8") as f:
         data = yaml.safe_load(f)
 
     return data.get("library_questions", [])
@@ -223,7 +223,7 @@ def write_domain_file(domain: str, nodes: list[dict], output_dir: Path) -> None:
     }
 
     output_file = output_dir / f"{domain.replace(' ', '_')}.yaml"
-    with open(output_file, "w") as f:
+    with open(output_file, "w", encoding="utf-8") as f:
         yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True, width=120)
     print(f"  Wrote {output_file.name}: {len(clean_nodes)} nodes")
 
@@ -243,7 +243,7 @@ def write_knowledge_file(domain: str, entries: list[dict], output_dir: Path) -> 
     }
 
     output_file = output_dir / f"{domain.replace(' ', '_')}_imported.yaml"
-    with open(output_file, "w") as f:
+    with open(output_file, "w", encoding="utf-8") as f:
         yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True, width=120)
     print(f"  Wrote {output_file.name}: {len(clean_entries)} entries")
 

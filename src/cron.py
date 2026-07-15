@@ -62,7 +62,7 @@ class CronSystem:
         schedules = []
         state = self._load_state()
         for yaml_file in sorted(self._schedules_dir.glob("*.yaml")):
-            with open(yaml_file) as f:
+            with open(yaml_file, encoding="utf-8") as f:
                 data = yaml.safe_load(f)
             if not data or "id" not in data:
                 continue
@@ -120,7 +120,7 @@ class CronSystem:
         }
 
         artifact_path = self._artifacts_dir / f"{sched.id}_{int(time.time())}.json"
-        with open(artifact_path, "w") as f:
+        with open(artifact_path, "w", encoding="utf-8") as f:
             json.dump(artifact, f, indent=2)
 
         # Update state
@@ -146,7 +146,7 @@ class CronSystem:
 
     def _load_state(self) -> dict:
         if self._state_file.exists():
-            with open(self._state_file) as f:
+            with open(self._state_file, encoding="utf-8") as f:
                 return json.load(f)
         return {}
 
@@ -156,5 +156,5 @@ class CronSystem:
             state[schedule_id] = {"run_count": 0}
         state[schedule_id]["last_run"] = time.time()
         state[schedule_id]["run_count"] = state[schedule_id].get("run_count", 0) + 1
-        with open(self._state_file, "w") as f:
+        with open(self._state_file, "w", encoding="utf-8") as f:
             json.dump(state, f, indent=2)

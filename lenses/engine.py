@@ -89,7 +89,7 @@ class LensEngine:
             if not dir_path.exists():
                 continue
             for yaml_file in sorted(dir_path.glob("*.yaml")):
-                with open(yaml_file) as f:
+                with open(yaml_file, encoding="utf-8") as f:
                     data = yaml.safe_load(f)
                 if data:
                     lens = Lens(data)

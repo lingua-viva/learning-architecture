@@ -224,7 +224,7 @@ def _log_firewall(original_text: str, result: Dict[str, Any]) -> None:
         "input_length": len(original_text),
     }
     try:
-        with open(FIREWALL_LOG, "a") as f:
+        with open(FIREWALL_LOG, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry) + "\n")
     except Exception:
         pass  # Never crash on log failure

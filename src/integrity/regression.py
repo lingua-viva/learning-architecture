@@ -61,7 +61,7 @@ class RegressionChecker:
             "sections": health.sections,
             "issues": health.issues,
         }
-        with open(self._baseline_path, "w") as f:
+        with open(self._baseline_path, "w", encoding="utf-8") as f:
             json.dump(snapshot, f, indent=2)
         return self._baseline_path
 
@@ -74,7 +74,7 @@ class RegressionChecker:
             result.summary = "No baseline captured. Run 'mc health --capture' first."
             return result
 
-        with open(self._baseline_path) as f:
+        with open(self._baseline_path, encoding="utf-8") as f:
             baseline = json.load(f)
 
         result.baseline_timestamp = baseline.get("timestamp", 0)

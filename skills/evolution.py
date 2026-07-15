@@ -130,7 +130,7 @@ class SkillEvolutionEngine:
     def _load_record(self, skill_name: str) -> SkillEvolutionRecord:
         path = self._data_dir / f"{skill_name}.json"
         if path.exists():
-            with open(path) as f:
+            with open(path, encoding="utf-8") as f:
                 data = json.load(f)
             return SkillEvolutionRecord(**{
                 k: v for k, v in data.items()
@@ -148,5 +148,5 @@ class SkillEvolutionEngine:
             "total_successes": record.total_successes,
             "pending_mutation": record.pending_mutation,
         }
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)

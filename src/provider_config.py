@@ -143,7 +143,7 @@ def connect_provider(provider: str, api_key: str, model: Optional[str] = None) -
     # to crash every subsequent REASON call. os.replace() is atomic on
     # both POSIX and Windows.
     tmp_path = config_path.with_suffix(".json.tmp")
-    with open(tmp_path, "w") as f:
+    with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump(existing, f)
     # 0600 — owner read/write only (Gap 5a point 7). Windows has no exact
     # equivalent via os.chmod; this is a no-op there, matching the spec's

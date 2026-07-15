@@ -45,15 +45,15 @@ class NDJSONAdapter:
 
     def write_path(self, record: PathRecord) -> None:
         """Append a path record. Append-only. Never deletes."""
-        with open(self.paths_file, "a") as f:
+        with open(self.paths_file, "a", encoding="utf-8") as f:
             f.write(json.dumps(record.to_dict()) + "\n")
 
     def write_session(self, record: SessionRecord) -> None:
-        with open(self.sessions_file, "a") as f:
+        with open(self.sessions_file, "a", encoding="utf-8") as f:
             f.write(json.dumps(record.to_dict()) + "\n")
 
     def write_gap_signal(self, signal: dict) -> None:
-        with open(self.gaps_file, "a") as f:
+        with open(self.gaps_file, "a", encoding="utf-8") as f:
             f.write(json.dumps(signal) + "\n")
 
     # --- Read ---
@@ -63,7 +63,7 @@ class NDJSONAdapter:
         if not self.paths_file.exists():
             return []
         records = []
-        with open(self.paths_file) as f:
+        with open(self.paths_file, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line:
@@ -78,7 +78,7 @@ class NDJSONAdapter:
         if not self.sessions_file.exists():
             return []
         records = []
-        with open(self.sessions_file) as f:
+        with open(self.sessions_file, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line:
@@ -89,7 +89,7 @@ class NDJSONAdapter:
         if not self.gaps_file.exists():
             return []
         signals = []
-        with open(self.gaps_file) as f:
+        with open(self.gaps_file, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line:
@@ -218,7 +218,7 @@ class NDJSONAdapter:
         if not self.paths_file.exists():
             return 0
         count = 0
-        with open(self.paths_file) as f:
+        with open(self.paths_file, encoding="utf-8") as f:
             for _ in f:
                 count += 1
         return count
@@ -227,7 +227,7 @@ class NDJSONAdapter:
         if not self.gaps_file.exists():
             return 0
         count = 0
-        with open(self.gaps_file) as f:
+        with open(self.gaps_file, encoding="utf-8") as f:
             for _ in f:
                 count += 1
         return count

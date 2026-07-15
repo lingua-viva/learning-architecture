@@ -431,7 +431,7 @@ class HealthCheck:
                 return passed, total, issues
 
             import json
-            with open(result_files[0]) as f:
+            with open(result_files[0], encoding="utf-8") as f:
                 data = json.load(f)
 
             accuracy = data.get("accuracy", 0)

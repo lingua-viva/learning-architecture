@@ -111,7 +111,7 @@ class IntegrationOnboarding:
             return
         os.makedirs(onboarding_dir, exist_ok=True)
         state_file = os.path.join(onboarding_dir, "onboarding_state.yaml")
-        with open(state_file, "w") as f:
+        with open(state_file, "w", encoding="utf-8") as f:
             yaml.safe_dump(self.state, f, sort_keys=False)
 
     def load(self, onboarding_id):
@@ -119,7 +119,7 @@ class IntegrationOnboarding:
         onboarding_dir = self.get_onboarding_dir()
         state_file = os.path.join(onboarding_dir, "onboarding_state.yaml")
         if os.path.exists(state_file):
-            with open(state_file, "r") as f:
+            with open(state_file, "r", encoding="utf-8") as f:
                 self.state = yaml.safe_load(f)
             return True
         return False
@@ -332,13 +332,13 @@ class IntegrationOnboarding:
             "generated_at": datetime.now().isoformat(),
         }
         config_path = os.path.join(onboarding_dir, "integration_config.yaml")
-        with open(config_path, "w") as f:
+        with open(config_path, "w", encoding="utf-8") as f:
             yaml.safe_dump(integration_config, f, sort_keys=False)
         self.state["artifacts"]["integration_config"] = config_path
 
         wiring_md = self._render_wiring_record(integration_config)
         wiring_path = os.path.join(onboarding_dir, "BRIDGE_WIRING_RECORD.md")
-        with open(wiring_path, "w") as f:
+        with open(wiring_path, "w", encoding="utf-8") as f:
             f.write(wiring_md)
         self.state["artifacts"]["bridge_wiring_record"] = wiring_path
 

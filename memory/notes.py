@@ -60,7 +60,7 @@ class NotesManager:
 
     def save(self, notes: AgentNotes) -> None:
         path = self._notes_path(notes.agent_id, notes.session_id)
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             json.dump({
                 "agent_id": notes.agent_id,
                 "session_id": notes.session_id,
@@ -75,6 +75,6 @@ class NotesManager:
         path = self._notes_path(agent_id, session_id)
         if not path.exists():
             return None
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             data = json.load(f)
         return AgentNotes(**data)

@@ -188,7 +188,7 @@ def run_eval(golden_path: str = None, dry_run: bool = False):
         print("Create one at tests/golden_education_v1.yaml or specify: mc eval <path.yaml>")
         return 1
 
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         data = yaml.safe_load(f)
 
     queries = data.get("queries", [])
@@ -244,7 +244,7 @@ def run_eval(golden_path: str = None, dry_run: bool = False):
     results_dir.mkdir(parents=True, exist_ok=True)
     timestamp = time.strftime("%Y%m%dT%H%M%S")
     results_path = results_dir / f"golden_results_{timestamp}.json"
-    with open(results_path, "w") as f:
+    with open(results_path, "w", encoding="utf-8") as f:
         json.dump({
             "timestamp": timestamp,
             "golden_path": str(path),

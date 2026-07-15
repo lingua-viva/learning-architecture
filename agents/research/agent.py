@@ -85,5 +85,5 @@ class ResearchAgent:
         """Save proposal as JSON for human review."""
         filename = f"proposal_{proposal.source_query_hash}_{int(proposal.timestamp)}.json"
         path = self._proposals_dir / filename
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             json.dump(proposal.to_dict(), f, indent=2)

@@ -239,7 +239,7 @@ class CandidateStore:
         path = self._dir / f"{candidate_id}.yaml"
         if not path.exists():
             return None
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
         return CandidateRIU.from_dict(data) if data else None
 
@@ -247,7 +247,7 @@ class CandidateStore:
         """List all candidates that haven't been resolved."""
         active = []
         for path in self._dir.glob("CAND-*.yaml"):
-            with open(path) as f:
+            with open(path, encoding="utf-8") as f:
                 data = yaml.safe_load(f)
             if data and data.get("status") in ("CREATED", "ENRICHED"):
                 active.append(CandidateRIU.from_dict(data))
@@ -257,7 +257,7 @@ class CandidateStore:
         """List candidates evaluated and ready for promotion."""
         ready = []
         for path in self._dir.glob("CAND-*.yaml"):
-            with open(path) as f:
+            with open(path, encoding="utf-8") as f:
                 data = yaml.safe_load(f)
             if data and data.get("resolution") == "promote":
                 ready.append(CandidateRIU.from_dict(data))
@@ -267,7 +267,7 @@ class CandidateStore:
 
     def _save(self, candidate: CandidateRIU) -> None:
         path = self._dir / f"{candidate.candidate_id}.yaml"
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             yaml.dump(candidate.to_dict(), f, default_flow_style=False,
                      sort_keys=False, allow_unicode=True)
 
