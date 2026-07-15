@@ -123,14 +123,14 @@ class OntologyEngine:
     def _load_schema(self) -> None:
         schema_path = Path(__file__).parent / "schema.yaml"
         if schema_path.exists():
-            with open(schema_path) as f:
+            with open(schema_path, encoding="utf-8") as f:
                 self._schema = yaml.safe_load(f) or {}
 
     def _load_domains(self, domains_dir: Path) -> None:
         if not domains_dir.exists():
             return
         for yaml_file in sorted(domains_dir.glob("*.yaml")):
-            with open(yaml_file) as f:
+            with open(yaml_file, encoding="utf-8") as f:
                 data = yaml.safe_load(f)
             if not data or "nodes" not in data:
                 continue
