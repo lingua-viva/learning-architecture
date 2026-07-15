@@ -39,7 +39,7 @@ class RecordingReasoning:
     def __init__(self):
         self.last_system_prompt = None
 
-    async def reason(self, query, context, model=None, system_prompt=None):
+    async def reason(self, query, context, model=None, default_model=None, system_prompt=None):
         self.last_system_prompt = system_prompt
         return ReasonResult(content="captured", confidence=0.9, model_used="test")
 

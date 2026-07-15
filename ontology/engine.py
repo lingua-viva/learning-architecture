@@ -14,6 +14,7 @@ Key operations:
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -332,7 +333,25 @@ class OntologyEngine:
             if parent and parent.parent:
                 depth = 0.15
 
-        return coverage + volume + intent_boost + depth
+        # TEMPORARY: workaround for _rank_score() coverage-bias (see
+        # SPEC_ONE_CLICK_LOCAL_APP_2026-07-14.md Gap 5b). Remove when the
+        # cross-domain fix ships. Mirrors the canvas runtime's existing
+        # active-canvas-domain bias pattern (a flat additive boost, not a
+        # multiplier), scoped narrowly to this fork's classify() path only —
+        # gated by node id prefix ("LV-" = this fork's education nodes) so a
+        # non-education query's decoy nodes are never boosted. Defaults to
+        # 0.20 (this fork ships education-biased out of the box, same as
+        # MC_PWA_NAME defaulting to "Still I Rise" in src/pwa.py); set the
+        # env var to "0" to disable for A/B comparison against the
+        # unbiased baseline.
+        education_bias = 0.0
+        if node.id.startswith("LV-"):
+            try:
+                education_bias = float(os.environ.get("SIR_EDUCATION_BIAS") or "0.20")
+            except ValueError:
+                education_bias = 0.0
+
+        return coverage + volume + intent_boost + depth + education_bias
 
     def _compute_confidence(
         self,

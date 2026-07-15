@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Optional
@@ -177,6 +178,56 @@ async def session_info():
     return status or {"active": False}
 
 
+@app.get("/api/provider")
+async def provider_info():
+    """Current provider-connection state for the Gap 5a onboarding screen
+    (SPEC_ONE_CLICK_LOCAL_APP_2026-07-14.md) — never returns the key
+    itself, only whether a provider is connected and whether local Ollama
+    is currently reachable."""
+    from src.provider_config import provider_status
+    return await asyncio.to_thread(provider_status)
+
+
+@app.post("/api/provider/connect")
+async def provider_connect(payload: dict):
+    """
+    Verify a provider API key with a lightweight test call before ever
+    saving it (Gap 5a point 3). `provider` must be one of openai/groq
+    /mistral — Claude/Gemini aren't implemented in the reasoning call
+    path yet (see src/pipeline.py ReasoningEngine._resolve_endpoint).
+    """
+    from src.provider_config import SUPPORTED_PROVIDERS, connect_provider
+
+    provider = str(payload.get("provider") or "").lower()
+    api_key = str(payload.get("api_key") or "")
+    model = payload.get("model")
+
+    if provider not in SUPPORTED_PROVIDERS:
+        return JSONResponse(
+            {"error": f"Unsupported provider — choose one of: {', '.join(SUPPORTED_PROVIDERS)}."},
+            status_code=400,
+        )
+    if not api_key.strip():
+        return JSONResponse({"error": "This key didn't work — check it and try again."}, status_code=400)
+    if model is not None and not isinstance(model, str):
+        return JSONResponse({"error": "Unsupported model value."}, status_code=400)
+
+    result = await asyncio.to_thread(connect_provider, provider, api_key, model)
+    if result["status"] == "rejected":
+        return JSONResponse({"error": result["message"]}, status_code=400)
+    return {"status": result["status"], "message": result["message"], "provider": provider}
+
+
+@app.post("/api/provider/disconnect")
+async def provider_disconnect():
+    """Reversible — Gap 5a point 4. Deletes the key material from disk
+    entirely, reverting to local-only (or whatever install.sh's own
+    Ollama auto-detection wrote)."""
+    from src.provider_config import disconnect_provider
+    await asyncio.to_thread(disconnect_provider)
+    return {"status": "disconnected"}
+
+
 @app.post("/api/query")
 async def query_endpoint(payload: dict):
     """Run a query through the governed pipeline."""
@@ -200,7 +251,14 @@ async def query_endpoint(payload: dict):
     })
 
     try:
-        pipeline = Pipeline()
+        from src.mc_cli import _document_retriever
+        from src.education.pipeline_execute import EducationExecutor
+
+        retriever = _document_retriever()
+        pipeline = Pipeline(
+            document_retriever=retriever,
+            education_executor=EducationExecutor(document_retriever=retriever),
+        )
         result = await pipeline.run(
             query_text,
             intent=intent,
@@ -239,6 +297,113 @@ async def query_endpoint(payload: dict):
         error = {"type": "error", "error": str(e), "timestamp": time.time()}
         await broadcaster.broadcast(error)
         return error
+
+
+# Gap 2, SPEC_ONE_CLICK_LOCAL_APP_2026-07-14.md: PDF upload -> governed
+# ingestion, so a teacher never needs `mc ingest` in a terminal. Only
+# .pdf is accepted (matches DocumentParser's actual support), capped at
+# 50MB, and ingestion requests are serialized behind one lock — a single
+# local user is the real-world case, not a queue-worthy one.
+MAX_INGEST_BYTES = 50 * 1024 * 1024
+_ingest_lock = asyncio.Lock()
+
+
+def _ingest_temp_dir() -> Path:
+    """Scoped scratch dir for uploads-in-flight — never the shared system
+    tmp root, so the lifecycle (write, parse, always delete) is easy to
+    reason about and to grep for. Lives under the same gitignored `data/`
+    tree the document store itself uses."""
+    d = MC_ROOT / "case-studies" / "04-still-i-rise" / "data" / "ingest-tmp"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+@app.post("/api/ingest")
+async def ingest_endpoint(request: Request):
+    """
+    Upload a PDF for governed ingestion into the local education document
+    store. Thin-wraps src/mc_cli.py's `ingest_document()` — the identical
+    parse -> PII-redact -> store pipeline `mc ingest` already uses,
+    including the `student-records` hard refusal.
+
+    Never trusts a client-supplied filesystem path: only the uploaded
+    byte stream is read; it is written to a server-chosen temp path
+    (tempfile.mkstemp) and always deleted in a `finally` block.
+    """
+    # Primary size guard: reject before touching the body at all when the
+    # client is honest about Content-Length (the common case).
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        try:
+            if int(content_length) > MAX_INGEST_BYTES:
+                return JSONResponse(
+                    {"error": "This file is too large — the limit is 50MB."},
+                    status_code=413,
+                )
+        except ValueError:
+            pass
+
+    try:
+        form = await request.form()
+    except Exception:
+        return JSONResponse(
+            {"error": "This file couldn't be read — try a different PDF."},
+            status_code=400,
+        )
+
+    upload = form.get("file")
+    if upload is None or not getattr(upload, "filename", None):
+        return JSONResponse({"error": "No file was uploaded."}, status_code=400)
+
+    filename = upload.filename
+    if Path(filename).suffix.lower() != ".pdf":
+        return JSONResponse(
+            {"error": "Only PDF files are supported right now."},
+            status_code=400,
+        )
+
+    doc_type = str((form.get("doc_type") or "curriculum"))
+
+    # Secondary size guard: even if Content-Length was absent or wrong,
+    # never hand more than the cap down to the parser/store.
+    data = await upload.read()
+    await upload.close()
+    if len(data) > MAX_INGEST_BYTES:
+        return JSONResponse(
+            {"error": "This file is too large — the limit is 50MB."},
+            status_code=413,
+        )
+    if not data:
+        return JSONResponse({"error": "The uploaded file was empty."}, status_code=400)
+
+    from src.mc_cli import ingest_document
+
+    fd, tmp_path_str = tempfile.mkstemp(suffix=".pdf", dir=_ingest_temp_dir())
+    tmp_path = Path(tmp_path_str)
+    try:
+        with open(fd, "wb") as f:
+            f.write(data)
+
+        # Serialize ingestion (parsing + embedding calls) behind one lock;
+        # run the blocking parse/store work off the event loop so /api/health
+        # and the WebSocket stay responsive during a large PDF.
+        async with _ingest_lock:
+            result = await asyncio.to_thread(ingest_document, tmp_path, doc_type)
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+    if not result["ok"]:
+        return JSONResponse({"error": result["error"]}, status_code=400)
+
+    return JSONResponse({
+        "status": "done",
+        "filename": filename,
+        "chunks_added": result["chunks_added"],
+        "tables": result["tables"],
+        "prose": result["prose"],
+        "redactions": result["redactions"],
+        "needs_review": result["needs_review"],
+    })
 
 
 @app.websocket("/ws")

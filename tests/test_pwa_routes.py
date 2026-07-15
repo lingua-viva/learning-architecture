@@ -27,6 +27,20 @@ def test_pwa_asset_routes():
     assert icon.content.startswith(b"\x89PNG\r\n\x1a\n")
 
 
+def test_default_branding_is_still_i_rise_not_mission_canvas():
+    """Gap 3, SPEC_ONE_CLICK_LOCAL_APP_2026-07-14.md: the shipped default (no
+    env override) must read "Still I Rise" everywhere a teacher looks — the
+    manifest, the page title, and the on-screen header — never "Mission
+    Canvas", which is the upstream engine's own name, not this product's."""
+    manifest = client.get("/manifest.json")
+    assert manifest.json()["name"] == "Still I Rise"
+    assert manifest.json()["short_name"] == "Still I Rise"
+
+    root = client.get("/")
+    assert "Still I Rise" in root.text
+    assert "Mission Canvas" not in root.text
+
+
 def test_manifest_route_uses_environment_overrides(monkeypatch):
     monkeypatch.setenv("MC_PWA_NAME", "Tropical IT - MC")
     monkeypatch.setenv("MC_PWA_THEME_COLOR", "#005f73")

@@ -76,38 +76,69 @@ def _document_retriever():
     return DocumentRetriever(DocumentStore(DOCUMENT_STORE_PATH))
 
 
-def run_ingest(path_arg: str, doc_type: str):
-    """Parse, redact, and store a local PDF in the education document store."""
+def ingest_document(path: Path, doc_type: str) -> dict:
+    """
+    Core ingestion logic: validate doc_type, parse, redact, and store a PDF
+    in the education document store. Returns a structured result dict
+    instead of printing, so it has exactly one caller-agnostic behavior.
+
+    Shared by the CLI (`run_ingest`, below) and the web upload route
+    (`POST /api/ingest` in src/web.py, Gap 2 of
+    case-studies/04-still-i-rise/SPEC_ONE_CLICK_LOCAL_APP_2026-07-14.md) —
+    both paths get identical validation, redaction, and storage behavior;
+    only the presentation (print vs JSON) differs at the caller.
+    """
     from src.education.document_parser import DocumentParser
     from src.education.document_store import DocumentStore, EmbeddingUnavailableError
 
     if doc_type in BLOCKED_DOC_TYPES:
-        print(f"Refused: document type '{doc_type}' is not supported by this ingestion path.")
-        print("Reason: PII redaction does not reliably catch bare student given names")
-        print("(no title prefix) — see src/education/document_parser.py module docstring.")
-        return 1
+        return {
+            "ok": False,
+            "reason": "blocked_type",
+            "error": (
+                f"Refused: document type '{doc_type}' is not supported by this ingestion path. "
+                "Reason: PII redaction does not reliably catch bare student given names "
+                "(no title prefix) — see src/education/document_parser.py module docstring."
+            ),
+        }
     if doc_type not in ALLOWED_DOC_TYPES:
-        print(f"Unknown document type '{doc_type}'. Allowed: {', '.join(sorted(ALLOWED_DOC_TYPES))}")
-        return 1
+        return {
+            "ok": False,
+            "reason": "unknown_type",
+            "error": f"Unknown document type '{doc_type}'. Allowed: {', '.join(sorted(ALLOWED_DOC_TYPES))}",
+        }
 
-    path = Path(path_arg)
     parser = DocumentParser()
     try:
         chunks = parser.parse(path)
-    except (FileNotFoundError, ValueError) as exc:
-        print(f"Parse failed: {exc}")
-        return 1
+    except FileNotFoundError:
+        return {"ok": False, "reason": "not_found", "error": f"Document not found: {path}"}
+    except ValueError as exc:
+        # Raised by DocumentParser.parse() for any non-.pdf suffix.
+        return {"ok": False, "reason": "unsupported_format", "error": str(exc)}
+    except Exception:
+        # Corrupt PDF, scanned-image-only PDF with no extractable text, or
+        # any other pdfplumber-internal failure — never surface a raw
+        # traceback to a caller (the web route turns this into a friendly
+        # "couldn't be read" message per Gap 2's error-reporting contract).
+        return {
+            "ok": False,
+            "reason": "parse_failed",
+            "error": f"This file couldn't be read — try a different PDF ({path.name}).",
+        }
 
     if not chunks:
-        print(f"No content extracted from {path.name} — nothing to ingest.")
-        return 1
+        return {
+            "ok": False,
+            "reason": "empty",
+            "error": f"No content extracted from {path.name} — nothing to ingest.",
+        }
 
     store = DocumentStore(DOCUMENT_STORE_PATH)
     try:
         added = store.add_chunks(chunks)
     except EmbeddingUnavailableError as exc:
-        print(f"Ingestion failed: {exc}")
-        return 1
+        return {"ok": False, "reason": "embedding_unavailable", "error": str(exc)}
     finally:
         store.close()
 
@@ -115,11 +146,33 @@ def run_ingest(path_arg: str, doc_type: str):
     needs_review = sum(1 for c in chunks if c.needs_review)
     tables = sum(1 for c in chunks if c.is_table)
 
-    print(f"Ingested {path.name}: {added} chunks ({tables} table, {added - tables} prose)")
-    print(f"Redactions applied: {total_redactions}")
-    if needs_review:
-        print(f"NEEDS REVIEW: {needs_review} chunk(s) flagged — human glance recommended before trusting.")
-    print(f"Store: {DOCUMENT_STORE_PATH}")
+    return {
+        "ok": True,
+        "filename": path.name,
+        "chunks_added": added,
+        "tables": tables,
+        "prose": added - tables,
+        "redactions": total_redactions,
+        "needs_review": needs_review,
+        "store": str(DOCUMENT_STORE_PATH),
+    }
+
+
+def run_ingest(path_arg: str, doc_type: str):
+    """CLI wrapper around ingest_document() — parses, redacts, and stores a
+    local PDF in the education document store, printing the result."""
+    result = ingest_document(Path(path_arg), doc_type)
+    if not result["ok"]:
+        print(result["error"])
+        return 1
+
+    print(f"Ingested {result['filename']}: {result['chunks_added']} chunks "
+          f"({result['tables']} table, {result['prose']} prose)")
+    print(f"Redactions applied: {result['redactions']}")
+    if result["needs_review"]:
+        print(f"NEEDS REVIEW: {result['needs_review']} chunk(s) flagged — "
+              "human glance recommended before trusting.")
+    print(f"Store: {result['store']}")
     return 0
 
 
@@ -545,7 +598,12 @@ async def run_intent(intent_name: str, query: str):
         print(f"Available: {', '.join(INTENTS.keys())}")
         return 1
 
-    pipeline = Pipeline(document_retriever=_document_retriever())
+    retriever = _document_retriever()
+    from src.education.pipeline_execute import EducationExecutor
+    pipeline = Pipeline(
+        document_retriever=retriever,
+        education_executor=EducationExecutor(document_retriever=retriever),
+    )
     result = await pipeline.run(query, intent=intent, session_id=session_id)
     if session_id:
         increment_session()

@@ -26,6 +26,112 @@ Write-Host "  ✓ Detected: windows-$arch" -ForegroundColor Green
 
 $installDir = "$env:USERPROFILE\.still-i-rise"
 
+# Gap 2b, SPEC_ONE_CLICK_LOCAL_APP_2026-07-14.md: a native launcher so
+# restarting after a reboot/crash never requires a terminal either — only
+# this initial `irm | iex` does. Idempotent: checks port 7896 for an
+# already-running Still I Rise before starting a second instance, and
+# tells the user plainly if something ELSE is holding the port.
+function Install-NativeLauncher {
+    $launcherDir = "$env:USERPROFILE\.still-i-rise"
+    New-Item -ItemType Directory -Force -Path $launcherDir | Out-Null
+    $launcherPath = "$launcherDir\sir-launch.ps1"
+
+    @'
+# Still I Rise -- native launcher (Gap 2b). Double-clickable via a Desktop/
+# Start Menu shortcut; never opens a visible terminal for the user.
+$port = 7896
+$healthUrl = "http://127.0.0.1:$port/api/health"
+$uiUrl = "http://127.0.0.1:$port"
+$log = "$env:USERPROFILE\.still-i-rise\launch.log"
+
+function Write-Log($msg) {
+    Add-Content -Path $log -Value "$(Get-Date): $msg"
+}
+
+function Test-PortOpen($p) {
+    try {
+        $client = New-Object System.Net.Sockets.TcpClient
+        $client.Connect("127.0.0.1", $p)
+        $client.Close()
+        return $true
+    } catch { return $false }
+}
+
+$healthy = $false
+$portBusy = $false
+try {
+    $resp = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
+    if ($resp.Content -match '"healthy"') { $healthy = $true } else { $portBusy = $true }
+} catch {
+    if (Test-PortOpen $port) { $portBusy = $true }
+}
+
+if ($healthy) {
+    Write-Log "Still I Rise is already running -- opening your browser."
+    Start-Process $uiUrl
+    exit 0
+}
+if ($portBusy) {
+    Write-Log "Port $port is in use by another program -- close it and try again."
+    exit 1
+}
+
+# Port is free -- start the server.
+$installDir = "$env:USERPROFILE\.still-i-rise"
+if (Test-Path "$installDir\sir.exe") {
+    Start-Process -FilePath "$installDir\sir.exe" -ArgumentList "serve", "$port" -WindowStyle Hidden
+} elseif (Test-Path "$installDir\src\mc_cli.py") {
+    Push-Location $installDir
+    Start-Process -FilePath "python" -ArgumentList "-m", "src.web", "$port" -WindowStyle Hidden
+    Pop-Location
+} else {
+    Write-Log "Couldn't find the Still I Rise install -- try re-running the installer."
+    exit 1
+}
+
+$up = $false
+foreach ($i in 1..30) {
+    Start-Sleep -Seconds 1
+    try {
+        Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 2 | Out-Null
+        $up = $true; break
+    } catch {}
+}
+if ($up) {
+    Start-Process $uiUrl
+} else {
+    Write-Log "Still I Rise didn't start in time -- try again in a moment."
+    exit 1
+}
+'@ | Set-Content -Path $launcherPath -Encoding UTF8
+
+    # Wrapper .bat so the shortcut never flashes a console window.
+    $batPath = "$launcherDir\sir-launch.bat"
+    @"
+@echo off
+powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "$launcherPath"
+"@ | Set-Content -Path $batPath -Encoding ASCII
+
+    # .lnk shortcut on the Desktop and in the Start Menu.
+    try {
+        $shell = New-Object -ComObject WScript.Shell
+        foreach ($dir in @(
+            [Environment]::GetFolderPath("Desktop"),
+            "$env:APPDATA\Microsoft\Windows\Start Menu\Programs"
+        )) {
+            $shortcut = $shell.CreateShortcut("$dir\Still I Rise.lnk")
+            $shortcut.TargetPath = $batPath
+            $shortcut.WorkingDirectory = $launcherDir
+            $shortcut.WindowStyle = 7  # minimized/hidden console
+            $shortcut.Description = "Still I Rise -- AI education for refugee children"
+            $shortcut.Save()
+        }
+        Write-Host "  ✓ Desktop and Start Menu shortcuts installed" -ForegroundColor Green
+    } catch {
+        Write-Host "  ⚠ Couldn't create shortcuts — restart with: $batPath" -ForegroundColor Yellow
+    }
+}
+
 function Check-Ollama {
     try {
         ollama --version 2>&1 | Out-Null
@@ -38,7 +144,7 @@ function Check-Ollama {
 
 # ── Try binary install first ──
 $binary = "sir-windows-${arch}.exe"
-$url = "https://raw.githubusercontent.com/lingua-viva/learning-architecture/main/dist/$binary"
+$url = "https://github.com/lingua-viva/learning-architecture/releases/latest/download/$binary"
 
 Write-Host "  → Attempting binary download..." -ForegroundColor Cyan
 New-Item -ItemType Directory -Force -Path $installDir | Out-Null
@@ -65,6 +171,7 @@ if ($binarySuccess) {
     [Environment]::SetEnvironmentVariable("PYTHONUTF8", "1", "User")
 
     Check-Ollama
+    Install-NativeLauncher
 
     # Auto-start the web server. Launch `sir serve` directly (a detached, persistent
     # process) rather than `sir start` — a frozen onefile exe spawning ITSELF as a
@@ -163,6 +270,7 @@ try {
 }
 
 Check-Ollama
+Install-NativeLauncher
 
 # Health check
 Write-Host ""

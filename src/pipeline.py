@@ -22,6 +22,7 @@ Invariants:
 
 from __future__ import annotations
 
+import json
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -186,6 +187,69 @@ class GatewayInterface:
         )
 
 
+def _provider_config_path() -> Path:
+    """
+    Path to the Gap 5a provider-choice config (SPEC_ONE_CLICK_LOCAL_APP_2026-07-14.md).
+    Same literal path `install.sh` already writes for Ollama auto-detection
+    (`~/.still-i-rise/config/providers.json`). `SIR_CONFIG_HOME` override
+    exists only so tests never touch a real user's home directory.
+    """
+    home = os.environ.get("SIR_CONFIG_HOME")
+    base = Path(home) if home else Path.home() / ".still-i-rise"
+    return base / "config" / "providers.json"
+
+
+def _read_provider_config() -> Optional[dict]:
+    """
+    Read the provider config fresh on every call — never cached. A teacher
+    can connect or disconnect a provider from the Gap 5a onboarding screen
+    without restarting the app, so a cached read would silently keep using
+    a stale (or just-disconnected) provider.
+
+    Hardening (15-iteration sweep, 2026-07-14): valid-but-non-object JSON
+    (e.g. a truncated write leaving `[]`/`"x"`/`42`/`true` on disk — no
+    JSONDecodeError, `json.load` succeeds) used to crash every caller's
+    `.get()` call with an unhandled AttributeError. Because
+    `_resolve_provider_model()` calls this on *every* REASON step, a
+    corrupted config file took down every query in the app with no
+    recovery path a non-technical teacher could find. Treat non-dict JSON
+    the same as "no config" — every caller already handles `None`.
+    """
+    try:
+        with open(_provider_config_path()) as f:
+            data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _provider_entries(config: dict) -> dict:
+    """
+    Safely extract the `providers` sub-object from a config dict.
+
+    Hardening (15-iteration sweep, 2026-07-14): `_read_provider_config()`
+    now guards against a non-dict *top-level* JSON value, but the same
+    corruption class can land one level down — e.g. `{"providers": [1,
+    2, 3]}` is a valid dict at the top, so it passes that guard, but
+    `.get("providers")` still returns a non-dict and the old `(config
+    .get("providers") or {}).get(name)` pattern crashed the same way.
+    Every caller of `config.get("providers")` should go through here.
+    """
+    providers = config.get("providers")
+    return providers if isinstance(providers, dict) else {}
+
+
+def _provider_api_key(provider_name: str) -> Optional[str]:
+    """Look up a saved provider's API key from the config file (Gap 5a
+    point 7 — the key lives only in this 0600 file, never in an env var
+    a teacher would have to set by hand)."""
+    config = _read_provider_config()
+    if not config:
+        return None
+    entry = _provider_entries(config).get(provider_name)
+    return entry.get("api_key") if isinstance(entry, dict) else None
+
+
 class ReasoningEngine:
     """
     Local reasoning via Ollama or LiteLLM.
@@ -203,23 +267,40 @@ class ReasoningEngine:
         query: str,
         context: dict,
         model: Optional[str] = None,
+        default_model: Optional[str] = None,
         system_prompt: Optional[str] = None,
     ) -> ReasonResult:
         """
-        Model reasoning. Resolution order:
-        1. Explicit model param (from @mention or task envelope)
-        2. MC_REASON_MODEL env var (user preference)
-        3. Best available Ollama model (auto-detected)
-        4. Placeholder (no model available)
+        Model reasoning. Resolution order (Gap 5a, SPEC_ONE_CLICK_LOCAL_APP
+        _2026-07-14.md point 1 — corrected from a single conflated `model`
+        param that always let the ontology default win):
+        1. `model` — a true explicit override (an actual @mention or
+           task-envelope-specified model). Rare; a caller must opt in
+           deliberately. Always wins.
+        2. User provider config (`~/.still-i-rise/config/providers.json`,
+           written by the Gap 5a onboarding screen or by install.sh's
+           Ollama auto-detection) — read fresh every call, never cached.
+        3. `default_model` — the ontology's suggestion for this node
+           (`classification.default_model`). Previously this was passed
+           in as `model` and treated as top priority, which meant a
+           user's provider choice could never actually take effect.
+        4. MC_REASON_MODEL env var (technical/dev override).
+        5. Best available Ollama model (auto-detected).
 
         The resolved model may be local (qwen, phi, llama) or cloud
-        (kimi:cloud, Claude, OpenAI). Governance holds regardless —
+        (kimi:cloud, OpenAI, Groq, Mistral). Governance holds regardless —
         the query reaching this step is already sanitized.
         """
-        model = model or os.environ.get("MC_REASON_MODEL") or self._resolve_best_model()
+        resolved_model = (
+            model
+            or self._resolve_provider_model()
+            or default_model
+            or os.environ.get("MC_REASON_MODEL")
+            or self._resolve_best_model()
+        )
 
         if system_prompt:
-            result = await self._call_model(query, system_prompt, model)
+            result = await self._call_model(query, system_prompt, resolved_model)
             if result:
                 return result
 
@@ -229,6 +310,30 @@ class ReasoningEngine:
             confidence=0.7,
             model_used="none",
         )
+
+    def _resolve_provider_model(self) -> Optional[str]:
+        """
+        User provider config, tier 2 of the resolution order above. Only
+        OpenAI/Groq/Mistral/Ollama are recognized — Gap 5a point 2 scopes
+        the onboarding dropdown to exactly what `_resolve_endpoint()`
+        below actually implements (no Anthropic/Gemini branch exists yet).
+        """
+        config = _read_provider_config()
+        if not config:
+            return None
+        default_provider = config.get("default_provider")
+        entry = _provider_entries(config).get(default_provider)
+        model_name = entry.get("model") if isinstance(entry, dict) else None
+        # Hardening: a non-string `model` (e.g. saved from a malformed
+        # /api/provider/connect payload — an int, list, or dict slipping
+        # past a caller that didn't validate) must not silently become
+        # part of the resolved model string; that degrades every future
+        # REASON call to the placeholder with no visible cause.
+        if not model_name or not isinstance(model_name, str):
+            return None
+        if default_provider in ("ollama", "openai", "groq", "mistral"):
+            return f"{default_provider}/{model_name}"
+        return None
 
     def _resolve_best_model(self) -> str:
         """Auto-detect best available model. Prefer local, then cloud."""
@@ -320,15 +425,21 @@ class ReasoningEngine:
 
     @staticmethod
     def _resolve_endpoint(model: str) -> tuple:
-        """Resolve model string to (endpoint_url, auth_headers)."""
+        """
+        Resolve model string to (endpoint_url, auth_headers). Key lookup
+        checks the Gap 5a provider config first (where a key saved via the
+        onboarding screen actually lives, per SPEC_ONE_CLICK_LOCAL_APP
+        point 7), falling back to the matching env var for the
+        technical/dev path (CI, `mc` CLI use without the onboarding UI).
+        """
         if model.startswith("openai/"):
-            key = os.environ.get("OPENAI_API_KEY", "")
+            key = _provider_api_key("openai") or os.environ.get("OPENAI_API_KEY", "")
             return "https://api.openai.com/v1/chat/completions", {"Authorization": f"Bearer {key}"}
         elif model.startswith("groq/"):
-            key = os.environ.get("GROQ_API_KEY", "")
+            key = _provider_api_key("groq") or os.environ.get("GROQ_API_KEY", "")
             return "https://api.groq.com/openai/v1/chat/completions", {"Authorization": f"Bearer {key}"}
         elif model.startswith("mistral/"):
-            key = os.environ.get("MISTRAL_API_KEY", "")
+            key = _provider_api_key("mistral") or os.environ.get("MISTRAL_API_KEY", "")
             return "https://api.mistral.ai/v1/chat/completions", {"Authorization": f"Bearer {key}"}
         else:
             # Default: Ollama (handles both local and :cloud models)
@@ -385,6 +496,7 @@ class Pipeline:
         reasoning: Optional[ReasoningEngine] = None,
         synthesis: Optional[SynthesisEngine] = None,
         document_retriever: Optional[object] = None,
+        education_executor: Optional[object] = None,
     ):
         self.ontology = ontology or OntologyEngine()
         self.memory = memory or MemoryStore()
@@ -405,6 +517,12 @@ class Pipeline:
         # pipeline decoupled from any single vertical. See
         # src/education/document_retrieval.py for the education instance.
         self.document_retriever = document_retriever
+        # Optional, duck-typed: object with .execute(riu_id, query) ->
+        # Optional[ExecutionResult]. Same decoupling pattern as
+        # document_retriever — the core pipeline never imports anything
+        # from src.education. See src/education/pipeline_execute.py
+        # (Gap 4, SPEC_ONE_CLICK_LOCAL_APP_2026-07-14.md).
+        self.education_executor = education_executor
 
     async def run(
         self,
@@ -412,10 +530,18 @@ class Pipeline:
         intent: Optional[str] = None,
         session_id: Optional[str] = None,
         eval_mode: bool = False,
+        explicit_model: Optional[str] = None,
     ) -> PipelineResult:
         """
         Execute the 8-step governed pipeline.
         Every query goes through all steps. No shortcuts.
+
+        `explicit_model`: a true caller-specified override (an actual
+        @mention or task-envelope-specified model) — rare, no current
+        caller sets it. Distinct from `classification.default_model` (the
+        ontology's own suggestion, passed to REASON on every call) — see
+        ReasoningEngine.reason()'s resolution-order docstring, Gap 5a,
+        SPEC_ONE_CLICK_LOCAL_APP_2026-07-14.md.
         """
         start_time = time.time()
         session_id = session_id or str(uuid.uuid4())
@@ -468,6 +594,24 @@ class Pipeline:
         )
         classification = self.ontology.classify(query, effective_intent, prior_paths)
         steps_executed.append("CLASSIFY")
+
+        # ================================================================
+        # Step 1b: EXECUTE — education modules (Gap 4, SPEC_ONE_CLICK_LOCAL_APP)
+        # ================================================================
+        # Only fires when a wired node is classified AND an executor was
+        # injected (education_executor is None for every other vertical /
+        # deployment using this same shared pipeline). When it fires, its
+        # output — either a real structured document or an honest
+        # missing-data message — becomes REASON's primary output below;
+        # RESEARCH is skipped so nothing generic gets appended on top of it.
+        execution_result = None
+        if self.education_executor is not None:
+            execution_result = self.education_executor.execute(classification.riu_id, safe_query)
+            if execution_result is not None:
+                steps_executed.append("EXECUTE")
+                gap_signals.append(
+                    f"education_execute:{execution_result.status}:{classification.riu_id}"
+                )
 
         # Gap signal if confidence is below threshold
         active_candidate = None
@@ -547,7 +691,8 @@ class Pipeline:
             gap_signals.append(f"research_blocked_by_governance:{classification.riu_id}")
 
         if (
-            not entry_gate_blocked_external
+            execution_result is None
+            and not entry_gate_blocked_external
             and not local_only_intent
             and not self_sufficient
             and await self.gateway.needs_external(classification, classification.confidence, user_intent=intent)
@@ -645,12 +790,49 @@ class Pipeline:
         # Step 5: REASON — local model with FULL context
         # ================================================================
         # The model receives: agent prompt + lens + RIU + KL + research + paths
-        local_result = await self.reasoning.reason(
-            query=user_message,
-            context=classification_dict,
-            model=classification.default_model,
-            system_prompt=system_prompt,
-        )
+        #
+        # Exception: when EXECUTE (Step 1b) already produced the answer, the
+        # model must never re-derive or paraphrase it — see
+        # src/education/pipeline_execute.py's module docstring for why a
+        # wrong-looking-right regeneration is worse than the honest module
+        # output. "missing_data" bypasses the model call entirely (there is
+        # nothing for it to add). "ok" gets a short model-written wrapper
+        # that is deterministically concatenated in code with the verbatim
+        # module markdown, never blended into a single generative call.
+        if execution_result is not None and execution_result.status == "missing_data":
+            local_result = ReasonResult(
+                content=execution_result.markdown,
+                confidence=1.0,
+                model_used="none:missing_data",
+            )
+        elif execution_result is not None:
+            wrapper_system_prompt = (
+                "Write a 1-3 sentence friendly introduction to the structured "
+                "document that follows. Do not repeat, summarize, quote, or "
+                "alter its content in any way — it is already complete and "
+                "correct and will be appended verbatim after your reply."
+            )
+            wrapper_result = await self.reasoning.reason(
+                query=query,
+                context=classification_dict,
+                model=explicit_model,
+                default_model=classification.default_model,
+                system_prompt=wrapper_system_prompt,
+            )
+            local_result = ReasonResult(
+                content=f"{wrapper_result.content}\n\n{execution_result.markdown}",
+                confidence=wrapper_result.confidence,
+                model_used=wrapper_result.model_used,
+                tokens_used=wrapper_result.tokens_used,
+            )
+        else:
+            local_result = await self.reasoning.reason(
+                query=user_message,
+                context=classification_dict,
+                model=explicit_model,
+                default_model=classification.default_model,
+                system_prompt=system_prompt,
+            )
         steps_executed.append("REASON")
 
         # ================================================================

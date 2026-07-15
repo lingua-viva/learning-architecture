@@ -3,7 +3,7 @@ from src.pwa import build_manifest
 
 def test_manifest_defaults_from_static_file():
     manifest = build_manifest(env={})
-    assert manifest["name"] == "Mission Canvas"
+    assert manifest["name"] == "Still I Rise"
     assert manifest["display"] == "standalone"
     assert any(icon["src"] == "/icons/icon-maskable.png" for icon in manifest["icons"])
 

@@ -6,11 +6,11 @@
   <meta name="theme-color" content="#13201d">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Mission Canvas">
+  <meta name="apple-mobile-web-app-title" content="Still I Rise">
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
-  <title>Mission Canvas</title>
+  <title>Still I Rise</title>
   <style>
     * { box-sizing: border-box; }
     :root {
@@ -52,6 +52,8 @@
       background: var(--ink);
       color: var(--paper);
       font-weight: 800;
+      font-size: 12px;
+      letter-spacing: 0.5px;
     }
     h1 { margin: 0; font-size: 18px; line-height: 1.15; }
     .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
@@ -109,6 +111,102 @@
       padding: 0 12px;
       font-weight: 700;
     }
+    .provider-bar {
+      padding: 10px 18px;
+      border-bottom: 1px solid var(--line);
+      background: var(--paper);
+    }
+    .provider-summary {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .provider-summary .dot { flex: 0 0 auto; }
+    .provider-summary span.label { font-size: 13px; color: var(--muted); flex: 1 1 auto; min-width: 160px; }
+    .provider-summary button {
+      min-height: 34px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--field);
+      color: var(--ink);
+      padding: 0 12px;
+      font-weight: 700;
+      font-size: 12px;
+    }
+    .provider-panel { display: none; margin-top: 12px; }
+    .provider-panel.open { display: block; }
+    .provider-explainer { font-size: 12.5px; color: var(--muted); line-height: 1.5; margin: 0 0 12px; }
+    .provider-form { display: grid; grid-template-columns: 130px minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+    .provider-form button {
+      border: 0;
+      border-radius: 8px;
+      background: var(--ink);
+      color: var(--paper);
+      padding: 0 16px;
+      font-weight: 800;
+      font-size: 13px;
+    }
+    .provider-msg { font-size: 12.5px; margin-top: 8px; }
+    .provider-msg.error { color: var(--accent); }
+    .provider-msg.ok { color: var(--green); }
+    .provider-disconnect {
+      margin-top: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--paper);
+      color: var(--muted);
+      padding: 6px 12px;
+      font-size: 12px;
+      min-height: 34px;
+    }
+    .ollama-warning {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      padding: 10px 18px;
+      border-bottom: 1px solid var(--line);
+      background: #fdece8;
+      color: var(--ink);
+      font-size: 13px;
+    }
+    .ollama-warning-actions { display: flex; gap: 8px; }
+    .ollama-warning-actions button {
+      min-height: 38px;
+      border: 1px solid #e0a99f;
+      border-radius: 8px;
+      background: var(--paper);
+      color: var(--ink);
+      padding: 0 12px;
+      font-weight: 700;
+      font-size: 12.5px;
+    }
+    .upload-bar {
+      padding: 10px 18px;
+      border-bottom: 1px solid var(--line);
+      background: var(--paper);
+    }
+    .upload-drop {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 44px;
+      border: 1.5px dashed var(--line);
+      border-radius: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      cursor: pointer;
+      padding: 8px 12px;
+      text-align: center;
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+    }
+    .upload-drop.dragover { border-color: var(--blue); background: #eaf3f6; color: var(--ink); }
+    .upload-drop.uploading { border-color: var(--blue); color: var(--blue); }
+    .upload-drop.processing { border-color: #a67a29; color: #a67a29; }
+    .upload-drop.done { border-color: var(--green); color: var(--green); }
+    .upload-drop.error { border-color: var(--accent); color: var(--accent); }
     .pipeline {
       display: flex;
       gap: 6px;
@@ -191,16 +289,16 @@
 <body>
   <div class="app">
     <header>
-      <div class="mark">MC</div>
+      <div class="mark">SIR</div>
       <div>
-        <h1>Mission Canvas</h1>
-        <div class="sub">Governed agent workbench</div>
+        <h1>Still I Rise</h1>
+        <div class="sub">AI education for refugee children</div>
       </div>
       <div id="status" class="status"><span class="dot"></span><span>connecting</span></div>
     </header>
 
     <div id="install" class="install">
-      <span>Install Mission Canvas for fast access and offline queueing.</span>
+      <span>Install Still I Rise for fast access and offline queueing — click the install icon in your browser's address bar to add this as an app.</span>
       <button id="install-btn" type="button">Install</button>
     </div>
 
@@ -210,6 +308,43 @@
         <button id="replay-btn" type="button">Send now</button>
         <button id="clear-queue-btn" type="button">Clear</button>
       </div>
+    </div>
+
+    <div id="ollama-warning" class="ollama-warning">
+      <span id="ollama-warning-text">Local mode isn't reachable right now — it looks like Ollama isn't running.</span>
+      <div class="ollama-warning-actions">
+        <button id="ollama-start-btn" type="button">Start Ollama</button>
+        <button id="ollama-connect-btn" type="button">Connect a provider instead</button>
+      </div>
+    </div>
+
+    <div class="provider-bar">
+      <div class="provider-summary">
+        <span class="dot" id="provider-dot"></span>
+        <span class="label" id="provider-label">Checking model connection...</span>
+        <button id="provider-toggle-btn" type="button">Change</button>
+      </div>
+      <div id="provider-panel" class="provider-panel">
+        <p class="provider-explainer">This runs on your own device by default — nothing you type leaves this computer. If you'd like faster or smarter answers, you can connect your own account with a provider like OpenAI or Groq. Even then, your personal privacy guard automatically removes names and other identifying details before anything is sent, and a digital firewall only ever allows connections to that provider's own official servers — nothing else.</p>
+        <form id="provider-form" class="provider-form">
+          <select id="provider-select" aria-label="Provider">
+            <option value="openai">OpenAI</option>
+            <option value="groq">Groq</option>
+            <option value="mistral">Mistral</option>
+          </select>
+          <input id="provider-key-input" type="password" autocomplete="off" placeholder="API key" aria-label="API key">
+          <button id="provider-connect-btn" type="submit">Connect</button>
+        </form>
+        <button id="provider-disconnect-btn" class="provider-disconnect" type="button">Disconnect / go back to local-only</button>
+        <div id="provider-msg" class="provider-msg"></div>
+      </div>
+    </div>
+
+    <div class="upload-bar">
+      <div id="upload-drop" class="upload-drop" tabindex="0" role="button" aria-label="Upload a curriculum PDF">
+        <span id="upload-label">Drop a curriculum PDF here, or click to choose a file</span>
+      </div>
+      <input id="upload-input" type="file" accept="application/pdf,.pdf" hidden>
     </div>
 
     <nav class="pipeline" id="pipeline" aria-label="Pipeline steps">
@@ -244,7 +379,7 @@
         <option value="DIAGNOSE">diagnose</option>
         <option value="REFLECT">reflect</option>
       </select>
-      <input id="query-input" autocomplete="off" placeholder="Ask Mission Canvas..." autofocus>
+      <input id="query-input" autocomplete="off" placeholder="Ask Still I Rise..." autofocus>
       <button id="send-btn" type="submit">Send</button>
     </form>
   </div>
@@ -263,6 +398,10 @@
     const clearQueueBtn = document.getElementById("clear-queue-btn");
     const installEl = document.getElementById("install");
     const installBtn = document.getElementById("install-btn");
+    const uploadInput = document.getElementById("upload-input");
+    const uploadDrop = document.getElementById("upload-drop");
+    const uploadLabel = document.getElementById("upload-label");
+    const DEFAULT_UPLOAD_LABEL = "Drop a curriculum PDF here, or click to choose a file";
     let ws;
     let queryCount = Number(localStorage.getItem("mc.queryCount") || 0);
     let installPrompt = null;
@@ -333,6 +472,196 @@
         sendBtn.disabled = false;
       }
     }
+
+    // Gap 2, SPEC_ONE_CLICK_LOCAL_APP_2026-07-14.md: curriculum PDF upload,
+    // so a teacher never types an `mc ingest` command. Uploading -> Processing
+    // -> Done states via XHR upload-progress events (fetch() can't observe
+    // upload progress, only response arrival).
+    function setUploadState(state, text) {
+      uploadDrop.className = `upload-drop${state ? " " + state : ""}`;
+      uploadLabel.textContent = text;
+    }
+
+    function resetUploadStateSoon(delayMs = 5000) {
+      setTimeout(() => setUploadState("", DEFAULT_UPLOAD_LABEL), delayMs);
+    }
+
+    function uploadFile(file) {
+      if (!file) return;
+      if (!/\.pdf$/i.test(file.name)) {
+        setUploadState("error", "Only PDF files are supported right now.");
+        resetUploadStateSoon();
+        return;
+      }
+      if (file.size > 50 * 1024 * 1024) {
+        setUploadState("error", "This file is too large — the limit is 50MB.");
+        resetUploadStateSoon();
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("doc_type", "curriculum");
+
+      setUploadState("uploading", `Uploading ${file.name}...`);
+
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", "/api/ingest");
+      xhr.upload.onprogress = event => {
+        if (event.lengthComputable) {
+          const pct = Math.round((event.loaded / event.total) * 100);
+          setUploadState("uploading", `Uploading ${file.name}... ${pct}%`);
+        }
+      };
+      xhr.upload.onload = () => setUploadState("processing", `Processing ${file.name}...`);
+      xhr.onload = () => {
+        let data = {};
+        try { data = JSON.parse(xhr.responseText); } catch (error) { /* non-JSON error body */ }
+        if (xhr.status >= 200 && xhr.status < 300 && data.status === "done") {
+          const n = data.chunks_added ?? 0;
+          setUploadState("done", `Done — ingested, ${n} section${n === 1 ? "" : "s"} found.`);
+          addEvent(
+            "system",
+            `Ingested ${data.filename}: ${data.chunks_added} sections (${data.tables} table, ${data.prose} prose), ` +
+            `${data.redactions} redaction(s) applied${data.needs_review ? `, ${data.needs_review} flagged for review` : ""}.`
+          );
+        } else {
+          setUploadState("error", data.error || "This file couldn't be read — try a different PDF.");
+        }
+        resetUploadStateSoon();
+      };
+      xhr.onerror = () => {
+        setUploadState("error", "Upload failed — check your connection and try again.");
+        resetUploadStateSoon();
+      };
+      xhr.send(formData);
+    }
+
+    uploadDrop.addEventListener("click", () => uploadInput.click());
+    uploadDrop.addEventListener("keydown", event => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        uploadInput.click();
+      }
+    });
+    uploadInput.addEventListener("change", () => uploadFile(uploadInput.files[0]));
+    ["dragenter", "dragover"].forEach(evt => uploadDrop.addEventListener(evt, event => {
+      event.preventDefault();
+      uploadDrop.classList.add("dragover");
+    }));
+    uploadDrop.addEventListener("dragleave", () => uploadDrop.classList.remove("dragover"));
+    uploadDrop.addEventListener("drop", event => {
+      event.preventDefault();
+      uploadDrop.classList.remove("dragover");
+      uploadFile(event.dataTransfer?.files?.[0]);
+    });
+
+    // Gap 5a, SPEC_ONE_CLICK_LOCAL_APP_2026-07-14.md: local-vs-external model
+    // choice. Local is the default (nothing to connect); connecting a
+    // provider is opt-in and reversible. The key is never echoed back once
+    // saved (point 7) — after a successful connect we only ever show a
+    // masked placeholder, never the value itself.
+    const ollamaWarning = document.getElementById("ollama-warning");
+    const ollamaConnectBtn = document.getElementById("ollama-connect-btn");
+    const ollamaStartBtn = document.getElementById("ollama-start-btn");
+    const providerDot = document.getElementById("provider-dot");
+    const providerLabel = document.getElementById("provider-label");
+    const providerToggleBtn = document.getElementById("provider-toggle-btn");
+    const providerPanel = document.getElementById("provider-panel");
+    const providerForm = document.getElementById("provider-form");
+    const providerSelect = document.getElementById("provider-select");
+    const providerKeyInput = document.getElementById("provider-key-input");
+    const providerConnectBtn = document.getElementById("provider-connect-btn");
+    const providerDisconnectBtn = document.getElementById("provider-disconnect-btn");
+    const providerMsg = document.getElementById("provider-msg");
+
+    function openProviderPanel() {
+      providerPanel.classList.add("open");
+      providerPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+
+    function setProviderMsg(text, kind) {
+      providerMsg.textContent = text || "";
+      providerMsg.className = `provider-msg${kind ? " " + kind : ""}`;
+    }
+
+    function renderProviderStatus(status) {
+      const connected = !!status.connected;
+      providerDot.className = `dot${connected ? " online" : ""}`;
+      providerLabel.textContent = connected
+        ? `Connected to ${status.provider}${status.model ? ` (${status.model})` : ""}`
+        : "Local — nothing you type leaves this computer";
+      providerDisconnectBtn.style.display = connected ? "inline-block" : "none";
+      providerKeyInput.placeholder = connected ? "Key saved — enter a new key to change it" : "API key";
+      providerKeyInput.value = "";
+      if (connected) providerSelect.value = status.provider;
+
+      const showOllamaWarning = !connected && status.ollama_reachable === false;
+      ollamaWarning.style.display = showOllamaWarning ? "flex" : "none";
+    }
+
+    function fetchProviderStatus() {
+      return fetch("/api/provider")
+        .then(r => r.json())
+        .then(renderProviderStatus)
+        .catch(() => {
+          providerLabel.textContent = "Model connection status unavailable.";
+        });
+    }
+
+    providerToggleBtn.addEventListener("click", () => {
+      providerPanel.classList.toggle("open");
+    });
+    ollamaConnectBtn.addEventListener("click", () => {
+      ollamaWarning.style.display = "none";
+      openProviderPanel();
+    });
+    ollamaStartBtn.addEventListener("click", () => {
+      addEvent("system", "Start Ollama, then reload this page: open a terminal and run \"ollama serve\", or restart the Still I Rise app from your desktop icon.");
+    });
+
+    providerForm.addEventListener("submit", async event => {
+      event.preventDefault();
+      const provider = providerSelect.value;
+      const api_key = providerKeyInput.value.trim();
+      if (!api_key) {
+        setProviderMsg("Enter an API key first.", "error");
+        return;
+      }
+      providerConnectBtn.disabled = true;
+      setProviderMsg("Checking key...");
+      try {
+        const response = await fetch("/api/provider/connect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ provider, api_key })
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          setProviderMsg(data.error || "This key didn't work — check it and try again.", "error");
+        } else {
+          setProviderMsg(data.message, data.status === "connected" ? "ok" : "error");
+          await fetchProviderStatus();
+        }
+      } catch (error) {
+        setProviderMsg("Couldn't reach Still I Rise to save this — check your connection and try again.", "error");
+      } finally {
+        providerConnectBtn.disabled = false;
+      }
+    });
+
+    providerDisconnectBtn.addEventListener("click", async () => {
+      providerDisconnectBtn.disabled = true;
+      try {
+        await fetch("/api/provider/disconnect", { method: "POST" });
+        setProviderMsg("Disconnected — back to local-only.", "ok");
+        await fetchProviderStatus();
+      } finally {
+        providerDisconnectBtn.disabled = false;
+      }
+    });
+
+    fetchProviderStatus();
 
     function connectWs() {
       const proto = location.protocol === "https:" ? "wss" : "ws";
@@ -428,7 +757,7 @@
       document.getElementById("nodes").textContent = data.ontology_nodes ?? "-";
       document.getElementById("knowledge").textContent = data.knowledge_entries ?? "-";
       document.getElementById("paths").textContent = data.path_records ?? "-";
-      addEvent("system", `Mission Canvas - ${data.ontology_nodes} nodes, ${data.knowledge_entries} knowledge entries, ${data.path_records} paths`);
+      addEvent("system", `Still I Rise - ${data.ontology_nodes} nodes, ${data.knowledge_entries} knowledge entries, ${data.path_records} paths`);
     }).catch(() => addEvent("system", "Stats unavailable while offline."));
   </script>
 </body>

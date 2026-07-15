@@ -69,9 +69,133 @@ pull_ollama() {
   fi
 }
 
+# Gap 2b, SPEC_ONE_CLICK_LOCAL_APP_2026-07-14.md: a native launcher so
+# restarting after a reboot/crash never requires a terminal either — only
+# this initial `curl | sh` does. Idempotent: checks port 7896 for an
+# already-running Still I Rise before starting a second instance, and
+# tells the user plainly (not silently) if something ELSE is holding the
+# port. Written once per install; safe to re-run.
+install_native_launcher() {
+  mkdir -p "${HOME}/.local/bin" "${HOME}/.still-i-rise"
+  cat > "${HOME}/.local/bin/sir-launch" << 'LAUNCHEOF'
+#!/bin/sh
+# Still I Rise — native launcher (Gap 2b). Double-clickable via a desktop
+# icon; never opens a terminal for the user. Checks whether port 7896 is
+# already serving Still I Rise before starting a second instance.
+PORT=7896
+HEALTH_URL="http://127.0.0.1:${PORT}/api/health"
+UI_URL="http://127.0.0.1:${PORT}"
+LOG="${HOME}/.still-i-rise/launch.log"
+mkdir -p "${HOME}/.still-i-rise"
+
+open_browser() {
+  if command -v xdg-open >/dev/null 2>&1; then xdg-open "$UI_URL" >/dev/null 2>&1 &
+  elif command -v open >/dev/null 2>&1; then open "$UI_URL" >/dev/null 2>&1 &
+  fi
+}
+
+notify() {
+  echo "$(date): $1" >> "$LOG"
+  if command -v notify-send >/dev/null 2>&1; then notify-send "Still I Rise" "$1" >/dev/null 2>&1 || true; fi
+  if command -v osascript >/dev/null 2>&1; then osascript -e "display notification \"$1\" with title \"Still I Rise\"" >/dev/null 2>&1 || true; fi
+}
+
+# Already running (ours)? Just open the browser to it — don't start a
+# second server instance.
+RESPONSE=$(curl -fsS --max-time 2 "$HEALTH_URL" 2>/dev/null || echo "")
+if [ -n "$RESPONSE" ]; then
+  case "$RESPONSE" in
+    *'"healthy"'*)
+      notify "Still I Rise is already running — opening your browser."
+      open_browser
+      exit 0
+      ;;
+    *)
+      notify "Port ${PORT} is in use by another program — close it and try again."
+      exit 1
+      ;;
+  esac
+fi
+
+# Nothing answered our health check. If the port is nonetheless occupied
+# by something that doesn't speak it, fail loudly rather than opening a
+# browser tab to the wrong thing.
+if command -v nc >/dev/null 2>&1 && nc -z 127.0.0.1 "$PORT" 2>/dev/null; then
+  notify "Port ${PORT} is in use by another program — close it and try again."
+  exit 1
+fi
+
+# Port is free — start the server.
+if command -v sir >/dev/null 2>&1; then
+  sir serve "$PORT" >/dev/null 2>&1 &
+elif [ -f "${HOME}/.still-i-rise/src/mc_cli.py" ]; then
+  ( cd "${HOME}/.still-i-rise" && python3 -m src.web "$PORT" >/dev/null 2>&1 & )
+else
+  notify "Couldn't find the Still I Rise install — try re-running the installer."
+  exit 1
+fi
+
+i=0
+while [ "$i" -lt 30 ]; do
+  if curl -fsS --max-time 2 "$HEALTH_URL" >/dev/null 2>&1; then break; fi
+  i=$((i + 1)); sleep 1
+done
+
+if [ "$i" -lt 30 ]; then
+  open_browser
+else
+  notify "Still I Rise didn't start in time — try again in a moment."
+  exit 1
+fi
+LAUNCHEOF
+  chmod +x "${HOME}/.local/bin/sir-launch"
+
+  case "$OS" in
+    linux)
+      APPS_DIR="${HOME}/.local/share/applications"
+      mkdir -p "$APPS_DIR"
+      cat > "${APPS_DIR}/still-i-rise.desktop" << DESKTOPEOF
+[Desktop Entry]
+Type=Application
+Name=Still I Rise
+Comment=AI education for refugee children
+Exec=${HOME}/.local/bin/sir-launch
+Terminal=false
+Categories=Education;
+DESKTOPEOF
+      chmod +x "${APPS_DIR}/still-i-rise.desktop"
+      echo "  ✓ Desktop launcher installed (search \"Still I Rise\" in your app menu)"
+      ;;
+    darwin)
+      APP_DIR="${HOME}/Applications/Still I Rise.app"
+      mkdir -p "${APP_DIR}/Contents/MacOS"
+      cat > "${APP_DIR}/Contents/MacOS/still-i-rise" << 'APPEOF'
+#!/bin/sh
+exec "$HOME/.local/bin/sir-launch"
+APPEOF
+      chmod +x "${APP_DIR}/Contents/MacOS/still-i-rise"
+      cat > "${APP_DIR}/Contents/Info.plist" << 'PLISTEOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key><string>Still I Rise</string>
+  <key>CFBundleExecutable</key><string>still-i-rise</string>
+  <key>CFBundleIdentifier</key><string>org.lingua-viva.still-i-rise</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>1.0</string>
+</dict>
+</plist>
+PLISTEOF
+      echo "  ✓ App installed to ~/Applications/Still I Rise.app"
+      echo "    (first open: right-click → Open, to clear the Gatekeeper unsigned-app warning)"
+      ;;
+  esac
+}
+
 # ── Try binary install first ──
 BINARY="sir-${PLATFORM}-${ARCH}"
-URL="https://raw.githubusercontent.com/lingua-viva/learning-architecture/main/dist/${BINARY}"
+URL="https://github.com/lingua-viva/learning-architecture/releases/latest/download/${BINARY}"
 echo "  → Downloading binary..."
 TMPFILE=$(mktemp)
 if curl -fsSL "$URL" -o "$TMPFILE" 2>/dev/null && [ -s "$TMPFILE" ]; then
@@ -126,6 +250,8 @@ PROVEOF
       fi
       ;;
   esac
+
+  install_native_launcher
 
   # Auto-start the web server. Launch `sir serve` DIRECTLY (not `sir start`) —
   # a frozen onefile that spawns itself inherits the parent's bundle dir and
@@ -228,6 +354,8 @@ pull_ollama
 # Verify
 echo ""
 python3 "$INSTALL_DIR/src/mc_cli.py" health 2>/dev/null || echo "  (Run 'sir health' to verify)"
+
+install_native_launcher
 
 # Auto-start web server (source mode — src/web.py is on disk)
 echo "  → Starting web server on http://localhost:7896 ..."
