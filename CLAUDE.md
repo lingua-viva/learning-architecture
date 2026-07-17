@@ -1,20 +1,23 @@
 # Learning Architecture — Claude Code Project Instructions
 
 ## What This Is
-Claudia Canu Fautré's professional portfolio of educational design frameworks, case studies, and methods — powered by Mission Canvas, a governed agent OS.
+Lingua Viva / Learning Architecture is Claudia Canu Fautré's education-product repository for curriculum architecture, teacher workflows, local app tooling, and publication-safe professional materials.
 
 ## Architecture
 
 This repo has two layers:
 
-### 1. Portfolio Layer (Claudia's education work)
+### 1. Curriculum And Portfolio Layer
 - `case-studies/` — 3 case studies with maturity labels
 - `methods/` — 2 validated methods (AI workflow, assessment)
 - `resume-cv/` — Professional CV
 - `publication-policy.md` — Privacy and transparency rules
+- `curriculum/`, `claims/`, `governance/`, `artifacts/` — Lingua Viva source tracking and publication-safety materials
 
-### 2. Engine Layer (Mission Canvas)
-- `src/` — Python runtime (governed pipeline, gateway, integrity)
+### 2. Lingua Viva Runtime Layer
+- `src/lingua_viva/` — Native local-first runtime, Doctor/app bridge, reasoning, config, privacy, and ingest helpers
+- `src/education/` — Teacher-facing education product code
+- `doctor/` — Local Doctor/support-loop checks
 - `ontology/` — 137-node classification system
 - `knowledge/` — Evidence-tiered library (148 entries, 526 citations)
 - `lenses/` — Interpretive filters + Claudia's person lens + Malaguzzi voice guide
@@ -23,7 +26,8 @@ This repo has two layers:
 - `skills/` — Education skills + morphable capability layer
 - `config/` — Three-tier governance
 - `runtime/` — Node.js message broker + voice hub
-- `tests/` — Gateway, ontology, memory, knowledge, integration
+- `tests/` — Education, app, Doctor, ontology, memory, and knowledge coverage
+- `archive/mc-engine/` — Archived legacy backend modules retained for history
 
 ## Palette Connection
 
@@ -69,7 +73,7 @@ Scopes: case-study, method, resume, engine, lens, skill, meta
 3. **Palette source of truth.** Claudia's profile lives in Palette. This repo is the public-facing portfolio.
 4. **Evidence-based claims only.** If you cite a number, it must be real and defensible.
 5. **Glass-box.** Every design decision should be traceable. No black boxes.
-6. **Engine integrity.** Don't modify `config/core.md` without explicit human approval (Tier 1, immutable).
+6. **Runtime boundary.** Keep Lingua Viva runtime code in `src/lingua_viva/` and education product code in `src/education/`; archived legacy backend machinery should stay archived unless explicitly restored.
 
 ## Running Tests
 ```bash

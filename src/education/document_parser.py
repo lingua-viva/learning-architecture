@@ -23,7 +23,7 @@ semantic chunker is future work if retrieval quality demands it).
 PII gate, and a documented, load-bearing scope restriction:
 This module reuses the exact same Layer 1 (regex PII patterns) and
 Layer 2 (name/address/client-reference patterns) compiled matchers from
-src/gateway/sanitizer.py — single source of truth, not a fork — but does
+src/lingua_viva/privacy.py — single source of truth, not a fork — but does
 NOT apply Sanitizer's Layer 3 behavior (whole-text block-and-blank on
 words like "confidential"). Layer 3 exists because refusing a live
 conversational query outright is safer than leaking; for a multi-page
@@ -60,9 +60,9 @@ from typing import Optional
 
 import pdfplumber
 
-from src.gateway.sanitizer import ADDRESS, CLIENT_REFS, NAME_PREFIXES, PATTERNS
+from src.lingua_viva.privacy import ADDRESS, CLIENT_REFS, NAME_PREFIXES, PATTERNS
 
-# Same word list as Sanitizer's Layer 3 (src/gateway/sanitizer.py
+# Same word list as Sanitizer's Layer 3 (src/lingua_viva/privacy.py
 # BLOCK_SIGNALS) — reused for consistency, but here it flags a chunk for
 # human review instead of blanking it. See module docstring for why.
 REVIEW_SIGNALS = {

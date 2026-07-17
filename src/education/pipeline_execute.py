@@ -205,7 +205,7 @@ class EducationExecutor:
     Each `execute()` call opens and closes its own StudentLensStore SQLite
     connection — same per-call lifecycle already used for
     `document_retriever` elsewhere in this pipeline (see
-    `src/mc_cli.py::_document_retriever`), rather than holding a
+    `src.lingua_viva.ingest.document_retriever`), rather than holding a
     long-lived connection across queries.
     """
 

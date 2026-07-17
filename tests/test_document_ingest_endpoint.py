@@ -2,8 +2,8 @@
 Document Ingest Endpoint Tests — Gap 2, SPEC_ONE_CLICK_LOCAL_APP_2026-07-14.md.
 
 Exercises POST /api/ingest, the browser-facing replacement for
-`mc ingest <path.pdf> --type=...` — the one real CLI dependency a teacher
-would otherwise have hit. Thin-wraps src/mc_cli.py's ingest_document(), so
+`lv ingest <path.pdf> --type=...` — the one real CLI dependency a teacher
+would otherwise have hit. Thin-wraps src.lingua_viva.ingest.ingest_document(), so
 this file focuses on the route-level contract (PDF-only, 50MB cap,
 temp-file lifecycle, no client-supplied filesystem paths, friendly errors)
 rather than re-testing parse/redact/store behavior already covered by
@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from fastapi.testclient import TestClient
 
-import src.mc_cli as mc_cli
+import src.lingua_viva.ingest as lv_ingest
 import src.web as web
 
 client = TestClient(web.app)
@@ -29,7 +29,7 @@ FIXTURE = Path(__file__).parent / "fixtures" / "sample_myp_guide.pdf"
 
 
 def test_ingest_endpoint_accepts_pdf_and_stores_chunks(tmp_path, monkeypatch):
-    monkeypatch.setattr(mc_cli, "DOCUMENT_STORE_PATH", tmp_path / "documents.db")
+    monkeypatch.setattr(lv_ingest, "DOCUMENT_STORE_PATH", tmp_path / "documents.db")
 
     with open(FIXTURE, "rb") as f:
         response = client.post(
@@ -47,7 +47,7 @@ def test_ingest_endpoint_accepts_pdf_and_stores_chunks(tmp_path, monkeypatch):
 
 
 def test_ingest_endpoint_never_leaves_a_temp_file_behind(tmp_path, monkeypatch):
-    monkeypatch.setattr(mc_cli, "DOCUMENT_STORE_PATH", tmp_path / "documents.db")
+    monkeypatch.setattr(lv_ingest, "DOCUMENT_STORE_PATH", tmp_path / "documents.db")
 
     with open(FIXTURE, "rb") as f:
         client.post(
@@ -101,7 +101,7 @@ def test_ingest_endpoint_rejects_oversized_file(monkeypatch):
 
 
 def test_ingest_endpoint_gives_friendly_error_on_corrupt_pdf(tmp_path, monkeypatch):
-    monkeypatch.setattr(mc_cli, "DOCUMENT_STORE_PATH", tmp_path / "documents.db")
+    monkeypatch.setattr(lv_ingest, "DOCUMENT_STORE_PATH", tmp_path / "documents.db")
 
     response = client.post(
         "/api/ingest",
@@ -116,7 +116,7 @@ def test_ingest_endpoint_never_trusts_a_client_supplied_path(tmp_path, monkeypat
     """The uploaded filename must never be used as a real filesystem path —
     only its suffix is inspected, and the bytes are written to a
     server-chosen tempfile.mkstemp() path."""
-    monkeypatch.setattr(mc_cli, "DOCUMENT_STORE_PATH", tmp_path / "documents.db")
+    monkeypatch.setattr(lv_ingest, "DOCUMENT_STORE_PATH", tmp_path / "documents.db")
 
     traversal_name = "../../../../tmp/should-not-exist-here.pdf"
     with open(FIXTURE, "rb") as f:

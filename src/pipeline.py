@@ -40,12 +40,51 @@ from memory.store import MemoryStore
 from memory.schema import PathRecord
 from knowledge import KnowledgeStore
 from src.context_builder import ContextBuilder
-from src.gates.entry import EntryGate
 from lenses import LensEngine
-from src.gates.exit import ExitGate
 from ontology.proposals.candidate import CandidateStore
 from ontology.learned_weights import LearnedWeights
-from src.integrity_gate import IntegrityGate
+
+
+@dataclass
+class SensitivityReport:
+    blocked: bool
+    sanitized_query: str
+    entities: list = field(default_factory=list)
+    sensitivity_level: str = "low"
+    domain_hint: str = "general"
+
+
+class EntryGate:
+    """Legacy local-only entry gate stub after MC gate archival."""
+
+    def scan(self, query: str) -> SensitivityReport:
+        return SensitivityReport(blocked=False, sanitized_query=query)
+
+
+class ExitGate:
+    """Legacy no-op exit gate stub after MC gate archival."""
+
+    def activate(self) -> None:
+        return None
+
+    def scan_response(self, content: str, host: str) -> tuple[bool, list[str]]:
+        return True, []
+
+
+@dataclass
+class IntegrityCheckResult:
+    warnings: list[str] = field(default_factory=list)
+
+
+class IntegrityGate:
+    """Legacy no-op integrity gate stub after MC integrity archival."""
+
+    def __init__(self, ontology_nodes: set[str], knowledge_ids: set[str]):
+        self.ontology_nodes = ontology_nodes
+        self.knowledge_ids = knowledge_ids
+
+    def check(self, content: str) -> IntegrityCheckResult:
+        return IntegrityCheckResult()
 
 
 @dataclass
@@ -107,11 +146,7 @@ class GatewayInterface:
     """
 
     def __init__(self):
-        from src.gateway.perplexity import PerplexityGateway
-        self._perplexity = PerplexityGateway()
-        # Unified sanitizer (direct import — same code path as HTTP service)
-        from sanitizer.app import sanitize as _unified_sanitize
-        self._unified_sanitize = _unified_sanitize
+        self.available = False
 
     async def needs_external(
         self,
@@ -123,32 +158,11 @@ class GatewayInterface:
         External research needed if: not blocked AND (confidence below threshold
         OR user explicitly requested research).
         """
-        if classification.blocks_external:
-            return False
-        if not self._perplexity.available:
-            return False
-        # User explicitly asked for research — honor it
-        if user_intent and user_intent.upper() == "RESEARCH":
-            return True
-        # Node's default is research
-        if classification.default_intent == "RESEARCH":
-            return True
-        return local_confidence < 0.85
+        return False
 
     async def sanitize_query(self, query: str, classification: ClassificationResult) -> str:
         """Sanitize via unified service. Context-aware based on classification domain."""
-        context = classification.domain if classification.domain in ("logistics", "medical", "education", "legal") else "general"
-        block_signals = []  # Per-client config passes these in; default = redact only
-        if classification.blocks_external:
-            return ""  # Blocked by ontology — don't even sanitize, just block
-        result = self._unified_sanitize(
-            query, context=context, block_signals=block_signals
-        )
-        if result["blocked"]:
-            return ""
-        # Store reverse_tokens for exit-gate rehydration
-        self._last_reverse_tokens = result.get("reverse_tokens", {})
-        return result["text"]
+        return "" if classification.blocks_external else query
 
     async def query_external(
         self,
@@ -162,28 +176,13 @@ class GatewayInterface:
         The query has already been sanitized. The classification determines
         the model depth and the system prompt targeting.
         """
-        # Determine research depth from intent
-        depth = "fast"
-        if classification.default_intent == "DIAGNOSE":
-            depth = "reasoning"
-        elif classification.default_intent == "DECIDE":
-            depth = "reasoning"
-
-        result = self._perplexity.research(
-            query=query,
-            node_name=classification.name,
-            domain=classification.domain,
-            local_knowledge=knowledge_context,
-            depth=depth,
-        )
-
         return ResearchResult(
-            content=result.content,
-            citations=result.citations,
-            model_used=result.model_used,
-            query_sent=result.query_sent,
-            gaps=result.gaps_identified,
-            contradictions=result.contradictions,
+            content="",
+            citations=[],
+            model_used="none",
+            query_sent=query,
+            gaps=[],
+            contradictions=[],
         )
 
 
@@ -480,7 +479,7 @@ class SynthesisEngine:
 
 class Pipeline:
     """
-    The 8-step governed pipeline. The heart of Mission Canvas.
+    Legacy 8-step pipeline retained until the Lingua Viva native pipeline replaces it.
 
     Usage:
         pipeline = Pipeline()
@@ -910,4 +909,3 @@ class Pipeline:
             external_called=external_called,
             gap_signals=gap_signals,
         )
-

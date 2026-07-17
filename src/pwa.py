@@ -1,4 +1,4 @@
-"""PWA manifest helpers for client-specific Mission Canvas instances."""
+"""PWA manifest helpers for Lingua Viva instances."""
 
 from __future__ import annotations
 

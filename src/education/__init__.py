@@ -2,7 +2,7 @@
 Education domain pack — Still I Rise.
 
 Runtime modules that implement the two Lingua Viva / Still I Rise products
-on top of the Mission Canvas engine:
+inside the Lingua Viva runtime:
 
   Product A: Teacher Observation -> Student Lens Pipeline
   Product B: IB Curriculum -> Differentiated Content Packs

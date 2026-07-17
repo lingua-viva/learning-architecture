@@ -7,7 +7,7 @@ The read side (`_provider_config_path`, `_read_provider_config`,
 is the write side — verify-then-save ("connect") and delete ("disconnect")
 — called from the `/api/provider*` routes in `src/web.py`, but kept
 importable/unit-testable on its own without spinning up FastAPI, same
-separation `mc_cli.ingest_document()` uses for the ingest endpoint.
+separation `src.lingua_viva.ingest.ingest_document()` uses for the ingest endpoint.
 
 Only OpenAI, Groq, and Mistral are offered (Gap 5a point 2): those are the
 only providers `ReasoningEngine._resolve_endpoint()` actually implements.

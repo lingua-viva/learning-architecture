@@ -14,11 +14,11 @@ async def run_teacher_query(
     native Lingua Viva ReasoningEngine.
     """
     from src.education.pipeline_execute import EducationExecutor
+    from src.lingua_viva.ingest import document_retriever
     from src.lingua_viva.reasoning import ReasoningEngine
-    from src.mc_cli import _document_retriever
     from src.pipeline import Pipeline
 
-    retriever = _document_retriever()
+    retriever = document_retriever()
     pipeline = Pipeline(
         reasoning=ReasoningEngine(),
         document_retriever=retriever,

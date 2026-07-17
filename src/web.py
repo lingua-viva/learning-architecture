@@ -305,9 +305,9 @@ def _ingest_temp_dir() -> Path:
 @app.post("/api/ingest")
 async def ingest_endpoint(request: Request):
     """
-    Upload a PDF for governed ingestion into the local education document
-    store. Thin-wraps src/mc_cli.py's `ingest_document()` — the identical
-    parse -> PII-redact -> store pipeline `mc ingest` already uses,
+    Upload a PDF for ingestion into the local education document
+    store. Thin-wraps src.lingua_viva.ingest.ingest_document() — the identical
+    parse -> PII-redact -> store flow `lv ingest` uses,
     including the `student-records` hard refusal.
 
     Never trusts a client-supplied filesystem path: only the uploaded
@@ -360,7 +360,7 @@ async def ingest_endpoint(request: Request):
     if not data:
         return JSONResponse({"error": "The uploaded file was empty."}, status_code=400)
 
-    from src.mc_cli import ingest_document
+    from src.lingua_viva.ingest import ingest_document
 
     fd, tmp_path_str = tempfile.mkstemp(suffix=".pdf", dir=_ingest_temp_dir())
     tmp_path = Path(tmp_path_str)
