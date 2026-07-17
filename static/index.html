@@ -770,19 +770,37 @@
       setTitle("Health", "doctor");
       $("content").innerHTML = `<div class="panel"><h2>Running Doctor...</h2></div>`;
       const data = await api("/api/health");
+      const bundleButton = data.status === "OK" ? "" : `<button id="create-bundle" class="primary" type="button">Create Support Bundle</button>`;
       $("content").innerHTML = `
         <div class="view-head"><div><h2>Doctor</h2><p>${escapeHtml(data.summary || "")}</p></div><span class="badge ${data.status === "OK" ? "ok" : "warn"}">${escapeHtml(data.status)}</span></div>
-        <div class="panel"><button type="button">Create Support Bundle</button><div class="list" style="margin-top:14px;">${(data.checks || []).map(check => `<div class="item"><h3>${escapeHtml(check.status)} · ${escapeHtml(check.id)}</h3><p>${escapeHtml(check.message)}</p></div>`).join("")}</div></div>`;
+        <div class="panel">${bundleButton}<div id="bundle-result" style="margin-top:12px;"></div><div class="list" style="margin-top:14px;">${(data.checks || []).map(check => `<div class="item"><h3>${escapeHtml(check.status)} · ${escapeHtml(check.id)}</h3><p>${escapeHtml(check.message)}</p></div>`).join("")}</div></div>`;
+      const button = $("create-bundle");
+      if (button) button.addEventListener("click", createSupportBundle);
     }
 
-    function renderPrivacy() {
+    async function createSupportBundle() {
+      const target = $("bundle-result");
+      target.innerHTML = `<span class="badge">creating local bundle...</span>`;
+      const data = await api("/api/support-bundle", {method: "POST", body: JSON.stringify({})});
+      target.innerHTML = `<div class="item"><h3>Support bundle created</h3><p>${escapeHtml(data.bundle_path)}</p><p>No student data was included. No files were uploaded.</p></div>`;
+    }
+
+    async function renderPrivacy() {
       setTitle("Privacy", "local-first");
+      let publication = {safe_to_claim: [], needs_evidence: [], blocked: [], not_publication_ready: true};
+      try { publication = await api("/api/publication/status"); } catch {}
       $("content").innerHTML = `
         <div class="view-head"><div><h2>Privacy</h2><p>Lingua Viva is built for local teacher work.</p></div><span class="badge ok">all local</span></div>
         <div class="grid three">
           <div class="panel"><h3>No uploads</h3><p>Student observations, lenses, reflections, and parent drafts stay on this machine.</p></div>
           <div class="panel"><h3>No external calls</h3><p>Teacher workflows use local app endpoints and Ollama-only model settings.</p></div>
           <div class="panel"><h3>No student surface</h3><p>Students do not chat with this app. Teachers prepare and decide.</p></div>
+        </div>
+        <div class="panel" style="margin-top:14px;">
+          <h3>Publication Readiness</h3>
+          <div class="source-line"><span class="badge ${publication.not_publication_ready ? "warn" : "ok"}">${publication.not_publication_ready ? "not publication-ready" : "publication-ready"}</span><span class="badge">${publication.claim_count || 0} claims reviewed</span></div>
+          <p>Safe to claim: ${publication.safe_to_claim.length}. Needs evidence: ${publication.needs_evidence.length}. Blocked: ${publication.blocked.length}.</p>
+          <div class="output">${publication.blocked.map(claim => `${claim.id}: ${claim.required_action}`).join("\n") || "No blocked claims reported."}</div>
         </div>`;
     }
 
@@ -809,10 +827,20 @@
       });
     }
 
-    function renderAdmin() {
+    async function renderAdmin() {
       const title = state.view[0].toUpperCase() + state.view.slice(1);
-      setTitle(title, "coordinator placeholder");
-      $("content").innerHTML = `<div class="panel"><h2>${escapeHtml(title)}</h2><p>Coordinator data views are scheduled for Phase 3. Teacher workflows are active in this build.</p></div>`;
+      setTitle(title, state.view === "programme" ? "curriculum overview" : "coordinator placeholder");
+      if (state.view === "programme") {
+        const data = await api("/api/admin/programme");
+        $("content").innerHTML = `<div class="panel"><h2>Programme of Inquiry overview coming soon</h2><p>Current curriculum matrix structure is available from the local curriculum service.</p><div class="list">${data.grade_bands.map(g => `<div class="item"><h3>${escapeHtml(g.grade)}</h3><p>${escapeHtml(g.curriculum_focus)}</p></div>`).join("")}</div></div>`;
+        return;
+      }
+      const copy = {
+        evidence: "Accreditation evidence bundle — requires teacher observation data.",
+        capacity: "Staffing & capacity assessment.",
+        trends: "School-wide anonymized trends — requires accumulated data."
+      }[state.view] || "Coordinator data view.";
+      $("content").innerHTML = `<div class="panel"><h2>${escapeHtml(title)}</h2><p>${escapeHtml(copy)}</p></div>`;
     }
 
     function studentOptions() {

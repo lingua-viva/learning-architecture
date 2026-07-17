@@ -35,10 +35,10 @@ def test_worst_status_orders_privacy_above_blocked():
     assert worst_status(checks) == "PRIVATE_RISK"
 
 
-def test_doctor_returns_phase_a_contract():
+def test_doctor_returns_phase_b_contract():
     result = run_doctor(write_log=False)
     assert result["status"] in {"OK", "WARN", "FIXABLE", "UPDATE_AVAILABLE", "BLOCKED", "PRIVATE_RISK"}
-    assert result["support_bundle_available"] is False
+    assert result["support_bundle_available"] is True
     assert result["external_calls"] is False
     assert isinstance(result["checks"], list)
     assert {check["id"] for check in result["checks"]} >= {

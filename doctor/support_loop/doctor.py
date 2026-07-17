@@ -19,12 +19,12 @@ MANUAL_DOCX = "Manuale_Italiano_Laboratorio_Linguistico_G1-G5.docx"
 REQUIRED_FILES = [
     "README.md",
     MANUAL_DOCX,
-    "LV_PUBLICATION_READINESS_AUDIT_2026-07-16.md",
+    "dev/specs/LV_PUBLICATION_READINESS_AUDIT_2026-07-16.md",
     "artifacts/inventory.yaml",
     "claims/evidence_register.yaml",
     "governance/publication_safety.yaml",
     "curriculum/lingua_viva_matrix.yaml",
-    "dev/lv_artifact_gauntlet.py",
+    "doctor/lv_artifact_gauntlet.py",
     "dev/lv_revision_log.ndjson",
     "dev/lv_deferred_candidates.yaml",
 ]
@@ -77,12 +77,12 @@ FORBIDDEN_README_PATTERNS = [
 
 ACTIVE_SURFACE_FILES = [
     "README.md",
-    "LV_PUBLICATION_READINESS_AUDIT_2026-07-16.md",
+    "dev/specs/LV_PUBLICATION_READINESS_AUDIT_2026-07-16.md",
     "artifacts/inventory.yaml",
     "claims/evidence_register.yaml",
     "governance/publication_safety.yaml",
     "curriculum/lingua_viva_matrix.yaml",
-    "dev/lv_artifact_gauntlet.py",
+    "doctor/lv_artifact_gauntlet.py",
     "dev/lv_support.py",
 ]
 
@@ -200,7 +200,7 @@ def check_revision_log_schema() -> CheckResult:
 
 
 def check_artifact_gauntlet() -> CheckResult:
-    script = LV_ROOT / "dev/lv_artifact_gauntlet.py"
+    script = LV_ROOT / "doctor/lv_artifact_gauntlet.py"
     completed = subprocess.run(["python3", str(script)], cwd=REPO_ROOT, text=True, capture_output=True, check=False)
     output = redact_text("\n".join(part for part in (completed.stdout, completed.stderr) if part).strip())
     if completed.returncode == 0:
@@ -273,8 +273,8 @@ def check_privacy_paths() -> CheckResult:
         if ".lv_support" in rel.parts or "__pycache__" in rel.parts:
             continue
         if matches_private_path(rel):
-            if rel.name == MANUAL_DOCX:
-                expected_exclusions.append(f"{rel}: authoritative manual draft excluded from support output")
+            if rel.suffix.lower() == ".docx":
+                expected_exclusions.append(f"{rel}: docx private/source draft excluded from support output")
             else:
                 risks.append(f"{rel}: private-path pattern")
     if risks:
@@ -339,8 +339,8 @@ def run_doctor(write_log: bool = True) -> dict[str, Any]:
             "Doctor checks paths and metadata only for private-risk files.",
             "Raw student observations, IEPs, parent communications, and .docx contents are not included in output.",
         ],
-        "support_bundle_available": False,
-        "next_steps": ["Support bundle is not implemented in Phase A app flow."],
+        "support_bundle_available": True,
+        "next_steps": ["Use the Health view to create a local redacted support bundle if you need help reviewing these findings."],
         "external_calls": False,
     }
     if write_log:

@@ -413,21 +413,49 @@ async def reflect_note(payload: dict):
 
 @app.get("/api/publication/status")
 async def publication_status():
-    import yaml
+    from src.lingua_viva.publication import PublicationService
 
-    governance_path = LV_ROOT / "governance" / "publication_safety.yaml"
-    claims_path = LV_ROOT / "claims" / "evidence_register.yaml"
-    with governance_path.open(encoding="utf-8") as handle:
-        governance = yaml.safe_load(handle) or {}
-    with claims_path.open(encoding="utf-8") as handle:
-        claims = yaml.safe_load(handle) or {}
-    return {
-        "status": governance.get("status"),
-        "release_checklist": governance.get("release_checklist", []),
-        "privacy_rules": governance.get("privacy_rules", {}),
-        "claim_count": len(claims.get("claims", [])),
-        "claims": claims.get("claims", []),
-    }
+    return await asyncio.to_thread(PublicationService().get_status)
+
+
+@app.post("/api/support-bundle")
+async def support_bundle():
+    from src.lingua_viva.support_bundle import SupportBundleService
+
+    try:
+        return await asyncio.to_thread(SupportBundleService().create_bundle)
+    except Exception as exc:
+        return JSONResponse(
+            {
+                "status": "ERROR",
+                "error": str(exc),
+                "summary": "I could not create the support bundle safely. No files were uploaded.",
+                "external_calls": False,
+            },
+            status_code=500,
+        )
+
+
+@app.get("/api/admin/programme")
+async def admin_programme():
+    from src.lingua_viva.curriculum import CurriculumService
+
+    return await asyncio.to_thread(CurriculumService().get_overview)
+
+
+@app.get("/api/admin/evidence")
+async def admin_evidence():
+    return {"status": "not_yet_implemented"}
+
+
+@app.get("/api/admin/capacity")
+async def admin_capacity():
+    return {"status": "not_yet_implemented"}
+
+
+@app.get("/api/admin/trends")
+async def admin_trends():
+    return {"status": "not_yet_implemented"}
 
 
 @app.get("/api/stats")

@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 REQUIRED_FILES = [
     "README.md",
     "Manuale_Italiano_Laboratorio_Linguistico_G1-G5.docx",
-    "LV_PUBLICATION_READINESS_AUDIT_2026-07-16.md",
+    "dev/specs/LV_PUBLICATION_READINESS_AUDIT_2026-07-16.md",
     "artifacts/inventory.yaml",
     "claims/evidence_register.yaml",
     "governance/publication_safety.yaml",

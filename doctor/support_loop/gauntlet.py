@@ -11,7 +11,7 @@ from .schemas import CheckResult
 
 
 def run_artifact_gauntlet() -> CheckResult:
-    script = DEV_ROOT / "lv_artifact_gauntlet.py"
+    script = LV_ROOT / "doctor/lv_artifact_gauntlet.py"
     if not script.exists():
         return CheckResult("artifact_gauntlet", "FIXABLE", "Lingua Viva artifact gauntlet is missing.", str(script), "create_required_dirs")
     completed = subprocess.run(["python3", str(script)], cwd=LV_ROOT, text=True, capture_output=True, check=False)

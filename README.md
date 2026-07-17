@@ -44,7 +44,7 @@ An institutional proposal for using AI to strengthen continuity — preserving a
 ### [03 — Lingua Viva](case-studies/03-lingua-viva/)
 **`designed`**
 
-A K-5 Italian language programme guide integrating four frameworks — Italy's Indicazioni Ministeriali, CEFR A1→B1 progression, IB PYP inquiry, and Reggio-inspired multimodality — into a single manual with learning goals, activities, assessment rubrics, and a student portfolio system. Part of a 3-year strategic initiative currently in the design and pilot phase.
+A K-5 Italian language programme guide designed to integrate four frameworks — Italy's Indicazioni Ministeriali, CEFR A1→B1 progression, IB PYP inquiry, and Reggio-inspired multimodality — into a single manual with learning goals, activities, assessment rubrics, and a student portfolio system. Part of a 3-year strategic initiative currently in the design and pilot phase.
 
 ---
 
@@ -58,7 +58,7 @@ How I actually use ChatGPT and Claude in my teaching practice — real prompts, 
 ### [Assessment Philosophy](methods/assessment-philosophy.md)
 **`validated` — 93% improvement measured against national norms**
 
-How I design assessment systems that track real learning, not just completion. CEFR language progression (A1-B1), Prove MT national benchmarking, and the principle that every instructional decision should be traceable to evidence.
+Assessment coherence: how I design assessment systems that track real learning, not just completion. CEFR language progression (A1-B1), Prove MT national benchmarking, and the principle that every instructional decision should be traceable to evidence.
 
 ---
 

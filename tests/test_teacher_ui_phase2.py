@@ -18,5 +18,7 @@ def test_teacher_sidebar_contract():
     assert "/api/prepare/activity" in html
     assert "/api/observe/capture" in html
     assert "/api/parents/recommendation" in html
+    assert "/api/support-bundle" in html
+    assert "/api/admin/programme" in html
     assert "Review before sending. No AI attribution in final message." in html
     assert "No external calls" in html
