@@ -403,7 +403,7 @@
     const uploadLabel = document.getElementById("upload-label");
     const DEFAULT_UPLOAD_LABEL = "Drop a curriculum PDF here, or click to choose a file";
     let ws;
-    let queryCount = Number(localStorage.getItem("mc.queryCount") || 0);
+    let queryCount = Number(localStorage.getItem("lv.queryCount") || 0);
     let installPrompt = null;
     const arrivedAt = Date.now();
 
@@ -457,7 +457,7 @@
       input.value = "";
       sendBtn.disabled = true;
       queryCount += 1;
-      localStorage.setItem("mc.queryCount", String(queryCount));
+      localStorage.setItem("lv.queryCount", String(queryCount));
       maybeShowInstall();
 
       try {
@@ -715,11 +715,11 @@
 
     window.addEventListener("online", () => {
       setStatus("connected", true);
-      navigator.serviceWorker.controller?.postMessage({ type: "MC_ONLINE" });
+      navigator.serviceWorker.controller?.postMessage({ type: "LV_ONLINE" });
     });
     window.addEventListener("offline", () => setStatus("offline", false));
-    replayBtn.addEventListener("click", () => navigator.serviceWorker.controller?.postMessage({ type: "MC_REPLAY_NOW" }));
-    clearQueueBtn.addEventListener("click", () => navigator.serviceWorker.controller?.postMessage({ type: "MC_CLEAR_QUEUE" }));
+    replayBtn.addEventListener("click", () => navigator.serviceWorker.controller?.postMessage({ type: "LV_REPLAY_NOW" }));
+    clearQueueBtn.addEventListener("click", () => navigator.serviceWorker.controller?.postMessage({ type: "LV_CLEAR_QUEUE" }));
     document.getElementById("query-form").addEventListener("submit", sendQuery);
     input.addEventListener("keydown", event => {
       if ((event.ctrlKey || event.metaKey) && event.key === "Enter") sendQuery(event);
@@ -727,15 +727,15 @@
 
     navigator.serviceWorker?.addEventListener("message", event => {
       const data = event.data || {};
-      if (data.type === "MC_QUEUED") setQueueCount(data.count);
-      if (data.type === "MC_REPLAY_START") addEvent("system", `Sending ${data.count} queued quer${data.count === 1 ? "y" : "ies"} through governance.`);
-      if (data.type === "MC_REPLAYED") {
+      if (data.type === "LV_QUEUED") setQueueCount(data.count);
+      if (data.type === "LV_REPLAY_START") addEvent("system", `Sending ${data.count} queued quer${data.count === 1 ? "y" : "ies"} through the privacy guard.`);
+      if (data.type === "LV_REPLAYED") {
         setQueueCount(data.remaining);
         handleResult(data.response, true);
       }
-      if (data.type === "MC_REPLAY_PAUSED") addEvent("queued", `Replay paused. ${data.remaining} still queued.`, "Connection not ready");
-      if (data.type === "MC_QUEUE_STATUS") setQueueCount(data.count);
-      if (data.type === "MC_QUEUE_CLEARED") {
+      if (data.type === "LV_REPLAY_PAUSED") addEvent("queued", `Replay paused. ${data.remaining} still queued.`, "Connection not ready");
+      if (data.type === "LV_QUEUE_STATUS") setQueueCount(data.count);
+      if (data.type === "LV_QUEUE_CLEARED") {
         setQueueCount(0);
         addEvent("system", "Offline queue cleared.");
       }
@@ -743,7 +743,7 @@
 
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").then(() => {
-        navigator.serviceWorker.controller?.postMessage({ type: "MC_QUEUE_STATUS" });
+        navigator.serviceWorker.controller?.postMessage({ type: "LV_QUEUE_STATUS" });
       }).catch(error => addEvent("error", `Service worker failed: ${error}`));
     }
 

@@ -30,8 +30,8 @@ def test_index_registers_service_worker_and_manifest():
 def test_service_worker_queues_governed_query_endpoint():
     sw = (ROOT / "static" / "sw.js").read_text()
     assert 'url.pathname === "/api/query"' in sw
-    assert "mc-replay-queue" in sw
+    assert "lv-replay-queue" in sw
     assert 'fetch("/api/query"' in sw
     assert "/icons/icon-maskable.png" in sw
-    assert "MC_REPLAY_NOW" in sw
-    assert "MC_CLEAR_QUEUE" in sw
+    assert "LV_REPLAY_NOW" in sw
+    assert "LV_CLEAR_QUEUE" in sw

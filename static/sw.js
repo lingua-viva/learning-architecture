@@ -1,5 +1,5 @@
-const CACHE_NAME = "mc-pwa-v3";
-const DB_NAME = "mc-offline";
+const CACHE_NAME = "lv-pwa-v1";
+const DB_NAME = "lv-offline";
 const QUEUE_STORE = "queue";
 const STATIC_ASSETS = [
   "/",
@@ -50,23 +50,23 @@ self.addEventListener("fetch", event => {
 });
 
 self.addEventListener("sync", event => {
-  if (event.tag === "mc-replay-queue") {
+  if (event.tag === "lv-replay-queue") {
     event.waitUntil(replayQueue());
   }
 });
 
 self.addEventListener("message", event => {
-  if (event.data && event.data.type === "MC_ONLINE") {
+  if (event.data && event.data.type === "LV_ONLINE") {
     event.waitUntil(replayQueue());
   }
-  if (event.data && event.data.type === "MC_QUEUE_STATUS") {
-    event.waitUntil(queueSize().then(count => event.source?.postMessage({ type: "MC_QUEUE_STATUS", count })));
+  if (event.data && event.data.type === "LV_QUEUE_STATUS") {
+    event.waitUntil(queueSize().then(count => event.source?.postMessage({ type: "LV_QUEUE_STATUS", count })));
   }
-  if (event.data && event.data.type === "MC_REPLAY_NOW") {
+  if (event.data && event.data.type === "LV_REPLAY_NOW") {
     event.waitUntil(replayQueue());
   }
-  if (event.data && event.data.type === "MC_CLEAR_QUEUE") {
-    event.waitUntil(clearQueued().then(() => notifyClients({ type: "MC_QUEUE_CLEARED", count: 0 })));
+  if (event.data && event.data.type === "LV_CLEAR_QUEUE") {
+    event.waitUntil(clearQueued().then(() => notifyClients({ type: "LV_QUEUE_CLEARED", count: 0 })));
   }
 });
 
@@ -86,7 +86,7 @@ async function networkOrQueue(request) {
     await enqueue(entry);
     await registerReplay();
     const count = await queueSize();
-    notifyClients({ type: "MC_QUEUED", entry, count });
+    notifyClients({ type: "LV_QUEUED", entry, count });
     return jsonResponse({
       type: "queued",
       queued: true,
@@ -104,20 +104,20 @@ function makeId() {
 async function replayQueue() {
   const entries = await allQueued();
   if (!entries.length) return;
-  notifyClients({ type: "MC_REPLAY_START", count: entries.length });
+  notifyClients({ type: "LV_REPLAY_START", count: entries.length });
 
   for (const entry of entries) {
     try {
       const response = await fetch("/api/query", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-MC-Replayed": "1" },
+        headers: { "Content-Type": "application/json", "X-LV-Replayed": "1" },
         body: JSON.stringify(entry.body)
       });
       const payload = await response.json().catch(() => ({}));
       await removeQueued(entry.id);
-      notifyClients({ type: "MC_REPLAYED", entry, response: payload, remaining: await queueSize() });
+      notifyClients({ type: "LV_REPLAYED", entry, response: payload, remaining: await queueSize() });
     } catch (error) {
-      notifyClients({ type: "MC_REPLAY_PAUSED", error: String(error), remaining: await queueSize() });
+      notifyClients({ type: "LV_REPLAY_PAUSED", error: String(error), remaining: await queueSize() });
       return;
     }
   }
@@ -146,7 +146,7 @@ async function networkFirst(request) {
 function jsonResponse(payload, status = 200) {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: { "Content-Type": "application/json", "X-MC-Offline-Queue": "1" }
+    headers: { "Content-Type": "application/json", "X-LV-Offline-Queue": "1" }
   });
 }
 
@@ -230,6 +230,6 @@ function stripPiiFromBody(body) {
 
 async function registerReplay() {
   if ("sync" in self.registration) {
-    await self.registration.sync.register("mc-replay-queue");
+    await self.registration.sync.register("lv-replay-queue");
   }
 }
