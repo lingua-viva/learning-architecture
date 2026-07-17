@@ -111,7 +111,7 @@ class ContextBuilder:
             return text
 
         # Fallback: minimal prompt
-        fallback = f"You are in {intent} mode within Mission Canvas."
+        fallback = f"You are in {intent} mode within Lingua Viva."
         self._prompt_cache[intent] = fallback
         return fallback
 

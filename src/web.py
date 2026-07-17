@@ -1,16 +1,16 @@
 """
-Mission Canvas — Web Surface (Dual Surface Architecture)
+Lingua Viva — Web Surface
 
 Embedded web server that syncs with the CLI through a shared session.
-Both surfaces see the same pipeline events in real-time.
+Both surfaces see the same app events in real-time.
 
 Architecture:
-    MC Process (single Python)
+    Lingua Viva Process (single Python)
     ├── CLI Loop (stdin/stdout)
     ├── Session (shared state)
     └── FastAPI + WebSocket Server (localhost:7896)
 
-Start: automatically launched as daemon thread when mc session starts.
+Start: automatically launched as a local teacher app server.
 """
 
 from __future__ import annotations
@@ -28,13 +28,13 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 import uvicorn
 from urllib.parse import urlencode
 
-MC_ROOT = Path(__file__).parent.parent
+LV_ROOT = Path(__file__).parent.parent
 
-app = FastAPI(title="Mission Canvas", docs_url=None, redoc_url=None)
+app = FastAPI(title="Lingua Viva", docs_url=None, redoc_url=None)
 
 
 class SessionBroadcaster:
-    """Manages WebSocket connections and broadcasts pipeline events."""
+    """Manages WebSocket connections and broadcasts app events."""
 
     def __init__(self):
         self.connections: list[WebSocket] = []
@@ -77,11 +77,11 @@ def load_governance_context() -> str:
     """Load steering files into ambient context. Called once per session."""
     parts = []
 
-    manifest_path = MC_ROOT / "MANIFEST.yaml"
+    manifest_path = LV_ROOT / "MANIFEST.yaml"
     if manifest_path.exists():
         parts.append(f"# MANIFEST\n{manifest_path.read_text()[:2000]}")
 
-    core_path = MC_ROOT / "config" / "core.md"
+    core_path = LV_ROOT / "config" / "core.md"
     if core_path.exists():
         parts.append(f"# TIER 1 RULES\n{core_path.read_text()}")
 
@@ -90,7 +90,7 @@ def load_governance_context() -> str:
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    html_path = MC_ROOT / "static" / "index.html"
+    html_path = LV_ROOT / "static" / "index.html"
     if html_path.exists():
         return HTMLResponse(html_path.read_text())
     return HTMLResponse(FALLBACK_HTML)
@@ -120,34 +120,24 @@ async def manifest():
 
 @app.get("/sw.js")
 async def service_worker():
-    return FileResponse(MC_ROOT / "static" / "sw.js", media_type="application/javascript")
+    return FileResponse(LV_ROOT / "static" / "sw.js", media_type="application/javascript")
 
 
 @app.get("/offline.html", response_class=HTMLResponse)
 async def offline_page():
-    return FileResponse(MC_ROOT / "static" / "offline.html", media_type="text/html")
+    return FileResponse(LV_ROOT / "static" / "offline.html", media_type="text/html")
 
 
 @app.get("/icons/{name}")
 async def icon_asset(name: str):
     safe_name = Path(name).name
-    return FileResponse(MC_ROOT / "static" / "icons" / safe_name)
+    return FileResponse(LV_ROOT / "static" / "icons" / safe_name)
 
 
 @app.get("/api/health")
 async def health():
-    try:
-        from src.integrity.health_check import HealthCheck
-        hc = HealthCheck()
-        result = hc.run()
-        return {
-            "healthy": result.healthy,
-            "score": f"{result.score:.0%}",
-            "checks_passed": result.checks_passed,
-            "checks_total": result.checks_total,
-        }
-    except Exception as e:
-        return {"healthy": False, "error": str(e)}
+    from doctor.support_loop.doctor import run_doctor
+    return await asyncio.to_thread(run_doctor)
 
 
 @app.get("/api/stats")
@@ -194,7 +184,7 @@ async def provider_connect(payload: dict):
     Verify a provider API key with a lightweight test call before ever
     saving it (Gap 5a point 3). `provider` must be one of openai/groq
     /mistral — Claude/Gemini aren't implemented in the reasoning call
-    path yet (see src/pipeline.py ReasoningEngine._resolve_endpoint).
+    path yet (see src.lingua_viva.reasoning.ReasoningEngine._resolve_endpoint).
     """
     from src.provider_config import SUPPORTED_PROVIDERS, connect_provider
 
@@ -230,7 +220,7 @@ async def provider_disconnect():
 
 @app.post("/api/query")
 async def query_endpoint(payload: dict):
-    """Run a query through the governed pipeline."""
+    """Run a teacher query through the Lingua Viva app runtime."""
     query_text = payload.get("query", "")
     intent = payload.get("intent")
     eval_mode = payload.get("eval_mode", False)
@@ -251,15 +241,9 @@ async def query_endpoint(payload: dict):
     })
 
     try:
-        from src.mc_cli import _document_retriever
-        from src.education.pipeline_execute import EducationExecutor
+        from src.lingua_viva.app import run_teacher_query
 
-        retriever = _document_retriever()
-        pipeline = Pipeline(
-            document_retriever=retriever,
-            education_executor=EducationExecutor(document_retriever=retriever),
-        )
-        result = await pipeline.run(
+        result = await run_teacher_query(
             query_text,
             intent=intent,
             session_id=session_id,
@@ -313,7 +297,7 @@ def _ingest_temp_dir() -> Path:
     tmp root, so the lifecycle (write, parse, always delete) is easy to
     reason about and to grep for. Lives under the same gitignored `data/`
     tree the document store itself uses."""
-    d = MC_ROOT / "case-studies" / "04-still-i-rise" / "data" / "ingest-tmp"
+    d = LV_ROOT / "case-studies" / "04-still-i-rise" / "data" / "ingest-tmp"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -413,7 +397,7 @@ async def websocket_endpoint(ws: WebSocket):
         while True:
             data = await ws.receive_json()
             if data.get("type") == "query":
-                # Browser sent a query — run through pipeline
+                # Browser sent a query.
                 result = await query_endpoint({
                     "query": data.get("query", ""),
                     "intent": data.get("intent"),
@@ -425,20 +409,8 @@ async def websocket_endpoint(ws: WebSocket):
         broadcaster.disconnect(ws)
 
 
-# Lazy import to avoid circular deps
-Pipeline = None
-
-
-def _ensure_pipeline():
-    global Pipeline
-    if Pipeline is None:
-        from src.pipeline import Pipeline as P
-        Pipeline = P
-
-
 def start_web_server(port: int = 7896):
-    """Start the web server. Called from a daemon thread in mc_cli.py."""
-    _ensure_pipeline()
+    """Start the web server."""
     broadcaster.governance_context = load_governance_context()
     uvicorn.run(app, host="127.0.0.1", port=port, log_level="error")
 
@@ -457,7 +429,7 @@ FALLBACK_HTML = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mission Canvas</title>
+<title>Lingua Viva</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
@@ -496,7 +468,7 @@ FALLBACK_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <header>
-  <h1>Mission Canvas</h1>
+  <h1>Lingua Viva</h1>
   <span class="status" id="status">connecting...</span>
 </header>
 <div class="pipeline-steps" id="pipeline">
@@ -522,7 +494,7 @@ FALLBACK_HTML = """<!DOCTYPE html>
     <option value="DIAGNOSE">diagnose</option>
     <option value="REFLECT">reflect</option>
   </select>
-  <input type="text" id="query-input" placeholder="Ask Mission Canvas..." autofocus>
+  <input type="text" id="query-input" placeholder="Ask Lingua Viva..." autofocus>
   <button id="send-btn" onclick="sendQuery()">Send</button>
 </div>
 <script>
@@ -601,7 +573,7 @@ connect();
 fetch('/api/stats').then(r => r.json()).then(data => {
   const div = document.createElement('div');
   div.className = 'event system';
-  div.textContent = `Mission Canvas — ${data.ontology_nodes} nodes, ${data.knowledge_entries} KL entries, ${data.path_records} paths`;
+  div.textContent = `Lingua Viva — ${data.ontology_nodes} nodes, ${data.knowledge_entries} KL entries, ${data.path_records} paths`;
   output.appendChild(div);
 });
 </script>
