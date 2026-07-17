@@ -1,5 +1,5 @@
 """
-Phase 3 — End-to-end integration test, Still I Rise vertical slice.
+Phase 3 — End-to-end integration test, Lingua Viva vertical slice.
 
 Ties Product A (Slack -> observation capture -> student lens) and
 Product B (IB lesson input -> differentiated content packs -> teacher

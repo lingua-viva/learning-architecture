@@ -1,5 +1,5 @@
 """
-Mission Canvas — Sanitizer Client
+Lingua Viva — Sanitizer Client
 
 Unified client for calling the sanitizer service.
 Used by pipeline, hub, bridges, and any other surface.
@@ -30,7 +30,7 @@ from urllib.error import URLError
 
 logger = logging.getLogger(__name__)
 
-SANITIZER_URL = os.getenv("MC_SANITIZER_URL", "http://localhost:6100")
+SANITIZER_URL = os.getenv("LV_SANITIZER_URL", "http://localhost:6100")
 
 # Cache: is the service reachable?
 _service_checked = False
@@ -94,7 +94,7 @@ def sanitize_text(
         logger.warning("[Sanitizer] Service unreachable: %s", e)
 
         # Re-read DEV_MODE at call time (not import time) for testability
-        dev_mode = os.getenv("MC_DEV_MODE", "1") == "1"
+        dev_mode = os.getenv("LV_DEV_MODE", "1") == "1"
 
         if dev_mode:
             # Dev mode fallback: direct import

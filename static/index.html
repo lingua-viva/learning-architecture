@@ -6,11 +6,11 @@
   <meta name="theme-color" content="#13201d">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Still I Rise">
+  <meta name="apple-mobile-web-app-title" content="Lingua Viva">
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
-  <title>Still I Rise</title>
+  <title>Lingua Viva</title>
   <style>
     * { box-sizing: border-box; }
     :root {
@@ -289,16 +289,16 @@
 <body>
   <div class="app">
     <header>
-      <div class="mark">SIR</div>
+      <div class="mark">LV</div>
       <div>
-        <h1>Still I Rise</h1>
-        <div class="sub">AI education for refugee children</div>
+        <h1>Lingua Viva</h1>
+        <div class="sub">Local-first teacher planning and curriculum support</div>
       </div>
       <div id="status" class="status"><span class="dot"></span><span>connecting</span></div>
     </header>
 
     <div id="install" class="install">
-      <span>Install Still I Rise for fast access and offline queueing — click the install icon in your browser's address bar to add this as an app.</span>
+      <span>Install Lingua Viva for fast access and offline queueing — click the install icon in your browser's address bar to add this as an app.</span>
       <button id="install-btn" type="button">Install</button>
     </div>
 
@@ -379,7 +379,7 @@
         <option value="DIAGNOSE">diagnose</option>
         <option value="REFLECT">reflect</option>
       </select>
-      <input id="query-input" autocomplete="off" placeholder="Ask Still I Rise..." autofocus>
+      <input id="query-input" autocomplete="off" placeholder="Ask Lingua Viva..." autofocus>
       <button id="send-btn" type="submit">Send</button>
     </form>
   </div>
@@ -617,7 +617,7 @@
       openProviderPanel();
     });
     ollamaStartBtn.addEventListener("click", () => {
-      addEvent("system", "Start Ollama, then reload this page: open a terminal and run \"ollama serve\", or restart the Still I Rise app from your desktop icon.");
+      addEvent("system", "Start Ollama, then reload this page: open a terminal and run \"ollama serve\", or restart the Lingua Viva app from your desktop icon.");
     });
 
     providerForm.addEventListener("submit", async event => {
@@ -644,7 +644,7 @@
           await fetchProviderStatus();
         }
       } catch (error) {
-        setProviderMsg("Couldn't reach Still I Rise to save this — check your connection and try again.", "error");
+        setProviderMsg("Couldn't reach Lingua Viva to save this — check your connection and try again.", "error");
       } finally {
         providerConnectBtn.disabled = false;
       }
@@ -757,7 +757,7 @@
       document.getElementById("nodes").textContent = data.ontology_nodes ?? "-";
       document.getElementById("knowledge").textContent = data.knowledge_entries ?? "-";
       document.getElementById("paths").textContent = data.path_records ?? "-";
-      addEvent("system", `Still I Rise - ${data.ontology_nodes} nodes, ${data.knowledge_entries} knowledge entries, ${data.path_records} paths`);
+      addEvent("system", `Lingua Viva - ${data.ontology_nodes} nodes, ${data.knowledge_entries} knowledge entries, ${data.path_records} paths`);
     }).catch(() => addEvent("system", "Stats unavailable while offline."));
   </script>
 </body>

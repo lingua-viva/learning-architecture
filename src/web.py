@@ -8,7 +8,7 @@ Architecture:
     Lingua Viva Process (single Python)
     ├── CLI Loop (stdin/stdout)
     ├── Session (shared state)
-    └── FastAPI + WebSocket Server (localhost:7896)
+    └── FastAPI + WebSocket Server (localhost:8787)
 
 Start: automatically launched as a local teacher app server.
 """
@@ -29,6 +29,8 @@ import uvicorn
 from urllib.parse import urlencode
 
 LV_ROOT = Path(__file__).parent.parent
+if str(LV_ROOT) not in sys.path:
+    sys.path.insert(0, str(LV_ROOT))
 
 app = FastAPI(title="Lingua Viva", docs_url=None, redoc_url=None)
 
@@ -409,18 +411,18 @@ async def websocket_endpoint(ws: WebSocket):
         broadcaster.disconnect(ws)
 
 
-def start_web_server(port: int = 7896):
+def start_web_server(port: int = 8787):
     """Start the web server."""
     broadcaster.governance_context = load_governance_context()
     uvicorn.run(app, host="127.0.0.1", port=port, log_level="error")
 
 
 if __name__ == "__main__":
-    # Standalone/detached launch — e.g. `python3 -m src.web 7893 &` from an
+    # Standalone/detached launch — e.g. `python3 -m src.web 8787 &` from an
     # installer. Mirrors src/api_server.py's own __main__ pattern; without
-    # this, start_web_server() could only ever run as a daemon thread inside
-    # `mc session start`'s foreground process, which dies with its parent.
-    _port = int(sys.argv[1]) if len(sys.argv) > 1 else 7896
+    # this, start_web_server() can only ever run as a daemon thread inside
+    # another foreground process, which dies with its parent.
+    _port = int(sys.argv[1]) if len(sys.argv) > 1 else 8787
     start_web_server(_port)
 
 

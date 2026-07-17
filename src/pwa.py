@@ -9,17 +9,17 @@ from pathlib import Path
 from typing import Any
 
 
-MC_ROOT = Path(__file__).parent.parent
-DEFAULT_MANIFEST = MC_ROOT / "static" / "manifest.json"
+LV_ROOT = Path(__file__).parent.parent
+DEFAULT_MANIFEST = LV_ROOT / "static" / "manifest.json"
 
 
 ENV_OVERRIDES = {
-    "MC_PWA_NAME": "name",
-    "MC_PWA_SHORT_NAME": "short_name",
-    "MC_PWA_DESCRIPTION": "description",
-    "MC_PWA_THEME_COLOR": "theme_color",
-    "MC_PWA_BACKGROUND_COLOR": "background_color",
-    "MC_PWA_START_URL": "start_url",
+    "LV_PWA_NAME": "name",
+    "LV_PWA_SHORT_NAME": "short_name",
+    "LV_PWA_DESCRIPTION": "description",
+    "LV_PWA_THEME_COLOR": "theme_color",
+    "LV_PWA_BACKGROUND_COLOR": "background_color",
+    "LV_PWA_START_URL": "start_url",
 }
 
 
@@ -31,7 +31,7 @@ def build_manifest(path: Path = DEFAULT_MANIFEST, env: dict[str, str] | None = N
     """Return the default manifest with per-instance environment overrides.
 
     This keeps the shipped PWA static by default while allowing deploy scripts or
-    a future `mc instance create` command to brand each client instance.
+    a future instance setup command to brand each client instance.
     """
     source = os.environ if env is None else env
     manifest = deepcopy(load_manifest(path))
@@ -40,8 +40,8 @@ def build_manifest(path: Path = DEFAULT_MANIFEST, env: dict[str, str] | None = N
         if value:
             manifest[key] = value
 
-    default_intent = source.get("MC_PWA_DEFAULT_INTENT", "").upper()
-    if default_intent and "MC_PWA_START_URL" not in source:
+    default_intent = source.get("LV_PWA_DEFAULT_INTENT", "").upper()
+    if default_intent and "LV_PWA_START_URL" not in source:
         manifest["start_url"] = f"/?intent={default_intent}"
 
     return manifest

@@ -1,7 +1,7 @@
 {
-  "name": "Still I Rise",
-  "short_name": "Still I Rise",
-  "description": "AI education for refugee children, with offline queueing.",
+  "name": "Lingua Viva",
+  "short_name": "Lingua Viva",
+  "description": "Local-first teacher planning and curriculum support, with offline queueing.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

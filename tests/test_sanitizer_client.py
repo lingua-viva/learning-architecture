@@ -7,7 +7,7 @@ from sanitizer.client import sanitize_text, rehydrate
 
 def test_dev_mode_direct_import():
     """In dev mode, if service is down, falls back to direct import."""
-    with patch.dict(os.environ, {"MC_DEV_MODE": "1", "MC_SANITIZER_URL": "http://localhost:99999"}):
+    with patch.dict(os.environ, {"LV_DEV_MODE": "1", "LV_SANITIZER_URL": "http://localhost:99999"}):
         # Service on port 99999 won't exist — should fall back to direct import
         r = sanitize_text("SSN 123-45-6789", block_signals=[])
         assert r["ok"] is True
@@ -16,7 +16,7 @@ def test_dev_mode_direct_import():
 
 def test_fail_closed_production_mode():
     """In production mode, if service is down, BLOCK everything."""
-    with patch.dict(os.environ, {"MC_DEV_MODE": "0", "MC_SANITIZER_URL": "http://localhost:99999"}):
+    with patch.dict(os.environ, {"LV_DEV_MODE": "0", "LV_SANITIZER_URL": "http://localhost:99999"}):
         r = sanitize_text("SSN 123-45-6789", block_signals=[])
         assert r["ok"] is False
         assert r["blocked"] is True
@@ -39,7 +39,7 @@ def test_rehydrate():
 
 def test_empty_block_signals_allows_all():
     """Empty block_signals = PII redaction only, no content blocking."""
-    with patch.dict(os.environ, {"MC_DEV_MODE": "1", "MC_SANITIZER_URL": "http://localhost:99999"}):
+    with patch.dict(os.environ, {"LV_DEV_MODE": "1", "LV_SANITIZER_URL": "http://localhost:99999"}):
         r = sanitize_text("The patient discussed their diagnosis", block_signals=[])
         assert r["blocked"] is False
         assert r["ok"] is True
@@ -47,7 +47,7 @@ def test_empty_block_signals_allows_all():
 
 def test_per_client_block_signals():
     """Different clients have different block signals."""
-    with patch.dict(os.environ, {"MC_DEV_MODE": "1", "MC_SANITIZER_URL": "http://localhost:99999"}):
+    with patch.dict(os.environ, {"LV_DEV_MODE": "1", "LV_SANITIZER_URL": "http://localhost:99999"}):
         # Tropical IT: block pricing
         r = sanitize_text("The pricing is $500 per unit", block_signals=["pricing"])
         assert r["blocked"] is True

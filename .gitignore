@@ -10,6 +10,7 @@ __pycache__/
 dist/
 build/
 node_modules/
+desktop/release/
 memory/hot/
 memory/cold/*.ndjson
 case-studies/04-still-i-rise/data/

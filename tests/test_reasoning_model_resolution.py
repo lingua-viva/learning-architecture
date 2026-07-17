@@ -28,7 +28,7 @@ from src.pipeline import ReasoningEngine, ReasonResult
 @pytest.fixture(autouse=True)
 def isolated_config_home(tmp_path, monkeypatch):
     monkeypatch.setenv("SIR_CONFIG_HOME", str(tmp_path))
-    monkeypatch.delenv("MC_REASON_MODEL", raising=False)
+    monkeypatch.delenv("LV_REASON_MODEL", raising=False)
     yield tmp_path
 
 
@@ -55,7 +55,7 @@ async def _recording_reason(engine, monkeypatch, **kwargs):
 
 def test_explicit_model_beats_everything(monkeypatch, isolated_config_home):
     _write_provider_config(isolated_config_home, "openai", "gpt-4o-mini")
-    monkeypatch.setenv("MC_REASON_MODEL", "ollama/env-model")
+    monkeypatch.setenv("LV_REASON_MODEL", "ollama/env-model")
     engine = ReasoningEngine()
 
     used = _run(_recording_reason(engine, monkeypatch, model="explicit/override", default_model="ollama/ontology-default"))
@@ -65,7 +65,7 @@ def test_explicit_model_beats_everything(monkeypatch, isolated_config_home):
 
 def test_provider_config_beats_default_model_and_env(monkeypatch, isolated_config_home):
     _write_provider_config(isolated_config_home, "groq", "llama-3.1-8b-instant")
-    monkeypatch.setenv("MC_REASON_MODEL", "ollama/env-model")
+    monkeypatch.setenv("LV_REASON_MODEL", "ollama/env-model")
     engine = ReasoningEngine()
 
     used = _run(_recording_reason(engine, monkeypatch, default_model="ollama/ontology-default"))
@@ -74,7 +74,7 @@ def test_provider_config_beats_default_model_and_env(monkeypatch, isolated_confi
 
 
 def test_default_model_beats_env_var_when_no_provider_connected(monkeypatch, isolated_config_home):
-    monkeypatch.setenv("MC_REASON_MODEL", "ollama/env-model")
+    monkeypatch.setenv("LV_REASON_MODEL", "ollama/env-model")
     engine = ReasoningEngine()
 
     used = _run(_recording_reason(engine, monkeypatch, default_model="ollama/ontology-default"))
@@ -83,7 +83,7 @@ def test_default_model_beats_env_var_when_no_provider_connected(monkeypatch, iso
 
 
 def test_env_var_used_when_no_provider_and_no_default_model(monkeypatch, isolated_config_home):
-    monkeypatch.setenv("MC_REASON_MODEL", "ollama/env-model")
+    monkeypatch.setenv("LV_REASON_MODEL", "ollama/env-model")
     engine = ReasoningEngine()
 
     used = _run(_recording_reason(engine, monkeypatch))

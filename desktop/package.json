@@ -1,0 +1,66 @@
+{
+  "name": "lingua-viva-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Lingua Viva teacher desktop shell",
+  "main": "dist/electron/main.js",
+  "type": "commonjs",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.json",
+    "start": "npm run build && electron .",
+    "dist": "npm run build && electron-builder",
+    "dist:mac": "npm run build && electron-builder --mac dmg",
+    "dist:win": "npm run build && electron-builder --win nsis",
+    "dist:linux": "npm run build && electron-builder --linux AppImage"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "electron": "^31.3.1",
+    "electron-builder": "^24.13.3",
+    "typescript": "^5.5.4"
+  },
+  "build": {
+    "appId": "org.linguaviva.teacher",
+    "productName": "Lingua Viva",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../",
+        "to": "app",
+        "filter": [
+          "src/**",
+          "static/**",
+          "doctor/**",
+          "curriculum/**",
+          "governance/**",
+          "artifacts/**",
+          "claims/**",
+          "knowledge/**",
+          "ontology/education/**",
+          "requirements*.txt",
+          "!Manuale_Italiano_Laboratorio_Linguistico_G1-G5.docx",
+          "!archive/**",
+          "!.git/**"
+        ]
+      }
+    ],
+    "mac": {
+      "target": ["dmg"],
+      "category": "public.app-category.education"
+    },
+    "win": {
+      "target": ["nsis"]
+    },
+    "linux": {
+      "target": ["AppImage"],
+      "category": "Education"
+    }
+  }
+}

@@ -34,7 +34,6 @@ class ReasoningEngine:
             or config.resolve_provider_model()
             or default_model
             or os.environ.get("LV_REASON_MODEL")
-            or os.environ.get("MC_REASON_MODEL")
             or self._resolve_best_model()
         )
 

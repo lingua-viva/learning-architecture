@@ -283,7 +283,7 @@ class ReasoningEngine:
            (`classification.default_model`). Previously this was passed
            in as `model` and treated as top priority, which meant a
            user's provider choice could never actually take effect.
-        4. MC_REASON_MODEL env var (technical/dev override).
+        4. LV_REASON_MODEL env var (technical/dev override).
         5. Best available Ollama model (auto-detected).
 
         The resolved model may be local (qwen, phi, llama) or cloud
@@ -294,7 +294,7 @@ class ReasoningEngine:
             model
             or self._resolve_provider_model()
             or default_model
-            or os.environ.get("MC_REASON_MODEL")
+            or os.environ.get("LV_REASON_MODEL")
             or self._resolve_best_model()
         )
 
