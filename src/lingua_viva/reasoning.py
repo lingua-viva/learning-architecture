@@ -1,0 +1,102 @@
+from __future__ import annotations
+
+import json
+import os
+from dataclasses import dataclass
+from typing import Optional
+from urllib import error, request
+
+from . import config
+
+
+@dataclass
+class ReasonResult:
+    content: str
+    confidence: float
+    model_used: str
+    tokens_used: int = 0
+
+
+class ReasoningEngine:
+    """Thin Lingua Viva reasoning client for local-first model calls."""
+
+    async def reason(
+        self,
+        query: str,
+        context: dict | None = None,
+        model: Optional[str] = None,
+        default_model: Optional[str] = None,
+        system_prompt: Optional[str] = None,
+    ) -> ReasonResult:
+        context = context or {}
+        resolved_model = (
+            model
+            or config.resolve_provider_model()
+            or default_model
+            or os.environ.get("LV_REASON_MODEL")
+            or os.environ.get("MC_REASON_MODEL")
+            or self._resolve_best_model()
+        )
+
+        if system_prompt:
+            result = await self._call_model(query, system_prompt, resolved_model)
+            if result:
+                return result
+
+        return ReasonResult(
+            content=f"[Local reasoning for {context.get('riu_id', 'lingua-viva')} - no model available]",
+            confidence=0.7,
+            model_used="none",
+        )
+
+    def _resolve_provider_model(self) -> Optional[str]:
+        return config.resolve_provider_model()
+
+    def _resolve_best_model(self) -> str:
+        if not hasattr(self, "_cached_model"):
+            self._cached_model = config.detect_model()
+        return self._cached_model
+
+    async def _call_model(self, query: str, system_prompt: str, model: str) -> Optional[ReasonResult]:
+        url, headers = self._resolve_endpoint(model)
+        model_name = model.split("/", 1)[-1] if "/" in model else model
+        payload = json.dumps({
+            "model": model_name,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": query},
+            ],
+            "temperature": 0.3,
+            "max_tokens": 2000,
+        }).encode("utf-8")
+        req = request.Request(
+            url,
+            data=payload,
+            headers={"Content-Type": "application/json", **headers},
+            method="POST",
+        )
+        try:
+            with request.urlopen(req, timeout=90) as response:
+                body = json.loads(response.read())
+        except (error.URLError, ConnectionError, TimeoutError, OSError, json.JSONDecodeError):
+            return None
+
+        try:
+            content = body["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError):
+            return None
+        tokens = body.get("usage", {}).get("total_tokens", 0)
+        return ReasonResult(content=content, confidence=0.75, model_used=model, tokens_used=tokens)
+
+    @staticmethod
+    def _resolve_endpoint(model: str) -> tuple[str, dict[str, str]]:
+        if model.startswith("openai/"):
+            key = config.provider_api_key("openai") or os.environ.get("OPENAI_API_KEY", "")
+            return "https://api.openai.com/v1/chat/completions", {"Authorization": f"Bearer {key}"}
+        if model.startswith("groq/"):
+            key = config.provider_api_key("groq") or os.environ.get("GROQ_API_KEY", "")
+            return "https://api.groq.com/openai/v1/chat/completions", {"Authorization": f"Bearer {key}"}
+        if model.startswith("mistral/"):
+            key = config.provider_api_key("mistral") or os.environ.get("MISTRAL_API_KEY", "")
+            return "https://api.mistral.ai/v1/chat/completions", {"Authorization": f"Bearer {key}"}
+        return "http://localhost:11434/v1/chat/completions", {}
