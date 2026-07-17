@@ -380,12 +380,11 @@ async def parent_recommendation(payload: dict):
         if extra:
             body = f"{body} At home, a {extra} may help your child begin tasks more independently."
         return {
-            "student_id": student_id,
             "subject_line": _strip_parent_output(draft.subject_line, names),
             "body": _strip_parent_output(body, names),
             "home_activities": [_strip_parent_output(item, names) for item in draft.home_activities],
             "review_label": "Review before sending. No AI attribution in final message.",
-            "source_citation": "Generated from Manuale v1 and local teacher observations.",
+            "source_citation": "Source: Manuale v1 and local teacher observations.",
         }
 
     return await asyncio.to_thread(_with_student_store, generate)
@@ -561,11 +560,15 @@ async def query_endpoint(payload: dict):
     try:
         from src.lingua_viva.app import run_teacher_query
 
-        result = await run_teacher_query(
-            query_text,
-            intent=intent,
-            session_id=session_id,
-            eval_mode=eval_mode,
+        timeout_seconds = float(payload.get("timeout_seconds") or 25)
+        result = await asyncio.wait_for(
+            run_teacher_query(
+                query_text,
+                intent=intent,
+                session_id=session_id,
+                eval_mode=eval_mode,
+            ),
+            timeout=timeout_seconds,
         )
         if session_id and not eval_mode:
             increment_session()
@@ -594,6 +597,16 @@ async def query_endpoint(payload: dict):
 
         await broadcaster.broadcast(response)
         return response
+
+    except asyncio.TimeoutError:
+        error = {
+            "type": "error",
+            "error": "Local reasoning timed out. Check Ollama, then try again.",
+            "timeout": True,
+            "timestamp": time.time(),
+        }
+        await broadcaster.broadcast(error)
+        return error
 
     except Exception as e:
         error = {"type": "error", "error": str(e), "timestamp": time.time()}

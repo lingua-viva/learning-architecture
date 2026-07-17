@@ -75,7 +75,8 @@ class ReasoningEngine:
             method="POST",
         )
         try:
-            with request.urlopen(req, timeout=90) as response:
+            timeout_seconds = float(os.environ.get("LV_REASON_TIMEOUT_SECONDS", "20"))
+            with request.urlopen(req, timeout=timeout_seconds) as response:
                 body = json.loads(response.read())
         except (error.URLError, ConnectionError, TimeoutError, OSError, json.JSONDecodeError):
             return None

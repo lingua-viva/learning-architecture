@@ -1,4 +1,5 @@
 from pathlib import Path
+import asyncio
 
 from fastapi.testclient import TestClient
 
@@ -58,7 +59,9 @@ def test_observe_students_parents_and_reflect_endpoints(monkeypatch, tmp_path):
         "focus": "creative quiet workspace",
     })
     assert parent.status_code == 200
-    parent_body = parent.json()["body"].lower()
+    parent_payload = parent.json()
+    parent_body = parent_payload["body"].lower()
+    assert "student_id" not in parent_payload
     assert "ai" not in parent_body
     assert students[0]["display_name"].lower() not in parent_body
 
@@ -80,3 +83,21 @@ def test_assess_and_publication_status(monkeypatch, tmp_path):
     publication = client.get("/api/publication/status")
     assert publication.status_code == 200
     assert publication.json()["claim_count"] >= 1
+
+
+def test_query_endpoint_times_out_cleanly(monkeypatch):
+    async def slow_query(*_args, **_kwargs):
+        await asyncio.sleep(1)
+
+    import src.lingua_viva.app as lv_app
+
+    monkeypatch.setattr(lv_app, "run_teacher_query", slow_query)
+    response = client.post("/api/query", json={
+        "query": "How do I scaffold listening?",
+        "timeout_seconds": 0.01,
+    })
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["type"] == "error"
+    assert body["timeout"] is True

@@ -1667,3 +1667,83 @@
 {"timestamp": "2026-07-16T22:23:53.567318", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.03, "input_length": 4}
 {"timestamp": "2026-07-16T22:23:53.897503", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.05, "input_length": 27}
 {"timestamp": "2026-07-16T22:23:54.394066", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.03, "input_length": 4}
+{"timestamp": "2026-07-16T22:43:55.210359", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.08, "input_length": 30}
+{"timestamp": "2026-07-16T22:43:55.525861", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.08, "input_length": 30}
+{"timestamp": "2026-07-16T22:43:55.902151", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.05, "input_length": 16}
+{"timestamp": "2026-07-16T22:43:55.915558", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.08, "input_length": 19}
+{"timestamp": "2026-07-16T22:43:56.279753", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.03, "input_length": 16}
+{"timestamp": "2026-07-16T22:43:56.676947", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.04, "input_length": 16}
+{"timestamp": "2026-07-16T22:43:56.692656", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.14, "input_length": 19}
+{"timestamp": "2026-07-16T22:43:57.040913", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.03, "input_length": 16}
+{"timestamp": "2026-07-16T22:44:06.155386", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.04, "input_length": 54}
+{"timestamp": "2026-07-16T22:44:06.445933", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.06, "input_length": 69}
+{"timestamp": "2026-07-16T22:44:06.461825", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.07, "input_length": 62}
+{"timestamp": "2026-07-16T22:44:06.466348", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.05, "input_length": 73}
+{"timestamp": "2026-07-16T22:44:08.291652", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.04, "input_length": 31}
+{"timestamp": "2026-07-16T22:44:08.306065", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.06, "input_length": 31}
+{"timestamp": "2026-07-16T22:44:08.719296", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.05, "input_length": 60}
+{"timestamp": "2026-07-16T22:44:09.193415", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.05, "input_length": 30}
+{"timestamp": "2026-07-16T22:44:09.208390", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.04, "input_length": 40}
+{"timestamp": "2026-07-16T22:44:09.584258", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.04, "input_length": 31}
+{"timestamp": "2026-07-16T22:44:09.984216", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.07, "input_length": 30}
+{"timestamp": "2026-07-16T22:44:10.352186", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.04, "input_length": 30}
+{"timestamp": "2026-07-16T22:44:10.757308", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.12, "input_length": 59}
+{"timestamp": "2026-07-16T22:44:10.777344", "blocked": false, "redaction_count": 1, "redaction_types": ["phone number (US)"], "context": "education", "reason": null, "latency_ms": 0.11, "input_length": 58}
+{"timestamp": "2026-07-16T22:44:10.799516", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.07, "input_length": 65}
+{"timestamp": "2026-07-16T22:44:10.820624", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.07, "input_length": 55}
+{"timestamp": "2026-07-16T22:44:10.859073", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.1, "input_length": 8}
+{"timestamp": "2026-07-16T22:44:10.864573", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.04, "input_length": 8}
+{"timestamp": "2026-07-16T22:44:11.604505", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.04, "input_length": 30}
+{"timestamp": "2026-07-16T22:44:11.622794", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.05, "input_length": 30}
+{"timestamp": "2026-07-16T22:44:12.091430", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.05, "input_length": 40}
+{"timestamp": "2026-07-16T22:44:15.355101", "blocked": false, "redaction_count": 1, "redaction_types": ["SSN"], "context": "general", "reason": null, "latency_ms": 0.14, "input_length": 15}
+{"timestamp": "2026-07-16T22:44:15.363687", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "general", "reason": null, "latency_ms": 0.08, "input_length": 37}
+{"timestamp": "2026-07-16T22:44:15.366323", "blocked": true, "redaction_count": 0, "redaction_types": [], "context": "general", "reason": "block_signal: pricing", "latency_ms": 0.08, "input_length": 28}
+{"timestamp": "2026-07-16T22:44:15.519266", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "general", "reason": null, "latency_ms": 0.06, "input_length": 28}
+{"timestamp": "2026-07-16T22:44:15.521016", "blocked": true, "redaction_count": 1, "redaction_types": ["SSN"], "context": "general", "reason": "block_signal: patient", "latency_ms": 0.07, "input_length": 37}
+{"timestamp": "2026-07-16T22:44:15.521779", "blocked": false, "redaction_count": 1, "redaction_types": ["SSN"], "context": "general", "reason": null, "latency_ms": 0.04, "input_length": 37}
+{"timestamp": "2026-07-16T22:44:15.522412", "blocked": false, "redaction_count": 2, "redaction_types": ["phone number (US)"], "context": "general", "reason": null, "latency_ms": 0.05, "input_length": 45}
+{"timestamp": "2026-07-16T22:44:15.522985", "blocked": false, "redaction_count": 1, "redaction_types": ["SSN"], "context": "general", "reason": null, "latency_ms": 0.03, "input_length": 15}
+{"timestamp": "2026-07-16T22:44:15.523049", "blocked": false, "redaction_count": 1, "redaction_types": ["SSN"], "context": "general", "reason": null, "latency_ms": 0.02, "input_length": 15}
+{"timestamp": "2026-07-16T22:44:15.523097", "blocked": false, "redaction_count": 1, "redaction_types": ["SSN"], "context": "general", "reason": null, "latency_ms": 0.02, "input_length": 15}
+{"timestamp": "2026-07-16T22:44:15.523655", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "logistics", "reason": null, "latency_ms": 0.02, "input_length": 33}
+{"timestamp": "2026-07-16T22:44:15.524221", "blocked": false, "redaction_count": 2, "redaction_types": ["phone number (US)", "SSN"], "context": "medical", "reason": null, "latency_ms": 0.05, "input_length": 34}
+{"timestamp": "2026-07-16T22:44:15.524791", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "general", "reason": null, "latency_ms": 0.03, "input_length": 26}
+{"timestamp": "2026-07-16T22:44:15.525340", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "general", "reason": null, "latency_ms": 0.03, "input_length": 60}
+{"timestamp": "2026-07-16T22:44:15.525901", "blocked": false, "redaction_count": 2, "redaction_types": ["phone number (US)", "email address"], "context": "general", "reason": null, "latency_ms": 0.05, "input_length": 41}
+{"timestamp": "2026-07-16T22:44:15.526482", "blocked": false, "redaction_count": 1, "redaction_types": ["email address"], "context": "general", "reason": null, "latency_ms": 0.03, "input_length": 30}
+{"timestamp": "2026-07-16T22:44:15.527033", "blocked": false, "redaction_count": 1, "redaction_types": ["SSN"], "context": "general", "reason": null, "latency_ms": 0.04, "input_length": 33}
+{"timestamp": "2026-07-16T22:44:16.566550", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.07, "input_length": 33}
+{"timestamp": "2026-07-16T22:44:17.604751", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.09, "input_length": 45}
+{"timestamp": "2026-07-16T22:44:18.152973", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.05, "input_length": 33}
+{"timestamp": "2026-07-16T22:44:18.922267", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.06, "input_length": 16}
+{"timestamp": "2026-07-16T22:44:18.927521", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.07, "input_length": 27}
+{"timestamp": "2026-07-16T22:44:19.498063", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.13, "input_length": 16}
+{"timestamp": "2026-07-16T22:44:20.215565", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.06, "input_length": 10}
+{"timestamp": "2026-07-16T22:44:20.221311", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.07, "input_length": 32}
+{"timestamp": "2026-07-16T22:44:20.225842", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.08, "input_length": 38}
+{"timestamp": "2026-07-16T22:44:20.784764", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.07, "input_length": 16}
+{"timestamp": "2026-07-16T22:44:23.963900", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.06, "input_length": 24}
+{"timestamp": "2026-07-16T22:44:24.544578", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.05, "input_length": 10}
+{"timestamp": "2026-07-16T22:44:31.006560", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.06, "input_length": 42}
+{"timestamp": "2026-07-16T22:44:31.631392", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.06, "input_length": 30}
+{"timestamp": "2026-07-16T22:44:31.645368", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.06, "input_length": 30}
+{"timestamp": "2026-07-16T22:44:32.054063", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.06, "input_length": 30}
+{"timestamp": "2026-07-16T22:44:32.067443", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.08, "input_length": 40}
+{"timestamp": "2026-07-16T22:44:32.449217", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.07, "input_length": 34}
+{"timestamp": "2026-07-16T22:44:32.463649", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.06, "input_length": 34}
+{"timestamp": "2026-07-16T22:44:32.468154", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.06, "input_length": 36}
+{"timestamp": "2026-07-16T22:44:32.865121", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.07, "input_length": 44}
+{"timestamp": "2026-07-16T22:44:33.415725", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.06, "input_length": 30}
+{"timestamp": "2026-07-16T22:44:33.837280", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.07, "input_length": 33}
+{"timestamp": "2026-07-16T22:44:33.850587", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.06, "input_length": 33}
+{"timestamp": "2026-07-16T22:44:34.236018", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.06, "input_length": 24}
+{"timestamp": "2026-07-16T22:44:34.783180", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.1, "input_length": 25}
+{"timestamp": "2026-07-16T22:44:35.185913", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.03, "input_length": 4}
+{"timestamp": "2026-07-16T22:44:35.198806", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.04, "input_length": 4}
+{"timestamp": "2026-07-16T22:44:35.791340", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.08, "input_length": 27}
+{"timestamp": "2026-07-16T22:44:36.541363", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.05, "input_length": 4}
+{"timestamp": "2026-07-16T22:44:37.150481", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.05, "input_length": 4}
+{"timestamp": "2026-07-16T22:44:37.565133", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.04, "input_length": 4}
+{"timestamp": "2026-07-16T22:44:37.956405", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.04, "input_length": 27}
+{"timestamp": "2026-07-16T22:44:38.509179", "blocked": false, "redaction_count": 0, "redaction_types": [], "context": "education", "reason": null, "latency_ms": 0.05, "input_length": 4}
