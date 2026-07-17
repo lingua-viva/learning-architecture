@@ -1,0 +1,26 @@
+version: "2026-07-16"
+status: active
+source_audit: "../LV_PUBLICATION_READINESS_AUDIT_2026-07-16.md"
+source_of_truth:
+  authoritative_current_draft: "../Manuale_Italiano_Laboratorio_Linguistico_G1-G5.docx"
+  derivative_surfaces:
+    - "../README.md"
+    - "../curriculum/lingua_viva_matrix.yaml"
+  rule: "The .docx remains authoritative until the curriculum owner explicitly promotes a structured source."
+artifacts:
+  - {id: lv-artifact-readme, path: "../README.md", current_role: "public/professional narrative", status: derivative, publication_status: review_needed, publication_risk: "overclaims if wording is not controlled", required_action: "use designed/proposed wording"}
+  - {id: lv-artifact-manual-docx, path: "../Manuale_Italiano_Laboratorio_Linguistico_G1-G5.docx", current_role: "curriculum/manual draft", status: authoritative_source_draft, publication_status: internal_review_needed, publication_risk: "institution identifiers and strong claims", required_action: "keep internal until reviewed"}
+  - {id: lv-ref-cefr-young-learners, path: "../references/CEFR_Young_Learners.pdf", current_role: "CEFR young learner reference", status: external_reference, publication_status: review_needed, publication_risk: "redistribution rights not verified", required_action: "verify license before redistribution"}
+  - {id: lv-ref-cefr-can-do, path: "../references/CEFR_can_do_lists.pdf", current_role: "CEFR can-do reference", status: external_reference, publication_status: review_needed, publication_risk: "redistribution rights not verified", required_action: "verify license before redistribution"}
+  - {id: lv-ref-criteri-pages, path: "../references/Criteri_Fondanti_Curricolo_Italiano_K-5.pages", current_role: "editable local criteria file", status: local_source_candidate, publication_status: private_review_needed, publication_risk: "local curriculum and assets", required_action: "keep internal until approved"}
+  - {id: lv-ref-criteri-pdf, path: "../references/Criteri_Fondanti_Curricolo_Italiano_K-5.pdf", current_role: "local criteria PDF", status: local_source_candidate, publication_status: private_review_needed, publication_risk: "institution identifiers and uniqueness claims", required_action: "redact and downgrade before public use"}
+  - {id: lv-ref-criteri-v2-pdf, path: "../references/Criteri_Fondanti_Curricolo_Italiano_K-5_v2.pdf", current_role: "revised local criteria PDF", status: local_source_candidate, publication_status: private_review_needed, publication_risk: "local POI/planner references", required_action: "keep internal until approved"}
+  - {id: lv-ref-indicazioni, path: "../references/D.M.211-2025-GU-26012026-Nuove-Indicazioni-nazionali.pdf", current_role: "Italian standards reference", status: external_standards_reference, publication_status: review_needed, publication_risk: "citation mismatch", required_action: "verify official citation"}
+  - {id: lv-artifact-palette-imported, path: "../palette_imported.yaml", current_role: "Palette knowledge snapshot", status: legacy_reference, publication_status: internal, publication_risk: "provenance confusion", required_action: "reference-only"}
+  - {id: lv-artifact-import-palette, path: "../import_palette.py", current_role: "legacy import utility", status: legacy_tooling, publication_status: internal, publication_risk: "implies MC machinery in LV", required_action: "archive/remove decision later"}
+  - {id: lv-artifact-phase0-audit, path: "../LV_PUBLICATION_READINESS_AUDIT_2026-07-16.md", current_role: "publication readiness audit", status: phase0_audit, publication_status: internal_review_document, publication_risk: "contains review judgments and unresolved questions", required_action: "use as review document, not release copy"}
+  - {id: lv-artifact-evidence-register, path: "../claims/evidence_register.yaml", current_role: "claim/evidence register", status: structured_tracking, publication_status: internal, publication_risk: "should not be treated as validation evidence by itself", required_action: "keep synchronized with public wording"}
+  - {id: lv-artifact-publication-safety, path: "../governance/publication_safety.yaml", current_role: "publication safety rules", status: structured_tracking, publication_status: internal, publication_risk: "release risk if bypassed", required_action: "apply before public release"}
+  - {id: lv-artifact-source-candidate-matrix, path: "../curriculum/lingua_viva_matrix.yaml", current_role: "draft structured source candidate", status: draft_extracted_non_authoritative, publication_status: internal_review_needed, publication_risk: "could be mistaken for authoritative source", required_action: "do not promote without review"}
+  - {id: lv-artifact-gauntlet, path: "../dev/lv_artifact_gauntlet.py", current_role: "lightweight publication/accountability checker", status: phase3_checker, publication_status: internal, publication_risk: "checker is a release gate, not proof of educational efficacy", required_action: "run before public release"}
+  - {id: lv-artifact-hardening-report, path: "../dev/LV_PHASE_1_3_HARDENING_REPORT_2026-07-16.md", current_role: "15-iteration hardening evidence", status: verification_report, publication_status: internal, publication_risk: "captures verification state at one time", required_action: "refresh if gates or artifacts change"}

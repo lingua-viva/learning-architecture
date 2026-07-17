@@ -1,0 +1,49 @@
+version: "2026-07-16"
+status: active
+source_audit: "../LV_PUBLICATION_READINESS_AUDIT_2026-07-16.md"
+claims:
+  - id: lv-claim-four-framework-integration
+    classification: supported_as_design_intent
+    maturity_label: designed
+    publication_safe_wording: "Lingua Viva is designed to integrate Italian national standards, CEFR-informed language progression, IB PYP inquiry, and Reggio-inspired multimodal documentation."
+    required_action: "avoid validated/coherent-by-proof wording until independent review"
+  - id: lv-claim-cefr-a1-b1-progression
+    classification: supported_as_target_not_outcome
+    maturity_label: designed
+    publication_safe_wording: "The curriculum is designed to target a CEFR-informed progression toward A1-B1 across K-5."
+    required_action: "do not claim student achievement without validated external assessment evidence"
+  - id: lv-claim-transferability
+    classification: aspirational
+    maturity_label: proposed
+    publication_safe_wording: "The integration method may be useful to other multilingual or IB immersion contexts after adaptation."
+    required_action: "label as potential transferability, not proven transferability"
+  - id: lv-claim-global-uniqueness
+    classification: unsupported
+    maturity_label: proposed
+    publication_safe_wording: "To the author's knowledge, this kind of four-framework integration appears rare among Italian immersion IB PYP contexts."
+    required_action: "replace global uniqueness language unless evidence is added"
+  - id: lv-claim-editorial-publication
+    classification: aspirational
+    maturity_label: proposed
+    publication_safe_wording: "A future editorial publication could be explored after internal review, anonymization, and rights clearance."
+    required_action: "keep as future option only"
+  - id: lv-claim-measurable-outcomes
+    classification: partially_supported_as_design_intent
+    maturity_label: designed
+    publication_safe_wording: "Each unit is intended to connect to CEFR indicators and school assessment tools so progress can be documented consistently."
+    required_action: "separate assessment-system design from measured learning gains"
+  - id: lv-claim-three-year-timeline
+    classification: supported_as_plan
+    maturity_label: proposed
+    publication_safe_wording: "Lingua Viva is planned as a three-year initiative: design and pilot, implementation, then consolidation and possible publication."
+    required_action: "keep as plan, not commitment"
+  - id: lv-claim-50-50-model
+    classification: supported_as_design_principle
+    maturity_label: designed
+    publication_safe_wording: "The design balances common objectives, rubrics, and activities with teacher adaptation to classroom needs."
+    required_action: "do not claim validated efficacy"
+  - id: lv-claim-tool-surfaces
+    classification: external_dependency_review_needed
+    maturity_label: proposed
+    publication_safe_wording: "Related learning-architecture tools may support future private workflows, subject to owner review and data boundaries."
+    required_action: "do not promise app/download features from LV package"

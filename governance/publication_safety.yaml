@@ -1,0 +1,28 @@
+version: "2026-07-16"
+status: active
+source_audit: "../LV_PUBLICATION_READINESS_AUDIT_2026-07-16.md"
+source_of_truth_rule:
+  authoritative_current_draft: "../Manuale_Italiano_Laboratorio_Linguistico_G1-G5.docx"
+  docx_drift_rule: "After structured derivative files exist, direct .docx edits require a review note or revision-log entry with defect_class: source_artifact_drift unless formatting-only."
+privacy_rules:
+  student_data: "No raw student work, names, IEPs, progress reports, individual scores, or identifiable observations in public surfaces."
+  teacher_contributions: "Private by default; public outputs may use anonymized patterns or collaboratively approved activities."
+  institution_data: "Use generic institution descriptions unless the curriculum owner and authorized school delegate approve identifying detail."
+  colleague_data: "Do not name or identify colleagues in public/professional surfaces without explicit approval."
+  references: "Classify each reference before public redistribution."
+  ai_attribution: "No public Lingua Viva artifact may attribute curriculum decisions, assessment decisions, or parent-facing communication to AI."
+claim_rules:
+  cefr_designed_target: "Use designed-to wording for CEFR A1-B1 unless validated external assessment evidence supports achievement."
+  uniqueness: "Downgrade uniqueness/global rarity claims unless external landscape evidence is added."
+  outcomes: "Do not report assessment/rubric changes as learning gains without independent evidence."
+  transferability: "Label transferability as potential unless external implementation is documented."
+release_checklist:
+  - ".docx source status is clear"
+  - "claims are classified and maturity-labeled"
+  - "unsupported uniqueness claims are downgraded"
+  - "student, colleague, and institution-private content is absent or approved"
+  - "teacher contributions are anonymized or approved"
+  - "AI is not credited as decision-maker or assessor"
+  - "assessment changes are not described as learning gains without independent evidence"
+  - "derivative README, matrix, or download is fresh relative to the .docx"
+  - "external research did not expose unpublished curriculum structure"

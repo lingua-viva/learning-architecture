@@ -1,0 +1,27 @@
+version: "2026-07-16"
+status: draft_extracted_source_candidate
+authority: non_authoritative
+source_of_truth: "../Manuale_Italiano_Laboratorio_Linguistico_G1-G5.docx"
+promotion_status:
+  current_decision: "Do not promote yet."
+  target_review_date: "2026-09-01"
+  promotion_requires:
+    - "curriculum owner approval"
+    - "teaching team review"
+    - "school leadership or authorized delegate review"
+    - "one-time reconciliation against the .docx and references"
+    - "Indicazioni Ministeriali coverage review"
+frameworks:
+  - {id: indicazioni, label: "Indicazioni Ministeriali italiane", role: "disciplinary rigor", review_status: needs_standards_review}
+  - {id: cefr, label: "CEFR / CECR progression", role: "communicative functions and proficiency descriptors", review_status: designed_target_not_achievement}
+  - {id: ib_pyp, label: "IB PYP inquiry pedagogy", role: "transdisciplinary inquiry and authentic content contexts", review_status: designed}
+  - {id: reggio, label: "Reggio-inspired multimodality", role: "documentation as learning and multimodal expression", review_status: designed}
+grade_bands:
+  - {grade: G1, cefr_target_wording: "designed to support Pre-A1 to A1 foundations", curriculum_focus: "alphabetic system, first sentences, pleasure in reading and writing", publication_status: review_needed}
+  - {grade: G2, cefr_target_wording: "designed to consolidate A1", curriculum_focus: "reading fluency, intentional writing, and early grammatical structures", publication_status: review_needed}
+  - {grade: G3, cefr_target_wording: "designed to expand from A1+ toward A2", curriculum_focus: "autonomous text production, text types, and verb-tense control", publication_status: review_needed}
+  - {grade: G4, cefr_target_wording: "designed to extend toward A2+ and B1 readiness", curriculum_focus: "advanced comprehension, richer written production, and inquiry-linked language use", publication_status: review_needed}
+  - {grade: G5, cefr_target_wording: "designed to support B1-oriented exit readiness", curriculum_focus: "multi-paragraph production, disciplinary language, and portfolio evidence", publication_status: review_needed}
+assessment:
+  design_intent: "shared CEFR-informed rubrics, authentic assessment, writing samples, self-assessment, narrative observations, and portfolio evidence"
+  outcome_boundary: "assessment coherence is a design claim; student learning gains require independent evidence"

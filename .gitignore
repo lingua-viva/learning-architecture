@@ -16,3 +16,17 @@ case-studies/04-still-i-rise/data/
 .venv/
 venv/
 *.log
+
+
+# MC runtime artifacts (generated when engine runs — never commit)
+.mc_session
+memory/data/firewall_log.ndjson
+memory/data/gap_signals.ndjson
+memory/data/paths.ndjson
+memory/data/traces.ndjson
+sanitizer/data/firewall_log.ndjson
+ontology/proposals/CAND-*.yaml
+scratch/onboarding/
+
+# Lingua Viva support loop runtime state
+.lv_support/

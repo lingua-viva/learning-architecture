@@ -1,0 +1,11 @@
+version: "2026-07-16"
+status: active
+source_audit: "../LV_PUBLICATION_READINESS_AUDIT_2026-07-16.md"
+deferred:
+  - {id: lv-def-001, question: "Which references can be redistributed publicly?", owner_needed: "curriculum owner plus rights/licensing reviewer"}
+  - {id: lv-def-002, question: "Who besides the curriculum owner can approve public wording?", owner_needed: "curriculum owner and school leadership"}
+  - {id: lv-def-003, question: "Should import_palette.py be archived or removed later?", owner_needed: "repo maintainer"}
+  - {id: lv-def-004, question: "What one-click download artifact format is actually needed?", owner_needed: "curriculum owner and runtime/tool owner"}
+  - {id: lv-def-005, question: "Which teacher-contributed materials can become shared curriculum source after anonymization and review?", owner_needed: "curriculum owner and teaching team"}
+  - {id: lv-def-006, question: "Is Indicazioni Ministeriali coverage sufficient for final publication?", owner_needed: "standards reviewer"}
+  - {id: lv-def-007, question: "Should the structured source candidate be promoted, and on what date?", owner_needed: "curriculum owner and authorized school delegate"}

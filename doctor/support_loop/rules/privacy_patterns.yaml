@@ -1,0 +1,25 @@
+version: "2026-07-16"
+private_path_patterns:
+  - "**/student_lens*.db"
+  - "**/still_i_rise.db"
+  - "**/observations*"
+  - "**/parent_reports*"
+  - "**/progress_reports*"
+  - "**/IEP*"
+  - "student_lens*.db"
+  - "still_i_rise.db"
+  - "observations*"
+  - "parent_reports*"
+  - "progress_reports*"
+  - "IEP*"
+  - "**/private*"
+  - "private*"
+  - "**/*.docx"
+  - "*.docx"
+redaction_classes:
+  - api_keys
+  - tokens
+  - passwords
+  - emails
+  - phone_numbers
+  - student_record_markers
