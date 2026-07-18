@@ -8,6 +8,7 @@ from pathlib import Path
 from doctor.support_loop.doctor import format_teacher_summary, run_doctor
 
 from .config import provider_status
+from .filemap import add_exclusion, clear_map, load_map, run_scan, to_api
 from .privacy import is_private_path
 from .reasoning import ReasoningEngine
 
@@ -65,6 +66,26 @@ def _doctor(args: argparse.Namespace) -> int:
     return 0 if result["status"] in ("OK", "WARN", "FIXABLE", "PRIVATE_RISK") else 1
 
 
+def _filemap(args: argparse.Namespace) -> int:
+    if args.filemap_command == "show":
+        _print_json(to_api(load_map()))
+        return 0
+    if args.filemap_command == "scan":
+        mapped = run_scan(args.path, max_depth=args.max_depth)
+        summary = to_api(mapped)["summary"]
+        print(f"Scanned {summary['total_directories']} directories; student zones excluded: {summary['student_zones_excluded']}")
+        return 0
+    if args.filemap_command == "exclude":
+        add_exclusion(args.path)
+        print(f"Excluded {args.path}")
+        return 0
+    if args.filemap_command == "clear":
+        clear_map()
+        print("Cleared file map")
+        return 0
+    return 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="lv", description="Lingua Viva local runtime")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -84,6 +105,16 @@ def build_parser() -> argparse.ArgumentParser:
     doctor = sub.add_parser("doctor", help="Run the Lingua Viva Doctor")
     doctor.add_argument("--json", action="store_true")
 
+    fmap = sub.add_parser("filemap", help="Manage the local curriculum file map")
+    fmap_sub = fmap.add_subparsers(dest="filemap_command", required=True)
+    fmap_sub.add_parser("show", help="Show the current file map")
+    scan = fmap_sub.add_parser("scan", help="Scan a directory into the file map")
+    scan.add_argument("path")
+    scan.add_argument("--max-depth", type=int, default=3)
+    exclude = fmap_sub.add_parser("exclude", help="Add a directory exclusion")
+    exclude.add_argument("path")
+    fmap_sub.add_parser("clear", help="Clear the file map")
+
     return parser
 
 
@@ -98,6 +129,8 @@ def main(argv: list[str] | None = None) -> int:
         return _health(args)
     if args.command == "doctor":
         return _doctor(args)
+    if args.command == "filemap":
+        return _filemap(args)
     return 1
 
 

@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from dataclasses import dataclass
 from typing import Optional
 from urllib import error, request
 
 from . import config
+from .filemap import build_filemap_context, infer_education_domain
+from .privacy_log import log_event
+from .traces import append_trace, new_trace
 
 
 @dataclass
@@ -29,6 +33,7 @@ class ReasoningEngine:
         system_prompt: Optional[str] = None,
     ) -> ReasonResult:
         context = context or {}
+        start = time.time()
         resolved_model = (
             model
             or config.resolve_provider_model()
@@ -38,15 +43,24 @@ class ReasoningEngine:
         )
 
         if system_prompt:
-            result = await self._call_model(query, system_prompt, resolved_model)
+            prompt = system_prompt
+            if not self._is_external_model(resolved_model):
+                query_domain = context.get("filemap_domain") or context.get("domain") or infer_education_domain(query)
+                filemap_context = build_filemap_context(query_domain, local_only=True)
+                if filemap_context:
+                    prompt = f"{system_prompt}\n\nLocal curriculum file locations:\n{filemap_context}"
+            result = await self._call_model(query, prompt, resolved_model)
             if result:
+                self._append_trace(query, context, result, start)
                 return result
 
-        return ReasonResult(
+        result = ReasonResult(
             content=f"[Local reasoning for {context.get('riu_id', 'lingua-viva')} - no model available]",
             confidence=0.7,
             model_used="none",
         )
+        self._append_trace(query, context, result, start)
+        return result
 
     def _resolve_provider_model(self) -> Optional[str]:
         return config.resolve_provider_model()
@@ -100,3 +114,27 @@ class ReasoningEngine:
             key = config.provider_api_key("mistral") or os.environ.get("MISTRAL_API_KEY", "")
             return "https://api.mistral.ai/v1/chat/completions", {"Authorization": f"Bearer {key}"}
         return "http://localhost:11434/v1/chat/completions", {}
+
+    @staticmethod
+    def _is_external_model(model: str) -> bool:
+        return model.startswith(("openai/", "groq/", "mistral/"))
+
+    def _append_trace(self, query: str, context: dict, result: ReasonResult, start: float) -> None:
+        try:
+            domain = str(context.get("domain") or context.get("classification_domain") or infer_education_domain(query) or "general")
+            sources = context.get("source_citations") or context.get("sources") or []
+            if isinstance(sources, str):
+                sources = [sources]
+            trace = new_trace(
+                query,
+                domain=domain,
+                model_used=result.model_used,
+                duration_ms=int((time.time() - start) * 1000),
+                token_count=result.tokens_used,
+                source_citations=[str(item) for item in sources],
+                privacy_events=[],
+            )
+            append_trace(trace)
+            log_event("query_processed_locally", query_text=query)
+        except Exception:
+            return

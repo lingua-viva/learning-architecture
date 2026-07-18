@@ -88,6 +88,10 @@
       align-items: center;
       min-height: 48px;
       padding: 4px 6px;
+      border: 0;
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
     }
     .mark {
       width: 36px;
@@ -352,13 +356,13 @@
 <body>
   <div class="app">
     <aside class="sidebar">
-      <div class="brand">
+      <button class="brand" id="brand-home" type="button">
         <div class="mark">LV</div>
         <div>
           <strong>Lingua Viva</strong>
           <span id="role-label">Teacher</span>
         </div>
-      </div>
+      </button>
       <nav id="primary-nav" class="nav"></nav>
       <nav id="utility-nav" class="nav utility"></nav>
     </aside>
@@ -377,8 +381,10 @@
 
   <div id="role-choice" class="role-choice">
     <div class="role-dialog">
-      <h2>Choose your Lingua Viva workspace</h2>
-      <p>Coordinator views are placeholders in this phase. The teacher workspace is active.</p>
+      <h2>🌱 Lingua Viva</h2>
+      <p>A teacher workbench for Italian language instruction.</p>
+      <p>Everything stays on your machine. No student data leaves. Ever.</p>
+      <p>I am a:</p>
       <div class="role-actions">
         <button class="primary" data-role="teacher" type="button">I am a teacher</button>
         <button data-role="coordinator" type="button">I am a coordinator</button>
@@ -389,16 +395,18 @@
   <script>
     const state = {
       role: localStorage.getItem("lvRole") || "",
-      view: "plan",
+      view: "home",
       overview: null,
       grade: "G3",
       unitId: "",
       students: [],
       selectedStudent: "student-marco",
-      chat: []
+      chat: [],
+      selectedTraceId: ""
     };
 
     const teacherNav = [
+      ["home", "Home", "🏠"],
       ["plan", "Plan", "📋"],
       ["prepare", "Prepare", "✏️"],
       ["observe", "Observe", "👁️"],
@@ -414,8 +422,10 @@
       ["trends", "Trends", "📊"]
     ];
     const utilityNav = [
+      ["why", "Why", "❓"],
       ["health", "Health", "❤️"],
       ["privacy", "Privacy", "🔒"],
+      ["profile", "Profile", "👩‍🏫"],
       ["settings", "Settings", "⚙️"],
       ["reflect", "Reflect", "💭"]
     ];
@@ -438,7 +448,7 @@
     function setRole(role) {
       state.role = role;
       localStorage.setItem("lvRole", role);
-      state.view = role === "coordinator" ? "programme" : "plan";
+      state.view = role === "coordinator" ? "programme" : "home";
       $("role-choice").classList.remove("visible");
       renderShell();
       renderView();
@@ -449,6 +459,11 @@
       const primary = state.role === "coordinator" ? adminNav : teacherNav;
       $("primary-nav").innerHTML = primary.map(item => navButton(item)).join("");
       $("utility-nav").innerHTML = utilityNav.map(item => navButton(item)).join("");
+      $("brand-home").onclick = () => {
+        state.view = state.role === "coordinator" ? "programme" : "home";
+        renderShell();
+        renderView();
+      };
       document.querySelectorAll("[data-view]").forEach(button => {
         button.addEventListener("click", () => {
           state.view = button.dataset.view;
@@ -490,6 +505,7 @@
 
     async function renderView() {
       const views = {
+        home: renderHome,
         plan: renderPlan,
         prepare: renderPrepare,
         observe: renderObserve,
@@ -497,8 +513,10 @@
         assess: renderAssess,
         ask: renderAsk,
         parents: renderParents,
+        why: renderWhy,
         health: renderHealth,
         privacy: renderPrivacy,
+        profile: renderProfile,
         settings: renderSettings,
         reflect: renderReflect,
         programme: renderAdmin,
@@ -507,10 +525,38 @@
         trends: renderAdmin
       };
       try {
-        await (views[state.view] || renderPlan)();
+        await (views[state.view] || renderHome)();
       } catch (error) {
         $("content").innerHTML = `<div class="panel"><h2>Could not load this view</h2><p>${escapeHtml(error.message)}</p></div>`;
       }
+    }
+
+    async function renderHome() {
+      setTitle("Home", "teacher brief");
+      const schedule = localStorage.getItem("lvSchedule") || "{}";
+      const data = await api(`/api/brief?schedule=${encodeURIComponent(schedule)}`);
+      const today = data.today || {configured: false};
+      const planHtml = today.configured
+        ? `<h2>Good morning.</h2><p>Today: <strong>${escapeHtml(today.grade)} — ${escapeHtml(today.unit)}</strong></p><p>CEFR targets: ${escapeHtml((today.cefr_targets || []).join(", "))}</p><p>Source: ${escapeHtml(today.source || "")}</p>`
+        : `<h2>Good morning.</h2><p>Set up your schedule in Settings → My Schedule to see today's plan.</p>`;
+      $("content").innerHTML = `
+        <div class="view-head"><div>${planHtml}</div><span class="badge ${data.health?.status === "OK" ? "ok" : "warn"}">System: ${escapeHtml(data.health?.status || "WARN")}</span></div>
+        <div class="grid two">
+          <div class="panel">
+            <h3>⚠️ ${data.attention.unobserved_count} students unobserved for 14+ days</h3>
+            <p>${escapeHtml((data.attention.unobserved_students || []).join(", ") || "No observation reminders right now.")}</p>
+            <button id="home-observe" class="primary" type="button">Go to Observe</button>
+          </div>
+          <div class="panel">
+            <h3>👤 ${data.attention.rti_pending} RTI decision pending</h3>
+            <p>${escapeHtml((data.attention.rti_pending_names || []).join(", ") || "No pending RTI decisions.")}</p>
+            <button id="home-students" type="button">Go to Students</button>
+          </div>
+          <div class="panel"><h3>This week</h3><p>${data.recent.observations_this_week} observations captured</p><p>Last reflection: ${escapeHtml(data.recent.last_reflection || "not recorded")}</p></div>
+          <div class="panel"><h3>Health</h3><p>${escapeHtml(data.health?.summary || "")}</p></div>
+        </div>`;
+      $("home-observe").addEventListener("click", () => { state.view = "observe"; renderShell(); renderView(); });
+      $("home-students").addEventListener("click", () => { state.view = "students"; renderShell(); renderView(); });
     }
 
     async function renderPlan() {
@@ -656,7 +702,7 @@
           cefr_level_observed: $("obs-level").value
         })
       });
-      $("obs-result").innerHTML = `<h3>Saved</h3><p>Observation ${escapeHtml(result.observation.observation_id)} is attached to the local lens.</p><div class="output">${escapeHtml(result.observation.raw_transcript)}</div>`;
+      $("obs-result").innerHTML = `<h3>Saved</h3><div class="source-line"><span class="badge ok">Saved locally. Not uploaded. Not shared.</span><span class="badge">Domain: observation</span></div><p>Observation ${escapeHtml(result.observation.observation_id)} is attached to the local lens.</p><div class="output">${escapeHtml(result.observation.raw_transcript)}</div>`;
     }
 
     async function renderStudents() {
@@ -723,10 +769,12 @@
           <form id="ask-form" class="row" style="margin-top:12px;"><input id="ask-input" placeholder="How do I scaffold articles for mixed-level Grade 3?"><button class="primary" type="submit">Send</button></form>
         </div>`;
       $("ask-form").addEventListener("submit", askQuestion);
+      attachWhyLinks();
     }
 
     function renderMessage(message) {
-      return `<div class="message ${message.role === "teacher" ? "user" : ""}"><strong>${message.role}</strong><p>${escapeHtml(message.text)}</p></div>`;
+      const meta = message.meta ? `<div class="source-line"><span class="badge ok">${escapeHtml(message.meta.route || "local")}</span><span class="badge">${escapeHtml(message.meta.model_used || "model unavailable")}</span><span class="badge">${((message.meta.duration_ms || 0) / 1000).toFixed(1)}s</span><span class="badge">${escapeHtml(message.meta.source_citation || "Manuale v1")}</span><button type="button" data-why="${escapeHtml(message.meta.trace_id || "")}">Why?</button></div>` : "";
+      return `<div class="message ${message.role === "teacher" ? "user" : ""}"><strong>${message.role}</strong><p>${escapeHtml(message.text)}</p>${meta}</div>`;
     }
 
     async function askQuestion(event) {
@@ -742,8 +790,27 @@
         body: JSON.stringify({query: text, intent: "TEACH"})
       });
       const data = await response.json();
-      state.chat.push({role: "Lingua Viva", text: data.result?.content || data.error || "No response."});
+      state.chat.push({
+        role: "Lingua Viva",
+        text: data.result?.content || data.error || "No response.",
+        meta: {
+          trace_id: data.trace_id,
+          route: data.route,
+          model_used: data.model_used,
+          duration_ms: data.duration_ms,
+          source_citation: data.source_citation
+        }
+      });
       renderAsk();
+    }
+
+    function attachWhyLinks() {
+      document.querySelectorAll("[data-why]").forEach(button => button.addEventListener("click", () => {
+        state.selectedTraceId = button.dataset.why;
+        state.view = "why";
+        renderShell();
+        renderView();
+      }));
     }
 
     async function renderParents() {
@@ -778,6 +845,26 @@
       if (button) button.addEventListener("click", createSupportBundle);
     }
 
+    async function renderWhy() {
+      setTitle("Why", "reasoning trace");
+      const path = state.selectedTraceId ? `/api/why?trace_id=${encodeURIComponent(state.selectedTraceId)}` : "/api/why";
+      const data = await api(path);
+      const traces = state.selectedTraceId ? [data] : (data.traces || []);
+      $("content").innerHTML = `
+        <div class="view-head"><div><h2>Why</h2><p>Every query is processed locally. No query text is stored, only a hash, route, sources, and timing.</p></div><span class="badge ok">external calls: 0</span></div>
+        <div class="panel">
+          <div class="list">${traces.length ? traces.map(trace => `
+            <div class="item">
+              <h3>${escapeHtml(trace.classification_domain)} · ${escapeHtml(trace.model_used)} · ${((trace.duration_ms || 0) / 1000).toFixed(1)}s</h3>
+              <div class="source-line"><span class="badge ok">${escapeHtml(trace.route)}</span><span class="badge">tokens ${trace.token_count || 0}</span><span class="badge">external ${trace.external_calls || 0}</span></div>
+              <p>Sources: ${escapeHtml((trace.source_citations || []).join(", ") || "Manuale v1")}</p>
+              <p>Privacy: ${escapeHtml((trace.privacy_events || []).join(", ") || "no events")}</p>
+              <p>Trace: ${escapeHtml(trace.trace_id)}</p>
+            </div>`).join("") : "<p>No traces recorded yet.</p>"}</div>
+        </div>`;
+      state.selectedTraceId = "";
+    }
+
     async function createSupportBundle() {
       const target = $("bundle-result");
       target.innerHTML = `<span class="badge">creating local bundle...</span>`;
@@ -788,13 +875,21 @@
     async function renderPrivacy() {
       setTitle("Privacy", "local-first");
       let publication = {safe_to_claim: [], needs_evidence: [], blocked: [], not_publication_ready: true};
+      let privacy = {total_queries_local: 0, student_blocks: 0, ai_attribution_stripped: 0, observations_saved_locally: 0, external_calls: 0, docx_modifications: 0, events: []};
       try { publication = await api("/api/publication/status"); } catch {}
+      try { privacy = await api("/api/privacy"); } catch {}
       $("content").innerHTML = `
         <div class="view-head"><div><h2>Privacy</h2><p>Lingua Viva is built for local teacher work.</p></div><span class="badge ok">all local</span></div>
         <div class="grid three">
-          <div class="panel"><h3>No uploads</h3><p>Student observations, lenses, reflections, and parent drafts stay on this machine.</p></div>
-          <div class="panel"><h3>No external calls</h3><p>Teacher workflows use local app endpoints and Ollama-only model settings.</p></div>
-          <div class="panel"><h3>No student surface</h3><p>Students do not chat with this app. Teachers prepare and decide.</p></div>
+          <div class="panel"><h3>${privacy.total_queries_local}</h3><p>queries processed locally</p></div>
+          <div class="panel"><h3>${privacy.student_blocks}</h3><p>student data blocks</p></div>
+          <div class="panel"><h3>${privacy.external_calls}</h3><p>No external calls</p></div>
+        </div>
+        <div class="panel" style="margin-top:14px;">
+          <h3>Data Protection Log</h3>
+          <div class="source-line"><span class="badge ok">.docx modifications: ${privacy.docx_modifications}</span><span class="badge">AI attribution stripped: ${privacy.ai_attribution_stripped}</span><span class="badge">observations local: ${privacy.observations_saved_locally}</span></div>
+          <div class="list" style="margin-top:12px;">${(privacy.events || []).length ? privacy.events.map(event => `<div class="item"><h3>${escapeHtml(event.event_type)}</h3><p>${escapeHtml(event.detail)}</p></div>`).join("") : "<p>No privacy events recorded yet.</p>"}</div>
+          <p>No student names appear in this log. No data has left this machine.</p>
         </div>
         <div class="panel" style="margin-top:14px;">
           <h3>Publication Readiness</h3>
@@ -804,16 +899,158 @@
         </div>`;
     }
 
+    async function renderProfile() {
+      setTitle("Profile", "data transparency");
+      const profile = await api("/api/profile");
+      const filemap = profile.filemap ? `${profile.filemap.root_count} roots, ${profile.filemap.total_directories} directories` : "not configured";
+      $("content").innerHTML = `
+        <div class="view-head"><div><h2>Your Teaching Profile</h2><p>Everything Lingua Viva knows about this local teacher workspace.</p></div><span class="badge ok">local only</span></div>
+        <div class="panel">
+          <div class="grid three">
+            <div class="item"><h3>Role</h3><p>${escapeHtml(profile.role)}</p></div>
+            <div class="item"><h3>Grades</h3><p>${escapeHtml((profile.grades_taught || []).join(", ") || "not set")}</p></div>
+            <div class="item"><h3>Observations</h3><p>${profile.observations || 0}</p></div>
+            <div class="item"><h3>Students</h3><p>${profile.students_tracked || 0}</p></div>
+            <div class="item"><h3>File map</h3><p>${escapeHtml(filemap)}</p></div>
+            <div class="item"><h3>Reasoning traces</h3><p>${profile.reasoning_traces || 0}</p></div>
+          </div>
+          <p>All app data is stored at ${escapeHtml(profile.storage)}. Nothing is uploaded. The source document and curriculum files are not affected by profile clear.</p>
+          <button id="clear-profile" class="primary" type="button">Clear All Data</button>
+          <div id="clear-profile-result" style="margin-top:12px;"></div>
+        </div>`;
+      $("clear-profile").addEventListener("click", async () => {
+        if (!confirm("Clear all local app data? The source document and curriculum files are not affected.")) return;
+        const data = await api("/api/profile/clear", {method: "POST", body: JSON.stringify({confirm: "clear-all-data"})});
+        $("clear-profile-result").innerHTML = `<span class="badge ok">${escapeHtml(data.status)}</span>`;
+      });
+    }
+
     async function renderSettings() {
       setTitle("Settings", "local configuration");
       let status = {ollama_reachable: false, model: null};
       try { status = await api("/api/provider"); } catch {}
+      const overview = await ensureOverview();
       $("content").innerHTML = `
         <div class="view-head"><div><h2>Settings</h2><p>Local model and server configuration.</p></div></div>
         <div class="grid two">
           <div class="panel"><h3>Ollama Model</h3><select><option>${escapeHtml(status.model || "qwen2.5:3b")}</option><option>qwen3:8b</option><option>llama3.1:8b</option></select><p>Ollama reachable: ${status.ollama_reachable ? "yes" : "no"}</p></div>
           <div class="panel"><h3>Port</h3><input value="8787"><p>Desktop shell loads http://127.0.0.1:8787.</p></div>
+        </div>
+        <div class="panel" style="margin-top:14px;">
+          <h3>My Schedule</h3>
+          <div id="schedule-grid" class="grid"></div>
+          <button id="save-schedule" class="primary" type="button" style="margin-top:12px;">Save Schedule</button>
+          <span id="schedule-status" class="badge" style="margin-left:8px;">stored on this machine</span>
+        </div>
+        <div class="panel" style="margin-top:14px;">
+          <h3>Curriculum File Map</h3>
+          <div class="form-grid">
+            <label>Folder path<input id="filemap-path" placeholder="~/Documents/Teaching"></label>
+            <label>Depth<select id="filemap-depth"><option>2</option><option selected>3</option><option>4</option></select></label>
+          </div>
+          <div class="row" style="margin-top:12px;">
+            <button id="scan-filemap" class="primary" type="button">Scan Folder</button>
+            <button id="clear-filemap" type="button">Clear Map</button>
+          </div>
+          <div id="filemap-status" class="source-line" style="margin-top:12px;"></div>
+          <div id="filemap-summary" style="margin-top:12px;"></div>
         </div>`;
+      await renderScheduleControls(overview);
+      await renderFileMapControls();
+    }
+
+    async function renderScheduleControls(overview) {
+      const days = ["monday", "tuesday", "wednesday", "thursday", "friday"];
+      const saved = JSON.parse(localStorage.getItem("lvSchedule") || "{}");
+      $("schedule-grid").innerHTML = days.map(day => `
+        <div class="form-grid item" data-schedule-row="${day}">
+          <label>${day[0].toUpperCase() + day.slice(1)} grade<select data-schedule-grade="${day}">
+            <option value="">Not set</option>
+            ${overview.grade_bands.map(g => `<option value="${g.grade}" ${saved[day]?.grade === g.grade ? "selected" : ""}>${g.grade}</option>`).join("")}
+          </select></label>
+          <label>Unit<select data-schedule-unit="${day}"><option value="">Choose grade first</option></select></label>
+        </div>`).join("");
+      for (const day of days) {
+        const gradeSelect = document.querySelector(`[data-schedule-grade="${day}"]`);
+        const unitSelect = document.querySelector(`[data-schedule-unit="${day}"]`);
+        gradeSelect.addEventListener("change", () => populateScheduleUnits(day));
+        await populateScheduleUnits(day, saved[day]?.unit_id || "");
+      }
+      $("save-schedule").addEventListener("click", () => {
+        const schedule = {};
+        for (const day of days) {
+          const grade = document.querySelector(`[data-schedule-grade="${day}"]`).value;
+          const unitId = document.querySelector(`[data-schedule-unit="${day}"]`).value;
+          if (grade && unitId) schedule[day] = {grade, unit_id: unitId};
+        }
+        localStorage.setItem("lvSchedule", JSON.stringify(schedule));
+        $("schedule-status").textContent = "saved";
+      });
+    }
+
+    async function populateScheduleUnits(day, selectedUnit = "") {
+      const grade = document.querySelector(`[data-schedule-grade="${day}"]`).value;
+      const unitSelect = document.querySelector(`[data-schedule-unit="${day}"]`);
+      if (!grade) {
+        unitSelect.innerHTML = `<option value="">Choose grade first</option>`;
+        return;
+      }
+      const data = await api(`/api/curriculum/grade/${grade}`);
+      unitSelect.innerHTML = data.units.map(unit => `<option value="${unit.unit_id}" ${unit.unit_id === selectedUnit ? "selected" : ""}>${escapeHtml(unit.title)}</option>`).join("");
+    }
+
+    async function renderFileMapControls() {
+      $("scan-filemap").addEventListener("click", scanFileMap);
+      $("clear-filemap").addEventListener("click", clearFileMap);
+      await loadFileMap();
+    }
+
+    async function loadFileMap() {
+      const target = $("filemap-summary");
+      const status = $("filemap-status");
+      let data;
+      try {
+        data = await api("/api/filemap");
+      } catch (error) {
+        target.innerHTML = `<p>${escapeHtml(error.message)}</p>`;
+        return;
+      }
+      const summary = data.summary || {};
+      const domains = Object.entries(summary.domains_detected || {});
+      const roots = data.roots || [];
+      status.innerHTML = `<span class="badge ${summary.configured ? "ok" : ""}">${summary.configured ? "configured" : "empty"}</span><span class="badge warn">${data.student_zones_detected || 0} student data zones excluded</span>`;
+      target.innerHTML = `
+        <div class="grid two">
+          <div class="item"><h3>Scanned roots</h3><div class="list">${roots.length ? roots.map(root => `<div class="item"><strong>${escapeHtml(root.path)}</strong><p>${root.entry_count} folders</p></div>`).join("") : "<p>No folders scanned yet.</p>"}</div></div>
+          <div class="item"><h3>Detected domains</h3><div class="source-line">${domains.length ? domains.map(([name, count]) => `<span class="badge">${escapeHtml(name)} ${count}</span>`).join("") : `<span class="badge">none</span>`}</div><p>Student data folders are counted, excluded, and never shown by path.</p></div>
+        </div>
+        <div class="item" style="margin-top:12px;"><h3>Exclusions</h3><div class="list">${(data.exclusions || []).length ? data.exclusions.map(path => `<div class="item"><span>${escapeHtml(path)}</span><button type="button" data-remove-exclusion="${escapeHtml(path)}">Remove</button></div>`).join("") : "<p>No exclusions set.</p>"}</div></div>`;
+      document.querySelectorAll("[data-remove-exclusion]").forEach(button => {
+        button.addEventListener("click", async () => {
+          await api("/api/filemap/exclude", {method: "POST", body: JSON.stringify({path: button.dataset.removeExclusion, action: "remove"})});
+          await loadFileMap();
+        });
+      });
+    }
+
+    async function scanFileMap() {
+      const path = $("filemap-path").value.trim();
+      if (!path) {
+        $("filemap-status").innerHTML = `<span class="badge warn">choose a folder path</span>`;
+        return;
+      }
+      $("filemap-status").innerHTML = `<span class="badge">scanning...</span>`;
+      const data = await api("/api/filemap/scan", {
+        method: "POST",
+        body: JSON.stringify({root_path: path, max_depth: Number($("filemap-depth").value || 3)})
+      });
+      $("filemap-status").innerHTML = `<span class="badge ok">scanned ${data.total_entries} folders</span><span class="badge warn">${data.student_zones_detected} student data zones excluded</span>`;
+      await loadFileMap();
+    }
+
+    async function clearFileMap() {
+      await api("/api/filemap/clear", {method: "POST", body: JSON.stringify({})});
+      await loadFileMap();
     }
 
     function renderReflect() {

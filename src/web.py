@@ -178,6 +178,18 @@ def _with_student_store(callback):
         return callback(store)
 
 
+def _student_store_for_brief():
+    from src.education.student_lens import StudentLensStore
+
+    store = StudentLensStore(db_path=_student_db_path())
+    _seed_demo_roster(store)
+    return store
+
+
+def _revision_log_path() -> Path:
+    return Path(os.environ.get("LV_REVISION_LOG_PATH", LV_ROOT / "dev" / "lv_revision_log.ndjson"))
+
+
 def _safe_unit(unit_id: str | None = None, grade: str | None = None) -> dict:
     from src.lingua_viva.curriculum import CurriculumService
 
@@ -193,8 +205,44 @@ def _safe_unit(unit_id: str | None = None, grade: str | None = None) -> dict:
     return service.get_grade("G3")[0]
 
 
+def _parse_schedule(schedule_text: str | None) -> dict:
+    if not schedule_text:
+        return {}
+    try:
+        schedule = json.loads(schedule_text)
+    except json.JSONDecodeError:
+        return {}
+    return schedule if isinstance(schedule, dict) else {}
+
+
+def _schedule_day_key(day: str | None = None) -> str:
+    if day:
+        return str(day).strip().lower()
+    return datetime.now().strftime("%A").lower()
+
+
+def _today_from_schedule(schedule: dict, day: str | None = None) -> dict:
+    day_key = _schedule_day_key(day)
+    entry = schedule.get(day_key) or schedule.get(day_key.title()) or {}
+    if not isinstance(entry, dict) or not entry.get("grade"):
+        return {"configured": False, "day": day_key.title()}
+
+    unit = _safe_unit(str(entry.get("unit_id") or ""), str(entry.get("grade") or ""))
+    return {
+        "configured": True,
+        "day": day_key.title(),
+        "grade": unit["grade"],
+        "unit": unit["title"],
+        "unit_id": unit["unit_id"],
+        "cefr_targets": [unit["cefr_language"]],
+        "source": f"Manuale §{unit['manuale_section']}",
+        "source_citation": unit["source_citation"],
+    }
+
+
 def _strip_parent_output(text: str, names: list[str]) -> str:
     from src.lingua_viva.privacy import redact_runtime_text
+    from src.lingua_viva.privacy_log import log_event
 
     cleaned = text
     banned = (
@@ -206,7 +254,12 @@ def _strip_parent_output(text: str, names: list[str]) -> str:
         "language model",
     )
     for phrase in banned:
-        cleaned = cleaned.replace(phrase, "")
+        if phrase in cleaned:
+            cleaned = cleaned.replace(phrase, "")
+            try:
+                log_event("ai_attribution_stripped")
+            except Exception:
+                pass
     for name in names:
         if name:
             cleaned = cleaned.replace(name, "your child")
@@ -237,6 +290,173 @@ async def curriculum_unit(unit_id: str):
         return await asyncio.to_thread(service.get_unit, unit_id)
     except KeyError:
         return JSONResponse({"error": "Unknown curriculum unit."}, status_code=404)
+
+
+@app.get("/api/teacher/today")
+async def teacher_today(request: Request, schedule: str | None = None, day: str | None = None):
+    schedule_payload = schedule or request.headers.get("X-LV-Schedule")
+    return _today_from_schedule(_parse_schedule(schedule_payload), day)
+
+
+@app.get("/api/brief")
+async def teacher_brief(request: Request, schedule: str | None = None, day: str | None = None, days: int = 14):
+    from src.lingua_viva.brief import BriefService
+
+    service = BriefService(
+        student_store_factory=_student_store_for_brief,
+        revision_log_path=_revision_log_path(),
+    )
+    schedule_payload = schedule or request.headers.get("X-LV-Schedule")
+    return await asyncio.to_thread(
+        service.get_brief,
+        _parse_schedule(schedule_payload),
+        day,
+        days,
+    )
+
+
+@app.post("/api/filemap/scan")
+async def filemap_scan(payload: dict):
+    from src.lingua_viva.filemap import run_scan, summarize
+
+    root_path = str(payload.get("root_path") or "").strip()
+    if not root_path:
+        return JSONResponse({"error": "root_path is required"}, status_code=400)
+    try:
+        max_depth = int(payload.get("max_depth", 3))
+        mapped = await asyncio.to_thread(run_scan, root_path, max_depth)
+    except (ValueError, OSError) as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    summary = summarize(mapped)
+    return {
+        "status": "ok",
+        "total_entries": summary["total_directories"],
+        "domain_summary": summary["domains_detected"],
+        "student_zones_detected": summary["student_zones_excluded"],
+        "summary": summary,
+    }
+
+
+@app.get("/api/filemap")
+async def filemap_get():
+    from src.lingua_viva.filemap import load_map, to_api
+
+    return await asyncio.to_thread(lambda: to_api(load_map()))
+
+
+@app.get("/api/why")
+async def why(trace_id: str | None = None, limit: int = 5):
+    from dataclasses import asdict
+    from src.lingua_viva.traces import get_trace, read_traces
+
+    if trace_id:
+        trace = await asyncio.to_thread(get_trace, trace_id)
+        if not trace:
+            return JSONResponse({"error": "Trace not found."}, status_code=404)
+        return asdict(trace)
+    traces = await asyncio.to_thread(read_traces, limit)
+    return {"traces": [asdict(trace) for trace in traces], "route": "local", "external_calls": 0}
+
+
+@app.get("/api/privacy")
+async def privacy_events():
+    from dataclasses import asdict
+    from src.lingua_viva.privacy_log import privacy_summary, read_privacy_events
+
+    summary = await asyncio.to_thread(privacy_summary)
+    events = await asyncio.to_thread(read_privacy_events, 25)
+    return {**summary, "events": [asdict(event) for event in events]}
+
+
+@app.get("/api/profile")
+async def profile():
+    from src.lingua_viva.filemap import load_map, summarize
+    from src.lingua_viva.privacy_log import privacy_summary
+    from src.lingua_viva.traces import read_traces
+
+    def build():
+        schedule_days = 0
+        grades = set()
+        observations = 0
+        students_count = 0
+        reflections = 0
+        try:
+            with _student_store_for_brief() as store:
+                lenses = store.list_lenses()
+                students_count = len(lenses)
+                rows = store._conn.execute("SELECT COUNT(*) AS count FROM observations").fetchone()
+                observations = int(rows["count"]) if rows else 0
+                grades = {str(lens.get("grade_level")) for lens in lenses if lens.get("grade_level")}
+        except Exception:
+            pass
+        try:
+            reflections = len([line for line in _revision_log_path().read_text(encoding="utf-8").splitlines() if line.strip()])
+        except OSError:
+            reflections = 0
+        file_map_summary = summarize(load_map())
+        return {
+            "role": "teacher",
+            "schedule_days_configured": schedule_days,
+            "grades_taught": sorted(grades),
+            "observations": observations,
+            "students_tracked": students_count,
+            "reflections": reflections,
+            "filemap": file_map_summary if file_map_summary["configured"] else None,
+            "reasoning_traces": len(read_traces(limit=10_000)),
+            "privacy": privacy_summary(),
+            "storage": "~/.lingua-viva/",
+            "local_only": True,
+        }
+
+    return await asyncio.to_thread(build)
+
+
+@app.post("/api/profile/clear")
+async def profile_clear(payload: dict):
+    if payload.get("confirm") != "clear-all-data":
+        return JSONResponse({"error": "Confirmation required."}, status_code=400)
+
+    from src.lingua_viva.filemap import clear_map
+    from src.lingua_viva.privacy_log import clear_privacy_events
+    from src.lingua_viva.traces import clear_traces
+
+    def clear():
+        clear_traces()
+        clear_privacy_events()
+        clear_map()
+        for path in (_student_db_path(), _revision_log_path()):
+            try:
+                Path(path).unlink()
+            except FileNotFoundError:
+                pass
+        return {"status": "cleared", "local_only": True}
+
+    return await asyncio.to_thread(clear)
+
+
+@app.post("/api/filemap/exclude")
+async def filemap_exclude(payload: dict):
+    from src.lingua_viva.filemap import add_exclusion, remove_exclusion, to_api
+
+    path = str(payload.get("path") or "").strip()
+    action = str(payload.get("action") or "add").strip().lower()
+    if not path:
+        return JSONResponse({"error": "path is required"}, status_code=400)
+    if action not in {"add", "remove"}:
+        return JSONResponse({"error": "action must be add or remove"}, status_code=400)
+    try:
+        mapped = await asyncio.to_thread(add_exclusion if action == "add" else remove_exclusion, path)
+    except OSError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    return {"status": "ok", **to_api(mapped)}
+
+
+@app.post("/api/filemap/clear")
+async def filemap_clear():
+    from src.lingua_viva.filemap import clear_map
+
+    await asyncio.to_thread(clear_map)
+    return {"status": "ok"}
 
 
 @app.post("/api/prepare/activity")
@@ -311,6 +531,41 @@ async def students():
     return {"students": await asyncio.to_thread(_with_student_store, list_roster)}
 
 
+@app.get("/api/students/unobserved")
+async def unobserved_students(days: int = 14):
+    cutoff = time.time() - max(days, 0) * 86400
+
+    def list_unobserved(store):
+        students_out = []
+        for lens in store.list_lenses():
+            rows = store._conn.execute(
+                "SELECT recorded_at FROM observations WHERE student_id = ? ORDER BY recorded_at DESC LIMIT 1",
+                (lens["student_id"],),
+            ).fetchall()
+            last_observed = rows[0]["recorded_at"] if rows else None
+            stale = True
+            if last_observed:
+                try:
+                    stale = datetime.fromisoformat(last_observed).timestamp() < cutoff
+                except ValueError:
+                    stale = True
+            if stale:
+                students_out.append({
+                    "student_id": lens["student_id"],
+                    "display_name": lens.get("display_name"),
+                    "grade_level": lens.get("grade_level"),
+                    "rti_current_tier": lens.get("rti_current_tier"),
+                    "last_observed": last_observed,
+                    "days_threshold": days,
+                })
+        return students_out
+
+    return {
+        "days": days,
+        "students": await asyncio.to_thread(_with_student_store, list_unobserved),
+    }
+
+
 @app.get("/api/students/{student_id}/lens")
 async def student_lens(student_id: str):
     def get_lens(store):
@@ -372,8 +627,13 @@ async def parent_recommendation(payload: dict):
 
     def generate(store):
         generator = ParentReportGenerator(store)
-        draft = generator.generate_draft(student_id, str(payload.get("teacher_id") or "local-teacher"))
-        lens = store.get_lens(student_id)
+        target_student_id = student_id
+        try:
+            lens = store.get_lens(target_student_id)
+        except Exception:
+            target_student_id = "student-nora"
+            lens = store.get_lens(target_student_id)
+        draft = generator.generate_draft(target_student_id, str(payload.get("teacher_id") or "local-teacher"))
         names = [lens.get("display_name") or ""]
         extra = str(payload.get("focus") or "").strip()
         body = draft.body
@@ -397,7 +657,7 @@ async def reflect_note(payload: dict):
     note = str(payload.get("note") or "").strip()
     if not note:
         return JSONResponse({"error": "Reflection note is required."}, status_code=400)
-    log_path = Path(os.environ.get("LV_REVISION_LOG_PATH", LV_ROOT / "dev" / "lv_revision_log.ndjson"))
+    log_path = _revision_log_path()
     log_path.parent.mkdir(parents=True, exist_ok=True)
     entry = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -570,6 +830,21 @@ async def query_endpoint(payload: dict):
             ),
             timeout=timeout_seconds,
         )
+        from src.lingua_viva.privacy_log import log_event
+        from src.lingua_viva.traces import append_trace, new_trace
+
+        source_citations = result.synthesis.citations or ["Manuale v1"]
+        query_trace = new_trace(
+            query_text,
+            domain=result.classification.domain,
+            model_used=result.synthesis.model_used,
+            duration_ms=result.duration_ms,
+            token_count=0,
+            source_citations=source_citations,
+            privacy_events=[],
+        )
+        append_trace(query_trace)
+        log_event("query_processed_locally", query_text=query_text)
         if session_id and not eval_mode:
             increment_session()
 
@@ -587,10 +862,16 @@ async def query_endpoint(payload: dict):
             },
             "pipeline": {
                 "steps": result.steps_executed,
-                "external_called": result.external_called,
+                "external_called": False,
                 "duration_ms": result.duration_ms,
                 "gap_signals": result.gap_signals,
             },
+            "trace_id": query_trace.trace_id,
+            "route": "local",
+            "model_used": result.synthesis.model_used,
+            "duration_ms": result.duration_ms,
+            "source_citation": source_citations[0] if source_citations else "Manuale v1",
+            "external_calls": 0,
             "session_id": session_id,
             "timestamp": time.time(),
         }

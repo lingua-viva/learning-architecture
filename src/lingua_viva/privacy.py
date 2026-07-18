@@ -66,6 +66,13 @@ def redact_runtime_text(text: str) -> str:
     redacted = _doctor_redact_text(text)
     for pattern in PRIVATE_RUNTIME_PATTERNS:
         redacted = pattern.sub("[REDACTED_PRIVATE_CONTEXT]", redacted)
+    if redacted != text:
+        try:
+            from src.lingua_viva.privacy_log import log_event
+
+            log_event("student_data_blocked")
+        except Exception:
+            pass
     return redacted
 
 

@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_teacher_sidebar_contract():
     html = (ROOT / "static" / "index.html").read_text()
 
-    for label in ["Plan", "Prepare", "Observe", "Students", "Assess", "Ask", "Parents"]:
+    for label in ["Home", "Plan", "Prepare", "Observe", "Students", "Assess", "Ask", "Parents"]:
         assert f'"{label}"' in html
 
     for label in ["Health", "Privacy", "Settings", "Reflect"]:
@@ -20,5 +20,7 @@ def test_teacher_sidebar_contract():
     assert "/api/parents/recommendation" in html
     assert "/api/support-bundle" in html
     assert "/api/admin/programme" in html
+    assert "lvSchedule" in html
+    assert "/api/teacher/today" in html or "My Schedule" in html
     assert "Review before sending. No AI attribution in final message." in html
     assert "No external calls" in html
