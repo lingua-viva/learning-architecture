@@ -508,7 +508,15 @@ async def observe_capture(payload: dict):
             urgency_flag=bool(payload.get("urgency_flag", False)),
         )
 
-    result = await asyncio.to_thread(_with_student_store, capture)
+    try:
+        result = await asyncio.to_thread(_with_student_store, capture)
+    except Exception as exc:
+        if "LensNotFoundError" in type(exc).__name__ or "LensNotFoundError" in str(type(exc)):
+            return JSONResponse(
+                {"error": f"Student '{student_id}' not found. Create their profile first in the Students view."},
+                status_code=404,
+            )
+        raise
     result["local_only"] = True
     return result
 
