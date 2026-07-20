@@ -49,7 +49,7 @@ jobs:
             cp dist/lv "dist/${{ matrix.name }}"
           fi
 
-      # Fail the build before publishing if the binary can't even run preflight.
+      # Fail the build before publishing if the binary can't even render health.
       # PYTHONUTF8=0 forces cp1252 so the encoding fixes are genuinely exercised.
       - name: Smoke test
         shell: bash
@@ -57,7 +57,7 @@ jobs:
           PYTHONUTF8: '0'
           LV_CONFIG_HOME: ${{ runner.temp }}/lv_smoke
         run: |
-          "dist/${{ matrix.name }}" preflight
+          "dist/${{ matrix.name }}" health --json
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

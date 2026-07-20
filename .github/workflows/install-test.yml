@@ -44,13 +44,13 @@ jobs:
             exit 1
           fi
 
-      - name: Assert lv preflight works under C locale
+      - name: Assert lv health JSON works under C locale
         env:
           LC_ALL: C
           LANG: C
         run: |
-          "$HOME/.local/bin/lv" preflight
-          echo "preflight exit: $?"
+          "$HOME/.local/bin/lv" health --json
+          echo "health json exit: $?"
 
       - name: Assert lv health runs to completion (not crash)
         run: |
@@ -58,5 +58,5 @@ jobs:
           # runs to completion and prints a Health line, not that it's 100%.
           out=$("$HOME/.local/bin/lv" health 2>&1 || true)
           echo "$out"
-          echo "$out" | grep -q "Health:" || { echo "FAIL: health did not run"; exit 1; }
+          echo "$out" | grep -q "Lingua Viva health:" || { echo "FAIL: health did not run"; exit 1; }
           echo "OK: health ran to completion"
