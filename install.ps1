@@ -1,4 +1,4 @@
-# Still I Rise — Windows Install (PowerShell)
+# Lingua Viva — Windows Install (PowerShell)
 # Usage: irm https://raw.githubusercontent.com/lingua-viva/learning-architecture/main/install.ps1 | iex
 #
 # Cloned from mission-canvas/install.ps1 — that script is the result of a
@@ -6,43 +6,45 @@
 # corruption, the self-spawn temp-dir trap, PATH persistence). Do not
 # redesign this from scratch; only adapt names/URLs/ports to this repo.
 #
-# Binary is named 'sir' (Still I Rise), not 'mc' — this is a fork of Mission
-# Canvas and both would otherwise install to the same PATH entry. Sharing
-# the name 'mc' would let whichever product installs second silently
-# overwrite the other's binary on any machine that has both.
+# Binary is named 'lv' (Lingua Viva). It installs under ~/.lingua-viva and
+# starts the local teacher workbench on port 8787.
 
 $ErrorActionPreference = "Stop"
 
 Write-Host ""
 Write-Host "  ╔══════════════════════════════════════════╗" -ForegroundColor Cyan
-Write-Host "  ║   Still I Rise Installer (Windows)       ║" -ForegroundColor Cyan
-Write-Host "  ║   AI education for refugee children      ║" -ForegroundColor Cyan
+Write-Host "  ║   Lingua Viva Installer (Windows)        ║" -ForegroundColor Cyan
+Write-Host "  ║   Local-first Italian teacher workbench  ║" -ForegroundColor Cyan
 Write-Host "  ╚══════════════════════════════════════════╝" -ForegroundColor Cyan
 Write-Host ""
 
-# Detect architecture
-$arch = if ([Environment]::Is64BitOperatingSystem) { "x86_64" } else { "x86" }
+# Detect architecture. The release pipeline currently ships 64-bit Windows only.
+if (-not [Environment]::Is64BitOperatingSystem) {
+    Write-Host "  ERROR: 32-bit Windows is not supported." -ForegroundColor Red
+    exit 1
+}
+$arch = "x86_64"
 Write-Host "  ✓ Detected: windows-$arch" -ForegroundColor Green
 
-$installDir = "$env:USERPROFILE\.still-i-rise"
+$installDir = "$env:USERPROFILE\.lingua-viva"
 
 # Gap 2b, SPEC_ONE_CLICK_LOCAL_APP_2026-07-14.md: a native launcher so
 # restarting after a reboot/crash never requires a terminal either — only
-# this initial `irm | iex` does. Idempotent: checks port 7896 for an
-# already-running Still I Rise before starting a second instance, and
+# this initial `irm | iex` does. Idempotent: checks port 8787 for an
+# already-running Lingua Viva before starting a second instance, and
 # tells the user plainly if something ELSE is holding the port.
 function Install-NativeLauncher {
-    $launcherDir = "$env:USERPROFILE\.still-i-rise"
+    $launcherDir = "$env:USERPROFILE\.lingua-viva"
     New-Item -ItemType Directory -Force -Path $launcherDir | Out-Null
-    $launcherPath = "$launcherDir\sir-launch.ps1"
+    $launcherPath = "$launcherDir\lv-launch.ps1"
 
     @'
-# Still I Rise -- native launcher (Gap 2b). Double-clickable via a Desktop/
+# Lingua Viva -- native launcher (Gap 2b). Double-clickable via a Desktop/
 # Start Menu shortcut; never opens a visible terminal for the user.
-$port = 7896
+$port = 8787
 $healthUrl = "http://127.0.0.1:$port/api/health"
 $uiUrl = "http://127.0.0.1:$port"
-$log = "$env:USERPROFILE\.still-i-rise\launch.log"
+$log = "$env:USERPROFILE\.lingua-viva\launch.log"
 
 function Write-Log($msg) {
     Add-Content -Path $log -Value "$(Get-Date): $msg"
@@ -67,7 +69,7 @@ try {
 }
 
 if ($healthy) {
-    Write-Log "Still I Rise is already running -- opening your browser."
+    Write-Log "Lingua Viva is already running -- opening your browser."
     Start-Process $uiUrl
     exit 0
 }
@@ -77,15 +79,15 @@ if ($portBusy) {
 }
 
 # Port is free -- start the server.
-$installDir = "$env:USERPROFILE\.still-i-rise"
-if (Test-Path "$installDir\sir.exe") {
-    Start-Process -FilePath "$installDir\sir.exe" -ArgumentList "serve", "$port" -WindowStyle Hidden
-} elseif (Test-Path "$installDir\src\mc_cli.py") {
+$installDir = "$env:USERPROFILE\.lingua-viva"
+if (Test-Path "$installDir\lv.exe") {
+    Start-Process -FilePath "$installDir\lv.exe" -ArgumentList "serve", "$port" -WindowStyle Hidden
+} elseif (Test-Path "$installDir\src\lv_cli.py") {
     Push-Location $installDir
     Start-Process -FilePath "python" -ArgumentList "-m", "src.web", "$port" -WindowStyle Hidden
     Pop-Location
 } else {
-    Write-Log "Couldn't find the Still I Rise install -- try re-running the installer."
+    Write-Log "Couldn't find the Lingua Viva install -- try re-running the installer."
     exit 1
 }
 
@@ -100,13 +102,13 @@ foreach ($i in 1..30) {
 if ($up) {
     Start-Process $uiUrl
 } else {
-    Write-Log "Still I Rise didn't start in time -- try again in a moment."
+    Write-Log "Lingua Viva didn't start in time -- try again in a moment."
     exit 1
 }
 '@ | Set-Content -Path $launcherPath -Encoding UTF8
 
     # Wrapper .bat so the shortcut never flashes a console window.
-    $batPath = "$launcherDir\sir-launch.bat"
+    $batPath = "$launcherDir\lv-launch.bat"
     @"
 @echo off
 powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "$launcherPath"
@@ -119,11 +121,11 @@ powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "$launch
             [Environment]::GetFolderPath("Desktop"),
             "$env:APPDATA\Microsoft\Windows\Start Menu\Programs"
         )) {
-            $shortcut = $shell.CreateShortcut("$dir\Still I Rise.lnk")
+            $shortcut = $shell.CreateShortcut("$dir\Lingua Viva.lnk")
             $shortcut.TargetPath = $batPath
             $shortcut.WorkingDirectory = $launcherDir
             $shortcut.WindowStyle = 7  # minimized/hidden console
-            $shortcut.Description = "Still I Rise -- AI education for refugee children"
+            $shortcut.Description = "Lingua Viva -- local-first Italian teacher workbench"
             $shortcut.Save()
         }
         Write-Host "  ✓ Desktop and Start Menu shortcuts installed" -ForegroundColor Green
@@ -143,7 +145,7 @@ function Check-Ollama {
 }
 
 # ── Try binary install first ──
-$binary = "sir-windows-${arch}.exe"
+$binary = "lv-windows-${arch}.exe"
 $url = "https://github.com/lingua-viva/learning-architecture/releases/latest/download/$binary"
 
 Write-Host "  → Attempting binary download..." -ForegroundColor Cyan
@@ -151,8 +153,8 @@ New-Item -ItemType Directory -Force -Path $installDir | Out-Null
 
 $binarySuccess = $false
 try {
-    Invoke-WebRequest -Uri $url -OutFile "$installDir\sir.exe" -UseBasicParsing -ErrorAction Stop
-    Write-Host "  ✓ Installed sir binary to $installDir\sir.exe" -ForegroundColor Green
+    Invoke-WebRequest -Uri $url -OutFile "$installDir\lv.exe" -UseBasicParsing -ErrorAction Stop
+    Write-Host "  ✓ Installed lv binary to $installDir\lv.exe" -ForegroundColor Green
     $binarySuccess = $true
 } catch {
     Write-Host "  ⚠ Binary download failed or not available. Falling back to source install." -ForegroundColor Yellow
@@ -161,7 +163,7 @@ try {
 if ($binarySuccess) {
     # Add to PATH
     $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-    if ($userPath -notlike "*\.still-i-rise*") {
+    if ($userPath -notlike "*\.lingua-viva*") {
         [Environment]::SetEnvironmentVariable("Path", "$userPath;$installDir", "User")
         $env:Path = "$env:Path;$installDir"
         Write-Host "  ✓ Added to PATH" -ForegroundColor Green
@@ -173,13 +175,13 @@ if ($binarySuccess) {
     Check-Ollama
     Install-NativeLauncher
 
-    # Auto-start the web server. Launch `sir serve` directly (a detached, persistent
-    # process) rather than `sir start` — a frozen onefile exe spawning ITSELF as a
+    # Auto-start the web server. Launch `lv serve` directly (a detached, persistent
+    # process) rather than `lv start` — a frozen onefile exe spawning ITSELF as a
     # child inherits the parent's PyInstaller temp dir and dies when the parent
     # exits. Start-Process launches an independent process that survives.
-    Write-Host "  → Starting web server on http://localhost:7896 ..." -ForegroundColor Cyan
+    Write-Host "  → Starting web server on http://localhost:8787 ..." -ForegroundColor Cyan
     try {
-        Start-Process -FilePath "$installDir\sir.exe" -ArgumentList "serve", "7896" -WindowStyle Hidden -ErrorAction SilentlyContinue
+        Start-Process -FilePath "$installDir\lv.exe" -ArgumentList "serve", "8787" -WindowStyle Hidden -ErrorAction SilentlyContinue
     } catch {}
 
     # Give the server time to bind. The frozen binary extracts (~3-5s) and loads
@@ -188,24 +190,24 @@ if ($binarySuccess) {
     foreach ($i in 1..30) {
         Start-Sleep -Seconds 1
         try {
-            Invoke-WebRequest -Uri "http://127.0.0.1:7896/" -UseBasicParsing -TimeoutSec 2 | Out-Null
+            Invoke-WebRequest -Uri "http://127.0.0.1:8787/" -UseBasicParsing -TimeoutSec 2 | Out-Null
             $up = $true; break
         } catch {}
     }
 
     if ($up) {
         Write-Host "  ✓ Web UI is live" -ForegroundColor Green
-        Start-Process "http://localhost:7896"            # open the web UI in the browser
+        Start-Process "http://localhost:8787"            # open the web UI in the browser
     } else {
-        Write-Host "  ⚠ Web server didn't come up in time — start it later with 'sir serve'" -ForegroundColor Yellow
+        Write-Host "  ⚠ Web server didn't come up in time — start it later with 'lv serve'" -ForegroundColor Yellow
     }
 
     Write-Host ""
     Write-Host "  ╔══════════════════════════════════════════╗" -ForegroundColor Cyan
     Write-Host "  ║   Installation complete!                 ║" -ForegroundColor Cyan
     Write-Host "  ╠══════════════════════════════════════════╣" -ForegroundColor Cyan
-    Write-Host "  ║   Web UI:   http://localhost:7896         ║" -ForegroundColor Cyan
-    Write-Host "  ║   Status:   sir health                   ║" -ForegroundColor Cyan
+    Write-Host "  ║   Web UI:   http://localhost:8787         ║" -ForegroundColor Cyan
+    Write-Host "  ║   Status:   lv health                    ║" -ForegroundColor Cyan
     Write-Host "  ╚══════════════════════════════════════════╝" -ForegroundColor Cyan
     Write-Host ""
     exit 0
@@ -239,7 +241,7 @@ try {
 
 # Clone or Update
 if (-not (Test-Path "$installDir\.git")) {
-    Write-Host "  → Cloning Still I Rise..." -ForegroundColor Cyan
+    Write-Host "  → Cloning Lingua Viva..." -ForegroundColor Cyan
     git clone https://github.com/lingua-viva/learning-architecture.git "$installDir"
 } else {
     Write-Host "  → Updating existing clone..." -ForegroundColor Cyan
@@ -276,15 +278,15 @@ Install-NativeLauncher
 Write-Host ""
 Write-Host "Running health check..." -ForegroundColor Cyan
 try {
-    python src/mc_cli.py health
+    python src/lv_cli.py health
 } catch {
-    Write-Host "  (Run 'python src/mc_cli.py health' to verify)" -ForegroundColor Yellow
+    Write-Host "  (Run 'python src/lv_cli.py health' to verify)" -ForegroundColor Yellow
 }
 
 # Auto-start web server (source mode — src/web.py is on disk)
-Write-Host "  → Starting web server on http://localhost:7896 ..." -ForegroundColor Cyan
+Write-Host "  → Starting web server on http://localhost:8787 ..." -ForegroundColor Cyan
 try {
-    Start-Process -FilePath "python" -ArgumentList "-m", "src.web", "7896" -WindowStyle Hidden -ErrorAction SilentlyContinue
+    Start-Process -FilePath "python" -ArgumentList "-m", "src.web", "8787" -WindowStyle Hidden -ErrorAction SilentlyContinue
 } catch {}
 
 Pop-Location
@@ -294,7 +296,7 @@ Write-Host "  ╔═════════════════════
 Write-Host "  ║     Installation complete                ║" -ForegroundColor Cyan
 Write-Host "  ╠══════════════════════════════════════════╣" -ForegroundColor Cyan
 Write-Host "  ║  Start:  cd $installDir                  ║" -ForegroundColor Cyan
-Write-Host "  ║          python src/mc_cli.py shell      ║" -ForegroundColor Cyan
-Write-Host "  ║  Web UI: http://localhost:7896            ║" -ForegroundColor Cyan
+Write-Host "  ║          python src/lv_cli.py shell      ║" -ForegroundColor Cyan
+Write-Host "  ║  Web UI: http://localhost:8787            ║" -ForegroundColor Cyan
 Write-Host "  ╚══════════════════════════════════════════╝" -ForegroundColor Cyan
 Write-Host ""

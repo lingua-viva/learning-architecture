@@ -24,3 +24,25 @@ def test_runtime_package_metadata_is_lingua_viva_branded():
     assert "Lingua Viva" in package["description"]
     assert not any(term in package["name"] for term in STALE_PRODUCT_TERMS)
     assert not any(term in package["description"] for term in STALE_PRODUCT_TERMS)
+
+
+def test_release_pipeline_uses_lingua_viva_binary_contract():
+    release_workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    install_test = (ROOT / ".github" / "workflows" / "install-test.yml").read_text(encoding="utf-8")
+    windows_installer = (ROOT / "install.ps1").read_text(encoding="utf-8")
+
+    assert "pyinstaller lv.spec" in release_workflow
+    assert "mc.spec" not in release_workflow
+    assert "LV_CONFIG_HOME" in release_workflow
+    assert "STILL_I_RISE_HOME" not in release_workflow
+    assert all(asset in release_workflow for asset in ("lv-darwin-arm64", "lv-linux-x86_64", "lv-windows-x86_64.exe"))
+    assert not any(asset in release_workflow for asset in ("sir-darwin-arm64", "sir-linux-x86_64", "sir-windows-x86_64.exe"))
+
+    assert "$HOME/.local/bin/lv" in install_test
+    assert "$HOME/.local/bin/sir" not in install_test
+
+    assert "lv-windows-${arch}.exe" in windows_installer
+    assert "$env:USERPROFILE\\.lingua-viva" in windows_installer
+    assert "src\\lv_cli.py" in windows_installer
+    assert "http://localhost:8787" in windows_installer
+    assert not any(term in windows_installer for term in ("Still I Rise", ".still-i-rise", "src\\mc_cli.py", "7896"))

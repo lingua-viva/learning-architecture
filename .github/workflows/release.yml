@@ -7,9 +7,8 @@ on:
 # approach (keeps CI binaries identical to local ones). Do not redesign from
 # scratch; only adapt names/deps/env-vars to this repo.
 #
-# Binary is named 'sir' (Still I Rise), not 'mc' — see mc.spec / install.sh for
-# the collision rationale (this fork and Mission Canvas both install to
-# ~/.local/bin/<name>).
+# Binary is named 'lv' (Lingua Viva). Keep these asset names aligned with
+# install.sh and install.ps1.
 
 jobs:
   build:
@@ -18,13 +17,13 @@ jobs:
         include:
           - os: macos-latest
             arch: arm64
-            name: sir-darwin-arm64
+            name: lv-darwin-arm64
           - os: ubuntu-latest
             arch: x86_64
-            name: sir-linux-x86_64
+            name: lv-linux-x86_64
           - os: windows-latest
             arch: x86_64
-            name: sir-windows-x86_64.exe
+            name: lv-windows-x86_64.exe
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -37,17 +36,17 @@ jobs:
       - name: Install dependencies
         run: pip install pyinstaller pyyaml redis fastapi uvicorn websockets pdfplumber sqlite-vec platformdirs
 
-      # Build from mc.spec — the single source of truth for the bundle (datas,
+      # Build from lv.spec — the single source of truth for the bundle (datas,
       # hidden imports incl. src.web, strip). Building from the spec keeps CI
       # binaries identical to local ones.
-      - name: Build binary (mc.spec)
+      - name: Build binary (lv.spec)
         shell: bash
         run: |
-          pyinstaller mc.spec --clean --noconfirm
+          pyinstaller lv.spec --clean --noconfirm
           if [ "$RUNNER_OS" = "Windows" ]; then
-            cp dist/sir.exe "dist/${{ matrix.name }}"
+            cp dist/lv.exe "dist/${{ matrix.name }}"
           else
-            cp dist/sir "dist/${{ matrix.name }}"
+            cp dist/lv "dist/${{ matrix.name }}"
           fi
 
       # Fail the build before publishing if the binary can't even render status.
@@ -56,7 +55,7 @@ jobs:
         shell: bash
         env:
           PYTHONUTF8: '0'
-          STILL_I_RISE_HOME: ${{ runner.temp }}/sir_smoke
+          LV_CONFIG_HOME: ${{ runner.temp }}/lv_smoke
         run: |
           "dist/${{ matrix.name }}" status
 
