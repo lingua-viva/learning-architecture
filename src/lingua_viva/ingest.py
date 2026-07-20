@@ -1,24 +1,33 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 
-DOCUMENT_STORE_PATH = (
-    Path(__file__).parents[2]
-    / "case-studies" / "04-still-i-rise" / "data" / "documents.db"
-)
+DOCUMENT_STORE_PATH: Path | None = None
 
 ALLOWED_DOC_TYPES = {"curriculum", "organizational"}
 BLOCKED_DOC_TYPES = {"student-records"}
 
 
+def document_store_path() -> Path:
+    override = os.environ.get("LV_DOCUMENT_STORE_PATH")
+    if override:
+        return Path(override)
+    if DOCUMENT_STORE_PATH is not None:
+        return Path(DOCUMENT_STORE_PATH)
+    from src.lingua_viva.config import lv_home
+    return lv_home() / "runtime" / "documents.db"
+
+
 def document_retriever():
-    if not DOCUMENT_STORE_PATH.exists():
+    store_path = document_store_path()
+    if not store_path.exists():
         return None
     from src.education.document_retrieval import DocumentRetriever
     from src.education.document_store import DocumentStore
 
-    return DocumentRetriever(DocumentStore(DOCUMENT_STORE_PATH))
+    return DocumentRetriever(DocumentStore(store_path))
 
 
 def ingest_document(path: Path, doc_type: str) -> dict:
@@ -63,7 +72,8 @@ def ingest_document(path: Path, doc_type: str) -> dict:
             "error": f"No content extracted from {path.name} — nothing to ingest.",
         }
 
-    store = DocumentStore(DOCUMENT_STORE_PATH)
+    store_path = document_store_path()
+    store = DocumentStore(store_path)
     try:
         added = store.add_chunks(chunks)
     except EmbeddingUnavailableError as exc:
@@ -83,5 +93,5 @@ def ingest_document(path: Path, doc_type: str) -> dict:
         "prose": added - tables,
         "redactions": total_redactions,
         "needs_review": needs_review,
-        "store": str(DOCUMENT_STORE_PATH),
+        "store": str(store_path),
     }

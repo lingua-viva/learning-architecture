@@ -5,8 +5,8 @@ Local teacher/operator support commands for Lingua Viva validation and support p
 Run from the Lingua Viva package or repo root:
 
 ```bash
-python3 implementations/education/lingua-viva/dev/lv_support.py doctor
-python3 implementations/education/lingua-viva/dev/lv_support.py doctor --json
+python3 -m doctor.support_loop doctor
+python3 -m src.lingua_viva.cli doctor --json
 ```
 
 Teacher mode constraints:

@@ -22,9 +22,10 @@ BUILD_JOURNAL.md Turn 0.
 
 Privacy: this module never calls any external model or API. It is pure
 local data storage and arithmetic. Nothing here routes through the MC
-pipeline's external-model path. The DB file lives under
-case-studies/04-still-i-rise/data/, which is gitignored — student data
-must never enter git history.
+pipeline's external-model path. The DB file defaults to
+~/.lingua-viva/runtime/student_lenses.db; tests and deployments can
+override it with LV_STUDENT_DB_PATH. Student data must never enter git
+history.
 
 Rights (mirrors MC-GOV-008 operator-lens pattern): a teacher can view
 (get_lens), export (export_lens — full profile + raw observation log),
@@ -35,6 +36,7 @@ explicit request) any student lens they own.
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import time
 import uuid
@@ -43,13 +45,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-DEFAULT_DB_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "case-studies"
-    / "04-still-i-rise"
-    / "data"
-    / "still_i_rise.db"
-)
+def default_db_path() -> Path:
+    override = os.environ.get("LV_STUDENT_DB_PATH")
+    if override:
+        return Path(override)
+    from src.lingua_viva.config import lv_home
+    return lv_home() / "runtime" / "student_lenses.db"
 
 VALID_RTI_TIERS = (1, 2, 3)
 VALID_CEFR_DIMENSIONS = ("reading", "writing", "speaking", "listening")
@@ -140,7 +141,7 @@ class StudentLensStore:
     """
 
     def __init__(self, db_path: Optional[Path] = None):
-        self.db_path = Path(db_path) if db_path else DEFAULT_DB_PATH
+        self.db_path = Path(db_path) if db_path else default_db_path()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(self.db_path)
         self._conn.row_factory = sqlite3.Row

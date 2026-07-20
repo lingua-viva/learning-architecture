@@ -23,7 +23,9 @@
 #     overlay, posting free text through /api/query (MC-lessons §7).
 #   v4 (2026-07-19): src/web.py — added GET /api/profile/export; static/index.html
 #     — added Export My Data button before Clear All Data (MC-lessons §8).
-version: 4
+#   v5 (2026-07-20): src/web.py — moved default ingest scratch storage under
+#     Lingua Viva runtime home instead of the legacy case-study data tree.
+version: 5
 files:
   - static/index.html
   - static/sw.js

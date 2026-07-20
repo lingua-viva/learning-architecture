@@ -27,7 +27,7 @@ class DocumentRetriever:
     Wraps a DocumentStore and gates retrieval by classified domain.
 
     Usage:
-        store = DocumentStore("case-studies/04-still-i-rise/data/documents.db")
+        store = DocumentStore("~/.lingua-viva/runtime/documents.db")
         retriever = DocumentRetriever(store)  # defaults to the 9 education subdomains
         pipeline = Pipeline(document_retriever=retriever)
 

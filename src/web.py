@@ -166,7 +166,10 @@ async def health():
 
 def _student_db_path() -> Path:
     override = os.environ.get("LV_STUDENT_DB_PATH")
-    return Path(override) if override else LV_ROOT / ".lv_support" / "runtime" / "student_lenses.db"
+    if override:
+        return Path(override)
+    from src.lingua_viva.config import lv_home
+    return lv_home() / "runtime" / "student_lenses.db"
 
 
 def _seed_demo_roster(store) -> None:
@@ -995,14 +998,17 @@ _ingest_lock = asyncio.Lock()
 
 
 def _ingest_temp_dir() -> Path:
-    """Scoped scratch dir for uploads-in-flight — never the shared system
-    tmp root, so the lifecycle (write, parse, always delete) is easy to
-    reason about and to grep for. Lives under the same gitignored `data/`
-    tree the document store itself uses. LV_INGEST_TMP_DIR overrides for
-    tests (MC-lessons §1c) — without it, tests exercising /api/ingest wrote
-    into the real case-studies tree."""
+    """Scoped scratch dir for uploads-in-flight.
+
+    Never use the shared system tmp root; this keeps write/parse/delete easy
+    to reason about and gives tests a single LV_INGEST_TMP_DIR override.
+    """
     override = os.environ.get("LV_INGEST_TMP_DIR")
-    d = Path(override) if override else LV_ROOT / "case-studies" / "04-still-i-rise" / "data" / "ingest-tmp"
+    if override:
+        d = Path(override)
+    else:
+        from src.lingua_viva.config import lv_home
+        d = lv_home() / "runtime" / "ingest-tmp"
     d.mkdir(parents=True, exist_ok=True)
     for stale in d.glob("tmp*.pdf"):
         try:

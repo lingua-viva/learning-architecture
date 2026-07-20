@@ -262,8 +262,8 @@ class ReasoningEngine:
         1. `model` — a true explicit override (an actual @mention or
            task-envelope-specified model). Rare; a caller must opt in
            deliberately. Always wins.
-        2. User provider config (`~/.still-i-rise/config/providers.json`,
-           written by the Gap 5a onboarding screen or by install.sh's
+        2. User provider config (`~/.lingua-viva/config/providers.json`,
+           written by the provider onboarding screen or by install.sh's
            Ollama auto-detection) — read fresh every call, never cached.
         3. `default_model` — the ontology's suggestion for this node
            (`classification.default_model`). Previously this was passed

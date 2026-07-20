@@ -1,13 +1,11 @@
 """
-Education domain pack — Still I Rise.
+Education domain pack — Lingua Viva.
 
-Runtime modules that implement the two Lingua Viva / Still I Rise products
-inside the Lingua Viva runtime:
+Runtime modules that implement Lingua Viva's teacher-support workflows:
 
   Product A: Teacher Observation -> Student Lens Pipeline
   Product B: IB Curriculum -> Differentiated Content Packs
 
-See case-studies/04-still-i-rise/BUILD_JOURNAL.md for build history and
-case-studies/04-still-i-rise/architecture/ for the design references these
-modules implement.
+The implementation originated in the 04-still-i-rise case-study materials,
+but the runtime app is now branded and packaged as Lingua Viva.
 """

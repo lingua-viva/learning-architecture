@@ -24,11 +24,9 @@ retrieval is plain cosine similarity over embeddings, ranked by
 sqlite-vec's built-in distance ordering. If retrieval quality demands
 re-ranking or hybrid (BM25 + vector) search, that is future work.
 
-Storage location: the caller supplies the DB path. This repo's convention
-(see case-studies/04-still-i-rise/.gitignore entry for `data/`) is to keep
-per-case-study runtime data under `case-studies/<slug>/data/`, which is
-already gitignored — so no student/school document content or embeddings
-derived from it is ever committed.
+Storage location: the caller supplies the DB path. Lingua Viva's ingestion
+wrapper defaults to ~/.lingua-viva/runtime/documents.db, keeping
+student/school document content and embeddings out of the repository.
 
 Embeddings never leave the machine: nomic-embed-text is called against
 the local Ollama instance only (http://localhost:11434), the same
@@ -90,7 +88,7 @@ class DocumentStore:
     Local SQLite-vec-backed store for parsed document chunks.
 
     Usage:
-        store = DocumentStore("case-studies/04-still-i-rise/data/documents.db")
+        store = DocumentStore("~/.lingua-viva/runtime/documents.db")
         store.add_chunks(chunks)  # from DocumentParser.parse()
         results = store.search("what are the criterion B levels?", k=5)
     """

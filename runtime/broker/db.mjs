@@ -1,4 +1,4 @@
-// Mission Canvas Broker Database
+// Lingua Viva Broker Database
 // SQLite via better-sqlite3 (sync API, proven)
 
 import Database from 'better-sqlite3';

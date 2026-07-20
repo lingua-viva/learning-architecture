@@ -10,8 +10,8 @@ ReasoningEngine.reason() (via _resolve_provider_model + the priority chain),
 without going through the network — _call_model is monkeypatched to just
 record what model string it was asked to use.
 
-Uses SIR_CONFIG_HOME (same mechanism as test_provider_config.py) so this
-suite never touches a real ~/.still-i-rise directory.
+Uses LV_CONFIG_HOME (same mechanism as test_provider_config.py) so this
+suite never touches a real ~/.lingua-viva directory.
 """
 
 import sys
@@ -27,7 +27,7 @@ from src.pipeline import ReasoningEngine, ReasonResult
 
 @pytest.fixture(autouse=True)
 def isolated_config_home(tmp_path, monkeypatch):
-    monkeypatch.setenv("SIR_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("LV_CONFIG_HOME", str(tmp_path))
     monkeypatch.delenv("LV_REASON_MODEL", raising=False)
     yield tmp_path
 

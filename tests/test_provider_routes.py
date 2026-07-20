@@ -5,7 +5,7 @@ Route-level contract for GET /api/provider, POST /api/provider/connect,
 POST /api/provider/disconnect. Monkeypatches src.provider_config's public
 functions directly (same pattern as test_provider_config.py uses for
 verify_key) so this suite never hits a real provider API or a real
-~/.still-i-rise directory.
+~/.lingua-viva directory.
 """
 
 import sys

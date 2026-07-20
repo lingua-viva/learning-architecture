@@ -8,9 +8,9 @@ HTTPError/URLError branches by faking urlopen, not by hitting real
 provider APIs (that was done once manually against the real network
 during development; this suite must be safe to run offline/in CI).
 
-Uses SIR_CONFIG_HOME to point _provider_config_path() at a tmp_path for
+Uses LV_CONFIG_HOME to point _provider_config_path() at a tmp_path for
 every test, so nothing here ever touches a real user's
-~/.still-i-rise/config/providers.json.
+~/.lingua-viva/config/providers.json.
 """
 
 import sys
@@ -27,7 +27,7 @@ from src import provider_config
 
 @pytest.fixture(autouse=True)
 def isolated_config_home(tmp_path, monkeypatch):
-    monkeypatch.setenv("SIR_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("LV_CONFIG_HOME", str(tmp_path))
     yield tmp_path
 
 

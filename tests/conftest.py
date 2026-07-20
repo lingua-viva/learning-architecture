@@ -41,18 +41,16 @@ def _hermetic_lv_state(monkeypatch, tmp_path):
     # specific override isn't set — that's what makes it "one seam", not
     # N hardcoded Path.home() calls. We still set the three specific
     # overrides directly here rather than LV_CONFIG_HOME itself, because
-    # config_home() is shared with provider_config.py's legacy
-    # SIR_CONFIG_HOME-based tests (test_reasoning_model_resolution.py has
-    # its own isolated_config_home fixture) — forcing LV_CONFIG_HOME here
-    # would win config_home()'s `LV_CONFIG_HOME or SIR_CONFIG_HOME` check
-    # and silently break that isolation.
+    # config_home() is shared with provider_config.py; several focused tests
+    # set LV_CONFIG_HOME themselves. Forcing LV_CONFIG_HOME here would win
+    # config_home()'s precedence check and silently break that isolation.
     monkeypatch.setenv("LV_TRACE_PATH", str(state_home / "traces.ndjson"))
     monkeypatch.setenv("LV_PRIVACY_LOG_PATH", str(state_home / "privacy_events.ndjson"))
     monkeypatch.setenv("LV_FILE_MAP_PATH", str(state_home / "file_map.yaml"))
 
-    # Specific overrides for the two state paths that don't route through
-    # lv_home() by design (student_lenses.db and the dev revision log are
-    # intentionally repo-relative in production — the revision log in
+    # Specific overrides for state paths whose tests need direct file
+    # assertions (student_lenses.db and the dev revision log are
+    # intentionally stable in production — the revision log in
     # particular is a real, partly-committed dev audit trail, not per-user
     # scratch state, so its default location must not change). Tests still
     # need their own isolated copies.

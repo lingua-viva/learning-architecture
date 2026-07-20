@@ -20,7 +20,8 @@ REPO = Path(__file__).resolve().parent.parent
 #   v2 (2026-07-19): src/web.py request-outcome logging middleware (§5).
 #   v3 (2026-07-19): static/index.html Ctrl/Cmd+K quick-capture overlay (§7).
 #   v4 (2026-07-19): GET /api/profile/export + Export My Data button (§8).
-EXPECTED_VERSION = 4
+#   v5 (2026-07-20): default ingest scratch storage moved to LV runtime home.
+EXPECTED_VERSION = 5
 
 
 def test_version_bumped_exactly_one_from_live():
