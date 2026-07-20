@@ -13,7 +13,8 @@ from .privacy import matches_private_path, redact_text
 from .schemas import CheckResult, utc_now, worst_status
 
 
-EXPECTED_BRANCH = "LINGUA-VIVA-UPDATE"
+EXPECTED_BRANCHES = ("main", "LINGUA-VIVA-UPDATE")
+EXPECTED_BRANCH = EXPECTED_BRANCHES[0]
 MANUAL_DOCX = "Manuale_Italiano_Laboratorio_Linguistico_G1-G5.docx"
 
 REQUIRED_FILES = [
@@ -132,9 +133,10 @@ def _load_yaml(rel: str) -> tuple[dict[str, Any] | None, str | None]:
 def check_branch() -> CheckResult:
     code, output = _git(["branch", "--show-current"])
     branch = output.strip() if code == 0 else "unknown"
-    if branch == EXPECTED_BRANCH:
-        return _check("pass", "branch", f"Branch is {EXPECTED_BRANCH}.", detail=branch)
-    return _check("fail", "branch", f"Branch must be {EXPECTED_BRANCH}; current branch is {branch}.", detail=branch)
+    if branch in EXPECTED_BRANCHES:
+        return _check("pass", "branch", f"Branch is allowed: {branch}.", detail=branch)
+    expected = " or ".join(EXPECTED_BRANCHES)
+    return _check("fail", "branch", f"Branch must be {expected}; current branch is {branch}.", detail=branch)
 
 
 def check_required_files() -> list[CheckResult]:
@@ -323,6 +325,7 @@ def run_doctor(write_log: bool = True) -> dict[str, Any]:
         "timestamp": utc_now(),
         "mode": "teacher",
         "branch_expected": EXPECTED_BRANCH,
+        "branch_allowed": list(EXPECTED_BRANCHES),
         "repo_root": str(REPO_ROOT),
         "lingua_viva_root": str(LV_ROOT),
         "checks": [check.as_dict() for check in checks],

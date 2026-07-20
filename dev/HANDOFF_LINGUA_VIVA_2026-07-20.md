@@ -35,11 +35,11 @@ Read `dev/INDEX.md` for the authoritative spec-status table before trusting any 
 
 ## 3. Current state (verified today, 2026-07-20)
 
-- **437 tests total: 437 passing** after the follow-up sanitizer client fix in this window. The original handoff pass found `tests/test_sanitizer_client.py::test_fail_closed_production_mode` red; `sanitizer/client.py` now resolves `LV_SANITIZER_URL` lazily so the production fail-closed path honors per-test env overrides.
-- **`python3 -m doctor.support_loop doctor` → BLOCKED**, not WARN: `FAIL: Branch must be LINGUA-VIVA-UPDATE; current branch is main.` Doctor has a hard-coded branch-name gate left over from when work happened on a feature branch. Now that the merged work lives on `main`, this gate blocks by design-mismatch, not because anything is actually broken. Needs a decision (see §6).
+- **454 tests total (437 app + 15 doctor + 2 doctor-hardening branch cases): all passing** after the follow-up sanitizer client fix in this window. The original handoff pass found `tests/test_sanitizer_client.py::test_fail_closed_production_mode` red; `sanitizer/client.py` now resolves `LV_SANITIZER_URL` lazily so the production fail-closed path honors per-test env overrides.
+- **`python3 -m doctor.support_loop doctor` → WARN**, not BLOCKED. Fixed in the Doctor sweep: `EXPECTED_BRANCH = "LINGUA-VIVA-UPDATE"` was a hard-coded single-branch gate left over from feature-branch work; Doctor now accepts either `main` or `LINGUA-VIVA-UPDATE` (`EXPECTED_BRANCHES` in `doctor/support_loop/doctor.py`). Remaining WARN after commit: expected private `.docx` source exclusions are present and intentionally not read. See `dev/REPORT_DOCTOR_SWEEP_2026-07-20.md`.
 - Ontology: 111 nodes / 25 domains. Knowledge: 178 entries / 559 citations. (MANIFEST.yaml, doc counts pinned by `tests/test_doc_counts.py`.)
 - Desktop: version 0.2.0, AppImage built locally (not committed — gitignored, not a release).
-- Uncommitted at time of this note: this handoff, `dev/INDEX.md`, and the sanitizer client fix.
+- Latest local commits after this note cover this handoff/index, the sanitizer client fix, and the Doctor branch-gate sweep.
 
 ---
 
@@ -131,7 +131,7 @@ If "build out the student tier" is ever the ask, it's a from-scratch build, not 
 2. **Admin tier is 75% placeholder.** 3 of 4 sidebar items return `not_yet_implemented`. The tier looks built in the UI but isn't.
 3. **The teacher-tier decision half of the flywheel is missing.** Observation capture works; RTI confirm/defer, grouping, portfolio writes, and gap-detection endpoints specified in the addendum were never built. The system can *observe and propose* but a teacher currently cannot *act* on a proposal through the app — the addendum's own headline design principle ("system proposes, teacher confirms") isn't wired end-to-end.
 4. **A second instance of the exact hermeticity bug MC-lessons §1 was built to close, found live today and fixed in this follow-up:** `sanitizer/client.py` kept `SANITIZER_URL = os.getenv("LV_SANITIZER_URL", "http://localhost:6100")` as a module-level import-time value, so `tests/conftest.py`'s per-test env override never reached it. The fix adds call-time URL resolution for `/health` and `/sanitize/fast`. The failure was real, not flaky, and is useful evidence that the "convert module constants to lazy functions" sweep in MC-lessons §1 wasn't repo-wide.
-5. **Doctor's branch-name gate now blocks on `main`.** `Branch must be LINGUA-VIVA-UPDATE; current branch is main` — a leftover feature-branch assumption that's wrong now that work has landed on `main`. Either the gate needs updating or the branching model needs restating.
+5. ~~Doctor's branch-name gate blocked on `main`.~~ **Fixed in the Doctor sweep** — `EXPECTED_BRANCHES` now accepts `main` alongside `LINGUA-VIVA-UPDATE` in `doctor/support_loop/doctor.py`. Left in the list as history/context; not a live weakness anymore.
 6. **Access control is a single-teacher bootstrap, not a roster system.** Fine today; breaks the moment a second teacher account is real (see §5.4).
 7. **Exit/integrity governance is a permanent no-op with no committed replacement date.** Currently safe only because external routing is hard-disabled elsewhere — that's a single point of failure if that assumption ever changes without someone remembering to build the exit gate first.
 8. **Publication layer is explicitly not publication-ready** and the audit that says so (§5.6) has sat at Phase 0 since 2026-07-16 with no Phase 1 follow-through.
@@ -142,13 +142,12 @@ If "build out the student tier" is ever the ask, it's a from-scratch build, not 
 
 ## 7. Where to focus next (suggested order)
 
-1. **Resolve the Doctor branch-name gate** (§6.5) — either it's stale and should be updated to accept `main`, or there's a branching convention that needs to be re-documented and actually followed.
-2. **Decide the fate of the addendum's unbuilt teacher endpoints** (§5.1) — either build `/rti`, `/grouping`, `/portfolio-entry`, `/assess/gaps`, and `/help-artifact`, or formally descope them in the spec/`dev/INDEX.md` so the SHIPPED status stops overclaiming. Right now the spec says shipped and the code says partial.
-3. **Same call for the admin tier** (§5.2) — either build evidence/capacity/trends for real (they need "accumulated, consent-aware teacher evidence data" per the code comments — i.e., they need enough real usage first) or explicitly message the coordinator sidebar as "coming after adoption" rather than a silent placeholder.
-4. **Auth/roles, before any second real user.** Even a minimal server-side role check would close weakness #1.
-5. **Roster model for access control** (§5.4) — replace "must have observed once" with an admin-grantable roster before a second teacher account is real.
-6. **Publication-readiness Phase 1**, if any of this portfolio content is going public soon — the audit already tells you exactly what to fix.
-7. **Student tier** — only after a genuine adoption signal from tier 1-2 usage, per the addendum's own reasoning. Don't build ahead of that signal.
+1. **Decide the fate of the addendum's unbuilt teacher endpoints** (§5.1) — either build `/rti`, `/grouping`, `/portfolio-entry`, `/assess/gaps`, and `/help-artifact`, or formally descope them in the spec/`dev/INDEX.md` so the SHIPPED status stops overclaiming. Right now the spec says shipped and the code says partial.
+2. **Same call for the admin tier** (§5.2) — either build evidence/capacity/trends for real (they need "accumulated, consent-aware teacher evidence data" per the code comments — i.e., they need enough real usage first) or explicitly message the coordinator sidebar as "coming after adoption" rather than a silent placeholder.
+3. **Auth/roles, before any second real user.** Even a minimal server-side role check would close weakness #1.
+4. **Roster model for access control** (§5.4) — replace "must have observed once" with an admin-grantable roster before a second teacher account is real.
+5. **Publication-readiness Phase 1**, if any of this portfolio content is going public soon — the audit already tells you exactly what to fix.
+6. **Student tier** — only after a genuine adoption signal from tier 1-2 usage, per the addendum's own reasoning. Don't build ahead of that signal.
 
 ---
 

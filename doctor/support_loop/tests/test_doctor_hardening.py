@@ -71,6 +71,18 @@ def test_branch_mismatch_blocks(monkeypatch):
     assert check.status == "fail"
 
 
+def test_main_branch_is_allowed(monkeypatch):
+    monkeypatch.setattr(doctor, "_git", lambda args: (0, "main"))
+    check = doctor.check_branch()
+    assert check.status == "pass"
+
+
+def test_legacy_update_branch_is_allowed(monkeypatch):
+    monkeypatch.setattr(doctor, "_git", lambda args: (0, "LINGUA-VIVA-UPDATE"))
+    check = doctor.check_branch()
+    assert check.status == "pass"
+
+
 def test_dirty_worktree_is_visible(monkeypatch):
     monkeypatch.setattr(doctor, "_git", lambda args: (0, " M implementations/education/lingua-viva/README.md"))
     check = doctor.check_lingua_viva_worktree()
