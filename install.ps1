@@ -278,9 +278,9 @@ Install-NativeLauncher
 Write-Host ""
 Write-Host "Running health check..." -ForegroundColor Cyan
 try {
-    python src/lv_cli.py health
+    python -m src.lv_cli health
 } catch {
-    Write-Host "  (Run 'python src/lv_cli.py health' to verify)" -ForegroundColor Yellow
+    Write-Host "  (Run 'python -m src.lv_cli health' to verify)" -ForegroundColor Yellow
 }
 
 # Auto-start web server (source mode — src/web.py is on disk)
@@ -296,7 +296,7 @@ Write-Host "  ╔═════════════════════
 Write-Host "  ║     Installation complete                ║" -ForegroundColor Cyan
 Write-Host "  ╠══════════════════════════════════════════╣" -ForegroundColor Cyan
 Write-Host "  ║  Start:  cd $installDir                  ║" -ForegroundColor Cyan
-Write-Host "  ║          python src/lv_cli.py shell      ║" -ForegroundColor Cyan
+Write-Host "  ║          python -m src.lv_cli shell      ║" -ForegroundColor Cyan
 Write-Host "  ║  Web UI: http://localhost:8787            ║" -ForegroundColor Cyan
 Write-Host "  ╚══════════════════════════════════════════╝" -ForegroundColor Cyan
 Write-Host ""

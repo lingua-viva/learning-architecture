@@ -44,13 +44,13 @@ jobs:
             exit 1
           fi
 
-      - name: Assert lv status works under C locale
+      - name: Assert lv preflight works under C locale
         env:
           LC_ALL: C
           LANG: C
         run: |
-          "$HOME/.local/bin/lv" status
-          echo "status exit: $?"
+          "$HOME/.local/bin/lv" preflight
+          echo "preflight exit: $?"
 
       - name: Assert lv health runs to completion (not crash)
         run: |

@@ -350,7 +350,7 @@ pull_ollama
 
 # Verify
 echo ""
-python3 "$INSTALL_DIR/src/lv_cli.py" health 2>/dev/null || echo "  (Run 'lv health' to verify)"
+python3 -m src.lv_cli health 2>/dev/null || echo "  (Run 'lv health' to verify)"
 
 install_native_launcher
 
@@ -376,7 +376,7 @@ fi
 # Symlink a `lv` shim on PATH so source-mode users get the same command name
 cat > "${HOME}/.local/bin/lv" << SHIMEOF
 #!/bin/sh
-exec python3 "$INSTALL_DIR/src/lv_cli.py" "\$@"
+cd "$INSTALL_DIR" && exec python3 -m src.lv_cli "\$@"
 SHIMEOF
 chmod +x "${HOME}/.local/bin/lv"
 
