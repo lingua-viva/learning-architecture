@@ -10,7 +10,7 @@ status change.
 
 | Spec | Date | Status | Evidence |
 |---|---|---|---|
-| [SPEC_DOWNLOAD_BUTTONS](specs/SPEC_DOWNLOAD_BUTTONS_2026-07-20.md) | 2026-07-20 | DRAFT | Landing-page buttons still `data-downloads-pending`; found live release assets (`sir-*`) don't match what `install.sh`/`install.ps1` request (`lv-*`), `release.yml` builds a nonexistent `mc.spec`, `install.ps1` never rebranded (still "Still I Rise", port 7896), desktop Electron app has no publishing CI at all |
+| [SPEC_DOWNLOAD_BUTTONS](specs/SPEC_DOWNLOAD_BUTTONS_2026-07-20.md) | 2026-07-20 | SHIPPED (partial) | Phases 1-2 shipped: `60faae5`, `797a52c`, `c86fb76`; live release `v1.0.3` publishes `lv-darwin-arm64`, `lv-linux-x86_64`, `lv-windows-x86_64.exe`; Release Binary run `29764711261` passed; Linux Install Test runs `29764711037` and `29764709197` passed. Mac/Windows installer paths remain manually unverified per G-5. Phases 3-4 still pending: desktop installer CI and landing-page button wiring |
 | [SPEC_APP_IMPROVEMENT_MC_LESSONS](specs/SPEC_APP_IMPROVEMENT_MC_LESSONS_2026-07-19.md) | 2026-07-19 | SHIPPED | This sweep — §1-§10 applied, HB1/HB2 green, see REPORT_APP_IMPROVEMENT_MC_LESSONS_2026-07-19.md |
 | [SPEC_FULL_ARCHITECTURE_SWEEP](specs/SPEC_FULL_ARCHITECTURE_SWEEP_2026-07-18.md) | 2026-07-18 | SHIPPED | REPORT_ARCHITECTURE_SWEEP_2026-07-18.md |
 | [SPEC_PHASE6_TRUST_UI](specs/SPEC_PHASE6_TRUST_UI_2026-07-18.md) | 2026-07-18 | SHIPPED | Trust/Why views live in static/index.html |

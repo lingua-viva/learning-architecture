@@ -1,6 +1,21 @@
 # SPEC_DOWNLOAD_BUTTONS_2026-07-20
 
-Status: DRAFT (unbuilt — this is the plan, not the ship)
+Status: SHIPPED (partial — Phases 1-2 only, Phases 3-4 still pending)
+
+Partial ship evidence, 2026-07-20:
+- Phase 1 naming split fixed in `60faae5`.
+- Phase 2 release retries exposed two additional CI/install bugs; fixes landed
+  in `797a52c` and `c86fb76`.
+- Live release `v1.0.3` publishes `lv-darwin-arm64`, `lv-linux-x86_64`, and
+  `lv-windows-x86_64.exe`.
+- Release Binary run `29764711261` passed, including CI smoke checks for
+  Linux, macOS, and Windows CLI binaries.
+- Install Test runs `29764711037` (`v1.0.3`) and `29764709197` (`main`) passed
+  for the Linux `install.sh` path.
+- Mac `install.sh` and Windows `install.ps1` installer paths remain manually
+  unverified per G-5.
+- Landing-page buttons remain pending because desktop installer CI and the
+  CLI-vs-desktop button decision are still unresolved.
 
 ## 0. Why this spec exists
 
@@ -288,13 +303,13 @@ the GitHub README), a different funnel than the marketing site.
 
 ## 5. Definition of done
 
-- [ ] Phase 1 landed: `install.sh`, `install.ps1`, both workflow files
+- [x] Phase 1 landed: `install.sh`, `install.ps1`, both workflow files
       agree on product name, binary name, install dir, port, and asset
       names.
-- [ ] Phase 2 landed: a real tagged release exists whose assets exactly
-      match what `install.sh`/`install.ps1` request; both scripts
-      verified end-to-end (Linux via `install-test.yml`, Mac/Windows via
-      manual verification per G-5).
+- [x] Phase 2 landed: a real tagged release exists whose assets exactly
+      match what `install.sh`/`install.ps1` request; Linux `install.sh`
+      verified end-to-end via `install-test.yml`; Mac `install.sh` and
+      Windows `install.ps1` remain manually unverified per G-5.
 - [ ] Decision made and recorded (§2) on CLI vs. desktop vs. both for the
       three landing-page buttons.
 - [ ] If desktop chosen/included: Phase 3 CI exists, produces real
