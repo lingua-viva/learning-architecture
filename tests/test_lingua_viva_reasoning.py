@@ -9,7 +9,13 @@ def run(coro):
     return asyncio.run(coro)
 
 
+def reset_breaker():
+    ReasoningEngine._ollama_failures = 0
+    ReasoningEngine._ollama_breaker_open_until = 0.0
+
+
 def test_reasoning_uses_model_response(monkeypatch, tmp_path):
+    reset_breaker()
     monkeypatch.setenv("LV_CONFIG_HOME", str(tmp_path))
     engine = ReasoningEngine()
 
@@ -44,6 +50,7 @@ def test_reasoning_uses_model_response(monkeypatch, tmp_path):
 
 
 def test_reasoning_falls_back_without_model(monkeypatch, tmp_path):
+    reset_breaker()
     monkeypatch.setenv("LV_CONFIG_HOME", str(tmp_path))
     monkeypatch.setattr(config, "detect_model", lambda: "ollama/qwen2.5:3b")
 
@@ -59,6 +66,7 @@ def test_reasoning_falls_back_without_model(monkeypatch, tmp_path):
 
 
 def test_reasoning_provider_config_precedes_default_model(monkeypatch, tmp_path):
+    reset_breaker()
     monkeypatch.setenv("LV_CONFIG_HOME", str(tmp_path))
     path = config.provider_config_path()
     path.parent.mkdir(parents=True)
@@ -82,6 +90,7 @@ def test_reasoning_provider_config_precedes_default_model(monkeypatch, tmp_path)
 
 
 def test_endpoint_uses_saved_provider_key(monkeypatch, tmp_path):
+    reset_breaker()
     monkeypatch.setenv("LV_CONFIG_HOME", str(tmp_path))
     path = config.provider_config_path()
     path.parent.mkdir(parents=True)
@@ -94,3 +103,26 @@ def test_endpoint_uses_saved_provider_key(monkeypatch, tmp_path):
 
     assert url == "https://api.openai.com/v1/chat/completions"
     assert headers["Authorization"] == "Bearer sk-test"
+
+
+def test_ollama_circuit_breaker_opens_after_three_timeouts(monkeypatch, tmp_path):
+    reset_breaker()
+    monkeypatch.setenv("LV_CONFIG_HOME", str(tmp_path))
+    calls = {"count": 0}
+
+    def timeout(*args, **kwargs):
+        calls["count"] += 1
+        raise TimeoutError("slow")
+
+    monkeypatch.setattr("src.lingua_viva.reasoning.request.urlopen", timeout)
+    engine = ReasoningEngine()
+
+    for _ in range(3):
+        result = run(engine.reason("Help", {}, model="ollama/qwen2.5:7b", system_prompt="Prompt"))
+        assert result.model_used == "none"
+
+    result = run(engine.reason("Help", {}, model="ollama/qwen2.5:7b", system_prompt="Prompt"))
+
+    assert "Ollama appears to be down" in result.content
+    assert calls["count"] == 3
+    reset_breaker()

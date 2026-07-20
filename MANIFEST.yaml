@@ -1,67 +1,49 @@
-name: mission-canvas
+name: lingua-viva-learning-architecture
 version: 1.0.0
 license: Apache-2.0
-product_url: https://missioncanvas.ai
-repo_url: https://github.com/pretendhome/mission-canvas
+product_url: https://github.com/lingua-viva
+repo_url: https://github.com/lingua-viva/learning-architecture
 
 ontology:
   version: "1.0"
-  nodes: 137
-  domains: [core, legal, ai-enablement, strategy, financial, safety, research, enablement, business_planning, financial_modeling, knowledge_management]
+  nodes: 111
+  domains: 25
+  education_domains: [admin, curriculum, teacher, student, assessment, parent, infrastructure, planning, learner]
 
 knowledge:
   version: "1.0"
-  entries: 148
-  citations: 526
+  entries: 178
+  citations: 559
   evidence_tiers: [1, 2, 3]
 
-memory:
-  backend: "redis+ndjson"
-  hot_store: "redis://localhost:6379"
-  cold_store: "ndjson (memory/data/)"
+runtime:
+  native_module: src/lingua_viva
+  education_modules: src/education
+  doctor: doctor/support_loop
+  desktop: desktop
+  web_port_dev: 8787
+  local_first: true
+  external_calls_default: 0
 
-skills:
-  core: 6
-  professional: 4
-  meta: 1
-  community: 0
-
-lenses:
-  core: 5
-  professional: 3
-
-agents:
-  intent: 6
-  orchestrator: 1
-  total: 7
-
-pipeline:
-  steps: 8
-  invariants:
-    - "Entry gate scans BEFORE classification"
-    - "Sensitive classification blocks external architecturally"
-    - "STORE always fires — memory compounds with every query"
-    - "Exit gate scans all inbound responses"
-
-governance:
-  tiers: 3
-  tier_1_rules: 8
+privacy:
+  source_document_authority: Manuale_Italiano_Laboratorio_Linguistico_G1-G5.docx
+  source_document_modified_by_app: false
+  trace_storage: "~/.lingua-viva/traces.ndjson"
+  privacy_log_storage: "~/.lingua-viva/privacy_events.ndjson"
+  trace_query_storage: "sha256 only; no raw query text"
 
 tests:
-  total: 65
-  pipeline: 0
-  gateway_pii: 14
-  ontology: 17
-  memory: 8
-  knowledge: 12
-  perplexity: 14
+  pytest_passed_baseline: 437
+  test_files: 60
+  test_functions: 437
+  doctor_tests: 15
+  golden_eval_queries: 36
 
-system:
-  ports:
-    api: 7891
-    broker: 7899
-    hub: 7890
-  models:
-    local: "ollama/qwen2.5:3b"
-    research: "perplexity/sonar-pro"
-    create: "mistral/mistral-large-latest"
+gates:
+  doctor_status_allowed: [OK, WARN, FIXABLE]
+  artifact_gauntlet: PASS
+  final_gate_iterations: 15
+
+archive:
+  mc_engine: archive/mc-engine
+  import_boundary: "Do not import archive/mc-engine from src/."

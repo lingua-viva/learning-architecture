@@ -32,3 +32,14 @@ def test_assert_safe_for_external_output_allows_public_curriculum_language():
     text = "Grade 3 curriculum is designed to target CEFR A1 language functions."
 
     assert privacy.assert_safe_for_external_output(text) == text
+
+
+def test_runtime_privacy_applies_declared_pii_patterns():
+    text = "Email a@example.com or call +39 1234567890. MRN: 123456."
+
+    redacted = privacy.redact_runtime_text(text)
+
+    assert "a@example.com" not in redacted
+    assert "+39 1234567890" not in redacted
+    assert "123456" not in redacted
+    assert privacy.contains_private_runtime_data(text) is True

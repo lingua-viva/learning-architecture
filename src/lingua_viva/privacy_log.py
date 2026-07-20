@@ -25,7 +25,8 @@ def privacy_log_path() -> Path:
     override = os.environ.get("LV_PRIVACY_LOG_PATH")
     if override:
         return Path(override).expanduser()
-    return Path.home() / ".lingua-viva" / "privacy_events.ndjson"
+    from src.lingua_viva.config import lv_home
+    return lv_home() / "privacy_events.ndjson"
 
 
 def event_hash(value: str) -> str:

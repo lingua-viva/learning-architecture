@@ -326,6 +326,59 @@
     .hidden {
       display: none !important;
     }
+    .qc-overlay {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: flex-start;
+      justify-content: center;
+      background: rgba(23, 33, 31, .36);
+      padding: 16px;
+      padding-top: 12vh;
+      z-index: 20;
+    }
+    .qc-overlay.visible {
+      display: flex;
+    }
+    .qc-dialog {
+      width: min(560px, 100%);
+      background: #fff;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      box-shadow: 0 24px 70px rgba(23, 33, 31, .28);
+      padding: 14px;
+    }
+    .qc-dialog input {
+      width: 100%;
+      font-size: 16px;
+      padding: 12px 14px;
+    }
+    .qc-error {
+      color: var(--accent);
+      font-size: 13px;
+      margin: 10px 2px 0;
+    }
+    .qc-hint {
+      color: var(--muted);
+      font-size: 12px;
+      margin: 10px 2px 0;
+    }
+    .qc-toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--brand);
+      color: #fff;
+      padding: 10px 18px;
+      border-radius: 6px;
+      box-shadow: var(--shadow);
+      z-index: 30;
+      display: none;
+    }
+    .qc-toast.visible {
+      display: block;
+    }
     @media (max-width: 860px) {
       .app {
         grid-template-columns: 1fr;
@@ -391,6 +444,18 @@
       </div>
     </div>
   </div>
+
+  <div id="qc-overlay" class="qc-overlay">
+    <div class="qc-dialog">
+      <form id="qc-form">
+        <input id="qc-input" type="text" autocomplete="off"
+          placeholder="Quick capture — an observation, a note… (Enter to save, Esc to close)">
+      </form>
+      <div id="qc-error" class="qc-error hidden"></div>
+      <div class="qc-hint">Ctrl/Cmd+K to open · Esc to close · goes through the same local privacy check as Ask</div>
+    </div>
+  </div>
+  <div id="qc-toast" class="qc-toast"></div>
 
   <script>
     const state = {
@@ -915,11 +980,22 @@
             <div class="item"><h3>Reasoning traces</h3><p>${profile.reasoning_traces || 0}</p></div>
           </div>
           <p>All app data is stored at ${escapeHtml(profile.storage)}. Nothing is uploaded. The source document and curriculum files are not affected by profile clear.</p>
+          <button id="export-profile" type="button">Export My Data</button>
           <button id="clear-profile" class="primary" type="button">Clear All Data</button>
           <div id="clear-profile-result" style="margin-top:12px;"></div>
         </div>`;
+      $("export-profile").addEventListener("click", async () => {
+        const response = await fetch("/api/profile/export");
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "lingua-viva-export.json";
+        link.click();
+        URL.revokeObjectURL(url);
+      });
       $("clear-profile").addEventListener("click", async () => {
-        if (!confirm("Clear all local app data? The source document and curriculum files are not affected.")) return;
+        if (!confirm("Clearing cannot be undone. Have you exported your data with the Export My Data button above? Click OK to proceed with clearing.")) return;
         const data = await api("/api/profile/clear", {method: "POST", body: JSON.stringify({confirm: "clear-all-data"})});
         $("clear-profile-result").innerHTML = `<span class="badge ok">${escapeHtml(data.status)}</span>`;
       });
@@ -1083,6 +1159,71 @@
     function studentOptions() {
       return state.students.map(student => `<option value="${student.student_id}" ${student.student_id === state.selectedStudent ? "selected" : ""}>${escapeHtml(student.display_name)}</option>`).join("");
     }
+
+    // Quick capture (Ctrl/Cmd+K) — MC-lessons §7. Claudia's core loop is
+    // capturing student observations mid-class; this makes it two
+    // keystrokes instead of navigate-to-view + form. Always posts to
+    // /api/query with no intent override — the classifier routes it,
+    // same governed path (privacy check, trace, local-only) as Ask.
+    let qcToastTimer = null;
+
+    function openQuickCapture() {
+      $("qc-input").value = "";
+      $("qc-error").classList.add("hidden");
+      $("qc-error").textContent = "";
+      $("qc-overlay").classList.add("visible");
+      $("qc-input").focus();
+    }
+
+    function closeQuickCapture() {
+      $("qc-overlay").classList.remove("visible");
+    }
+
+    function showQcToast(message) {
+      const toast = $("qc-toast");
+      toast.textContent = message;
+      toast.classList.add("visible");
+      if (qcToastTimer) clearTimeout(qcToastTimer);
+      qcToastTimer = setTimeout(() => toast.classList.remove("visible"), 3500);
+    }
+
+    async function submitQuickCapture(event) {
+      event.preventDefault();
+      const text = $("qc-input").value.trim();
+      if (!text) return;
+      try {
+        const data = await api("/api/query", {
+          method: "POST",
+          body: JSON.stringify({query: text})
+        });
+        if (data.type === "error" || data.error) {
+          $("qc-error").textContent = data.error || "Capture failed. Try again.";
+          $("qc-error").classList.remove("hidden");
+          return;
+        }
+        closeQuickCapture();
+        showQcToast(`Captured → ${data.classification?.name || data.classification?.node || "local trace"}`);
+      } catch (err) {
+        $("qc-error").textContent = err.message || "Capture failed. Try again.";
+        $("qc-error").classList.remove("hidden");
+      }
+    }
+
+    document.addEventListener("keydown", event => {
+      const key = event.key.toLowerCase();
+      if ((event.metaKey || event.ctrlKey) && key === "k") {
+        event.preventDefault();
+        openQuickCapture();
+        return;
+      }
+      if (key === "escape" && $("qc-overlay").classList.contains("visible")) {
+        closeQuickCapture();
+      }
+    });
+    $("qc-overlay").addEventListener("click", event => {
+      if (event.target.id === "qc-overlay") closeQuickCapture();
+    });
+    $("qc-form").addEventListener("submit", submitQuickCapture);
 
     $("change-role").addEventListener("click", () => $("role-choice").classList.add("visible"));
     document.querySelectorAll("[data-role]").forEach(button => button.addEventListener("click", () => setRole(button.dataset.role)));

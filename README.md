@@ -11,7 +11,7 @@ My work sits at the intersection of three questions:
 2. **How can AI support teachers** without replacing the judgment, empathy, and relational complexity that only humans bring?
 3. **How do you measure whether learning is actually happening** — not through compliance metrics, but through evidence that students are genuinely more capable?
 
-This repository contains frameworks, case studies, and methods from my work designing educational systems — now powered by [Mission Canvas](https://github.com/pretendhome/mission-canvas), a governed agent OS that ensures every decision is traceable, every memory is structured, and judgment compounds over time.
+This repository contains frameworks, case studies, and methods from my work designing educational systems, plus the Lingua Viva local-first teacher app. The runtime keeps teacher workflows inspectable: every response can show its route, sources, privacy events, and local trace metadata.
 
 ---
 
@@ -87,15 +87,15 @@ Interpretive filters that shape how the engine processes queries:
 
 ---
 
-## The Engine — Mission Canvas
+## The Runtime — Lingua Viva
 
-This repository is powered by [Mission Canvas](https://github.com/pretendhome/mission-canvas), an open-source governed agent OS. The engine provides:
+This repository includes the Lingua Viva teacher runtime. The app provides:
 
-- **Ontology-based memory** — 137 nodes across 11 domains classify every query before any model fires
-- **8-step governed pipeline** — SCAN → CLASSIFY → RETRIEVE → RESEARCH → CONTEXT → REASON → SYNTHESIZE → STORE
-- **Path-structured persistence** — Redis hot, NDJSON cold, zero semantic interference
-- **Composable lenses** — interpretive filters that modify processing without changing the query
-- **Evidence-tiered knowledge** — 148 entries, 526 citations
+- **Teacher-first local app** — planning, preparation, observation capture, student lenses, assessment, parent drafts, health, privacy, profile, and Why views
+- **Ontology-based routing** — 111 nodes across 25 domains classify teacher queries before model reasoning
+- **Local-first reasoning** — Ollama-first model calls with trace metadata and no raw query text in trace storage
+- **Privacy-visible workflow** — privacy events, support bundles, file maps, and profile clear controls are visible to the teacher
+- **Evidence-tiered knowledge** — 178 entries and 559 citations
 
 ### Quick Start
 
@@ -114,9 +114,11 @@ pip install -e .
 
 | Directory | What's in it |
 |---|---|
-| `src/` | Python runtime — governed pipeline, gateway, integrity engine |
-| `ontology/` | 137-node classification system across 11 domains |
-| `knowledge/` | Evidence-tiered library — 148 entries, 526 citations |
+| `src/lingua_viva/` | Native local-first runtime, config, privacy, file map, trust traces, CLI |
+| `src/education/` | Teacher-facing product modules |
+| `src/` | Python runtime bridge and legacy pipeline retained for strangler migration |
+| `ontology/` | 111-node classification system across 25 domains |
+| `knowledge/` | Evidence-tiered library — 178 entries, 559 citations |
 | `lenses/` | Interpretive filters + person lenses + voice guides |
 | `memory/` | Path-structured persistence (Redis + NDJSON) |
 | `agents/` | 6 intent agents + orchestrator |
@@ -124,12 +126,14 @@ pip install -e .
 | `config/` | Three-tier governance (Tier 1 immutable, Tier 2 reviewed, Tier 3 auto) |
 | `runtime/` | Node.js message broker + voice hub |
 | `tests/` | Gateway, ontology, memory, knowledge, integration |
+| `desktop/` | Electron shell for the local teacher app |
+| `doctor/` | Local diagnostics and support-bundle tooling |
 
 ---
 
 ## What This Repository Is
 
-This is a **learning design portfolio powered by a governed AI engine**. The portfolio contains frameworks for thinking about educational systems, case studies from real institutional work, and methods I use daily as a practitioner. The engine ensures that every design decision is traceable, every piece of evidence is cited, and the system gets smarter over time.
+This is a **learning design portfolio and local teacher app**. The portfolio contains frameworks for thinking about educational systems, case studies from real institutional work, and methods I use daily as a practitioner. The app keeps teacher-facing AI support local, inspectable, and tied to accountable evidence.
 
 If you are looking for someone who can design learning experiences that produce measurable outcomes, and who builds AI-governed systems to support that practice, this is what that looks like from the inside.
 
@@ -169,4 +173,4 @@ See [publication-policy.md](publication-policy.md) for what is shared here, what
 
 ---
 
-*This repository represents my professional portfolio of educational design work, powered by [Mission Canvas](https://github.com/pretendhome/mission-canvas). For academic publications, see [LinkedIn](https://linkedin.com/in/claudia-canu-fautre-31b204162). For inquiries: claudiacanufautre@gmail.com*
+*This repository represents my professional portfolio of educational design work and the Lingua Viva local teacher app. For academic publications, see [LinkedIn](https://linkedin.com/in/claudia-canu-fautre-31b204162). For inquiries: claudiacanufautre@gmail.com*

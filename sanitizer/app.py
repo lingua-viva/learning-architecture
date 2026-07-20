@@ -30,18 +30,35 @@ from typing import Any, Dict, List, Optional, Tuple
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# When frozen (PyInstaller onefile), __file__ lives in the transient _MEIxxxx
-# extraction dir — not writable across runs and its parents may be absent,
-# which crashed the binary at import time. Use a persistent, writable user
-# dir when frozen; the source tree's own data/ dir otherwise. parents=True
-# covers a missing parent. Same pattern as mission-canvas/sanitizer/app.py.
-if getattr(sys, "frozen", False):
-    _sir_home = os.environ.get("STILL_I_RISE_HOME") or str(Path.home() / ".still-i-rise")
-    DATA_DIR = Path(_sir_home) / "data"
-else:
-    DATA_DIR = Path(__file__).parent / "data"
-DATA_DIR.mkdir(parents=True, exist_ok=True)
-FIREWALL_LOG = DATA_DIR / "firewall_log.ndjson"
+def _data_dir() -> Path:
+    """Resolved lazily (not a module-level constant) so LV_SANITIZER_DATA_DIR
+    can override it per-test — module-level constants are computed once at
+    import time, before any test's monkeypatch.setenv runs, same seam
+    pattern as traces.trace_path()/privacy_log.privacy_log_path().
+
+    When frozen (PyInstaller onefile), __file__ lives in the transient
+    _MEIxxxx extraction dir — not writable across runs and its parents may
+    be absent, which crashed the binary at import time. Use a persistent,
+    writable user dir when frozen; the source tree's own data/ dir
+    otherwise. Same pattern as mission-canvas/sanitizer/app.py.
+
+    LV_SANITIZER_DATA_DIR (checked unconditionally, not just when frozen) is
+    the test-hermeticity override (MC-lessons §1) — without it, every test
+    that exercises the sanitizer wrote firewall_log.ndjson straight into the
+    tracked sanitizer/data/ dir, dirtying the tree on every suite run.
+    """
+    override = os.environ.get("LV_SANITIZER_DATA_DIR")
+    if override:
+        data_dir = Path(override)
+    elif getattr(sys, "frozen", False):
+        sir_home = os.environ.get("STILL_I_RISE_HOME") or str(Path.home() / ".still-i-rise")
+        data_dir = Path(sir_home) / "data"
+    else:
+        data_dir = Path(__file__).parent / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    return data_dir
+
+
 
 # ─── PII Patterns ────────────────────────────────────────────────────────────
 
@@ -224,7 +241,7 @@ def _log_firewall(original_text: str, result: Dict[str, Any]) -> None:
         "input_length": len(original_text),
     }
     try:
-        with open(FIREWALL_LOG, "a", encoding="utf-8") as f:
+        with open(_data_dir() / "firewall_log.ndjson", "a", encoding="utf-8") as f:
             f.write(json.dumps(entry) + "\n")
     except Exception:
         pass  # Never crash on log failure

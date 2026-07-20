@@ -1,6 +1,31 @@
 """Tests for the unified sanitizer service."""
+from pathlib import Path
+
 import pytest
 from sanitizer.app import sanitize
+
+
+def test_firewall_log_honors_hermeticity_override(monkeypatch, tmp_path):
+    """MC-lessons §1 gap found during the §9 desktop-build dirty-tree check:
+    DATA_DIR/FIREWALL_LOG used to be module-level constants computed once at
+    import time, so a test's monkeypatch.setenv("LV_SANITIZER_DATA_DIR", ...)
+    had no effect and every sanitizer-touching test appended real lines to
+    the tracked sanitizer/data/firewall_log.ndjson. _data_dir() now resolves
+    the override lazily on every call, same seam pattern as
+    traces.trace_path()."""
+    override_dir = tmp_path / "sanitizer-state"
+    monkeypatch.setenv("LV_SANITIZER_DATA_DIR", str(override_dir))
+
+    sanitize("SSN 123-45-6789", block_signals=[])
+
+    log = override_dir / "firewall_log.ndjson"
+    assert log.is_file(), "firewall log should be written under the override dir"
+
+    repo_log = Path(__file__).resolve().parent.parent / "sanitizer" / "data" / "firewall_log.ndjson"
+    before = repo_log.read_text(encoding="utf-8") if repo_log.exists() else ""
+    sanitize("SSN 123-45-6789", block_signals=[])
+    after = repo_log.read_text(encoding="utf-8") if repo_log.exists() else ""
+    assert before == after, "tracked sanitizer/data/firewall_log.ndjson must not change under the override"
 
 
 def test_pii_detection_with_block_signals():

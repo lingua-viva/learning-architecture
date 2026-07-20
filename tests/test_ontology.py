@@ -78,8 +78,14 @@ class TestClassification:
 
     def test_research_query_classifies_to_research(self, engine):
         result = engine.classify("Find the latest market trends in AI governance")
-        # After classification improvements (name auto-indexing), "AI governance"
-        # correctly routes to ai-enablement domain (RIU-029) rather than generic CORE
+        # 101 of the 111 fork-era ai-enablement nodes were archived to
+        # archive/mc-engine/ontology/domains/ 2026-07-19 (MC-lessons §6,
+        # SPEC_APP_IMPROVEMENT_MC_LESSONS_2026-07-19.md) — golden eval stayed
+        # 36/36 with and without them. The remaining 10 (ontology/domains/
+        # ai-enablement-core.yaml) were kept live because other domains'
+        # escalates_to/resolves_to edges form a transitive closure that
+        # requires them — archiving the full 111 broke graph integrity
+        # (test_no_broken_edges). RIU-029 is one of those 10.
         assert result.domain in ("core", "legal", "ai-enablement")
 
     def test_decision_query_classifies_to_decide(self, engine):

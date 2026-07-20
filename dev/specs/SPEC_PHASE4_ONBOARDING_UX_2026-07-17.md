@@ -1,7 +1,7 @@
 # SPEC: Lingua Viva Phase 4 — Teacher Home View + Onboarding UX
 
 **Date**: 2026-07-17
-**Status**: READY TO BUILD
+**Status**: SHIPPED
 **Repo**: `/home/mical/learning-architecture`
 **Branch**: `LINGUA-VIVA-UPDATE`
 **Depends on**: Phase 1 (Electron shell), Phase 2 (teacher interface), Phase 3 (support bundle)

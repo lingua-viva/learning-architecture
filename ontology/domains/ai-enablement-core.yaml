@@ -1,0 +1,214 @@
+domain: ai-enablement
+version: '1.0'
+description: Retained subset of the fork-era ai-enablement import (see archive/mc-engine/ontology/domains/ai-enablement.yaml
+  for full 111-node history). These 10 nodes form the transitive escalates_to/resolves_to/parent
+  closure required by live cross-domain edges (strategy, financial, business_planning,
+  enablement, safety) — cannot be archived without breaking graph integrity.
+nodes:
+- id: RIU-001
+  name: Convergence Brief (Semantic Blueprint)
+  description: Engagement starts underspecified; stakeholders differ on goals, constraints,
+    and non-goals.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - new engagement
+  - conflicting asks
+  - paid commitment
+  - rebrand messaging risk
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-002
+  name: Stakeholder Map + RACI-lite
+  description: Decisions slow or blocked because ownership and approval paths unclear.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - scoping engagement
+  - change in mgmt context
+  - ambiguous requirements
+  - stakeholder alignment needed
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-004
+  name: Problem → Workstream Decomposition
+  description: Need expansive decomposition without committing to a plan.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - scoping engagement
+  - schema needs
+  - ambiguous requirements
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-006
+  name: Success Metrics Charter
+  description: Undefined success leads to churn and rework.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - debates about 'good'
+  - no KPI
+  - success criteria unclear
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-012
+  name: PII/Compliance Triage (Controls Plan)
+  description: Regulated data or compliance requirements constrain design and tooling.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - quality concerns
+  - discovery engagement
+  - compliance/audit requirements
+  - unclear inputs/outputs
+  blocks_external: true
+  requires_local: true
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-020
+  name: Baseline Behavior Snapshot
+  description: Baseline unknown; risk of regressions.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - testing-schema
+  - quality concerns
+  - core behavior/logic changes needed
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: RESEARCH
+  default_lens: null
+- id: RIU-029
+  name: Tool-Calling Safety Envelope
+  description: Agents can call tools; must limit blast radius and enforce permissions.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - agent-design
+  - quality concerns
+  - reliability concerns
+  - core behavior/logic changes
+  - compliance/audit requirements
+  - governance
+  - governed
+  - governed execution
+  - execution adapter
+  - sanitizer
+  - sanitize
+  - data boundary
+  - pii gate
+  - pii
+  - phi boundary
+  - phi
+  - outbound filter
+  - firewall
+  - entry gate
+  - exit gate
+  - safety envelope
+  - envelope
+  - blast radius
+  - permission boundary
+  - codex adapter
+  - codex
+  blocks_external: true
+  requires_local: true
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-061
+  name: Observability Baseline
+  description: System not observable; failures will be silent.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - observability engagement
+  - quality concerns
+  - spec/requirements document needed
+  - dashboards/visibility needed
+  - production deployment
+  blocks_external: false
+  requires_local: false
+  escalates_to: []
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null
+- id: RIU-200
+  name: Customer Problem Narrative (JTBD + Constraints)
+  description: Customer describes symptoms, not root cause; narrative fragmented.
+  domain: ai-enablement
+  parent: CORE-RESEARCH
+  signals:
+  - customer problem
+  - JTBD
+  - problem narrative
+  - symptom mapping
+  - root cause
+  blocks_external: false
+  requires_local: false
+  escalates_to:
+  - RIU-001
+  - RIU-002
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: RESEARCH
+  default_lens: null
+- id: RIU-534
+  name: AI Audit Trail Requirements
+  description: AI system requires audit trail for compliance, debugging, or accountability.
+  domain: ai-enablement
+  parent: CORE-DECIDE
+  signals:
+  - audit trail
+  - logging requirements
+  - compliance logging
+  - accountability
+  - audit requirements
+  blocks_external: true
+  requires_local: true
+  escalates_to:
+  - RIU-012
+  - RIU-061
+  resolves_to: []
+  evidence_tier: 2
+  path_weight: 1.0
+  default_intent: DECIDE
+  default_lens: null

@@ -1,7 +1,7 @@
 # SPEC: Phase 6 — Trust UI + Final Gate
 
 **Date**: 2026-07-18
-**Status**: READY TO BUILD
+**Status**: SHIPPED
 **Repo**: `/home/mical/learning-architecture`
 **Branch**: `LINGUA-VIVA-UPDATE`
 **Depends on**: Phases 1-5 complete

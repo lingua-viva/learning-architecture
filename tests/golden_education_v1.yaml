@@ -1,7 +1,7 @@
 # Lingua Viva Education Golden Query Suite
 # Teacher-voice and admin-voice queries against the 38 LV-* education nodes,
 # plus PROTECT-tagged sensitive-student queries and cross-domain decoys.
-# Run: python3 -m src.mc_cli eval tests/golden_education_v1.yaml
+# Run: python3 -m src.lingua_viva.cli eval golden tests/golden_education_v1.yaml
 
 queries:
 # --- Curriculum (LV-CUR-*) ---

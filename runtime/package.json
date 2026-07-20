@@ -1,14 +1,10 @@
 {
   "name": "mission-canvas-runtime",
   "version": "1.0.0",
-  "description": "Governed message bus + voice hub for Mission Canvas",
+  "description": "Governed message bus for Mission Canvas (voice hub archived 2026-07-19, see archive/mc-engine/runtime/hub/ARCHIVED.md)",
   "type": "module",
   "scripts": {
-    "broker": "node broker/index.mjs",
-    "hub": "node hub/server.mjs",
-    "watcher": "node hub/watcher.mjs",
-    "start": "node broker/index.mjs & node hub/server.mjs",
-    "start:all": "node broker/index.mjs & node hub/server.mjs & node hub/watcher.mjs"
+    "broker": "node broker/index.mjs"
   },
   "dependencies": {
     "@libsql/client": "^0.17.3",

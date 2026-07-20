@@ -40,6 +40,16 @@ def config_home() -> Path:
     return Path(home) if home else Path.home() / ".lingua-viva"
 
 
+# Canonical home-resolution seam (MC-lessons §1): every module that stores
+# local-first state under ~/.lingua-viva/ resolves its *default* location
+# through this function, so one env var (LV_CONFIG_HOME) — or one monkeypatch
+# in tests/conftest.py — redirects all of it. Callers still expose their own
+# more specific override (LV_TRACE_PATH, LV_PRIVACY_LOG_PATH, ...) which is
+# checked first and wins when set explicitly.
+def lv_home() -> Path:
+    return config_home()
+
+
 def provider_config_path() -> Path:
     return config_home() / "config" / "providers.json"
 

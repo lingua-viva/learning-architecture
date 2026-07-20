@@ -1,4 +1,4 @@
-const CACHE_NAME = "lv-pwa-v1";
+const CACHE_NAME = "lv-pwa-v6";
 const DB_NAME = "lv-offline";
 const QUEUE_STORE = "queue";
 const STATIC_ASSETS = [
@@ -209,10 +209,15 @@ function requestDone(req) {
 
 const PII_PATTERNS = [
   { name: "ssn", re: /\b\d{3}-\d{2}-\d{4}\b/g },
+  { name: "ssn_nodash", re: /\b\d{9}\b/g },
   { name: "email", re: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g },
   { name: "phone_us", re: /\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/g },
+  { name: "phone_intl", re: /\b\+\d{1,3}[-.\s]?\d{6,14}\b/g },
   { name: "credit_card", re: /\b(?:\d[ -]*?){13,19}\b/g },
+  { name: "dob", re: /\b(?:born|DOB|date of birth)[:\s]*\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}\b/gi },
+  { name: "passport", re: /\b[A-Z]{1,2}\d{6,9}\b/g },
   { name: "mrn", re: /\b(?:MRN|mrn)[:\s#]?\d{4,}\b/gi },
+  { name: "address", re: /\b\d{1,5}\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+(?:Street|St|Avenue|Ave|Road|Rd|Drive|Dr|Lane|Ln|Boulevard|Blvd|Way|Court|Ct)\b/gi },
 ];
 
 function stripPiiFromBody(body) {

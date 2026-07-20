@@ -29,7 +29,8 @@ def trace_path() -> Path:
     override = os.environ.get("LV_TRACE_PATH")
     if override:
         return Path(override).expanduser()
-    return Path.home() / ".lingua-viva" / "traces.ndjson"
+    from src.lingua_viva.config import lv_home
+    return lv_home() / "traces.ndjson"
 
 
 def hash_query(query: str) -> str:

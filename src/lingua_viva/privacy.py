@@ -8,6 +8,7 @@ from doctor.support_loop.privacy import matches_private_path, path_risk_reason, 
 PATTERNS = {
     "email": re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"),
     "phone_us": re.compile(r"\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b"),
+    "phone_intl": re.compile(r"\b\+\d{1,3}[-.\s]?\d{6,14}\b"),
     "ssn": re.compile(r"\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b"),
     "credit_card": re.compile(r"\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b"),
     "dob": re.compile(r"\b(?:born|DOB|date of birth)[:\s]*\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}\b", re.IGNORECASE),
@@ -59,11 +60,22 @@ def contains_private_runtime_data(text: str) -> bool:
     redacted = _doctor_redact_text(text)
     if redacted != text:
         return True
-    return any(pattern.search(text) for pattern in PRIVATE_RUNTIME_PATTERNS)
+    return (
+        any(pattern.search(text) for pattern in PATTERNS.values())
+        or NAME_PREFIXES.search(text) is not None
+        or CLIENT_REFS.search(text) is not None
+        or ADDRESS.search(text) is not None
+        or any(pattern.search(text) for pattern in PRIVATE_RUNTIME_PATTERNS)
+    )
 
 
 def redact_runtime_text(text: str) -> str:
     redacted = _doctor_redact_text(text)
+    for name, pattern in PATTERNS.items():
+        redacted = pattern.sub(f"[REDACTED_{name.upper()}]", redacted)
+    redacted = NAME_PREFIXES.sub("[REDACTED_NAME]", redacted)
+    redacted = CLIENT_REFS.sub("[REDACTED_CLIENT_REF]", redacted)
+    redacted = ADDRESS.sub("[REDACTED_ADDRESS]", redacted)
     for pattern in PRIVATE_RUNTIME_PATTERNS:
         redacted = pattern.sub("[REDACTED_PRIVATE_CONTEXT]", redacted)
     if redacted != text:

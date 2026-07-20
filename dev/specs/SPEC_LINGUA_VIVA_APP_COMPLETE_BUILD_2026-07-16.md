@@ -1,7 +1,7 @@
 # SPEC: Lingua Viva App — Complete Build
 
 **Date**: 2026-07-16
-**Status**: READY TO BUILD
+**Status**: SHIPPED
 **Author**: kiro.design (synthesized from separation, migration, and unified build specs)
 **Repo**: `/home/mical/learning-architecture` (git@lingua-viva:lingua-viva/learning-architecture.git)
 **Branch**: `LINGUA-VIVA-UPDATE`

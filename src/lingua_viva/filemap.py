@@ -97,7 +97,8 @@ def storage_path() -> Path:
     override = os.environ.get("LV_FILE_MAP_PATH")
     if override:
         return Path(override).expanduser()
-    return Path.home() / ".lingua-viva" / "file_map.yaml"
+    from src.lingua_viva.config import lv_home
+    return lv_home() / "file_map.yaml"
 
 
 def _now() -> str:

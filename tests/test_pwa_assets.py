@@ -35,3 +35,20 @@ def test_service_worker_queues_governed_query_endpoint():
     assert "/icons/icon-maskable.png" in sw
     assert "LV_REPLAY_NOW" in sw
     assert "LV_CLEAR_QUEUE" in sw
+
+
+def test_service_worker_covers_high_value_pii_patterns():
+    sw = (ROOT / "static" / "sw.js").read_text()
+    for pattern_name in [
+        "ssn",
+        "ssn_nodash",
+        "email",
+        "phone_us",
+        "phone_intl",
+        "credit_card",
+        "dob",
+        "passport",
+        "mrn",
+        "address",
+    ]:
+        assert f'name: "{pattern_name}"' in sw

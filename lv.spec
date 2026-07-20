@@ -1,25 +1,22 @@
-# mc.spec — PyInstaller build spec for the Still I Rise / Learning Architecture
-# engine (Mission Canvas, education fork).
+# lv.spec — PyInstaller build spec for the Lingua Viva / Learning Architecture
+# engine (Lingua Viva, education fork).
 #
-# Cloned from mission-canvas/mc.spec — that spec is the result of a month of
+# Cloned from Lingua Viva/lv.spec — that spec is the result of a month of
 # PyInstaller debugging (App Translocation, frozen-bundle health-check
 # crashes, Windows strip.exe DLL corruption — see
-# mission-canvas/dev/INVESTIGATION_NAKED_INSTALL_MACOS.md). Do not redesign
+# Lingua Viva/dev/INVESTIGATION_NAKED_INSTALL_MACOS.md). Do not redesign
 # this from scratch; only adapt datas/hiddenimports to what this repo
 # actually ships and imports.
 #
-# Build: pyinstaller mc.spec --clean --noconfirm
-# Output: dist/sir (single binary)
+# Build: pyinstaller lv.spec --clean --noconfirm
+# Output: dist/lv (single binary)
 #
-# Named 'sir' (Still I Rise), not 'mc' — this fork and Mission Canvas itself
-# both install to ~/.local/bin/<name>. Sharing the name 'mc' would let
-# whichever product installs second silently overwrite the other's binary
-# on any machine that has both.
+# Named 'lv' (Lingua Viva). It installs to ~/.local/bin/lv.
 
 import sys
 
 a = Analysis(
-    ['src/mc_cli.py'],
+    ['src/lv_cli.py'],
     pathex=['.'],
     datas=[
         ('ontology', 'ontology'),
@@ -27,7 +24,7 @@ a = Analysis(
         ('lenses', 'lenses'),
         ('static', 'static'),
         ('config', 'config'),
-        # Version stamp — same reasoning as MC's mc.spec: without this,
+        # Version stamp — same reasoning as MC's lv.spec: without this,
         # frozen binaries can't report their own version.
         ('pyproject.toml', '.'),
     ],
@@ -44,12 +41,11 @@ a = Analysis(
         'pdfplumber',
         'sqlite_vec',
         # This repo's real UI-serving module (FastAPI + WebSocket, serves
-        # static/index.html) — the education-fork equivalent of MC's
-        # src.api_server. Must be a hidden import: mc_cli.py only imports
+        # static/index.html) — the app's FastAPI entry point.
+        # src.web. Must be a hidden import: lv_cli.py only imports
         # it lazily inside _start_web_server(), which PyInstaller's static
         # analysis can't see.
         'src.web',
-        'src.api_server',
         # Pulled in transitively by pdfplumber's dependency chain through
         # pkg_resources's runtime hook (pyi_rth_pkgres) — modern setuptools
         # de-vendored its pkg_resources.extern names (see
@@ -58,7 +54,7 @@ a = Analysis(
         # PyInstaller's static analysis misses them unless listed here.
         # Confirmed by two real local build failures: "ImportError: The
         # 'jaraco' package is required", then "...'platformdirs' package
-        # is required" at dist/mc runtime.
+        # is required" at dist/lv runtime.
         'jaraco.text',
         'jaraco.functools',
         'jaraco.context',
@@ -78,7 +74,7 @@ exe = EXE(
     a.scripts,
     a.binaries,
     a.datas,
-    name='sir',
+    name='lv',
     # Never strip on Windows: a `strip.exe` on PATH (Git for Windows ships
     # one) corrupts the bundled python3xx.dll -> "Failed to load Python
     # DLL". Same fix MC applied. Strip is safe/useful on Linux/macOS.

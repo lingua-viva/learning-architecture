@@ -1,7 +1,7 @@
 # SPEC: Phase 5 — Curriculum File Map
 
 **Date**: 2026-07-17
-**Status**: READY TO BUILD
+**Status**: SHIPPED
 **Repo**: `/home/mical/learning-architecture`
 **Branch**: `LINGUA-VIVA-UPDATE`
 **Depends on**: Phase 4 complete (home view + brief endpoint must exist)

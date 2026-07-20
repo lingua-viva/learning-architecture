@@ -55,14 +55,33 @@ class SensitivityReport:
 
 
 class EntryGate:
-    """Legacy local-only entry gate stub after MC gate archival."""
+    """Local entry gate for private runtime data.
+
+    LV is local-first, so this gate does not reject teacher work outright.
+    It detects student/family data, routes the query through PROTECT intent,
+    and uses a redacted query for retrieval/execution paths.
+    """
 
     def scan(self, query: str) -> SensitivityReport:
+        from src.lingua_viva.privacy import contains_private_runtime_data, redact_runtime_text
+
+        if contains_private_runtime_data(query):
+            return SensitivityReport(
+                blocked=True,
+                sanitized_query=redact_runtime_text(query),
+                sensitivity_level="high",
+                domain_hint="education",
+            )
         return SensitivityReport(blocked=False, sanitized_query=query)
 
 
 class ExitGate:
-    """Legacy no-op exit gate stub after MC gate archival."""
+    """Outbound response gate.
+
+    # DEFERRED: external response scanning is not load-bearing while Lingua
+    # Viva disables external research. Date: 2026-07-18. Owner: LV Phase 7
+    # native pipeline migration.
+    """
 
     def activate(self) -> None:
         return None
@@ -77,7 +96,12 @@ class IntegrityCheckResult:
 
 
 class IntegrityGate:
-    """Legacy no-op integrity gate stub after MC integrity archival."""
+    """Structural output integrity gate.
+
+    # DEFERRED: ontology/knowledge integrity checks move to the native LV
+    # pipeline replacement instead of this archived MC-shaped pipeline. Date:
+    # 2026-07-18. Owner: LV Phase 7 native pipeline migration.
+    """
 
     def __init__(self, ontology_nodes: set[str], knowledge_ids: set[str]):
         self.ontology_nodes = ontology_nodes
@@ -154,10 +178,7 @@ class GatewayInterface:
         local_confidence: float,
         user_intent: Optional[str] = None,
     ) -> bool:
-        """
-        External research needed if: not blocked AND (confidence below threshold
-        OR user explicitly requested research).
-        """
+        """Intentionally disabled: Lingua Viva teacher workflows are local-only."""
         return False
 
     async def sanitize_query(self, query: str, classification: ClassificationResult) -> str:
@@ -187,66 +208,31 @@ class GatewayInterface:
 
 
 def _provider_config_path() -> Path:
-    """
-    Path to the Gap 5a provider-choice config (SPEC_ONE_CLICK_LOCAL_APP_2026-07-14.md).
-    Same literal path `install.sh` already writes for Ollama auto-detection
-    (`~/.still-i-rise/config/providers.json`). `SIR_CONFIG_HOME` override
-    exists only so tests never touch a real user's home directory.
-    """
-    home = os.environ.get("SIR_CONFIG_HOME")
-    base = Path(home) if home else Path.home() / ".still-i-rise"
-    return base / "config" / "providers.json"
+    """Compatibility wrapper for the canonical Lingua Viva config path."""
+    from src.lingua_viva.config import provider_config_path
+
+    return provider_config_path()
 
 
 def _read_provider_config() -> Optional[dict]:
-    """
-    Read the provider config fresh on every call — never cached. A teacher
-    can connect or disconnect a provider from the Gap 5a onboarding screen
-    without restarting the app, so a cached read would silently keep using
-    a stale (or just-disconnected) provider.
+    """Compatibility wrapper for the canonical Lingua Viva config reader."""
+    from src.lingua_viva.config import read_provider_config
 
-    Hardening (15-iteration sweep, 2026-07-14): valid-but-non-object JSON
-    (e.g. a truncated write leaving `[]`/`"x"`/`42`/`true` on disk — no
-    JSONDecodeError, `json.load` succeeds) used to crash every caller's
-    `.get()` call with an unhandled AttributeError. Because
-    `_resolve_provider_model()` calls this on *every* REASON step, a
-    corrupted config file took down every query in the app with no
-    recovery path a non-technical teacher could find. Treat non-dict JSON
-    the same as "no config" — every caller already handles `None`.
-    """
-    try:
-        with open(_provider_config_path(), encoding="utf-8") as f:
-            data = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError, OSError):
-        return None
-    return data if isinstance(data, dict) else None
+    return read_provider_config()
 
 
 def _provider_entries(config: dict) -> dict:
-    """
-    Safely extract the `providers` sub-object from a config dict.
+    """Compatibility wrapper for the canonical Lingua Viva provider entries."""
+    from src.lingua_viva.config import provider_entries
 
-    Hardening (15-iteration sweep, 2026-07-14): `_read_provider_config()`
-    now guards against a non-dict *top-level* JSON value, but the same
-    corruption class can land one level down — e.g. `{"providers": [1,
-    2, 3]}` is a valid dict at the top, so it passes that guard, but
-    `.get("providers")` still returns a non-dict and the old `(config
-    .get("providers") or {}).get(name)` pattern crashed the same way.
-    Every caller of `config.get("providers")` should go through here.
-    """
-    providers = config.get("providers")
-    return providers if isinstance(providers, dict) else {}
+    return provider_entries(config)
 
 
 def _provider_api_key(provider_name: str) -> Optional[str]:
-    """Look up a saved provider's API key from the config file (Gap 5a
-    point 7 — the key lives only in this 0600 file, never in an env var
-    a teacher would have to set by hand)."""
-    config = _read_provider_config()
-    if not config:
-        return None
-    entry = _provider_entries(config).get(provider_name)
-    return entry.get("api_key") if isinstance(entry, dict) else None
+    """Compatibility wrapper for canonical provider API key lookup."""
+    from src.lingua_viva.config import provider_api_key
+
+    return provider_api_key(provider_name)
 
 
 class ReasoningEngine:

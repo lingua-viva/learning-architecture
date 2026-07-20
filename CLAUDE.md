@@ -18,8 +18,8 @@ This repo has two layers:
 - `src/lingua_viva/` — Native local-first runtime, Doctor/app bridge, reasoning, config, privacy, and ingest helpers
 - `src/education/` — Teacher-facing education product code
 - `doctor/` — Local Doctor/support-loop checks
-- `ontology/` — 137-node classification system
-- `knowledge/` — Evidence-tiered library (148 entries, 526 citations)
+- `ontology/` — 111-node classification system across 25 domains
+- `knowledge/` — Evidence-tiered library (178 entries, 559 citations)
 - `lenses/` — Interpretive filters + Claudia's person lens + Malaguzzi voice guide
 - `memory/` — Path-structured persistence (Redis + NDJSON)
 - `agents/` — 6 intent agents + orchestrator

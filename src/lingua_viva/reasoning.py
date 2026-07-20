@@ -24,6 +24,9 @@ class ReasonResult:
 class ReasoningEngine:
     """Thin Lingua Viva reasoning client for local-first model calls."""
 
+    _ollama_failures = 0
+    _ollama_breaker_open_until = 0.0
+
     async def reason(
         self,
         query: str,
@@ -45,6 +48,14 @@ class ReasoningEngine:
         if system_prompt:
             prompt = system_prompt
             if not self._is_external_model(resolved_model):
+                if self._ollama_breaker_open(resolved_model):
+                    result = ReasonResult(
+                        content="Ollama appears to be down - check if it's running, then try again.",
+                        confidence=0.0,
+                        model_used=resolved_model,
+                    )
+                    self._append_trace(query, context, result, start)
+                    return result
                 query_domain = context.get("filemap_domain") or context.get("domain") or infer_education_domain(query)
                 filemap_context = build_filemap_context(query_domain, local_only=True)
                 if filemap_context:
@@ -93,6 +104,8 @@ class ReasoningEngine:
             with request.urlopen(req, timeout=timeout_seconds) as response:
                 body = json.loads(response.read())
         except (error.URLError, ConnectionError, TimeoutError, OSError, json.JSONDecodeError):
+            if self._is_ollama_model(model):
+                self._record_ollama_failure()
             return None
 
         try:
@@ -100,6 +113,8 @@ class ReasoningEngine:
         except (KeyError, IndexError, TypeError):
             return None
         tokens = body.get("usage", {}).get("total_tokens", 0)
+        if self._is_ollama_model(model):
+            self._reset_ollama_failures()
         return ReasonResult(content=content, confidence=0.75, model_used=model, tokens_used=tokens)
 
     @staticmethod
@@ -118,6 +133,25 @@ class ReasoningEngine:
     @staticmethod
     def _is_external_model(model: str) -> bool:
         return model.startswith(("openai/", "groq/", "mistral/"))
+
+    @staticmethod
+    def _is_ollama_model(model: str) -> bool:
+        return not ReasoningEngine._is_external_model(model)
+
+    @classmethod
+    def _ollama_breaker_open(cls, model: str) -> bool:
+        return cls._is_ollama_model(model) and time.time() < cls._ollama_breaker_open_until
+
+    @classmethod
+    def _record_ollama_failure(cls) -> None:
+        cls._ollama_failures += 1
+        if cls._ollama_failures >= 3:
+            cls._ollama_breaker_open_until = time.time() + 30
+
+    @classmethod
+    def _reset_ollama_failures(cls) -> None:
+        cls._ollama_failures = 0
+        cls._ollama_breaker_open_until = 0.0
 
     def _append_trace(self, query: str, context: dict, result: ReasonResult, start: float) -> None:
         try:

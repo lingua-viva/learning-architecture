@@ -37,6 +37,26 @@ if str(LV_ROOT) not in sys.path:
 app = FastAPI(title="Lingua Viva", docs_url=None, redoc_url=None)
 
 
+@app.middleware("http")
+async def _log_request_outcome(request: Request, call_next):
+    """Append one request-outcome event per response (MC-lessons §5).
+
+    Path-template only (never the raw URL with resolved dynamic segments)
+    so no student/path-parameter content reaches the log — same
+    privacy-first discipline as traces.ndjson and privacy_events.ndjson.
+    Logging failures never break the response.
+    """
+    response = await call_next(request)
+    try:
+        from src.lingua_viva.request_log import append_request_event
+        route = request.scope.get("route")
+        path_template = route.path_format if route is not None else request.url.path
+        append_request_event(request.method, path_template, response.status_code)
+    except Exception:
+        pass
+    return response
+
+
 class SessionBroadcaster:
     """Manages WebSocket connections and broadcasts app events."""
 
@@ -411,6 +431,47 @@ async def profile():
     return await asyncio.to_thread(build)
 
 
+@app.get("/api/profile/export")
+async def profile_export():
+    """Export right (MC-lessons §8): everything /api/profile/clear would
+    delete, bundled as one local-download JSON. Must be offered before
+    clear, never after — there is no undo for clear."""
+    from src.lingua_viva.filemap import load_map, summarize
+    from src.lingua_viva.privacy_log import read_privacy_events
+    from src.lingua_viva.traces import read_traces
+    from dataclasses import asdict
+
+    def build():
+        try:
+            with _student_store_for_brief() as store:
+                students = [store.export_lens(lens["student_id"]) for lens in store.list_lenses()]
+        except Exception:
+            students = []
+        try:
+            revision_log = [
+                json.loads(line)
+                for line in _revision_log_path().read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+        except OSError:
+            revision_log = []
+        bundle = {
+            "exported_at": datetime.now(timezone.utc).isoformat(),
+            "storage": "~/.lingua-viva/",
+            "traces": [asdict(t) for t in read_traces(limit=10_000)],
+            "privacy_events": [asdict(e) for e in read_privacy_events(limit=10_000)],
+            "students": students,
+            "revision_log": revision_log,
+            "filemap": summarize(load_map()),
+        }
+        return JSONResponse(
+            bundle,
+            headers={"Content-Disposition": 'attachment; filename="lingua-viva-export.json"'},
+        )
+
+    return await asyncio.to_thread(build)
+
+
 @app.post("/api/profile/clear")
 async def profile_clear(payload: dict):
     if payload.get("confirm") != "clear-all-data":
@@ -465,6 +526,10 @@ async def prepare_activity(payload: dict):
 
     unit = _safe_unit(payload.get("unit_id"), payload.get("grade"))
     grade_number = unit["grade"].removeprefix("G")
+    try:
+        duration_minutes = int(payload.get("duration_minutes") or 45)
+    except (TypeError, ValueError):
+        return JSONResponse({"error": "duration_minutes must be a number."}, status_code=400)
     lesson = LessonInput(
         ib_programme="PYP",
         subject="Italian",
@@ -472,7 +537,7 @@ async def prepare_activity(payload: dict):
         topic=str(payload.get("topic") or unit["focus"]),
         atl_skills=["communication", "self-management"],
         cefr_target="A2" if unit["grade"] in ("G3", "G4") else "A1",
-        duration_minutes=int(payload.get("duration_minutes") or 45),
+        duration_minutes=duration_minutes,
         language_of_instruction="it",
         created_by="teacher",
     )
@@ -669,9 +734,20 @@ async def reflect_note(payload: dict):
     log_path.parent.mkdir(parents=True, exist_ok=True)
     entry = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "type": "teacher_reflection",
+        "revision_id": f"teacher-reflection-{int(time.time())}",
+        "artifact_id": "lv-private-teacher-reflection",
+        "artifact_path": "dev/lv_revision_log.ndjson",
+        "defect_class": "teacher_reflection",
+        "origin": "teacher_input",
+        "instrument_that_found_it": "reflect_view",
+        "instrument_touched": False,
+        "independent_cross_check": "private_teacher_note_no_external_sync",
+        "decision": "Record private teacher reflection locally.",
+        "proof": redact_runtime_text(note),
+        "reviewer": "teacher",
+        "teacher_contribution_involved": True,
+        "privacy_review": "private_local_only",
         "private": True,
-        "note": redact_runtime_text(note),
     }
     with log_path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(entry, ensure_ascii=True) + "\n")
@@ -712,16 +788,22 @@ async def admin_programme():
 
 @app.get("/api/admin/evidence")
 async def admin_evidence():
+    # DEFERRED: requires accumulated, consent-aware teacher evidence data.
+    # Date: 2026-07-18. Owner: LV Phase 7 admin dashboard.
     return {"status": "not_yet_implemented"}
 
 
 @app.get("/api/admin/capacity")
 async def admin_capacity():
+    # DEFERRED: requires staffing/capacity model inputs that do not exist yet.
+    # Date: 2026-07-18. Owner: LV Phase 7 admin dashboard.
     return {"status": "not_yet_implemented"}
 
 
 @app.get("/api/admin/trends")
 async def admin_trends():
+    # DEFERRED: requires accumulated anonymized trend data.
+    # Date: 2026-07-18. Owner: LV Phase 7 admin dashboard.
     return {"status": "not_yet_implemented"}
 
 
@@ -811,7 +893,7 @@ async def query_endpoint(payload: dict):
     eval_mode = payload.get("eval_mode", False)
 
     if not query_text:
-        return {"error": "query is required"}
+        return JSONResponse({"error": "query is required"}, status_code=400)
 
     from src.session import get_active_session, increment_session
 
@@ -916,9 +998,17 @@ def _ingest_temp_dir() -> Path:
     """Scoped scratch dir for uploads-in-flight — never the shared system
     tmp root, so the lifecycle (write, parse, always delete) is easy to
     reason about and to grep for. Lives under the same gitignored `data/`
-    tree the document store itself uses."""
-    d = LV_ROOT / "case-studies" / "04-still-i-rise" / "data" / "ingest-tmp"
+    tree the document store itself uses. LV_INGEST_TMP_DIR overrides for
+    tests (MC-lessons §1c) — without it, tests exercising /api/ingest wrote
+    into the real case-studies tree."""
+    override = os.environ.get("LV_INGEST_TMP_DIR")
+    d = Path(override) if override else LV_ROOT / "case-studies" / "04-still-i-rise" / "data" / "ingest-tmp"
     d.mkdir(parents=True, exist_ok=True)
+    for stale in d.glob("tmp*.pdf"):
+        try:
+            stale.unlink()
+        except OSError:
+            pass
     return d
 
 

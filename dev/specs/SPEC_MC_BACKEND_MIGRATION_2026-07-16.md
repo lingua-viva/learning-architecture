@@ -1,6 +1,6 @@
 # SPEC: MC-Shaped Backend Migration to Lingua Viva Native
 
-**Status**: draft — ready to build  
+**Status**: SHIPPED — phases 1-3 complete; remaining legacy pipeline replacement deferred  
 **Date**: 2026-07-16  
 **Repo**: `/home/mical/learning-architecture`  
 **Branch**: `LINGUA-VIVA-UPDATE`  
