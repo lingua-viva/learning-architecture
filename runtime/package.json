@@ -1,7 +1,7 @@
 {
-  "name": "mission-canvas-runtime",
+  "name": "lingua-viva-runtime",
   "version": "1.0.0",
-  "description": "Governed message bus for Mission Canvas (voice hub archived 2026-07-19, see archive/mc-engine/runtime/hub/ARCHIVED.md)",
+  "description": "Governed local runtime services for Lingua Viva.",
   "type": "module",
   "scripts": {
     "broker": "node broker/index.mjs"
