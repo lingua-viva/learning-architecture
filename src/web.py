@@ -789,25 +789,47 @@ async def admin_programme():
     return await asyncio.to_thread(CurriculumService().get_overview)
 
 
+def _admin_deferred(title: str, reason: str, requires: list[str]) -> dict:
+    return {
+        "status": "deferred",
+        "phase": "LV Phase 7 admin dashboard",
+        "title": title,
+        "reason": reason,
+        "requires": requires,
+    }
+
+
 @app.get("/api/admin/evidence")
 async def admin_evidence():
     # DEFERRED: requires accumulated, consent-aware teacher evidence data.
     # Date: 2026-07-18. Owner: LV Phase 7 admin dashboard.
-    return {"status": "not_yet_implemented"}
+    return _admin_deferred(
+        "Evidence",
+        "Evidence bundles need consent-aware teacher observations accumulated over time.",
+        ["teacher observation history", "consent review", "evidence export policy"],
+    )
 
 
 @app.get("/api/admin/capacity")
 async def admin_capacity():
     # DEFERRED: requires staffing/capacity model inputs that do not exist yet.
     # Date: 2026-07-18. Owner: LV Phase 7 admin dashboard.
-    return {"status": "not_yet_implemented"}
+    return _admin_deferred(
+        "Capacity",
+        "Capacity planning needs staffing, enrollment, and classroom allocation inputs.",
+        ["staffing roster", "projected enrollment", "classroom allocation model"],
+    )
 
 
 @app.get("/api/admin/trends")
 async def admin_trends():
     # DEFERRED: requires accumulated anonymized trend data.
     # Date: 2026-07-18. Owner: LV Phase 7 admin dashboard.
-    return {"status": "not_yet_implemented"}
+    return _admin_deferred(
+        "Trends",
+        "School-wide trends need enough anonymized observations to avoid overclaiming.",
+        ["anonymized observation history", "minimum cohort size", "trend review policy"],
+    )
 
 
 @app.get("/api/stats")

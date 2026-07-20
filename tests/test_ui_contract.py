@@ -21,7 +21,8 @@ REPO = Path(__file__).resolve().parent.parent
 #   v3 (2026-07-19): static/index.html Ctrl/Cmd+K quick-capture overlay (§7).
 #   v4 (2026-07-19): GET /api/profile/export + Export My Data button (§8).
 #   v5 (2026-07-20): default ingest scratch storage moved to LV runtime home.
-EXPECTED_VERSION = 5
+#   v6 (2026-07-20): admin deferred views explain reasons/prerequisites.
+EXPECTED_VERSION = 6
 
 
 def test_version_bumped_exactly_one_from_live():

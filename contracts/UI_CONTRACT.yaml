@@ -25,7 +25,9 @@
 #     — added Export My Data button before Clear All Data (MC-lessons §8).
 #   v5 (2026-07-20): src/web.py — moved default ingest scratch storage under
 #     Lingua Viva runtime home instead of the legacy case-study data tree.
-version: 5
+#   v6 (2026-07-20): src/web.py/static/index.html — admin deferred views now
+#     return and render explicit reasons/prerequisites instead of placeholders.
+version: 6
 files:
   - static/index.html
   - static/sw.js

@@ -15,8 +15,12 @@ def test_admin_programme_returns_overview():
     assert body["source_status"]["badge"] == "Authoritative source: Manuale v1"
 
 
-def test_admin_trends_not_yet_implemented():
+def test_admin_trends_deferred_with_reason():
     response = client.get("/api/admin/trends")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "not_yet_implemented"}
+    body = response.json()
+    assert body["status"] == "deferred"
+    assert body["phase"] == "LV Phase 7 admin dashboard"
+    assert "anonymized observations" in body["reason"]
+    assert body["requires"]

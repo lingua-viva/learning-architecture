@@ -39,8 +39,12 @@ def test_integrity_gate_deferred_noop_contract():
     assert result.warnings == []
 
 
-def test_admin_deferred_endpoints_are_explicit_placeholders():
+def test_admin_deferred_endpoints_explain_prerequisites():
     for path in ("/api/admin/evidence", "/api/admin/capacity", "/api/admin/trends"):
         response = client.get(path)
         assert response.status_code == 200
-        assert response.json() == {"status": "not_yet_implemented"}
+        body = response.json()
+        assert body["status"] == "deferred"
+        assert body["phase"] == "LV Phase 7 admin dashboard"
+        assert body["reason"]
+        assert body["requires"]

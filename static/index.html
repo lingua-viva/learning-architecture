@@ -1142,18 +1142,17 @@
 
     async function renderAdmin() {
       const title = state.view[0].toUpperCase() + state.view.slice(1);
-      setTitle(title, state.view === "programme" ? "curriculum overview" : "coordinator placeholder");
+      setTitle(title, state.view === "programme" ? "curriculum overview" : "planned after pilot evidence");
       if (state.view === "programme") {
         const data = await api("/api/admin/programme");
         $("content").innerHTML = `<div class="panel"><h2>Programme of Inquiry overview coming soon</h2><p>Current curriculum matrix structure is available from the local curriculum service.</p><div class="list">${data.grade_bands.map(g => `<div class="item"><h3>${escapeHtml(g.grade)}</h3><p>${escapeHtml(g.curriculum_focus)}</p></div>`).join("")}</div></div>`;
         return;
       }
-      const copy = {
-        evidence: "Accreditation evidence bundle — requires teacher observation data.",
-        capacity: "Staffing & capacity assessment.",
-        trends: "School-wide anonymized trends — requires accumulated data."
-      }[state.view] || "Coordinator data view.";
-      $("content").innerHTML = `<div class="panel"><h2>${escapeHtml(title)}</h2><p>${escapeHtml(copy)}</p></div>`;
+      const data = await api(`/api/admin/${state.view}`);
+      const requirements = (data.requires || []).map(item => `<li>${escapeHtml(item)}</li>`).join("");
+      $("content").innerHTML = `
+        <div class="view-head"><div><h2>${escapeHtml(data.title || title)}</h2><p>${escapeHtml(data.reason || "This coordinator view depends on pilot data.")}</p></div><span class="badge warn">${escapeHtml(data.status || "deferred")}</span></div>
+        <div class="panel"><h3>Required Before Activation</h3><ul>${requirements}</ul><p class="muted">${escapeHtml(data.phase || "LV Phase 7 admin dashboard")}</p></div>`;
     }
 
     function studentOptions() {
