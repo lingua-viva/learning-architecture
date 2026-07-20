@@ -39,6 +39,7 @@ status change.
 | Report | Date | Evidence |
 |---|---|---|
 | [REPORT_APP_IMPROVEMENT_MC_LESSONS_2026-07-19](REPORT_APP_IMPROVEMENT_MC_LESSONS_2026-07-19.md) | 2026-07-19 | This sweep's final report |
+| [REPORT_STAKEHOLDER_HARDENING_SWEEP_2026-07-20](REPORT_STAKEHOLDER_HARDENING_SWEEP_2026-07-20.md) | 2026-07-20 | Stakeholder-readiness hardening: metadata, runtime storage, admin deferred UX, runtime broker test |
 | [REPORT_DOCTOR_SWEEP_2026-07-20](REPORT_DOCTOR_SWEEP_2026-07-20.md) | 2026-07-20 | Doctor branch gate updated for main; privacy WARN reviewed/deferred |
 | [REPORT_ARCHITECTURE_SWEEP_2026-07-18](REPORT_ARCHITECTURE_SWEEP_2026-07-18.md) | 2026-07-18 | Full architecture sweep close-out |
 | [REPORT_FINAL_POLISH_2026-07-18](REPORT_FINAL_POLISH_2026-07-18.md) | 2026-07-18 | Final polish close-out |

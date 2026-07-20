@@ -35,11 +35,11 @@ Read `dev/INDEX.md` for the authoritative spec-status table before trusting any 
 
 ## 3. Current state (verified today, 2026-07-20)
 
-- **454 tests total (437 app + 15 doctor + 2 doctor-hardening branch cases): all passing** after the follow-up sanitizer client fix in this window. The original handoff pass found `tests/test_sanitizer_client.py::test_fail_closed_production_mode` red; `sanitizer/client.py` now resolves `LV_SANITIZER_URL` lazily so the production fail-closed path honors per-test env overrides.
+- **442 app tests passing** after the stakeholder hardening sweep. The original handoff pass found `tests/test_sanitizer_client.py::test_fail_closed_production_mode` red; `sanitizer/client.py` now resolves `LV_SANITIZER_URL` lazily so the production fail-closed path honors per-test env overrides.
 - **`python3 -m doctor.support_loop doctor` → WARN**, not BLOCKED. Fixed in the Doctor sweep: `EXPECTED_BRANCH = "LINGUA-VIVA-UPDATE"` was a hard-coded single-branch gate left over from feature-branch work; Doctor now accepts either `main` or `LINGUA-VIVA-UPDATE` (`EXPECTED_BRANCHES` in `doctor/support_loop/doctor.py`). Remaining WARN after commit: expected private `.docx` source exclusions are present and intentionally not read. See `dev/REPORT_DOCTOR_SWEEP_2026-07-20.md`.
 - Ontology: 111 nodes / 25 domains. Knowledge: 178 entries / 559 citations. (MANIFEST.yaml, doc counts pinned by `tests/test_doc_counts.py`.)
 - Desktop: version 0.2.0, AppImage built locally (not committed — gitignored, not a release).
-- Latest local commits after this note cover this handoff/index, the sanitizer client fix, and the Doctor branch-gate sweep.
+- Latest local commits after this note cover this handoff/index, the sanitizer client fix, the Doctor branch-gate sweep, and the stakeholder hardening sweep.
 
 ---
 
@@ -93,13 +93,13 @@ So: capture → lens is real and is the strongest part of the product. The *deci
 Sidebar (built): Programme · Evidence · Capacity · Trends, + same utility bar.
 
 - `GET /api/admin/programme` — **real**, delegates to `CurriculumService().get_overview` (`src/web.py:782`)
-- `GET /api/admin/evidence`, `/api/admin/capacity`, `/api/admin/trends` — **all three are literal stubs**:
+- `GET /api/admin/evidence`, `/api/admin/capacity`, `/api/admin/trends` — **all three are deferred, not real analytics features yet**:
   ```python
   # DEFERRED: requires accumulated, consent-aware teacher evidence data.
   # Date: 2026-07-18. Owner: LV Phase 7 admin dashboard.
-  return {"status": "not_yet_implemented"}
+  return {"status": "deferred", "phase": "LV Phase 7 admin dashboard", ...}
   ```
-  This is documented and tested (`tests/test_stub_audit_sweep.py::test_admin_deferred_endpoints_are_explicit_placeholders`), so it's an honest stub, not a hidden gap — but it means **3 of 4 admin sidebar items render a placeholder, not a feature.** The backing logic partially exists elsewhere and is unwired: `src/education/trend_analysis.py` and `src/education/weekly_recommendation.py` exist but nothing calls them from `/api/admin/trends`.
+  This is documented and tested (`tests/test_stub_audit_sweep.py::test_admin_deferred_endpoints_explain_prerequisites`), so it's an honest deferral, not a hidden gap. The stakeholder hardening sweep changed the UI/API from placeholders to explicit reasons and prerequisites, but **3 of 4 admin sidebar items are still not actual analytics features.** The backing logic partially exists elsewhere and is unwired: `src/education/trend_analysis.py` and `src/education/weekly_recommendation.py` exist but nothing calls them from `/api/admin/trends`.
 
 ### 5.3 Student tier — does not exist
 
@@ -128,7 +128,7 @@ If "build out the student tier" is ever the ask, it's a from-scratch build, not 
 ## 6. Biggest weaknesses, ranked
 
 1. **No auth / no server-side role enforcement.** Role is a client-side DOM toggle. Anyone can become "coordinator" by clicking a different onboarding button. Not a concern for a single-teacher pilot; a hard blocker for any multi-user deployment.
-2. **Admin tier is 75% placeholder.** 3 of 4 sidebar items return `not_yet_implemented`. The tier looks built in the UI but isn't.
+2. **Admin tier is still 75% deferred.** 3 of 4 sidebar items are not real analytics features yet, but they now return/render explicit `deferred` state with reasons and prerequisites instead of `not_yet_implemented` placeholders.
 3. **The teacher-tier decision half of the flywheel is missing.** Observation capture works; RTI confirm/defer, grouping, portfolio writes, and gap-detection endpoints specified in the addendum were never built. The system can *observe and propose* but a teacher currently cannot *act* on a proposal through the app — the addendum's own headline design principle ("system proposes, teacher confirms") isn't wired end-to-end.
 4. **A second instance of the exact hermeticity bug MC-lessons §1 was built to close, found live today and fixed in this follow-up:** `sanitizer/client.py` kept `SANITIZER_URL = os.getenv("LV_SANITIZER_URL", "http://localhost:6100")` as a module-level import-time value, so `tests/conftest.py`'s per-test env override never reached it. The fix adds call-time URL resolution for `/health` and `/sanitize/fast`. The failure was real, not flaky, and is useful evidence that the "convert module constants to lazy functions" sweep in MC-lessons §1 wasn't repo-wide.
 5. ~~Doctor's branch-name gate blocked on `main`.~~ **Fixed in the Doctor sweep** — `EXPECTED_BRANCHES` now accepts `main` alongside `LINGUA-VIVA-UPDATE` in `doctor/support_loop/doctor.py`. Left in the list as history/context; not a live weakness anymore.
@@ -143,7 +143,7 @@ If "build out the student tier" is ever the ask, it's a from-scratch build, not 
 ## 7. Where to focus next (suggested order)
 
 1. **Decide the fate of the addendum's unbuilt teacher endpoints** (§5.1) — either build `/rti`, `/grouping`, `/portfolio-entry`, `/assess/gaps`, and `/help-artifact`, or formally descope them in the spec/`dev/INDEX.md` so the SHIPPED status stops overclaiming. Right now the spec says shipped and the code says partial.
-2. **Same call for the admin tier** (§5.2) — either build evidence/capacity/trends for real (they need "accumulated, consent-aware teacher evidence data" per the code comments — i.e., they need enough real usage first) or explicitly message the coordinator sidebar as "coming after adoption" rather than a silent placeholder.
+2. **Same call for the admin tier** (§5.2) — either build evidence/capacity/trends for real (they need accumulated, consent-aware teacher evidence data) or keep them formally deferred until pilot data exists. The UI now says this explicitly; the product decision is still open.
 3. **Auth/roles, before any second real user.** Even a minimal server-side role check would close weakness #1.
 4. **Roster model for access control** (§5.4) — replace "must have observed once" with an admin-grantable roster before a second teacher account is real.
 5. **Publication-readiness Phase 1**, if any of this portfolio content is going public soon — the audit already tells you exactly what to fix.
