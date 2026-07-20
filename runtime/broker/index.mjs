@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Palette Peers Broker v1.0.0
+ * Lingua Viva Runtime Broker v1.0.0
  *
  * Governed local message bus for multi-agent coordination.
  * HTTP + SQLite. Transport is shared, execution is isolated.
@@ -14,8 +14,8 @@ import { initDb } from './db.mjs';
 import { evaluateGate } from './gates.mjs';
 import { validateEnvelope, validateRegistration } from './validate.mjs';
 
-const PORT = parseInt(process.env.PALETTE_PEERS_PORT ?? '7899', 10);
-const DB_PATH = process.env.PALETTE_PEERS_DB ?? join(homedir(), '.palette-peers.db');
+const PORT = parseInt(process.env.LV_RUNTIME_PORT ?? process.env.PALETTE_PEERS_PORT ?? '7899', 10);
+const DB_PATH = process.env.LV_RUNTIME_DB ?? process.env.PALETTE_PEERS_DB ?? join(homedir(), '.lingua-viva-runtime.db');
 const MAX_BODY_BYTES = 1_048_576; // 1 MiB — prevents unbounded reads on localhost
 const PID_PEER_GRACE_MS = 60_000;
 const PIDLESS_PEER_TTL_MS = 24 * 60 * 60 * 1000;
@@ -686,12 +686,12 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(PORT, '127.0.0.1', () => {
-  console.error(`[palette-peers broker] v1.0.0 on 127.0.0.1:${PORT} (db: ${DB_PATH})`);
+  console.error(`[lingua-viva broker] v1.0.0 on 127.0.0.1:${PORT} (db: ${DB_PATH})`);
 });
 
 // --- Graceful shutdown ---
 function shutdown(signal) {
-  console.error(`[palette-peers broker] ${signal} received, shutting down`);
+  console.error(`[lingua-viva broker] ${signal} received, shutting down`);
   server.close(() => {
     db.close();
     process.exit(0);

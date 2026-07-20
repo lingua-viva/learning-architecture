@@ -4,7 +4,8 @@
   "description": "Governed local runtime services for Lingua Viva.",
   "type": "module",
   "scripts": {
-    "broker": "node broker/index.mjs"
+    "broker": "node broker/index.mjs",
+    "test": "node test_broker_db.mjs"
   },
   "dependencies": {
     "@libsql/client": "^0.17.3",
