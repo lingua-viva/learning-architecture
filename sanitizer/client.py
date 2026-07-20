@@ -37,11 +37,16 @@ _service_checked = False
 _service_available = False
 
 
+def _sanitizer_url() -> str:
+    """Resolve sanitizer URL at call time so env changes are honored."""
+    return os.getenv("LV_SANITIZER_URL", SANITIZER_URL)
+
+
 def _check_service() -> bool:
     """Check if the sanitizer HTTP service is running."""
     global _service_checked, _service_available
     try:
-        req = Request(f"{SANITIZER_URL}/health", method="GET")
+        req = Request(f"{_sanitizer_url()}/health", method="GET")
         resp = urlopen(req, timeout=2)
         data = json.loads(resp.read())
         _service_available = data.get("ok", False)
@@ -81,7 +86,7 @@ def sanitize_text(
         }).encode()
 
         req = Request(
-            f"{SANITIZER_URL}/sanitize/fast",
+            f"{_sanitizer_url()}/sanitize/fast",
             data=payload,
             headers={"Content-Type": "application/json"},
             method="POST",

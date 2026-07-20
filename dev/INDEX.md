@@ -28,6 +28,12 @@ status change.
 | [SPEC_LINGUA_VIVA_MC_TRANSFER_APPENDIX](specs/SPEC_LINGUA_VIVA_MC_TRANSFER_APPENDIX_2026-07-16.md) | 2026-07-16 | DRAFT | Reference/mapping doc, not a build spec |
 | [SPEC_LINGUA_VIVA_MC_TRANSFER_FULL_TABLE](specs/SPEC_LINGUA_VIVA_MC_TRANSFER_FULL_TABLE_2026-07-16.md) | 2026-07-16 | DRAFT | Reference/mapping doc, not a build spec |
 
+## Handoffs (`dev/`)
+
+| Handoff | Date | Purpose |
+|---|---|---|
+| [HANDOFF_LINGUA_VIVA_2026-07-20](HANDOFF_LINGUA_VIVA_2026-07-20.md) | 2026-07-20 | Cross-session orientation: full spec inventory, three-tier (student/teacher/admin) build status, ranked weaknesses, recommended focus order |
+
 ## Reports (`dev/`)
 
 | Report | Date | Evidence |
