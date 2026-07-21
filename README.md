@@ -89,7 +89,7 @@ Interpretive filters that shape how the engine processes queries:
 
 ## The Runtime — Lingua Viva
 
-This repository includes the Lingua Viva teacher runtime. The app provides:
+This repository includes the Lingua Viva teacher runtime and the public site at [linguaviva.art](https://linguaviva.art). The app provides:
 
 - **Teacher-first local app** — planning, preparation, observation capture, student lenses, assessment, parent drafts, health, privacy, profile, and Why views
 - **Ontology-based routing** — 111 nodes across 25 domains classify teacher queries before model reasoning
@@ -99,15 +99,19 @@ This repository includes the Lingua Viva teacher runtime. The app provides:
 
 ### Quick Start
 
+**Download the app**: [linguaviva.art](https://linguaviva.art)
+
+Or install from terminal:
+
 ```bash
-./install.sh
+curl -fsSL https://raw.githubusercontent.com/lingua-viva/learning-architecture/main/install.sh | sh
 ```
 
-Or manually:
+Or from source:
 
 ```bash
 pip install -e .
-./setup.sh
+python3 -m src.lv_cli serve 8787
 ```
 
 ### Engine Structure
@@ -126,8 +130,9 @@ pip install -e .
 | `config/` | Three-tier governance (Tier 1 immutable, Tier 2 reviewed, Tier 3 auto) |
 | `runtime/` | Node.js message broker + voice hub |
 | `tests/` | Gateway, ontology, memory, knowledge, integration |
-| `desktop/` | Electron shell for the local teacher app |
+| `desktop/` | Electron shell with guided setup wizard (Python/Ollama detection, one-click install) |
 | `doctor/` | Local diagnostics and support-bundle tooling |
+| `docs/` | Public landing site (linguaviva.art — auto-deploys via GitHub Pages) |
 
 ---
 
