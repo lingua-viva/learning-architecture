@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Lingua Viva">
+  <rect width="64" height="64" rx="14" fill="#10231f"/>
+  <path d="M17 17h30v6H24v14h20v6H17V17z" fill="#f4efe6"/>
+  <path d="M24 29h23v6H31v12h-7V29z" fill="#7cc7b2"/>
+  <circle cx="47" cy="47" r="5" fill="#f2bf5e"/>
+</svg>

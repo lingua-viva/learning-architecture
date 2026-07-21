@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
+  <title>Lingua Viva - Open source teacher support for language learning.</title>
+  <meta name="description" content="Lingua Viva is a local-first, open source education tool for language teachers: capture observations, build student lenses, and prepare differentiated activities without sending student data away." />
+  <link rel="canonical" href="https://linguaviva.art/" />
+  <meta property="og:title" content="Lingua Viva - Open source teacher support for language learning." />
+  <meta property="og:description" content="Capture observations, build student lenses, and prepare differentiated language activities locally." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://linguaviva.art/" />
+  <meta property="og:site_name" content="Lingua Viva" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="theme-color" content="#10231f" />
+  <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+  <link rel="alternate icon" href="/icons/icon.svg" type="image/svg+xml" />
+  <link rel="manifest" href="/site.webmanifest" />
+  <link rel="stylesheet" href="style.css?v=20260720-001" />
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="nav" id="nav">
+    <div class="nav-inner">
+      <a href="/" class="nav-logo" aria-label="Lingua Viva home">
+        <span class="nav-logo-mark" aria-hidden="true">LV</span>
+        <span>Lingua Viva</span>
+      </a>
+      <nav class="nav-links" aria-label="Primary navigation">
+        <a href="#how-it-works">How it works</a>
+        <a href="#classroom">Classroom</a>
+        <a href="#open-source">Open source</a>
+        <a href="#download">Download</a>
+      </nav>
+      <div class="nav-actions">
+        <button data-theme-toggle aria-label="Switch to light mode" aria-pressed="false" class="theme-toggle" type="button">
+          <svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg>
+        </button>
+        <a href="#download" class="btn btn-primary btn-sm">Get the app</a>
+      </div>
+    </div>
+  </header>
+
+  <main id="main" tabindex="-1">
+    <section class="hero" aria-label="Lingua Viva">
+      <div class="hero-inner">
+        <div class="hero-eyebrow fade-in">
+          <span class="chip chip-local">Local-first</span>
+          <span class="chip chip-open">Open source</span>
+          <span class="chip chip-education">Built for teachers</span>
+        </div>
+
+        <h1 class="hero-headline fade-in">
+          Language learning<br />
+          <em>teachers can trust.</em>
+        </h1>
+
+        <p class="hero-sub fade-in">
+          Lingua Viva helps teachers capture classroom observations, understand each student's language journey, and prepare differentiated activities while keeping student data local.
+        </p>
+
+        <div class="hero-ctas fade-in">
+          <a href="#how-it-works" class="btn btn-primary">See the classroom loop</a>
+          <a href="#download" class="btn btn-ghost">Download buttons coming next</a>
+          <span class="mobile-download-note">Desktop app downloads will be wired after the release-link spec lands.</span>
+        </div>
+      </div>
+
+      <div class="lv-demo fade-in" aria-label="Lingua Viva product preview">
+        <div class="lv-window">
+          <div class="lv-titlebar">
+            <div class="lv-dots" aria-hidden="true"><span></span><span></span><span></span></div>
+            <span>Lingua Viva Teacher</span>
+          </div>
+          <div class="lv-app">
+            <aside class="lv-sidebar" aria-hidden="true">
+              <span class="lv-nav-dot active"></span>
+              <span class="lv-nav-dot"></span>
+              <span class="lv-nav-dot"></span>
+              <span class="lv-nav-dot"></span>
+            </aside>
+            <section class="lv-workspace" aria-hidden="true">
+              <div class="lv-toolbar">
+                <span class="chip chip-local">Student data local</span>
+                <span class="chip chip-lens" id="demoChipOne">Observation</span>
+                <span class="chip chip-education" id="demoChipTwo">Italian G3</span>
+              </div>
+              <div class="capture-card">
+                <div class="capture-label">Quick capture</div>
+                <p><span id="demoCapture"></span><span class="caret" aria-hidden="true"></span></p>
+              </div>
+              <div class="lens-grid">
+                <div class="lens-card" id="lensOne">
+                  <span>Student lens</span>
+                  <strong>Marco</strong>
+                  <p>Speaking: A2 progressing</p>
+                </div>
+                <div class="lens-card" id="lensTwo">
+                  <span>Next step</span>
+                  <strong>Articles practice</strong>
+                  <p>Pair oral scaffold with picture cards</p>
+                </div>
+              </div>
+              <div class="proof-line" id="demoProof">Saved locally - no third-party calls - teacher controlled</div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="trust-bar" aria-label="Trust signals">
+      <div class="container trust-items">
+        <div class="trust-item"><strong>No account</strong><span>Teachers can try the app without creating a cloud profile.</span></div>
+        <div class="trust-divider"></div>
+        <div class="trust-item"><strong>Local data</strong><span>Observations and student lenses stay on the device by default.</span></div>
+        <div class="trust-divider"></div>
+        <div class="trust-item"><strong>Open source</strong><span>Schools can inspect the code and the policy gates.</span></div>
+        <div class="trust-divider"></div>
+        <div class="trust-item"><strong>442 tests</strong><span>Current app hardening suite is passing.</span></div>
+      </div>
+    </section>
+
+    <section class="how-it-works" id="how-it-works" aria-label="How Lingua Viva works">
+      <div class="container">
+        <div class="section-label fade-in">How it works</div>
+        <h2 class="section-headline fade-in">A classroom loop, not another dashboard.</h2>
+        <p class="section-sub fade-in">
+          Lingua Viva starts from a real teaching habit: notice something, record it quickly, and use it to prepare tomorrow's lesson.
+        </p>
+
+        <div class="pipeline" aria-label="Lingua Viva workflow">
+          <div class="pipeline-step fade-in">
+            <div class="step-num">01</div>
+            <div class="step-body">
+              <h3>Capture</h3>
+              <p>Write or dictate a short observation during class. The note is saved locally and tagged to the student.</p>
+            </div>
+          </div>
+          <div class="pipeline-arrow fade-in">-</div>
+          <div class="pipeline-step fade-in">
+            <div class="step-num">02</div>
+            <div class="step-body">
+              <h3>Lens</h3>
+              <p>The student lens updates CEFR signals, RTI context, and observation history without replacing teacher judgment.</p>
+            </div>
+          </div>
+          <div class="pipeline-arrow fade-in">-</div>
+          <div class="pipeline-step fade-in step-highlight">
+            <div class="step-num">03</div>
+            <div class="step-body">
+              <h3>Prepare</h3>
+              <p>Generate differentiated activity ideas that match the class, the unit, and the evidence teachers have recorded.</p>
+            </div>
+          </div>
+          <div class="pipeline-arrow fade-in">-</div>
+          <div class="pipeline-step fade-in">
+            <div class="step-num">04</div>
+            <div class="step-body">
+              <h3>Reflect</h3>
+              <p>Keep a private implementation note so the curriculum improves from actual classroom use.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="classroom" id="classroom" aria-label="Who Lingua Viva is for">
+      <div class="container">
+        <div class="section-label fade-in">For education</div>
+        <h2 class="section-headline fade-in">Built around the people using it.</h2>
+        <div class="cards-grid">
+          <article class="case-card fade-in">
+            <div class="case-icon">T</div>
+            <h3>Teachers</h3>
+            <p>Capture observations, review student lenses, prepare tiered activities, and draft parent-safe notes from local evidence.</p>
+            <span class="proof-label">Strongest current tier</span>
+          </article>
+          <article class="case-card fade-in">
+            <div class="case-icon">C</div>
+            <h3>Coordinators</h3>
+            <p>Programme overview is live. Evidence, capacity, and trends are deliberately deferred until pilot data exists.</p>
+            <span class="proof-label">No overclaiming</span>
+          </article>
+          <article class="case-card fade-in">
+            <div class="case-icon">S</div>
+            <h3>Students</h3>
+            <p>Student-facing workflows are planned only after teacher adoption signals justify building them.</p>
+            <span class="proof-label">Teacher-first product boundary</span>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="open-source" id="open-source" aria-label="Open source education">
+      <div class="container">
+        <div class="open-source-inner fade-in">
+          <div class="os-text">
+            <div class="section-label">Open source</div>
+            <h2>Schools should be able to inspect the tool they trust.</h2>
+            <p>
+              Lingua Viva is designed as a local-first education tool. The privacy rules, support checks, and data paths are visible in code so a school can review them before a pilot.
+            </p>
+            <div class="os-ctas">
+              <a class="btn btn-primary" href="https://github.com/lingua-viva/learning-architecture" target="_blank" rel="noopener">GitHub repo</a>
+              <a class="btn btn-ghost" href="#download">Release area</a>
+            </div>
+            <p class="os-stat">Local-first - no telemetry claim - teacher-controlled observations</p>
+          </div>
+          <div class="os-code-block">
+            <div class="code-header">
+              <span class="code-file">teacher loop</span>
+              <span class="code-badge">local</span>
+            </div>
+            <pre class="code-pre"><code><span class="code-comment"># classroom evidence stays local</span>
+capture = <span class="code-fn">observe</span>(student, note)
+lens = <span class="code-fn">update_lens</span>(capture)
+activity = <span class="code-fn">prepare</span>(unit, lens)
+
+<span class="code-kw">if</span> student_data:
+  route = <span class="code-str">"local only"</span>
+
+<span class="code-fn">show_teacher</span>(activity)</code></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="journey" aria-label="Pilot journey">
+      <div class="container">
+        <div class="section-label fade-in">Pilot path</div>
+        <h2 class="section-headline fade-in">From first classroom note to a credible pilot.</h2>
+        <div class="journey-steps">
+          <div class="journey-step fade-in"><div class="journey-num">01</div><div><h3>Install locally</h3><p>Run the teacher app on a school-controlled device.</p><span>Day 1</span></div></div>
+          <div class="journey-step fade-in"><div class="journey-num">02</div><div><h3>Capture real observations</h3><p>Use the quick capture loop during normal lessons.</p><span>Week 1</span></div></div>
+          <div class="journey-step fade-in"><div class="journey-num">03</div><div><h3>Prepare from evidence</h3><p>Generate differentiated language activities from the recorded student lens.</p><span>Weeks 2-4</span></div></div>
+          <div class="journey-step fade-in"><div class="journey-num">04</div><div><h3>Review what is ready</h3><p>Keep coordinator analytics deferred until the data is consent-aware and large enough.</p><span>Pilot review</span></div></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="final-cta" id="download" aria-label="Download Lingua Viva">
+      <div class="container">
+        <div class="final-cta-inner fade-in">
+          <h2>Download area reserved for the app release spec.</h2>
+          <p>
+            The landing page is ready for platform buttons, but the links will stay inactive until the release artifact contract is defined and tested.
+          </p>
+          <div class="download-buttons" data-downloads-pending="true">
+            <a class="btn btn-download" id="btn-dl-mac" role="button" href="https://github.com/lingua-viva/learning-architecture/releases/latest/download/lv-darwin-arm64" data-platform="mac" data-status="live" data-release-slot="mac">Download for Mac (Apple Silicon)</a>
+            <a class="btn btn-download" id="btn-dl-win" role="button" href="https://github.com/lingua-viva/learning-architecture/releases/latest/download/lv-windows-x86_64.exe" data-platform="windows" data-status="live" data-release-slot="windows">Download for Windows</a>
+            <a class="btn btn-download" id="btn-dl-linux" role="button" href="https://github.com/lingua-viva/learning-architecture/releases/latest/download/lv-linux-x86_64" data-platform="linux" data-status="live" data-release-slot="linux">Download for Linux</a>
+          </div>
+          <p class="final-byline">Open source education software, grounded in classroom evidence.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container footer-inner">
+      <div class="footer-brand">
+        <span class="footer-logo">Lingua Viva</span>
+        <span class="footer-tagline">Open source teacher support for language learning.</span>
+      </div>
+      <nav class="footer-links" aria-label="Footer navigation">
+        <a href="https://github.com/lingua-viva/learning-architecture" target="_blank" rel="noopener">GitHub</a>
+        <a href="#open-source">Open source</a>
+        <a href="mailto:hello@linguaviva.art">Contact</a>
+      </nav>
+      <p class="footer-copy">Open source - local-first - linguaviva.art</p>
+    </div>
+  </footer>
+
+  <script src="app.js?v=20260720-001" defer></script>
+</body>
+</html>
