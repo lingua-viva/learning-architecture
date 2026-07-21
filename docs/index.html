@@ -31,7 +31,6 @@
         <a href="#how-it-works">How it works</a>
         <a href="#classroom">Classroom</a>
         <a href="#open-source">Open source</a>
-        <a href="#download">Download</a>
       </nav>
       <div class="nav-actions">
         <button data-theme-toggle aria-label="Switch to light mode" aria-pressed="false" class="theme-toggle" type="button">
@@ -62,8 +61,6 @@
 
         <div class="hero-ctas fade-in">
           <a href="#how-it-works" class="btn btn-primary">See the classroom loop</a>
-          <a href="#download" class="btn btn-ghost">Download buttons coming next</a>
-          <span class="mobile-download-note">Desktop app downloads will be wired after the release-link spec lands.</span>
         </div>
       </div>
 
@@ -242,15 +239,15 @@ activity = <span class="code-fn">prepare</span>(unit, lens)
     <section class="final-cta" id="download" aria-label="Download Lingua Viva">
       <div class="container">
         <div class="final-cta-inner fade-in">
-          <h2>Download area reserved for the app release spec.</h2>
+          <h2>Get Lingua Viva</h2>
           <p>
-            The landing page is ready for platform buttons, but the links will stay inactive until the release artifact contract is defined and tested.
+            A local-first CLI that starts a teacher workbench on your machine. No account needed. No data leaves your computer.
           </p>
-          <div class="download-buttons" data-downloads-pending="true">
-            <a class="btn btn-download" id="btn-dl-mac" role="button" href="https://github.com/lingua-viva/learning-architecture/releases/latest/download/lv-darwin-arm64" data-platform="mac" data-status="live" data-release-slot="mac">Download for Mac (Apple Silicon)</a>
-            <a class="btn btn-download" id="btn-dl-win" role="button" href="https://github.com/lingua-viva/learning-architecture/releases/latest/download/lv-windows-x86_64.exe" data-platform="windows" data-status="live" data-release-slot="windows">Download for Windows</a>
-            <a class="btn btn-download" id="btn-dl-linux" role="button" href="https://github.com/lingua-viva/learning-architecture/releases/latest/download/lv-linux-x86_64" data-platform="linux" data-status="live" data-release-slot="linux">Download for Linux</a>
+          <div class="download-buttons">
+            <a class="btn btn-download" id="btn-dl-win" role="button" href="https://github.com/lingua-viva/learning-architecture/releases/latest/download/lv-windows-x86_64.exe" data-platform="windows" data-status="live">Download for Windows</a>
+            <a class="btn btn-download" id="btn-dl-mac" role="button" href="https://github.com/lingua-viva/learning-architecture/releases/latest/download/lv-darwin-arm64" data-platform="mac" data-status="live">Download for Mac / Linux</a>
           </div>
+          <p class="download-note" style="font-size:0.85rem;opacity:0.7;margin-top:0.75rem;">Mac download is Apple Silicon. Linux users: <code>curl -fsSL https://raw.githubusercontent.com/lingua-viva/learning-architecture/main/install.sh | sh</code></p>
           <p class="final-byline">Open source education software, grounded in classroom evidence.</p>
         </div>
       </div>
