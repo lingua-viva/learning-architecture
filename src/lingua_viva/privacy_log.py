@@ -40,6 +40,7 @@ def _generic_detail(event_type: str) -> str:
         "observation_saved_locally": "Observation saved locally only.",
         "query_processed_locally": "Teacher query processed locally.",
         "ai_attribution_stripped": "AI attribution wording removed from parent draft.",
+        "external_call_made": "Query was sent to a teacher-connected external model provider.",
     }
     return details.get(event_type, "Privacy event recorded locally.")
 
@@ -94,7 +95,7 @@ def privacy_summary() -> dict:
         "student_blocks": sum(1 for event in events if event.event_type in STUDENT_EVENT_TYPES),
         "ai_attribution_stripped": sum(1 for event in events if event.event_type == "ai_attribution_stripped"),
         "observations_saved_locally": sum(1 for event in events if event.event_type == "observation_saved_locally"),
-        "external_calls": 0,
+        "external_calls": sum(1 for event in events if event.event_type == "external_call_made"),
         "docx_modifications": 0,
     }
 

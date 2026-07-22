@@ -143,29 +143,32 @@ class ParentReportGenerator:
         trend = self.analyzer.analyze_student(student_id)
         name = lens.get("display_name") or "your child"
 
-        body_parts = [f"Over the past few weeks, we've been getting to know {name} better in class."]
+        body_parts = [
+            f"We noticed {name} trying new ways to make meaning in class."
+        ]
         activities: list = []
 
         progressed_dims = [d for d in trend.cefr_dimensions if d.direction == "improved"]
         if progressed_dims:
             dim = progressed_dims[0]
             body_parts.append(
-                f"{name} has been making real progress with {dim.dimension} — "
-                f"we've seen steady growth in this area."
+                f"In {dim.dimension}, {name}'s progress is visible in growing confidence "
+                "and more independent choices."
             )
             activities.append(_CEFR_ACTIVITY.get(dim.dimension, _GENERAL_ACTIVITY))
         elif trend.cefr_dimensions:
             dim = trend.cefr_dimensions[0]
             body_parts.append(
-                f"{name} is working on building {dim.dimension} skills, and a little "
-                f"extra practice at home would help."
+                f"In {dim.dimension}, we are watching for the next small signs of confidence."
             )
             activities.append(_CEFR_ACTIVITY.get(dim.dimension, _GENERAL_ACTIVITY))
         else:
-            body_parts.append(f"We're still getting a full picture of {name}'s learning — more updates soon.")
+            body_parts.append(
+                f"We are still collecting classroom observations so the next note can be more specific."
+            )
 
         if trend.sel_positive_count > 0:
-            body_parts.append(f"{name} has had some lovely moments in class this month.")
+            body_parts.append(f"{name} has brought care and attention to class moments this month.")
 
         if not activities:
             activities.append(_GENERAL_ACTIVITY)

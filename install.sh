@@ -14,7 +14,8 @@ set -e
 echo ""
 echo "  ╔══════════════════════════════════════════╗"
 echo "  ║   Lingua Viva — Install                 ║"
-echo "  ║   Local-first Italian teacher workbench      ║"
+echo "  ║   Local-first teacher workbench              ║"
+echo "  ║   Observations, planning, parent drafts local║"
 echo "  ╚══════════════════════════════════════════╝"
 echo ""
 
@@ -28,8 +29,25 @@ case "$ARCH" in
   *) echo "  ✗ Unsupported architecture: $ARCH"; exit 1 ;;
 esac
 
+SKIP_BINARY=""
 case "$OS" in
-  darwin) PLATFORM="darwin"; ARCH="arm64" ;;  # Single universal binary
+  darwin)
+    PLATFORM="darwin"
+    # The release pipeline only builds and publishes an arm64 (Apple
+    # Silicon) macOS asset (lv-darwin-arm64) — there is no lipo'd
+    # universal binary and no x86_64 asset. Detect the REAL architecture
+    # (fixed above from `uname -m`, not assumed) and, on an unsupported
+    # one, say so explicitly and go straight to source install instead of
+    # attempting a download that would either 404 or — worse — silently
+    # fetch an arm64 binary that can't execute on an Intel host.
+    case "$ARCH" in
+      arm64) : ;;
+      *)
+        echo "  ⚠ No published macOS binary for architecture: $ARCH (only Apple Silicon/arm64 is built) — installing from source instead."
+        SKIP_BINARY="1"
+        ;;
+    esac
+    ;;
   linux) PLATFORM="linux" ;;
   *) echo "  ✗ Unsupported OS: $OS"; exit 1 ;;
 esac
@@ -108,7 +126,7 @@ if [ -n "$RESPONSE" ]; then
       exit 0
       ;;
     *)
-      notify "Port ${PORT} is in use by another program — close it and try again."
+      notify "Port ${PORT} is in use by another program — close the app using 8787, then open Lingua Viva again."
       exit 1
       ;;
   esac
@@ -155,7 +173,7 @@ LAUNCHEOF
 [Desktop Entry]
 Type=Application
 Name=Lingua Viva
-Comment=Local-first Italian teacher workbench
+  Comment=Local-first teacher workbench for observations, planning, and parent drafts
 Exec=${HOME}/.local/bin/lv-launch
 Terminal=false
 Categories=Education;
@@ -193,9 +211,11 @@ PLISTEOF
 # ── Try binary install first ──
 BINARY="lv-${PLATFORM}-${ARCH}"
 URL="https://github.com/lingua-viva/learning-architecture/releases/latest/download/${BINARY}"
-echo "  → Downloading binary..."
 TMPFILE=$(mktemp)
-if curl -fsSL "$URL" -o "$TMPFILE" 2>/dev/null && [ -s "$TMPFILE" ]; then
+if [ -z "$SKIP_BINARY" ]; then
+  echo "  → Downloading binary..."
+fi
+if [ -z "$SKIP_BINARY" ] && curl -fsSL "$URL" -o "$TMPFILE" 2>/dev/null && [ -s "$TMPFILE" ]; then
   chmod +x "$TMPFILE"
   INSTALL_DIR="${HOME}/.local/bin"
   mv "$TMPFILE" "$INSTALL_DIR/lv"
@@ -321,19 +341,25 @@ fi
 echo "  ✓ Git"
 
 # Clone or update to ~/.lingua-viva/
-INSTALL_DIR="${HOME}/.lingua-viva"
-if [ -d "$INSTALL_DIR/.git" ]; then
+# Named distinctly from the binary branch's INSTALL_DIR (~/.local/bin, a
+# bin dir for a single executable) above — this is an app home, a
+# different kind of directory. The binary branch always `exit 0`s before
+# this point is reached in the same invocation, so the two never
+# genuinely collided, but a shared name across two different meanings was
+# a shadowing footgun waiting for a future refactor. L-1.
+SRC_INSTALL_DIR="${HOME}/.lingua-viva"
+if [ -d "$SRC_INSTALL_DIR/.git" ]; then
   echo "  → Updating existing install..."
-  (cd "$INSTALL_DIR" && git pull --quiet 2>/dev/null) || true
+  (cd "$SRC_INSTALL_DIR" && git pull --quiet 2>/dev/null) || true
 else
   echo "  → Cloning Lingua Viva..."
-  git clone --quiet --depth 1 https://github.com/lingua-viva/learning-architecture.git "$INSTALL_DIR"
+  git clone --quiet --depth 1 https://github.com/lingua-viva/learning-architecture.git "$SRC_INSTALL_DIR"
 fi
 echo "  ✓ Source ready"
 
 # Install Python deps (with PEP 668 break packages)
 echo "  → Installing dependencies..."
-cd "$INSTALL_DIR"
+cd "$SRC_INSTALL_DIR"
 pip3 install --quiet --break-system-packages pyyaml redis fastapi uvicorn websockets pdfplumber sqlite-vec pytest 2>/dev/null || \
   pip3 install --quiet pyyaml redis fastapi uvicorn websockets pdfplumber sqlite-vec pytest 2>/dev/null || \
   python3 -m pip install --quiet --break-system-packages pyyaml redis fastapi uvicorn websockets pdfplumber sqlite-vec pytest 2>/dev/null || \
@@ -348,9 +374,13 @@ fi
 
 pull_ollama
 
-# Verify
+# Verify. Surface stderr to a log instead of discarding it — two of this
+# cycle's release tags (v1.0.1, v1.0.2) failed for reasons that would have
+# been diagnosable faster with visible stderr here. L-2.
 echo ""
-python3 -m src.lv_cli health 2>/dev/null || echo "  (Run 'lv health' to verify)"
+HEALTH_LOG="${HOME}/.lingua-viva/install-health-stderr.log"
+mkdir -p "${HOME}/.lingua-viva"
+python3 -m src.lv_cli health 2>"$HEALTH_LOG" || echo "  (Run 'lv health' to verify — errors logged to $HEALTH_LOG)"
 
 install_native_launcher
 
@@ -376,7 +406,7 @@ fi
 # Symlink a `lv` shim on PATH so source-mode users get the same command name
 cat > "${HOME}/.local/bin/lv" << SHIMEOF
 #!/bin/sh
-cd "$INSTALL_DIR" && exec python3 -m src.lv_cli "\$@"
+cd "$SRC_INSTALL_DIR" && exec python3 -m src.lv_cli "\$@"
 SHIMEOF
 chmod +x "${HOME}/.local/bin/lv"
 

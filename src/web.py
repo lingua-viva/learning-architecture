@@ -714,7 +714,10 @@ async def parent_recommendation(payload: dict):
         extra = str(payload.get("focus") or "").strip()
         body = draft.body
         if extra:
-            body = f"{body} At home, a {extra} may help your child begin tasks more independently."
+            body = (
+                f"{body} At home, you might offer a {extra} and notice what your child "
+                "chooses to try first."
+            )
         return {
             "subject_line": _strip_parent_output(draft.subject_line, names),
             "body": _strip_parent_output(body, names),

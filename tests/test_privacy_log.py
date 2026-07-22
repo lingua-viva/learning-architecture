@@ -44,9 +44,22 @@ def test_privacy_log_never_contains_student_names(monkeypatch, tmp_path):
     assert "student name:" not in path.read_text(encoding="utf-8")
 
 
-def test_external_calls_always_zero(monkeypatch, tmp_path):
+def test_external_calls_zero_when_no_external_call_made(monkeypatch, tmp_path):
     _privacy_store(monkeypatch, tmp_path)
     log_event("query_processed_locally")
 
     assert privacy_summary()["external_calls"] == 0
     assert privacy_log_path().stat().st_mode & 0o777 == 0o600
+
+
+def test_external_calls_counts_real_external_call_events(monkeypatch, tmp_path):
+    """Regression for LV P0 improvement cycle EXP04: `external_calls` used to be
+    hardcoded to 0 even though `ReasoningEngine._call_model` has a real code path
+    to openai/groq/mistral once a teacher connects a provider (src/provider_config.py).
+    The Privacy view's "all local" claim must be backed by a real counter, not a
+    cosmetic literal — this proves an external_call_made event actually moves it."""
+    _privacy_store(monkeypatch, tmp_path)
+    log_event("query_processed_locally")
+    log_event("external_call_made")
+
+    assert privacy_summary()["external_calls"] == 1

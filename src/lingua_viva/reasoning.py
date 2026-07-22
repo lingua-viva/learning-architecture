@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import time
@@ -83,6 +84,8 @@ class ReasoningEngine:
 
     async def _call_model(self, query: str, system_prompt: str, model: str) -> Optional[ReasonResult]:
         url, headers = self._resolve_endpoint(model)
+        if self._is_external_model(model):
+            log_event("external_call_made", query_text=query)
         model_name = model.split("/", 1)[-1] if "/" in model else model
         payload = json.dumps({
             "model": model_name,
@@ -99,10 +102,23 @@ class ReasoningEngine:
             headers={"Content-Type": "application/json", **headers},
             method="POST",
         )
+        def _blocking_call() -> dict:
+            with request.urlopen(req, timeout=timeout_seconds) as response:
+                return json.loads(response.read())
+
         try:
             timeout_seconds = float(os.environ.get("LV_REASON_TIMEOUT_SECONDS", "20"))
-            with request.urlopen(req, timeout=timeout_seconds) as response:
-                body = json.loads(response.read())
+            # `request.urlopen` is a blocking call with no await points, so it
+            # was previously freezing the whole asyncio event loop for its
+            # duration — that made outer `asyncio.wait_for(...)` callers
+            # (query_endpoint's timeout_seconds budget) unable to actually
+            # cancel it: cancellation can only be delivered at an await
+            # point, and there wasn't one. Running it in a worker thread via
+            # asyncio.to_thread restores real cancellability. Confirmed via
+            # live repro: timeout_seconds=1 previously still took ~20s
+            # (LV_REASON_TIMEOUT_SECONDS's own internal socket timeout)
+            # before returning, instead of honoring the requested budget.
+            body = await asyncio.to_thread(_blocking_call)
         except (error.URLError, ConnectionError, TimeoutError, OSError, json.JSONDecodeError):
             if self._is_ollama_model(model):
                 self._record_ollama_failure()

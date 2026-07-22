@@ -14,7 +14,8 @@ $ErrorActionPreference = "Stop"
 Write-Host ""
 Write-Host "  ╔══════════════════════════════════════════╗" -ForegroundColor Cyan
 Write-Host "  ║   Lingua Viva Installer (Windows)        ║" -ForegroundColor Cyan
-Write-Host "  ║   Local-first Italian teacher workbench  ║" -ForegroundColor Cyan
+Write-Host "  ║   Local-first teacher workbench          ║" -ForegroundColor Cyan
+Write-Host "  ║   Observations, planning, drafts local   ║" -ForegroundColor Cyan
 Write-Host "  ╚══════════════════════════════════════════╝" -ForegroundColor Cyan
 Write-Host ""
 
@@ -74,7 +75,7 @@ if ($healthy) {
     exit 0
 }
 if ($portBusy) {
-    Write-Log "Port $port is in use by another program -- close it and try again."
+    Write-Log "Port $port is in use by another program -- close the app using 8787, then open Lingua Viva again."
     exit 1
 }
 
@@ -125,7 +126,7 @@ powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "$launch
             $shortcut.TargetPath = $batPath
             $shortcut.WorkingDirectory = $launcherDir
             $shortcut.WindowStyle = 7  # minimized/hidden console
-            $shortcut.Description = "Lingua Viva -- local-first Italian teacher workbench"
+            $shortcut.Description = "Lingua Viva -- local-first teacher workbench for observations, planning, and parent drafts"
             $shortcut.Save()
         }
         Write-Host "  ✓ Desktop and Start Menu shortcuts installed" -ForegroundColor Green
@@ -152,12 +153,27 @@ Write-Host "  → Attempting binary download..." -ForegroundColor Cyan
 New-Item -ItemType Directory -Force -Path $installDir | Out-Null
 
 $binarySuccess = $false
+$tmpFile = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), [System.IO.Path]::GetRandomFileName())
 try {
-    Invoke-WebRequest -Uri $url -OutFile "$installDir\lv.exe" -UseBasicParsing -ErrorAction Stop
-    Write-Host "  ✓ Installed lv binary to $installDir\lv.exe" -ForegroundColor Green
-    $binarySuccess = $true
+    # Stage to a tempfile and validate before moving into place, matching
+    # install.sh's own binary-install pattern (mktemp + `[ -s "$TMPFILE" ]`
+    # before `mv`). A connection that closes without raising (a proxy or
+    # server that terminates the stream without a Content-Length mismatch
+    # error) can otherwise leave a truncated/corrupt lv.exe at the final
+    # install path while still reporting success.
+    Invoke-WebRequest -Uri $url -OutFile $tmpFile -UseBasicParsing -ErrorAction Stop
+    $downloaded = Get-Item $tmpFile -ErrorAction SilentlyContinue
+    if ($downloaded -and $downloaded.Length -gt 0) {
+        Move-Item -Path $tmpFile -Destination "$installDir\lv.exe" -Force
+        Write-Host "  ✓ Installed lv binary to $installDir\lv.exe" -ForegroundColor Green
+        $binarySuccess = $true
+    } else {
+        Write-Host "  ⚠ Download produced an empty file. Falling back to source install." -ForegroundColor Yellow
+    }
 } catch {
     Write-Host "  ⚠ Binary download failed or not available. Falling back to source install." -ForegroundColor Yellow
+} finally {
+    if (Test-Path $tmpFile) { Remove-Item $tmpFile -Force -ErrorAction SilentlyContinue }
 }
 
 if ($binarySuccess) {
@@ -181,8 +197,10 @@ if ($binarySuccess) {
     # exits. Start-Process launches an independent process that survives.
     Write-Host "  → Starting web server on http://localhost:8787 ..." -ForegroundColor Cyan
     try {
-        Start-Process -FilePath "$installDir\lv.exe" -ArgumentList "serve", "8787" -WindowStyle Hidden -ErrorAction SilentlyContinue
-    } catch {}
+        Start-Process -FilePath "$installDir\lv.exe" -ArgumentList "serve", "8787" -WindowStyle Hidden -ErrorAction Stop
+    } catch {
+        Write-Host "  ⚠ Couldn't start lv.exe: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
 
     # Give the server time to bind. The frozen binary extracts (~3-5s) and loads
     # the ontology/knowledge before binding, so poll up to ~30s.
@@ -286,8 +304,10 @@ try {
 # Auto-start web server (source mode — src/web.py is on disk)
 Write-Host "  → Starting web server on http://localhost:8787 ..." -ForegroundColor Cyan
 try {
-    Start-Process -FilePath "python" -ArgumentList "-m", "src.web", "8787" -WindowStyle Hidden -ErrorAction SilentlyContinue
-} catch {}
+    Start-Process -FilePath "python" -ArgumentList "-m", "src.web", "8787" -WindowStyle Hidden -ErrorAction Stop
+} catch {
+    Write-Host "  ⚠ Couldn't start the web server: $($_.Exception.Message)" -ForegroundColor Yellow
+}
 
 Pop-Location
 

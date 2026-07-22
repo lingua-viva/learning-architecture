@@ -111,6 +111,7 @@ def test_no_generated_text_contains_unsafe_labels():
     pack = engine.generate(make_lesson())
     for tier in pack.tiers.values():
         _check_trauma_safety(tier["learning_objective"])
+        assert not tier["learning_objective"].startswith("Students will")
         for task in tier["tasks"]:
             _check_trauma_safety(task["prompt"])
 
@@ -199,6 +200,7 @@ def test_generate_with_source_chunks_adapts_instead_of_generates():
     for tier in pack.tiers.values():
         assert "source_excerpt" in tier
         assert "multiplication" in tier["source_excerpt"].lower()
+        assert not tier["learning_objective"].startswith("Students will")
 
     # Same source material at every tier — only how much/how it's
     # scaffolded should differ, not the underlying content.

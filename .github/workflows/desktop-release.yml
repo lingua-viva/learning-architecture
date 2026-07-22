@@ -1,0 +1,102 @@
+name: Desktop Release
+on:
+  push:
+    tags: ['desktop-v*']
+
+# Adapted from mission-canvas/.github/workflows/desktop-release.yml.
+# Builds the Electron desktop app (setup wizard + embedded LV server).
+# The CLI binary release uses release.yml (triggered by v* tags).
+#
+# MUST stay prerelease: true — otherwise desktop releases steal the CLI's
+# "latest" slot and `curl -fsSL linguaviva.art/install.sh | sh` 404s on
+# CLI binaries.
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            dist_args: --mac dmg
+            rename_from: "*.dmg"
+            rename_to: LinguaViva.dmg
+          - os: windows-latest
+            dist_args: --win nsis
+            rename_from: "*.exe"
+            rename_to: LinguaViva-Setup.exe
+          - os: ubuntu-latest
+            dist_args: --linux AppImage
+            rename_from: "*.AppImage"
+            rename_to: LinguaViva.AppImage
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: desktop
+        run: npm install
+
+      - name: Build renderer and electron
+        working-directory: desktop
+        run: npm run build
+
+      - name: Package with electron-builder
+        working-directory: desktop
+        shell: bash
+        timeout-minutes: 15
+        run: ./node_modules/.bin/electron-builder ${{ matrix.dist_args }}
+
+      - name: Rename artifact
+        shell: bash
+        working-directory: desktop
+        run: |
+          echo "=== Looking for built artifacts ==="
+          find . -maxdepth 4 -type f \( -name "*.dmg" -o -name "*.exe" -o -name "*.AppImage" \) -not -path "*/node_modules/*" 2>/dev/null || true
+          echo "=== release/ contents ==="
+          ls -lhR release/ 2>/dev/null || echo "release/ does not exist"
+          FOUND=$(find . -maxdepth 4 -type f -name "${{ matrix.rename_from }}" -not -path "*/node_modules/*" | head -1)
+          if [ -n "$FOUND" ]; then
+            mkdir -p release
+            mv "$FOUND" "release/${{ matrix.rename_to }}"
+            echo "Renamed $FOUND → release/${{ matrix.rename_to }}"
+          else
+            echo "ERROR: No file matching ${{ matrix.rename_from }} found"
+            exit 1
+          fi
+          ls -lh "release/${{ matrix.rename_to }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.os }}
+          path: desktop/release/${{ matrix.rename_to }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: artifacts/
+
+      - name: List artifacts
+        run: ls -lh artifacts/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/LinguaViva.dmg
+            artifacts/LinguaViva-Setup.exe
+            artifacts/LinguaViva.AppImage
+          generate_release_notes: true
+          prerelease: true  # MUST stay true — desktop releases steal the CLI's "latest" slot otherwise

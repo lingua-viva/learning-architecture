@@ -66,6 +66,16 @@ def test_band_descriptors_use_0_to_8_scale_not_1_to_8():
     assert "7-8" in assessment.band_descriptors
 
 
+def test_band_descriptors_use_asset_based_language():
+    pack = make_pack()
+    descriptors = AssessmentGenerator().generate(pack).band_descriptors
+    combined = " ".join(descriptors.values()).lower()
+    assert "does not yet reach" not in combined
+    assert "limited:" not in combined
+    assert "emerging" in combined
+    assert "learner" in combined
+
+
 def test_tier_target_bands_increase_with_tier():
     pack = make_pack()
     assessment = AssessmentGenerator().generate(pack)

@@ -40,6 +40,8 @@ def test_quick_capture_markup_and_wiring_present():
     # submits through the same governed endpoint as Ask
     assert "/api/query" in html
     assert "submitQuickCapture" in html
+    assert "timeout_seconds: 1" in html
+    assert "Captured as local trace" in html
 
 
 def test_quick_capture_blocks_private_student_data(monkeypatch, tmp_path):

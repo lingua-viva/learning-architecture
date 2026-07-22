@@ -50,7 +50,7 @@ def test_release_pipeline_uses_lingua_viva_binary_contract():
     assert 'grep -q "Lingua Viva health:"' in install_test
 
     assert "python3 -m src.lv_cli health" in unix_installer
-    assert 'cd "$INSTALL_DIR" && exec python3 -m src.lv_cli "\\$@"' in unix_installer
+    assert 'cd "$SRC_INSTALL_DIR" && exec python3 -m src.lv_cli "\\$@"' in unix_installer
     assert 'exec python3 "$INSTALL_DIR/src/lv_cli.py" "$@"' not in unix_installer
 
     assert "lv-windows-${arch}.exe" in windows_installer

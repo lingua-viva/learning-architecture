@@ -1,7 +1,7 @@
 {
   "name": "Lingua Viva",
   "short_name": "Lingua Viva",
-  "description": "Local-first teacher planning and curriculum support, with offline queueing.",
+  "description": "Local-first teacher planning, observation, and family communication support.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -40,10 +40,10 @@
   ],
   "shortcuts": [
     {
-      "name": "Research",
-      "short_name": "Research",
-      "description": "Governed external research",
-      "url": "/?intent=RESEARCH",
+      "name": "Capture Observation",
+      "short_name": "Observe",
+      "description": "Open Lingua Viva for local observation capture",
+      "url": "/?view=observe",
       "icons": [
         {
           "src": "/icons/icon-192.png",
@@ -53,10 +53,10 @@
       ]
     },
     {
-      "name": "Protect",
-      "short_name": "Protect",
-      "description": "Local-only analysis",
-      "url": "/?intent=PROTECT",
+      "name": "Plan Lesson",
+      "short_name": "Plan",
+      "description": "Open Lingua Viva planning tools",
+      "url": "/?view=plan",
       "icons": [
         {
           "src": "/icons/icon-192.png",

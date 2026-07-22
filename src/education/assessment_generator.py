@@ -81,11 +81,11 @@ GENERIC_CRITERIA = {
 # These describe the *shape* of response quality at each band (MYP's own
 # general mechanism), not subject-specific content standards.
 BAND_DESCRIPTORS = {
-    "0": "Does not yet reach the standard described by band 1-2.",
-    "1-2": "Limited: attempts the task with significant support; response is partial or unclear.",
-    "3-4": "Adequate: completes the task with some support; response shows basic understanding.",
-    "5-6": "Substantial: completes the task independently; response shows clear understanding with some depth.",
-    "7-8": "Excellent: completes the task independently with sophistication; response shows deep understanding and original thinking.",
+    "0": "Evidence is still emerging; gather another observation before assigning a band.",
+    "1-2": "Emerging: the learner shows first evidence with significant support.",
+    "3-4": "Developing: the learner completes the task with some support and shows basic understanding.",
+    "5-6": "Secure: the learner works independently and shows clear understanding with some depth.",
+    "7-8": "Expansive: the learner works independently with sophistication, depth, and original thinking.",
 }
 
 # Differentiation happens here: which band a tier's task is realistically

@@ -64,6 +64,8 @@ def test_observe_students_parents_and_reflect_endpoints(monkeypatch, tmp_path):
     assert "student_id" not in parent_payload
     assert "ai" not in parent_body
     assert students[0]["display_name"].lower() not in parent_body
+    assert "we noticed your child" in parent_body
+    assert "what your child chooses to try first" in parent_body
 
     reflect = client.post("/api/reflect/note", json={"note": "Checklist worked today."})
     assert reflect.status_code == 200
@@ -79,6 +81,9 @@ def test_assess_and_publication_status(monkeypatch, tmp_path):
     body = rubric.json()
     assert body["assessment"]["cefr_language"].startswith("Designed to target")
     assert "achieve" not in body["assessment"]["cefr_language"].lower()
+    descriptors = " ".join(body["assessment"]["band_descriptors"].values()).lower()
+    assert "does not yet reach" not in descriptors
+    assert "limited:" not in descriptors
 
     publication = client.get("/api/publication/status")
     assert publication.status_code == 200

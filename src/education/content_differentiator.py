@@ -209,12 +209,11 @@ def _generate_tier(
         "extended": _cefr_shift(lesson.cefr_target, +1),
     }[tier]
 
-    objective_verb = {
-        "foundational": "identify and describe",
-        "on_track": "explain and analyze",
-        "extended": "evaluate and construct an argument about",
+    learning_objective = {
+        "foundational": f"Children notice and name {lesson.topic.lower()}.",
+        "on_track": f"Children connect and explain {lesson.topic.lower()}.",
+        "extended": f"Children investigate and argue from evidence about {lesson.topic.lower()}.",
     }[tier]
-    learning_objective = f"Students will {objective_verb} {lesson.topic.lower()}."
     if tier == "foundational":
         learning_objective = _simplify_sentence(
             learning_objective, FOUNDATIONAL_MAX_SENTENCE_WORDS
@@ -314,14 +313,11 @@ def _adapt_tier_from_source(
         "extended": _cefr_shift(lesson.cefr_target, +1),
     }[tier]
 
-    objective_verb = {
-        "foundational": "identify and describe",
-        "on_track": "explain and analyze",
-        "extended": "evaluate and construct an argument about",
+    learning_objective = {
+        "foundational": f"Children notice and name {lesson.topic.lower()} using the provided material.",
+        "on_track": f"Children connect and explain {lesson.topic.lower()} using the provided material.",
+        "extended": f"Children investigate and argue from evidence about {lesson.topic.lower()} using the provided material.",
     }[tier]
-    learning_objective = (
-        f"Students will {objective_verb} {lesson.topic.lower()}, using the provided material."
-    )
     if tier == "foundational":
         learning_objective = _simplify_sentence(
             learning_objective, FOUNDATIONAL_MAX_SENTENCE_WORDS

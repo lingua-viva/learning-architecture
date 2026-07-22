@@ -23,4 +23,8 @@ weights:
   LV-CUR-001: {}
   MC-DATA-003: {}
   LV-PLN-003: {}
+  LV-CUR-003:
+    cefr: 1.01
+    a2: 1.01
+  LV-TCH-001: {}
 description: Auto-learned from path outcomes. Do not edit manually.

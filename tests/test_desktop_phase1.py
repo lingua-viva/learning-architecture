@@ -18,14 +18,15 @@ def test_desktop_package_targets_all_required_installers():
 def test_electron_shell_starts_backend_on_required_port():
     main = (DESKTOP / "electron" / "main.ts").read_text()
     bootstrap = (DESKTOP / "electron" / "bootstrap.ts").read_text()
+    wizard = (DESKTOP / "electron" / "setup-wizard.html").read_text()
     assert "BrowserWindow" in main
     assert "contextIsolation: true" in main
     assert "sandbox: true" in main
     assert "nodeIntegration: false" in main
     assert "http://127.0.0.1:8787" in main
-    assert "Starting your local teacher workbench" in main
-    assert "Everything stays on your machine" in main
-    assert "checkPython" in main
+    assert "Setting up your teacher workbench" in wizard
+    assert "Everything stays on your machine" in wizard
+    assert "detectPython" in main
     assert "checkOllama" in main
     assert "python3" in bootstrap
     assert "src\", \"web.py" in bootstrap

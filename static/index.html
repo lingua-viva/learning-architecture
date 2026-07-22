@@ -25,7 +25,11 @@
       --accent: #b24b31;
       --warn: #8a5b00;
       --ok: #1f6f4a;
+      --risk: #a3222c;
       --shadow: 0 8px 24px rgba(23, 33, 31, .08);
+      --lv-sidebar-width: 200px;
+      --lv-nav-gap: 4px;
+      --lv-nav-row-min-height: 38px;
     }
     body {
       margin: 0;
@@ -71,7 +75,7 @@
     }
     .app {
       display: grid;
-      grid-template-columns: 200px minmax(0, 1fr);
+      grid-template-columns: var(--lv-sidebar-width) minmax(0, 1fr);
       min-height: 100vh;
     }
     .sidebar {
@@ -115,7 +119,7 @@
     }
     .nav {
       display: grid;
-      gap: 4px;
+      gap: var(--lv-nav-gap);
     }
     .nav button {
       width: 100%;
@@ -127,12 +131,19 @@
       align-items: center;
       text-align: left;
       color: #283631;
+      min-height: var(--lv-nav-row-min-height);
     }
     .nav button.active {
       background: #e8f1ed;
       color: var(--brand);
       border-color: #cae0d8;
       font-weight: 700;
+    }
+    .nav button:focus-visible {
+      outline: 3px solid var(--accent);
+      outline-offset: 2px;
+      border-color: var(--accent);
+      background: #fff8f4;
     }
     .utility {
       border-top: 1px solid var(--line);
@@ -179,6 +190,12 @@
       color: var(--warn);
       border-color: #e7d2a5;
       background: #fff7e8;
+    }
+    .badge.risk {
+      color: #fff;
+      border-color: var(--risk);
+      background: var(--risk);
+      font-weight: 600;
     }
     .content {
       padding: 22px 24px 32px;
@@ -391,6 +408,7 @@
         border-bottom: 1px solid var(--line);
       }
       .nav {
+        gap: var(--lv-nav-gap);
         grid-template-columns: repeat(3, minmax(0, 1fr));
       }
       .utility {
@@ -416,8 +434,8 @@
           <span id="role-label">Teacher</span>
         </div>
       </button>
-      <nav id="primary-nav" class="nav"></nav>
-      <nav id="utility-nav" class="nav utility"></nav>
+      <nav id="primary-nav" class="nav" aria-label="Primary"></nav>
+      <nav id="utility-nav" class="nav utility" aria-label="Utility"></nav>
     </aside>
     <main class="main">
       <div class="topbar">
@@ -433,11 +451,12 @@
   </div>
 
   <div id="role-choice" class="role-choice">
-    <div class="role-dialog">
-      <h2>🌱 Lingua Viva</h2>
-      <p>A teacher workbench for Italian language instruction.</p>
-      <p>Everything stays on your machine. No student data leaves. Ever.</p>
-      <p>I am a:</p>
+      <div class="role-dialog">
+        <h2>🌱 Lingua Viva</h2>
+        <p>A teacher workbench for Italian language instruction.</p>
+        <p>Everything stays on your machine. No student data leaves. Ever.</p>
+        <p>Start from the work you already do: planning, observing, documenting, and sharing learning with care.</p>
+        <p>I am a:</p>
       <div class="role-actions">
         <button class="primary" data-role="teacher" type="button">I am a teacher</button>
         <button data-role="coordinator" type="button">I am a coordinator</button>
@@ -449,10 +468,10 @@
     <div class="qc-dialog">
       <form id="qc-form">
         <input id="qc-input" type="text" autocomplete="off"
-          placeholder="Quick capture — an observation, a note… (Enter to save, Esc to close)">
+          placeholder="Quick capture — save an observation-shaped note as a local trace (Enter to save, Esc to close)">
       </form>
       <div id="qc-error" class="qc-error hidden"></div>
-      <div class="qc-hint">Ctrl/Cmd+K to open · Esc to close · goes through the same local privacy check as Ask</div>
+      <div class="qc-hint">Ctrl/Cmd+K to open · Esc to close · local privacy check, no external call</div>
     </div>
   </div>
   <div id="qc-toast" class="qc-toast"></div>
@@ -470,6 +489,22 @@
       selectedTraceId: ""
     };
 
+    /*
+      NavItem tuple contract:
+      [id, label, icon]
+      - id: matches state.view, data-view, and a renderView() handler key
+      - label: visible button text
+      - icon: single visible glyph
+      - roles/group: implied by array membership
+        teacherNav -> roles=["teacher"], group="primary"
+        adminNav -> roles=["coordinator"], group="primary"
+        utilityNav -> roles=["teacher","coordinator"], group="utility"
+
+      Sidebar state transitions:
+      - role "" -> "teacher" | "coordinator" through the role-choice modal
+      - view -> any nav id valid for current role through nav click
+      - brand-home resets view to home for teacher, programme for coordinator
+    */
     const teacherNav = [
       ["home", "Home", "🏠"],
       ["plan", "Plan", "📋"],
@@ -540,7 +575,8 @@
 
     function navButton([id, label, icon]) {
       const active = id === state.view ? " active" : "";
-      return `<button class="${active}" type="button" data-view="${id}"><span>${icon}</span><span>${label}</span></button>`;
+      const current = id === state.view ? ` aria-current="page"` : "";
+      return `<button class="${active}" type="button" data-view="${id}"${current}><span>${icon}</span><span>${label}</span></button>`;
     }
 
     function setTitle(title, badge = "local route") {
@@ -608,12 +644,12 @@
         <div class="view-head"><div>${planHtml}</div><span class="badge ${data.health?.status === "OK" ? "ok" : "warn"}">System: ${escapeHtml(data.health?.status || "WARN")}</span></div>
         <div class="grid two">
           <div class="panel">
-            <h3>⚠️ ${data.attention.unobserved_count} students unobserved for 14+ days</h3>
+            <h3>⚠️ ${data.attention.unobserved_count} observation to renew</h3>
             <p>${escapeHtml((data.attention.unobserved_students || []).join(", ") || "No observation reminders right now.")}</p>
             <button id="home-observe" class="primary" type="button">Go to Observe</button>
           </div>
           <div class="panel">
-            <h3>👤 ${data.attention.rti_pending} RTI decision pending</h3>
+            <h3>👤 ${data.attention.rti_pending} decision to review</h3>
             <p>${escapeHtml((data.attention.rti_pending_names || []).join(", ") || "No pending RTI decisions.")}</p>
             <button id="home-students" type="button">Go to Students</button>
           </div>
@@ -629,7 +665,7 @@
       const overview = await ensureOverview();
       $("content").innerHTML = `
         <div class="view-head">
-          <div><h2>Curriculum Navigator</h2><p>Browse grade bands, unit starters, and designed-to CEFR language without editing the source document.</p></div>
+          <div><h2>Curriculum Navigator</h2><p>Browse grade bands, unit starters, and designed-to CEFR language. The source document stays untouched.</p></div>
           <span class="badge ok">${escapeHtml(overview.source_status.badge)}</span>
         </div>
         <div class="grid two">
@@ -656,7 +692,7 @@
             <p>${escapeHtml(unit.focus)}</p>
             <p><strong>${escapeHtml(unit.cefr_language)}</strong></p>
             <div class="source-line"><span class="badge">${escapeHtml(unit.source_citation)}</span></div>
-            <button type="button" data-unit="${unit.unit_id}">Use this unit</button>
+            <button type="button" data-unit="${unit.unit_id}">Plan from this unit</button>
           </div>`).join("")}
         </div>`;
       document.querySelectorAll("[data-unit]").forEach(button => button.addEventListener("click", () => {
@@ -671,7 +707,7 @@
       setTitle("Prepare", "content differentiation");
       const overview = await ensureOverview();
       $("content").innerHTML = `
-        <div class="view-head"><div><h2>Activity Generator</h2><p>Create a three-level activity pack for the selected grade and unit.</p></div></div>
+        <div class="view-head"><div><h2>Activity Generator</h2><p>Create a three-level activity pack that keeps the same concept visible at different entry points.</p></div></div>
         <div class="panel">
           <div class="form-grid">
             <label>Grade<select id="prep-grade">${overview.grade_bands.map(g => `<option ${g.grade === state.grade ? "selected" : ""}>${g.grade}</option>`).join("")}</select></label>
@@ -726,7 +762,7 @@
           <div class="panel">
             <label>Student<select id="obs-student">${studentOptions()}</select></label>
             <div class="row" style="margin:14px 0;"><button id="mic" class="mic" type="button" title="Start speech capture">🎙</button><span id="mic-status" class="badge">ready</span></div>
-            <textarea id="obs-text" placeholder="Marco self-corrected passato prossimo, used essere correctly in context"></textarea>
+            <textarea id="obs-text" placeholder="A learner self-corrected passato prossimo, used essere correctly in context"></textarea>
             <div class="form-grid" style="margin-top:12px;">
               <label>CEFR skill<select id="obs-dim"><option>speaking</option><option>listening</option><option>reading</option><option>writing</option></select></label>
               <label>Observed level<select id="obs-level"><option>A1</option><option>A1+</option><option>A2</option><option>A2+</option><option>B1</option></select></label>
@@ -774,9 +810,9 @@
       setTitle("Students", "teacher decision gate");
       await ensureStudents();
       $("content").innerHTML = `
-        <div class="view-head"><div><h2>Student Lenses</h2><p>View profiles, observations, CEFR trajectory, grouping notes, and RTI proposals. The system suggests; the teacher decides.</p></div></div>
+        <div class="view-head"><div><h2>Student Lenses</h2><p>View profiles, observations, CEFR trajectory, grouping notes, and support proposals. The system suggests; the teacher decides.</p></div></div>
         <div class="grid two">
-          <div class="panel"><h3>Roster</h3><div class="list">${state.students.map(s => `<button type="button" data-student="${s.student_id}"><strong>${escapeHtml(s.display_name)}</strong><br>RTI Tier ${s.rti_current_tier} · ${escapeHtml(s.grade_level)}</button>`).join("")}</div></div>
+          <div class="panel"><h3>Roster</h3><div class="list">${state.students.map(s => `<button type="button" data-student="${s.student_id}"><strong>${escapeHtml(s.display_name)}</strong><br>${escapeHtml(s.cefr_trajectory_30d || "trajectory pending")} · support tier ${s.rti_current_tier} · ${escapeHtml(s.grade_level)}</button>`).join("")}</div></div>
           <div id="lens" class="panel"></div>
         </div>`;
       document.querySelectorAll("[data-student]").forEach(button => button.addEventListener("click", () => {
@@ -791,8 +827,8 @@
       const observations = (lens.observations || []).slice(-3).reverse();
       $("lens").innerHTML = `
         <h3>${escapeHtml(lens.display_name)}</h3>
-        <p>CEFR trajectory: <strong>${escapeHtml(lens.cefr_trajectory_30d)}</strong> · RTI Tier <strong>${lens.rti_current_tier}</strong></p>
-        <div class="source-line"><span class="badge warn">System suggests: review before any tier decision</span></div>
+        <p>CEFR trajectory: <strong>${escapeHtml(lens.cefr_trajectory_30d)}</strong> · support tier <strong>${lens.rti_current_tier}</strong></p>
+        <div class="source-line"><span class="badge warn">System suggests; teacher reviews before any support-tier decision</span></div>
         <div class="row"><button type="button">Confirm</button><button type="button">Defer</button></div>
         <h3 style="margin-top:16px;">Recent observations</h3>
         <div class="list">${observations.length ? observations.map(o => `<div class="item"><p>${escapeHtml(o.raw_transcript)}</p><span class="badge">${escapeHtml(o.cefr_level_observed || "not tagged")}</span></div>`).join("") : "<p>No observations yet.</p>"}</div>
@@ -804,7 +840,7 @@
       setTitle("Assess", "rubric design");
       await ensureOverview();
       $("content").innerHTML = `
-        <div class="view-head"><div><h2>Rubric Template</h2><p>Build CEFR-informed assessment structures with designed-to-target wording.</p></div></div>
+        <div class="view-head"><div><h2>Rubric Template</h2><p>Build CEFR-informed assessment structures that keep evidence visible without reducing a learner to a score.</p></div></div>
         <div class="panel"><div class="form-grid"><label>Grade<select id="assess-grade"></select></label><label>Unit<select id="assess-unit"></select></label></div><button id="load-rubric" class="primary" type="button">Show Rubric</button></div>
         <div id="rubric-output" class="panel" style="margin-top:14px;"></div>`;
       $("assess-grade").innerHTML = state.overview.grade_bands.map(g => `<option ${g.grade === state.grade ? "selected" : ""}>${g.grade}</option>`).join("");
@@ -882,7 +918,7 @@
       setTitle("Parents", "parent-safe draft");
       await ensureStudents();
       $("content").innerHTML = `
-        <div class="view-head"><div><h2>Parent Recommendation</h2><p>Draft a parent-safe message for teacher review.</p></div><span class="badge warn">Review before sending. No AI attribution in final message.</span></div>
+        <div class="view-head"><div><h2>Parent Recommendation</h2><p>Draft a warm, parent-safe note for teacher review.</p></div><span class="badge warn">Review before sending. No AI attribution in final message.</span></div>
         <div class="grid two">
           <div class="panel"><label>Student<select id="parent-student">${studentOptions()}</select></label><label style="display:block;margin-top:12px;">Home support focus<input id="parent-focus" value="creative quiet workspace"></label><button id="draft-parent" class="primary" type="button" style="margin-top:12px;">Draft Recommendation</button></div>
           <div id="parent-output" class="panel"><p>Drafts appear here for editing before sending.</p></div>
@@ -898,13 +934,23 @@
       $("parent-output").innerHTML = `<h3>${escapeHtml(data.subject_line)}</h3>${sourceLine(data.source_citation)}<textarea>${escapeHtml(data.body + "\n\n" + data.home_activities.join("\n"))}</textarea><p>${escapeHtml(data.review_label)}</p>`;
     }
 
+    function healthBadgeClass(status) {
+      // PRIVATE_RISK must read as more urgent than a routine WARN/FIXABLE/
+      // BLOCKED status -- it means Doctor found a privacy risk and stopped,
+      // not just "something may need attention." See EXP09,
+      // dev/LV_HAPPY_STATE_P0_2026-07-20.md.
+      if (status === "OK") return "ok";
+      if (status === "PRIVATE_RISK") return "risk";
+      return "warn";
+    }
+
     async function renderHealth() {
       setTitle("Health", "doctor");
       $("content").innerHTML = `<div class="panel"><h2>Running Doctor...</h2></div>`;
       const data = await api("/api/health");
       const bundleButton = data.status === "OK" ? "" : `<button id="create-bundle" class="primary" type="button">Create Support Bundle</button>`;
       $("content").innerHTML = `
-        <div class="view-head"><div><h2>Doctor</h2><p>${escapeHtml(data.summary || "")}</p></div><span class="badge ${data.status === "OK" ? "ok" : "warn"}">${escapeHtml(data.status)}</span></div>
+        <div class="view-head"><div><h2>Doctor</h2><p>${escapeHtml(data.summary || "")}</p></div><span class="badge ${healthBadgeClass(data.status)}">${escapeHtml(data.status)}</span></div>
         <div class="panel">${bundleButton}<div id="bundle-result" style="margin-top:12px;"></div><div class="list" style="margin-top:14px;">${(data.checks || []).map(check => `<div class="item"><h3>${escapeHtml(check.status)} · ${escapeHtml(check.id)}</h3><p>${escapeHtml(check.message)}</p></div>`).join("")}</div></div>`;
       const button = $("create-bundle");
       if (button) button.addEventListener("click", createSupportBundle);
@@ -1007,19 +1053,19 @@
       try { status = await api("/api/provider"); } catch {}
       const overview = await ensureOverview();
       $("content").innerHTML = `
-        <div class="view-head"><div><h2>Settings</h2><p>Local model and server configuration.</p></div></div>
+        <div class="view-head"><div><h2>Settings</h2><p>Configure the local pieces that support your week.</p></div></div>
         <div class="grid two">
-          <div class="panel"><h3>Ollama Model</h3><select><option>${escapeHtml(status.model || "qwen2.5:3b")}</option><option>qwen3:8b</option><option>llama3.1:8b</option></select><p>Ollama reachable: ${status.ollama_reachable ? "yes" : "no"}</p></div>
-          <div class="panel"><h3>Port</h3><input value="8787"><p>Desktop shell loads http://127.0.0.1:8787.</p></div>
+          <div class="panel"><h3>Local model</h3><select><option>${escapeHtml(status.model || "qwen2.5:3b")}</option><option>qwen3:8b</option><option>llama3.1:8b</option></select><p>Ollama reachable: ${status.ollama_reachable ? "yes" : "no"}</p></div>
+          <div class="panel"><h3>Local app port</h3><input value="8787"><p>Desktop shell loads http://127.0.0.1:8787.</p></div>
         </div>
         <div class="panel" style="margin-top:14px;">
-          <h3>My Schedule</h3>
+          <h3>My week</h3>
           <div id="schedule-grid" class="grid"></div>
           <button id="save-schedule" class="primary" type="button" style="margin-top:12px;">Save Schedule</button>
           <span id="schedule-status" class="badge" style="margin-left:8px;">stored on this machine</span>
         </div>
         <div class="panel" style="margin-top:14px;">
-          <h3>Curriculum File Map</h3>
+          <h3>Curriculum folders</h3>
           <div class="form-grid">
             <label>Folder path<input id="filemap-path" placeholder="~/Documents/Teaching"></label>
             <label>Depth<select id="filemap-depth"><option>2</option><option selected>3</option><option>4</option></select></label>
@@ -1133,7 +1179,7 @@
       setTitle("Reflect", "private note");
       $("content").innerHTML = `
         <div class="view-head"><div><h2>Private Reflection</h2><p>Save a private implementation note to the revision log.</p></div><span class="badge ok">private</span></div>
-        <div class="panel"><textarea id="reflect-note" placeholder="The checklist artifact worked today..."></textarea><button id="save-reflect" class="primary" type="button" style="margin-top:12px;">Save Note</button><div id="reflect-result" style="margin-top:12px;"></div></div>`;
+        <div class="panel"><textarea id="reflect-note" placeholder="What did children show? What did the environment make possible? What will I adjust next?"></textarea><button id="save-reflect" class="primary" type="button" style="margin-top:12px;">Save Note</button><div id="reflect-result" style="margin-top:12px;"></div></div>`;
       $("save-reflect").addEventListener("click", async () => {
         const data = await api("/api/reflect/note", {method: "POST", body: JSON.stringify({note: $("reflect-note").value})});
         $("reflect-result").innerHTML = `<span class="badge ok">saved ${escapeHtml(data.timestamp)}</span>`;
@@ -1193,7 +1239,7 @@
       try {
         const data = await api("/api/query", {
           method: "POST",
-          body: JSON.stringify({query: text})
+          body: JSON.stringify({query: text, timeout_seconds: 1})
         });
         if (data.type === "error" || data.error) {
           $("qc-error").textContent = data.error || "Capture failed. Try again.";
@@ -1201,7 +1247,7 @@
           return;
         }
         closeQuickCapture();
-        showQcToast(`Captured → ${data.classification?.name || data.classification?.node || "local trace"}`);
+        showQcToast(`Captured as local trace → ${data.classification?.name || data.classification?.node || "review in Why"}`);
       } catch (err) {
         $("qc-error").textContent = err.message || "Capture failed. Try again.";
         $("qc-error").classList.remove("hidden");

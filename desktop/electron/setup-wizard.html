@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lingua Viva — Setup</title>
+  <style>
+    :root {
+      --brand: #17463b;
+      --surface: #f5f7f4;
+      --panel: #ffffff;
+      --border: #d8dfdc;
+      --text: #17211f;
+      --text-muted: #66736f;
+      --accent: #1f6f4a;
+      --success: #1f6f4a;
+      --warn: #8a5b00;
+      --fail: #b24b31;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      background: var(--surface);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 40px 24px;
+      -webkit-app-region: drag;
+    }
+    .container {
+      max-width: 520px;
+      width: 100%;
+      -webkit-app-region: no-drag;
+    }
+    h1 {
+      font-size: 28px;
+      font-weight: 600;
+      margin-bottom: 4px;
+      text-align: center;
+      color: var(--brand);
+    }
+    .subtitle {
+      color: var(--text-muted);
+      text-align: center;
+      margin-bottom: 28px;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    .explainer {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin-bottom: 24px;
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--text-muted);
+    }
+    .explainer strong { color: var(--text); }
+    .steps {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+    .step {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 16px 18px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      transition: all 0.2s ease;
+    }
+    .step.active {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent);
+    }
+    .step.done {
+      border-color: var(--success);
+    }
+    .step.needs-action {
+      border-color: var(--warn);
+    }
+    .step.failed {
+      border-color: var(--fail);
+    }
+    .step-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      flex-shrink: 0;
+      background: var(--border);
+      color: var(--text-muted);
+    }
+    .step.done .step-icon { background: var(--success); color: #fff; }
+    .step.active .step-icon { background: var(--accent); color: #fff; }
+    .step.needs-action .step-icon { background: var(--warn); color: #fff; }
+    .step.failed .step-icon { background: var(--fail); color: #fff; }
+    .step-content { flex: 1; }
+    .step-title {
+      font-weight: 500;
+      font-size: 15px;
+      margin-bottom: 2px;
+    }
+    .step-detail {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .action-area {
+      text-align: center;
+      margin-top: 8px;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 28px;
+      font-size: 15px;
+      font-weight: 500;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      -webkit-app-region: no-drag;
+    }
+    .btn-primary {
+      background: var(--brand);
+      color: #fff;
+    }
+    .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+    .btn-primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .btn-secondary {
+      background: var(--panel);
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 10px 20px;
+      font-size: 13px;
+      margin-top: 12px;
+    }
+    .btn-secondary:hover { border-color: var(--accent); }
+    .progress-bar {
+      height: 3px;
+      background: var(--border);
+      border-radius: 2px;
+      margin-top: 6px;
+      overflow: hidden;
+      display: none;
+    }
+    .progress-bar.visible { display: block; }
+    .progress-bar-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 2px;
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+    .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .fade-in { animation: fadeIn 0.3s ease; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .privacy-note {
+      margin-top: 20px;
+      font-size: 13px;
+      color: var(--brand);
+      text-align: center;
+    }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🌱 Lingua Viva</h1>
+    <p class="subtitle">Setting up your teacher workbench</p>
+
+    <div class="explainer">
+      <strong>Everything runs on your machine.</strong> Python starts the local
+      app server. Ollama is optional — it enables local AI reasoning (lesson
+      planning, assessments) but the app works without it. No data leaves your
+      computer.
+    </div>
+
+    <div class="steps">
+      <div class="step" id="step-python">
+        <div class="step-icon">1</div>
+        <div class="step-content">
+          <div class="step-title">Python</div>
+          <div class="step-detail" id="python-detail">Checking...</div>
+          <div class="progress-bar" id="python-progress">
+            <div class="progress-bar-fill" id="python-progress-fill"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="step" id="step-ollama">
+        <div class="step-icon">2</div>
+        <div class="step-content">
+          <div class="step-title">Ollama (local AI — optional)</div>
+          <div class="step-detail" id="ollama-detail">Waiting...</div>
+          <div class="progress-bar" id="ollama-progress">
+            <div class="progress-bar-fill" id="ollama-progress-fill"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="step" id="step-server">
+        <div class="step-icon">3</div>
+        <div class="step-content">
+          <div class="step-title">Lingua Viva Server</div>
+          <div class="step-detail" id="server-detail">Waiting...</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="action-area" id="action-area">
+      <!-- Dynamic buttons appear here -->
+    </div>
+
+    <div class="privacy-note">Everything stays on your machine.</div>
+  </div>
+
+  <script>
+    // State
+    const state = {
+      python: 'checking',
+      ollama: 'waiting',
+      server: 'waiting',
+    };
+
+    // Elements
+    const els = {
+      pythonStep: document.getElementById('step-python'),
+      pythonDetail: document.getElementById('python-detail'),
+      pythonProgress: document.getElementById('python-progress'),
+      pythonProgressFill: document.getElementById('python-progress-fill'),
+      ollamaStep: document.getElementById('step-ollama'),
+      ollamaDetail: document.getElementById('ollama-detail'),
+      ollamaProgress: document.getElementById('ollama-progress'),
+      ollamaProgressFill: document.getElementById('ollama-progress-fill'),
+      serverStep: document.getElementById('step-server'),
+      serverDetail: document.getElementById('server-detail'),
+      actionArea: document.getElementById('action-area'),
+    };
+
+    function setStep(el, status) {
+      el.className = 'step' + (status ? ' ' + status : '');
+    }
+
+    function setIcon(el, icon) {
+      el.querySelector('.step-icon').textContent = icon;
+    }
+
+    function showAction(html) {
+      els.actionArea.innerHTML = html;
+      els.actionArea.classList.add('fade-in');
+    }
+
+    // Listen for IPC from main process
+    if (window.lvDesktop && window.lvDesktop.onSetupProgress) {
+      window.lvDesktop.onSetupProgress(handleProgress);
+    }
+
+    function handleProgress(payload) {
+      const { step, detail } = payload;
+      switch (step) {
+        case 'python':
+          state.python = 'checking';
+          setStep(els.pythonStep, 'active');
+          els.pythonDetail.textContent = detail || 'Checking...';
+          break;
+
+        case 'python_ok':
+          state.python = 'found';
+          setStep(els.pythonStep, 'done');
+          setIcon(els.pythonStep, '✓');
+          els.pythonDetail.textContent = detail || 'Ready';
+          break;
+
+        case 'python_fail':
+          state.python = 'missing';
+          setStep(els.pythonStep, 'needs-action');
+          setIcon(els.pythonStep, '!');
+          els.pythonDetail.textContent = 'Python is needed to run Lingua Viva locally.';
+          showAction(`
+            <button class="btn btn-primary" onclick="installPython()">
+              Install Python (automatic)
+            </button>
+            <br>
+            <button class="btn btn-secondary" onclick="openPythonSite()">
+              I'll install it myself
+            </button>
+          `);
+          break;
+
+        case 'python_installing':
+          state.python = 'installing';
+          setStep(els.pythonStep, 'active');
+          setIcon(els.pythonStep, '⟳');
+          els.pythonDetail.textContent = detail || 'Installing Python...';
+          els.pythonProgress.classList.add('visible');
+          els.pythonProgressFill.style.width = '30%';
+          showAction(`
+            <button class="btn btn-primary" disabled>
+              <span class="spinner"></span> Installing...
+            </button>
+          `);
+          break;
+
+        case 'python_install_progress':
+          els.pythonProgressFill.style.width = (detail || '60') + '%';
+          break;
+
+        case 'python_installed':
+          state.python = 'installed';
+          setStep(els.pythonStep, 'done');
+          setIcon(els.pythonStep, '✓');
+          els.pythonDetail.textContent = detail || 'Python installed successfully';
+          els.pythonProgress.classList.remove('visible');
+          showAction('');
+          break;
+
+        case 'python_install_failed':
+          setStep(els.pythonStep, 'needs-action');
+          setIcon(els.pythonStep, '!');
+          els.pythonDetail.textContent = detail || 'Automatic install did not complete.';
+          els.pythonProgress.classList.remove('visible');
+          showAction(`
+            <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 12px;">
+              No worries — you can install Python manually and we'll continue.
+            </p>
+            <button class="btn btn-primary" onclick="openPythonSite()">
+              Open python.org
+            </button>
+            <br>
+            <button class="btn btn-secondary" onclick="retryPython()">
+              I've installed it — check again
+            </button>
+          `);
+          break;
+
+        case 'ollama':
+          state.ollama = 'checking';
+          setStep(els.ollamaStep, 'active');
+          els.ollamaDetail.textContent = detail || 'Checking...';
+          break;
+
+        case 'ollama_ok':
+          state.ollama = 'found';
+          setStep(els.ollamaStep, 'done');
+          setIcon(els.ollamaStep, '✓');
+          els.ollamaDetail.textContent = detail || 'Ready';
+          break;
+
+        case 'ollama_warn':
+          state.ollama = 'missing';
+          setStep(els.ollamaStep, 'needs-action');
+          setIcon(els.ollamaStep, '!');
+          els.ollamaDetail.textContent = 'Ollama adds local AI reasoning (planning, assessments). The app works without it.';
+          if (state.python === 'found' || state.python === 'installed') {
+            showAction(`
+              <button class="btn btn-primary" onclick="installOllama()">
+                Install Ollama
+              </button>
+              <br>
+              <button class="btn btn-secondary" onclick="skipOllama()">
+                Skip for now — I'll add it later
+              </button>
+            `);
+          }
+          break;
+
+        case 'ollama_installing':
+          state.ollama = 'installing';
+          setStep(els.ollamaStep, 'active');
+          setIcon(els.ollamaStep, '⟳');
+          els.ollamaDetail.textContent = detail || 'Installing Ollama...';
+          els.ollamaProgress.classList.add('visible');
+          els.ollamaProgressFill.style.width = '30%';
+          showAction(`
+            <button class="btn btn-primary" disabled>
+              <span class="spinner"></span> Installing...
+            </button>
+          `);
+          break;
+
+        case 'ollama_installed':
+          state.ollama = 'installed';
+          setStep(els.ollamaStep, 'done');
+          setIcon(els.ollamaStep, '✓');
+          els.ollamaDetail.textContent = detail || 'Ollama installed';
+          els.ollamaProgress.classList.remove('visible');
+          showAction('');
+          break;
+
+        case 'ollama_skipped':
+          state.ollama = 'skipped';
+          setStep(els.ollamaStep, 'done');
+          setIcon(els.ollamaStep, '—');
+          els.ollamaDetail.textContent = 'Skipped — install any time from ollama.com';
+          showAction('');
+          break;
+
+        case 'server':
+        case 'backend':
+          state.server = 'starting';
+          setStep(els.serverStep, 'active');
+          setIcon(els.serverStep, '⟳');
+          els.serverDetail.textContent = detail || 'Starting local server...';
+          showAction(`
+            <button class="btn btn-primary" disabled>
+              <span class="spinner"></span> Almost ready...
+            </button>
+          `);
+          break;
+
+        case 'server_ok':
+          state.server = 'ready';
+          setStep(els.serverStep, 'done');
+          setIcon(els.serverStep, '✓');
+          els.serverDetail.textContent = 'Running locally';
+          showAction('');
+          break;
+
+        case 'server_fail':
+          state.server = 'failed';
+          setStep(els.serverStep, 'failed');
+          setIcon(els.serverStep, '✗');
+          els.serverDetail.textContent = detail || 'Server could not start.';
+          showAction(`
+            <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 12px;">
+              The local server did not start. This usually means a Python
+              dependency is missing or port 8787 is busy.
+            </p>
+            <button class="btn btn-primary" onclick="retryPython()">
+              Retry setup
+            </button>
+          `);
+          break;
+
+        case 'loading':
+        case 'done':
+          showAction(`
+            <button class="btn btn-primary" disabled>
+              <span class="spinner"></span> Loading...
+            </button>
+          `);
+          break;
+
+        default:
+          console.log('setup: unhandled step', step, detail);
+      }
+    }
+
+    // Actions — call into main process via IPC
+    function installPython() {
+      if (window.lvDesktop && window.lvDesktop.installPython) {
+        window.lvDesktop.installPython();
+      }
+    }
+
+    function openPythonSite() {
+      if (window.lvDesktop && window.lvDesktop.openExternal) {
+        window.lvDesktop.openExternal('https://www.python.org/downloads/');
+      }
+    }
+
+    function retryPython() {
+      if (window.lvDesktop && window.lvDesktop.retrySetup) {
+        window.lvDesktop.retrySetup();
+      }
+    }
+
+    function installOllama() {
+      if (window.lvDesktop && window.lvDesktop.installOllama) {
+        window.lvDesktop.installOllama();
+      }
+    }
+
+    function skipOllama() {
+      if (window.lvDesktop && window.lvDesktop.skipOllama) {
+        window.lvDesktop.skipOllama();
+      }
+    }
+  </script>
+</body>
+</html>

@@ -6,6 +6,10 @@ def test_manifest_defaults_from_static_file():
     assert manifest["name"] == "Lingua Viva"
     assert manifest["display"] == "standalone"
     assert any(icon["src"] == "/icons/icon-maskable.png" for icon in manifest["icons"])
+    shortcut_names = {shortcut["name"] for shortcut in manifest["shortcuts"]}
+    assert shortcut_names == {"Capture Observation", "Plan Lesson"}
+    assert "Research" not in shortcut_names
+    assert "Protect" not in shortcut_names
 
 
 def test_manifest_environment_overrides_client_branding():

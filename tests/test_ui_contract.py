@@ -22,7 +22,15 @@ REPO = Path(__file__).resolve().parent.parent
 #   v4 (2026-07-19): GET /api/profile/export + Export My Data button (§8).
 #   v5 (2026-07-20): default ingest scratch storage moved to LV runtime home.
 #   v6 (2026-07-20): admin deferred views explain reasons/prerequisites.
-EXPECTED_VERSION = 6
+#   v7 (2026-07-20): EXP09 fix — healthBadgeClass() + .badge.risk CSS class.
+#   v8 (2026-07-20): Claudia-lens hardening — copy/register updates for
+#     teacher UI, parent draft route, and quick-capture deterministic feedback.
+#   v9 (2026-07-20): sidebar accessibility + token pass.
+EXPECTED_VERSION = 9
+
+
+def _html() -> str:
+    return (REPO / "static" / "index.html").read_text(encoding="utf-8")
 
 
 def test_version_bumped_exactly_one_from_live():
@@ -52,3 +60,37 @@ def test_ui_contract_lock_matches_live_files():
     for rel in contract["files"]:
         actual = hashlib.sha256((REPO / rel).read_bytes()).hexdigest()
         assert lock["hashes"][rel] == actual, f"{rel} hash drifted from lock without a version bump"
+
+
+def test_sidebar_nav_contract_counts_and_handlers():
+    import re
+
+    html = _html()
+    arrays = {}
+    for name in ("teacherNav", "adminNav", "utilityNav"):
+        match = re.search(rf"const {name} = \[(.*?)\];", html, flags=re.S)
+        assert match, f"{name} array missing"
+        arrays[name] = re.findall(r'\["([^"]+)",\s*"([^"]+)",\s*"([^"]+)"\]', match.group(1))
+
+    assert len(arrays["teacherNav"]) == 8
+    assert len(arrays["adminNav"]) == 4
+    assert len(arrays["utilityNav"]) == 6
+
+    view_map = re.search(r"const views = \{(.*?)\n      \};", html, flags=re.S)
+    assert view_map, "renderView() view handler map missing"
+    handler_ids = set(re.findall(r"^\s*([a-z]+):\s*render[A-Za-z]+,?", view_map.group(1), flags=re.M))
+    nav_ids = {item[0] for items in arrays.values() for item in items}
+    assert nav_ids <= handler_ids
+
+
+def test_sidebar_accessibility_markup_and_tokens_present():
+    html = _html()
+    assert 'id="primary-nav" class="nav" aria-label="Primary"' in html
+    assert 'id="utility-nav" class="nav utility" aria-label="Utility"' in html
+    assert 'aria-current="page"' in html
+    assert ".nav button:focus-visible" in html
+    assert "--lv-sidebar-width: 200px;" in html
+    assert "grid-template-columns: var(--lv-sidebar-width) minmax(0, 1fr);" in html
+    assert "--lv-nav-gap: 4px;" in html
+    assert "gap: var(--lv-nav-gap);" in html
+    assert "--lv-nav-row-min-height: 38px;" in html
