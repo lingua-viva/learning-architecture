@@ -1,6 +1,6 @@
 {
   "name": "lingua-viva-desktop",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "description": "Lingua Viva teacher desktop shell",
   "main": "dist/electron/main.js",
