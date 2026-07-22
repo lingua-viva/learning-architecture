@@ -68,6 +68,10 @@ Scopes: case-study, method, resume, engine, lens, skill, meta
 
 ## Key Rules
 
+0. **PUSH = downloadable on the live site, right now. Nothing else counts.** Not committed, not
+   on `main`, not a green CI run, not a tag, not a 200 on the URL. See
+   [`AGENTS.md`](AGENTS.md) for the full definition and the 7-step verification checklist —
+   read it before ever telling the user something is "pushed" or "done."
 1. **Privacy first.** Never commit identifiable student data, institution names, or colleague names.
 2. **Honest maturity labels.** Every framework/method gets a label. Don't inflate.
 3. **Palette source of truth.** Claudia's profile lives in Palette. This repo is the public-facing portfolio.
