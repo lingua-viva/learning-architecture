@@ -24,7 +24,8 @@
     "appId": "org.linguaviva.teacher",
     "productName": "Lingua Viva",
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "electron/build"
     },
     "files": [
       "dist/electron/**/*",
@@ -58,8 +59,8 @@
       "category": "public.app-category.education",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
-      "entitlements": "electron/build/entitlements.mac.plist",
-      "entitlementsInherit": "electron/build/entitlements.mac.plist",
+      "entitlements": "entitlements.mac.plist",
+      "entitlementsInherit": "entitlements.mac.plist",
       "notarize": {
         "teamId": "XWT7RB624U"
       }
