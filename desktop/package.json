@@ -58,8 +58,8 @@
       "category": "public.app-category.education",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
-      "entitlements": "entitlements.mac.plist",
-      "entitlementsInherit": "entitlements.mac.plist",
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
       "notarize": {
         "teamId": "XWT7RB624U"
       }
