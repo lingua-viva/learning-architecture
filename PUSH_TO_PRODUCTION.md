@@ -136,6 +136,80 @@ equivalent hard gate; treat any Windows `.exe` as unverified until Azure secrets
 
 ---
 
+## Rule 4: Three specific macOS signing failures, and their real fixes
+
+Getting `CSC_LINK` set is not the end of it. On 2026-07-22, six consecutive `desktop-v0.2.2`
+build attempts failed, each with a different error, each requiring the actual CI log to diagnose
+(the "Package with electron-builder" step, not the "Verify macOS signature" gate — that gate
+never even ran because packaging failed first every time). In order encountered:
+
+**4a. `security: SecKeychainItemImport: Unable to decode the provided data.`**
+OpenSSL 3.x's default `.p12` export (PBES2, PBKDF2, AES-256-CBC) is not readable by macOS's
+legacy `SecKeychainItemImport` API, which `security import` uses. `openssl pkcs12 -export -legacy`
+is **not** the fix either — it produces RC2-40-CBC, which current OpenSSL itself can't even read
+back (`unsupported ... Algorithm (RC2-40-CBC : 0)`). The actual fix is to force the exact legacy
+cipher suite explicitly:
+```bash
+openssl pkcs12 -export \
+  -inkey developer_id.key -in developerID_application.pem -certfile DeveloperIDG2CA.pem \
+  -out signing.p12 -passout pass:"$PASSWORD" \
+  -certpbe pbeWithSHA1And3-KeyTripleDES-CBC \
+  -keypbe pbeWithSHA1And3-KeyTripleDES-CBC \
+  -macalg sha1
+```
+Verify locally before uploading: `openssl pkcs12 -info -in signing.p12 -passin pass:"$PASSWORD" -nokeys`
+must show `pbeWithSHA1And3-KeyTripleDES-CBC`, not `PBES2`/`AES-256-CBC` and not `RC2`.
+
+**4b. `entitlements.mac.plist: cannot read entitlement data`** (during electron-builder's deep-sign
+pass over nested framework resources, e.g. `Electron Framework.framework/.../locale.pak` — the
+top-level `.app` signs fine and logs a "signing" line, which is misleading; the failure is later,
+in `readDirectoryAndSign`). Root cause: `mac.entitlements`/`entitlementsInherit` in
+`desktop/package.json` must be a path that resolves correctly from wherever `codesign` actually
+runs. A bare filename (`"entitlements.mac.plist"`) combined with a custom
+`directories.buildResources` override does **not** work — electron-builder passes the raw config
+string straight to `codesign --entitlements <value>` without resolving it against
+`buildResourcesDir` first. Putting the physical file at the *default* `buildResources` location
+(`desktop/build/`) is necessary but **not sufficient** by itself. The fix that actually works,
+confirmed against Mission Canvas's proven-working config:
+```json
+"directories": { "output": "release" },
+"mac": {
+  "entitlements": "build/entitlements.mac.plist",
+  "entitlementsInherit": "build/entitlements.mac.plist"
+}
+```
+i.e. an explicit relative path from the project root (where `package.json` lives), no
+`buildResources` override, file physically present at that exact path. Root has a `build/` entry
+in `.gitignore` — you must `git add -f` the entitlements file or it silently won't be in the repo
+checkout that CI builds from.
+
+**4c. `Cannot use password credentials, API key credentials and keychain credentials at once`**
+(from `@electron/notarize`, during the same deep-sign/notarize pass, once 4a and 4b are both
+fixed). This looks like an environment leak (stray `APPLE_ID`/`APPLE_ID_PASSWORD`) but on
+GitHub-hosted runners it isn't — those vars are never set. The real cause is in
+`app-builder-lib`'s `macPackager.js` (`generateNotarizeOptions`): when `mac.notarize` in
+`package.json` is an object with a `teamId` field, that `teamId` gets merged into the *same*
+options object as the API-key credentials (`appleApiKey`/`appleApiKeyId`/`appleApiIssuer`) before
+being handed to `@electron/notarize`. `@electron/notarize`'s validator
+(`isNotaryToolPasswordCredentials`) treats **`teamId` presence alone** — regardless of whether
+`appleId`/`appleIdPassword` are also set — as a signal that password-based credentials are in
+play. With both apiKey and (spuriously) password credentials detected, it throws. Fix: don't set
+`notarize.teamId` when authenticating via API key. Use the boolean form instead:
+```json
+"mac": { "notarize": true }
+```
+With `notarize: true`, `macPackager.js` still merges in a `teamId` key but its value is
+`undefined` (booleans have no `.teamId` property), which `@electron/notarize`'s
+`!== undefined` check correctly treats as absent — only the API-key credentials are detected, and
+notarization proceeds normally. (`notarize: false` is **not** a fix — it ships a genuinely
+unnotarized `.dmg` that Gatekeeper will block; this violates Rule 2 even if the build goes green.)
+Mission Canvas's own `desktop/package.json` still has `notarize: {"teamId": ...}` and reportedly
+works — its `electron-builder`/`@electron/notarize` versions are newer (`^25.1.8`/`2.5.0` vs. this
+repo's `^24.13.3`/`2.2.1`) and evidently don't trigger this false-positive. Don't assume MC's exact
+config is safe to copy without checking installed dependency versions first.
+
+---
+
 ## Cutting a Desktop Release (full sequence)
 
 1. Confirm signing secrets are `SET` (Rule 3). If any are `MISSING`, stop — the build will fail.
