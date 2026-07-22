@@ -24,8 +24,7 @@
     "appId": "org.linguaviva.teacher",
     "productName": "Lingua Viva",
     "directories": {
-      "output": "release",
-      "buildResources": "electron/build"
+      "output": "release"
     },
     "files": [
       "dist/electron/**/*",
