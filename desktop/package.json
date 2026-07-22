@@ -60,9 +60,7 @@
       "gatekeeperAssess": false,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
-      "notarize": {
-        "teamId": "XWT7RB624U"
-      }
+      "notarize": false
     },
     "win": {
       "target": [

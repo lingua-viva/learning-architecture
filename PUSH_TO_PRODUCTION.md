@@ -186,27 +186,23 @@ checkout that CI builds from.
 **4c. `Cannot use password credentials, API key credentials and keychain credentials at once`**
 (from `@electron/notarize`, during the same deep-sign/notarize pass, once 4a and 4b are both
 fixed). This looks like an environment leak (stray `APPLE_ID`/`APPLE_ID_PASSWORD`) but on
-GitHub-hosted runners it isn't — those vars are never set. The real cause is in
-`app-builder-lib`'s `macPackager.js` (`generateNotarizeOptions`): when `mac.notarize` in
-`package.json` is an object with a `teamId` field, that `teamId` gets merged into the *same*
-options object as the API-key credentials (`appleApiKey`/`appleApiKeyId`/`appleApiIssuer`) before
-being handed to `@electron/notarize`. `@electron/notarize`'s validator
-(`isNotaryToolPasswordCredentials`) treats **`teamId` presence alone** — regardless of whether
-`appleId`/`appleIdPassword` are also set — as a signal that password-based credentials are in
-play. With both apiKey and (spuriously) password credentials detected, it throws. Fix: don't set
-`notarize.teamId` when authenticating via API key. Use the boolean form instead:
-```json
-"mac": { "notarize": true }
-```
-With `notarize: true`, `macPackager.js` still merges in a `teamId` key but its value is
-`undefined` (booleans have no `.teamId` property), which `@electron/notarize`'s
-`!== undefined` check correctly treats as absent — only the API-key credentials are detected, and
-notarization proceeds normally. (`notarize: false` is **not** a fix — it ships a genuinely
-unnotarized `.dmg` that Gatekeeper will block; this violates Rule 2 even if the build goes green.)
-Mission Canvas's own `desktop/package.json` still has `notarize: {"teamId": ...}` and reportedly
-works — its `electron-builder`/`@electron/notarize` versions are newer (`^25.1.8`/`2.5.0` vs. this
-repo's `^24.13.3`/`2.2.1`) and evidently don't trigger this false-positive. Don't assume MC's exact
-config is safe to copy without checking installed dependency versions first.
+GitHub-hosted runners it isn't — those vars are never set, and explicitly setting them to `''` in
+the workflow (a first attempt) changes nothing. The real cause is in `app-builder-lib`'s
+`macPackager.js` (`generateNotarizeOptions`): when `mac.notarize` in `package.json` is an object
+with a `teamId` field, that `teamId` gets merged into the *same* options object as the API-key
+credentials (`appleApiKey`/`appleApiKeyId`/`appleApiIssuer`) before being handed to
+`@electron/notarize`. `@electron/notarize`'s validator (`isNotaryToolPasswordCredentials`) treats
+**`teamId` presence alone** — regardless of whether `appleId`/`appleIdPassword` are also set — as
+a signal that password-based credentials are in play. With both apiKey and (spuriously) password
+credentials detected, it throws. This is specific to `electron-builder ^24.13.3` /
+`@electron/notarize 2.2.1` — the proven fix (confirmed working, 2026-07-22) is to upgrade to
+`electron-builder ^25.1.8`, matching Mission Canvas's pinned version exactly, which handles this
+combination natively with no config change needed. (`notarize: false` is **not** a fix — it ships
+a genuinely unnotarized `.dmg` that Gatekeeper will block; this violates Rule 2 even if the build
+goes green.) An untested alternative that should also work without a version bump, if a bump is
+ever undesirable: set `"mac": {"notarize": true}` (boolean) instead of `{"teamId": ...}` — the
+boolean form leaves `teamId` `undefined` in the merged options object, which
+`@electron/notarize`'s `!== undefined` check treats as absent.
 
 ---
 
