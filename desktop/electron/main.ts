@@ -181,6 +181,30 @@ async function runSetupFlow(root: string, window: BrowserWindow): Promise<void> 
 
 function waitForPythonResolution(window: BrowserWindow): Promise<string> {
   return new Promise((resolve) => {
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+    const startPolling = () => {
+      emitProgress(window, "python_polling",
+        "Follow the installer prompts — we'll continue automatically.");
+      pollTimer = setInterval(async () => {
+        const result = await detectPythonBroad();
+        if (result.ok) {
+          cleanup();
+          emitProgress(window, "python_installed", result.detail);
+          resolve(result.command);
+        }
+      }, 2000);
+      // Timeout after 5 minutes
+      setTimeout(() => {
+        if (pollTimer) {
+          clearInterval(pollTimer);
+          pollTimer = null;
+          emitProgress(window, "python_install_failed",
+            "Still waiting. If the installer finished, click below.");
+        }
+      }, 300000);
+    };
+
     const handleInstall = async () => {
       if (process.platform === "win32") {
         emitProgress(window, "python_installing", "Downloading Python 3.12...");
@@ -189,16 +213,38 @@ function waitForPythonResolution(window: BrowserWindow): Promise<string> {
           emitProgress(window, "python_install_progress", "90");
           emitProgress(window, "python_installed", "Python 3.12 installed");
           cleanup();
-          // Re-detect to get the resolved command
-          const recheck = await detectPython();
+          const recheck = await detectPythonBroad();
           resolve(recheck.ok ? recheck.command : "python");
         } catch (err) {
           emitProgress(window, "python_install_failed", String(err instanceof Error ? err.message : err));
         }
+      } else if (process.platform === "darwin") {
+        // macOS: download the .pkg directly and open it
+        emitProgress(window, "python_installing", "Downloading Python installer...");
+        try {
+          const { downloadFile } = await import("./bootstrap");
+          const os = await import("node:os");
+          const { spawn } = await import("node:child_process");
+          const pkgUrl = "https://www.python.org/ftp/python/3.12.7/python-3.12.7-macos11.pkg";
+          const dest = path.join(os.tmpdir(), "python-3.12.7-macos11.pkg");
+          await downloadFile(pkgUrl, dest);
+          emitProgress(window, "python_installing",
+            "Opening installer — click \"Continue\" then \"Install\"...");
+          spawn("open", [dest], { detached: true }).unref();
+          startPolling();
+        } catch (err) {
+          // Download failed — fall back to website + poll
+          shell.openExternal("https://www.python.org/downloads/");
+          emitProgress(window, "python_install_failed",
+            "Download failed — install from the page that opened.");
+          startPolling();
+        }
       } else {
-        // macOS/Linux: open python.org and show retry
+        // Linux: open website + poll
         shell.openExternal("https://www.python.org/downloads/");
-        emitProgress(window, "python_install_failed", "Download Python from the site that just opened, then click retry below.");
+        emitProgress(window, "python_install_failed",
+          "Install Python 3.11+ from your package manager, then we'll detect it.");
+        startPolling();
       }
     };
 
@@ -207,17 +253,20 @@ function waitForPythonResolution(window: BrowserWindow): Promise<string> {
         refreshWindowsPath();
       }
       emitProgress(window, "python", "Checking again...");
-      const recheck = await detectPython();
+      const recheck = await detectPythonBroad();
       if (recheck.ok) {
         emitProgress(window, "python_installed", recheck.detail);
         cleanup();
         resolve(recheck.command);
       } else {
-        emitProgress(window, "python_install_failed", "Still not found. Install Python 3.10+ and try again.");
+        emitProgress(window, "python_install_failed",
+          "Not found yet. The installer may still be running.");
+        if (!pollTimer) startPolling();
       }
     };
 
     const cleanup = () => {
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
       ipcMain.removeHandler("lv:setup:installPython");
       ipcMain.removeHandler("lv:setup:retryPython");
     };
@@ -227,8 +276,61 @@ function waitForPythonResolution(window: BrowserWindow): Promise<string> {
   });
 }
 
+/** Broader Python detection — checks standard macOS install paths beyond just PATH. */
+async function detectPythonBroad(): Promise<{ ok: boolean; command: string; detail: string }> {
+  // First try the normal detection
+  const normal = await detectPython();
+  if (normal.ok) return normal;
+
+  // On macOS, the python.org .pkg installs to paths that may not be on
+  // the Electron process's PATH. Check them directly.
+  if (process.platform === "darwin") {
+    const { checkPython } = await import("./bootstrap");
+    const macPaths = [
+      "/usr/local/bin/python3",
+      "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
+      "/Library/Frameworks/Python.framework/Versions/3.11/bin/python3",
+      "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+      "/opt/homebrew/bin/python3",
+    ];
+    for (const cmd of macPaths) {
+      try {
+        const { existsSync } = await import("node:fs");
+        if (!existsSync(cmd)) continue;
+        const result = await checkPython(cmd);
+        if (result.ok) {
+          return { ok: true, command: cmd, detail: result.detail };
+        }
+      } catch { /* try next */ }
+    }
+  }
+
+  return { ok: false, command: "", detail: "Python 3.10+ not found" };
+}
+
 function waitForOllamaResolution(window: BrowserWindow): Promise<void> {
   return new Promise((resolve) => {
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+    const startOllamaPolling = () => {
+      pollTimer = setInterval(async () => {
+        const status = await checkOllama();
+        if (status.ok) {
+          cleanup();
+          emitProgress(window, "ollama_installed", "Ollama ready");
+          resolve();
+        }
+      }, 2000);
+      // Auto-skip after 2 minutes if Ollama never comes up
+      setTimeout(() => {
+        if (pollTimer) {
+          cleanup();
+          emitProgress(window, "ollama_skipped");
+          resolve();
+        }
+      }, 120000);
+    };
+
     const handleInstall = async () => {
       if (process.platform === "win32") {
         emitProgress(window, "ollama_installing", "Downloading Ollama...");
@@ -237,17 +339,57 @@ function waitForOllamaResolution(window: BrowserWindow): Promise<void> {
           emitProgress(window, "ollama_installed", "Ollama installed");
           cleanup();
           resolve();
-        } catch (err) {
-          // Fallback: skip and continue
+        } catch {
+          emitProgress(window, "ollama_skipped");
+          cleanup();
+          resolve();
+        }
+      } else if (process.platform === "darwin") {
+        emitProgress(window, "ollama_installing", "Downloading Ollama...");
+        try {
+          const { downloadFile } = await import("./bootstrap");
+          const os = await import("node:os");
+          const fs = await import("node:fs");
+          const { execSync, spawn } = await import("node:child_process");
+          const zipUrl = "https://ollama.com/download/Ollama-darwin.zip";
+          const dest = path.join(os.tmpdir(), "Ollama-darwin.zip");
+          await downloadFile(zipUrl, dest);
+
+          emitProgress(window, "ollama_installing", "Installing Ollama app...");
+          const appDest = path.join(os.homedir(), "Applications");
+          fs.mkdirSync(appDest, { recursive: true });
+          execSync(`unzip -o -q "${dest}" -d "${appDest}/"`, { timeout: 60000 });
+
+          // Launch Ollama.app — it auto-starts the daemon
+          spawn("open", [path.join(appDest, "Ollama.app")], { detached: true }).unref();
+          try { fs.unlinkSync(dest); } catch {}
+
+          emitProgress(window, "ollama_installing",
+            "Ollama is starting — this takes a moment the first time...");
+          startOllamaPolling();
+        } catch {
+          // Download failed — open website and skip
+          shell.openExternal("https://ollama.com/download");
           emitProgress(window, "ollama_skipped");
           cleanup();
           resolve();
         }
       } else {
-        shell.openExternal("https://ollama.com/download");
-        emitProgress(window, "ollama_skipped");
-        cleanup();
-        resolve();
+        // Linux: try the official install script
+        try {
+          const { execSync } = await import("node:child_process");
+          emitProgress(window, "ollama_installing", "Installing Ollama...");
+          execSync("curl -fsSL https://ollama.com/install.sh | sh",
+            { timeout: 120000, stdio: "pipe" });
+          emitProgress(window, "ollama_installed", "Ollama installed");
+          cleanup();
+          resolve();
+        } catch {
+          shell.openExternal("https://ollama.com/download");
+          emitProgress(window, "ollama_skipped");
+          cleanup();
+          resolve();
+        }
       }
     };
 
@@ -258,6 +400,7 @@ function waitForOllamaResolution(window: BrowserWindow): Promise<void> {
     };
 
     const cleanup = () => {
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
       ipcMain.removeHandler("lv:setup:installOllama");
       ipcMain.removeHandler("lv:setup:skipOllama");
     };

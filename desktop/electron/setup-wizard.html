@@ -303,15 +303,14 @@
           state.python = 'missing';
           setStep(els.pythonStep, 'needs-action');
           setIcon(els.pythonStep, '!');
-          els.pythonDetail.textContent = 'Python is needed to run Lingua Viva locally.';
+          els.pythonDetail.textContent = 'Python is needed to run Lingua Viva.';
           showAction(`
             <button class="btn btn-primary" onclick="installPython()">
-              Install Python (automatic)
+              Install Python
             </button>
-            <br>
-            <button class="btn btn-secondary" onclick="openPythonSite()">
-              I'll install it myself
-            </button>
+            <p style="color: var(--text-muted); font-size: 12px; margin-top: 10px;">
+              Downloads the installer (~30MB) — you'll see a familiar "Install" dialog.
+            </p>
           `);
           break;
 
@@ -342,21 +341,32 @@
           showAction('');
           break;
 
+        case 'python_polling':
+          state.python = 'installing';
+          setStep(els.pythonStep, 'active');
+          setIcon(els.pythonStep, '⟳');
+          els.pythonDetail.textContent = detail || 'Waiting for install to finish...';
+          showAction(`
+            <p style="color: var(--text-muted); font-size: 13px;">
+              Follow the installer prompts — we'll continue automatically.
+            </p>
+            <button class="btn btn-secondary" onclick="retryPython()" style="margin-top: 12px;">
+              Check now
+            </button>
+          `);
+          break;
+
         case 'python_install_failed':
           setStep(els.pythonStep, 'needs-action');
           setIcon(els.pythonStep, '!');
-          els.pythonDetail.textContent = detail || 'Automatic install did not complete.';
+          els.pythonDetail.textContent = detail || 'Waiting for install to complete...';
           els.pythonProgress.classList.remove('visible');
           showAction(`
             <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 12px;">
-              No worries — you can install Python manually and we'll continue.
+              We'll continue automatically once Python is installed.
             </p>
-            <button class="btn btn-primary" onclick="openPythonSite()">
-              Open python.org
-            </button>
-            <br>
             <button class="btn btn-secondary" onclick="retryPython()">
-              I've installed it — check again
+              Check now
             </button>
           `);
           break;
