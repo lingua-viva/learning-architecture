@@ -52,14 +52,27 @@
       }
     ],
     "mac": {
-      "target": ["dmg"],
-      "category": "public.app-category.education"
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.education",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "electron/build/entitlements.mac.plist",
+      "entitlementsInherit": "electron/build/entitlements.mac.plist",
+      "notarize": {
+        "teamId": "XWT7RB624U"
+      }
     },
     "win": {
-      "target": ["nsis"]
+      "target": [
+        "nsis"
+      ]
     },
     "linux": {
-      "target": ["AppImage"],
+      "target": [
+        "AppImage"
+      ],
       "category": "Education"
     }
   }
