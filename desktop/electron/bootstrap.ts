@@ -74,6 +74,18 @@ export async function detectPython(): Promise<{ ok: boolean; command: string; de
 // --- Ollama detection ---
 
 export async function checkOllama(): Promise<BootstrapCheck> {
+  // Check HTTP first (daemon may be running even if CLI isn't on PATH)
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
+    const resp = await fetch("http://127.0.0.1:11434/api/tags", { signal: controller.signal });
+    clearTimeout(timer);
+    if (resp.ok) {
+      return { ok: true, detail: "Ollama daemon running" };
+    }
+  } catch { /* daemon not running, try CLI */ }
+
+  // Fall back to CLI version check
   return execFileText("ollama", ["--version"], 5000);
 }
 
@@ -228,19 +240,37 @@ export async function installOllamaWindows(): Promise<void> {
 // --- Python dependency installer ---
 
 export async function installPythonDeps(pythonCmd: string, repoRoot: string): Promise<void> {
-  const deps = ["pyyaml", "fastapi", "uvicorn", "httpx", "websockets"];
-  const args = pythonCmd === "py"
-    ? ["-3", "-m", "pip", "install", "--quiet", ...deps]
-    : ["-m", "pip", "install", "--quiet", ...deps];
+  const deps = ["pyyaml", "fastapi", "uvicorn", "httpx", "websockets", "pdfplumber", "sqlite-vec"];
+  // Try with --break-system-packages first (required on macOS 14+ / PEP 668),
+  // fall back to without if that flag isn't supported (older pip).
+  const baseArgs = pythonCmd === "py"
+    ? ["-3", "-m", "pip", "install", "--quiet"]
+    : ["-m", "pip", "install", "--quiet"];
 
   return new Promise((resolve) => {
-    const proc = spawn(pythonCmd, args, {
-      cwd: repoRoot,
-      windowsHide: true,
-      stdio: "pipe",
-    });
-    proc.on("close", () => resolve());
-    proc.on("error", () => resolve()); // Non-fatal — server may still start
+    const tryInstall = (extraFlags: string[]) => {
+      const args = [...baseArgs, ...extraFlags, ...deps];
+      const proc = spawn(pythonCmd, args, {
+        cwd: repoRoot,
+        windowsHide: true,
+        stdio: "pipe",
+      });
+      let stderr = "";
+      proc.stderr?.on("data", (d) => { stderr += d.toString(); });
+      proc.on("close", (code) => {
+        if (code === 0 || extraFlags.length === 0) {
+          resolve();
+        } else {
+          // --break-system-packages failed, retry without it
+          tryInstall([]);
+        }
+      });
+      proc.on("error", () => {
+        if (extraFlags.length > 0) tryInstall([]);
+        else resolve();
+      });
+    };
+    tryInstall(["--break-system-packages"]);
   });
 }
 

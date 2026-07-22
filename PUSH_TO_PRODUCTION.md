@@ -195,14 +195,44 @@ credentials (`appleApiKey`/`appleApiKeyId`/`appleApiIssuer`) before being handed
 **`teamId` presence alone** — regardless of whether `appleId`/`appleIdPassword` are also set — as
 a signal that password-based credentials are in play. With both apiKey and (spuriously) password
 credentials detected, it throws. This is specific to `electron-builder ^24.13.3` /
-`@electron/notarize 2.2.1` — the proven fix (confirmed working, 2026-07-22) is to upgrade to
-`electron-builder ^25.1.8`, matching Mission Canvas's pinned version exactly, which handles this
-combination natively with no config change needed. (`notarize: false` is **not** a fix — it ships
-a genuinely unnotarized `.dmg` that Gatekeeper will block; this violates Rule 2 even if the build
-goes green.) An untested alternative that should also work without a version bump, if a bump is
-ever undesirable: set `"mac": {"notarize": true}` (boolean) instead of `{"teamId": ...}` — the
-boolean form leaves `teamId` `undefined` in the merged options object, which
-`@electron/notarize`'s `!== undefined` check treats as absent.
+`@electron/notarize 2.2.1`. Upgrading to `electron-builder ^25.1.8` (matching Mission Canvas's
+pinned version) clears this specific error, but **was not sufficient on its own** — see 4d.
+(`notarize: false` is **not** a fix — it ships a genuinely unnotarized `.dmg` that Gatekeeper will
+block; this violates Rule 2 even if the build goes green.)
+
+**4d. `Error: invalidPEMDocument`** (from `xcrun notarytool` via `@electron/notarize`, once 4a-4c
+are all cleared — signing succeeds, notarization itself fails parsing the `.p8` API key). Root
+cause was never conclusively identified — the local `.p8` file was verified byte-for-byte clean
+(`openssl pkey -noout -text`, full hexdump: standard PKCS#8 PEM, no BOM, no CRLF), and switching
+the workflow's base64 decode from `echo | base64 --decode` to `printf | base64 --decode` (theory:
+trailing newline corruption) did **not** fix it — the identical error recurred on the very next
+build. **The actual, proven fix (confirmed working, 2026-07-22): stop routing through
+`@electron/notarize` entirely.** Split packaging and notarizing into two separate CI steps —
+`electron-builder` signs only (`mac.notarize` omitted from `package.json` entirely, or explicitly
+`false`, since notarization is no longer its job), then a dedicated step calls `xcrun notarytool
+submit ... --wait` and `xcrun stapler staple` directly:
+```yaml
+- name: Package with electron-builder   # signs only, no notarize config
+  run: ./node_modules/.bin/electron-builder --mac dmg
+- name: Notarize macOS app
+  env:
+    APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+    APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+    APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+  run: |
+    mkdir -p "$RUNNER_TEMP/api-key"
+    echo "$APPLE_API_KEY_BASE64" | base64 --decode > "$RUNNER_TEMP/api-key/AuthKey.p8"
+    APP=$(find desktop/release -name "*.app" -type d | head -1)
+    ditto -c -k --keepParent "$APP" "$RUNNER_TEMP/app-to-notarize.zip"
+    xcrun notarytool submit "$RUNNER_TEMP/app-to-notarize.zip" \
+      --key "$RUNNER_TEMP/api-key/AuthKey.p8" --key-id "$APPLE_API_KEY_ID" \
+      --issuer "$APPLE_API_ISSUER" --wait --timeout 10m
+    xcrun stapler staple "$APP"
+```
+This is also what Apple's own docs recommend directly, and sidesteps whatever `@electron/notarize`
+was doing wrong with the decoded key — never fully diagnosed, not worth chasing further now that
+there's a working path. Confirmed end-to-end on `desktop-v0.2.2`: `status: Accepted` from Apple's
+notary service, `The staple and validate action worked!`, `spctl`/`codesign --verify` both clean.
 
 ---
 

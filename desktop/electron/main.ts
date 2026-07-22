@@ -115,7 +115,7 @@ async function runSetupFlow(root: string, window: BrowserWindow): Promise<void> 
 
   // Step 1: Python detection
   emitProgress(window, "python", "Checking for Python...");
-  const pythonResult = await detectPython();
+  const pythonResult = await detectPythonBroad();
 
   if (pythonResult.ok) {
     pythonCmd = pythonResult.command;
@@ -150,13 +150,23 @@ async function runSetupFlow(root: string, window: BrowserWindow): Promise<void> 
   const started = startBackend(root, PORT, pythonCmd);
   backend = started.process;
 
-  // Early exit detection
-  backend.on("exit", () => {
+  // Early exit detection — only retry server start, not the whole wizard
+  backend.on("exit", (code) => {
     if (isQuitting) return;
     backend = null;
-    if (backendRestartCount < 3 && mainWindow) {
+    if (backendRestartCount < 2 && mainWindow && code !== 0) {
       backendRestartCount += 1;
-      void runSetupFlow(root, mainWindow);
+      emitProgress(window, "server", `Retrying server start (attempt ${backendRestartCount + 1})...`);
+      const retryStarted = startBackend(root, PORT, pythonCmd);
+      backend = retryStarted.process;
+      backend.on("exit", () => { backend = null; });
+      void waitForBackend(retryStarted.url, 30000, retryStarted.process).then((ok) => {
+        if (ok) {
+          emitProgress(window, "server_ok");
+          emitProgress(window, "loading");
+          void window.loadURL(BACKEND_URL);
+        }
+      });
     }
   });
 
@@ -321,14 +331,14 @@ function waitForOllamaResolution(window: BrowserWindow): Promise<void> {
           resolve();
         }
       }, 2000);
-      // Auto-skip after 2 minutes if Ollama never comes up
+      // Auto-skip after 4 minutes if Ollama never comes up
       setTimeout(() => {
         if (pollTimer) {
           cleanup();
           emitProgress(window, "ollama_skipped");
           resolve();
         }
-      }, 120000);
+      }, 240000);
     };
 
     const handleInstall = async () => {
