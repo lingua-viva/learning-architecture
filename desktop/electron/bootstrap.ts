@@ -241,36 +241,54 @@ export async function installOllamaWindows(): Promise<void> {
 
 export async function installPythonDeps(pythonCmd: string, repoRoot: string): Promise<void> {
   const deps = ["pyyaml", "fastapi", "uvicorn", "httpx", "websockets", "pdfplumber", "sqlite-vec"];
-  // Try with --break-system-packages first (required on macOS 14+ / PEP 668),
-  // fall back to without if that flag isn't supported (older pip).
+  // Strategy: try multiple pip invocations in order of preference.
+  // macOS python.org installs ship WITHOUT SSL certs configured (need "Install Certificates.command").
+  // We work around this by adding --trusted-host flags as a fallback.
   const baseArgs = pythonCmd === "py"
     ? ["-3", "-m", "pip", "install", "--quiet"]
     : ["-m", "pip", "install", "--quiet"];
 
+  const sslWorkaround = [
+    "--trusted-host", "pypi.org",
+    "--trusted-host", "pypi.python.org",
+    "--trusted-host", "files.pythonhosted.org",
+  ];
+
+  // Attempts in order:
+  // 1. --break-system-packages (normal, works if SSL certs are configured)
+  // 2. --break-system-packages + --trusted-host (SSL cert workaround)
+  // 3. bare install (no --break-system-packages, for older pip)
+  // 4. bare + --trusted-host
+  const attempts: string[][] = [
+    ["--break-system-packages"],
+    ["--break-system-packages", ...sslWorkaround],
+    [],
+    [...sslWorkaround],
+  ];
+
   return new Promise((resolve) => {
-    const tryInstall = (extraFlags: string[]) => {
+    let attemptIdx = 0;
+
+    const tryNext = () => {
+      if (attemptIdx >= attempts.length) {
+        resolve(); // All failed — server will show the real import error
+        return;
+      }
+      const extraFlags = attempts[attemptIdx];
+      attemptIdx++;
       const args = [...baseArgs, ...extraFlags, ...deps];
       const proc = spawn(pythonCmd, args, {
         cwd: repoRoot,
         windowsHide: true,
         stdio: "pipe",
       });
-      let stderr = "";
-      proc.stderr?.on("data", (d) => { stderr += d.toString(); });
       proc.on("close", (code) => {
-        if (code === 0 || extraFlags.length === 0) {
-          resolve();
-        } else {
-          // --break-system-packages failed, retry without it
-          tryInstall([]);
-        }
+        if (code === 0) resolve();
+        else tryNext();
       });
-      proc.on("error", () => {
-        if (extraFlags.length > 0) tryInstall([]);
-        else resolve();
-      });
+      proc.on("error", () => tryNext());
     };
-    tryInstall(["--break-system-packages"]);
+    tryNext();
   });
 }
 
@@ -323,6 +341,13 @@ export function startBackend(repoRoot: string, port = DEFAULT_PORT, pythonComman
   if (!existsSync(webPath)) {
     throw new Error(`Lingua Viva server not found at ${webPath}`);
   }
+
+  // Kill any lingering process on our port (prevents "address already in use" on retry)
+  try {
+    if (process.platform !== "win32") {
+      execFileSync("sh", ["-c", `lsof -t -i :${port} | xargs kill -9 2>/dev/null || true`], { timeout: 3000 });
+    }
+  } catch { /* best effort */ }
 
   const child = spawn(pythonCommand, [webPath, String(port)], {
     cwd: repoRoot,
