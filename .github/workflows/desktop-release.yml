@@ -90,11 +90,7 @@ jobs:
         working-directory: desktop
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'true'
-          # macOS notarization — API key method ONLY
-          # Explicitly unset password/keychain methods to avoid
-          # "Cannot use password credentials, API key credentials and keychain credentials at once"
-          APPLE_ID: ''
-          APPLE_PASSWORD: ''
+          # macOS notarization — API key method (electron-builder 25.x handles this natively)
           APPLE_API_KEY: ${{ runner.temp }}/api-key/AuthKey.p8
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
