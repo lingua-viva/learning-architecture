@@ -76,11 +76,11 @@ pull_ollama() {
     return
   fi
   # Check if model already present
-  if curl -s http://127.0.0.1:11434/api/tags 2>/dev/null | grep -q "qwen3"; then
-    echo "  ✓ qwen3:8b already available"
+  if curl -s http://127.0.0.1:11434/api/tags 2>/dev/null | grep -q "qwen2.5:3b"; then
+    echo "  ✓ qwen2.5:3b already available"
   else
-    echo "  → Pulling Ollama qwen3:8b model..."
-    ollama pull qwen3:8b || true
+    echo "  → Pulling Ollama qwen2.5:3b model..."
+    ollama pull qwen2.5:3b || true
   fi
 }
 
@@ -231,7 +231,7 @@ if [ -z "$SKIP_BINARY" ] && curl -fsSL "$URL" -o "$TMPFILE" 2>/dev/null && [ -s 
 {
   "providers": {
     "ollama": {
-      "model": "qwen3:8b",
+      "model": "qwen2.5:3b",
       "verified": true
     }
   },
@@ -239,7 +239,7 @@ if [ -z "$SKIP_BINARY" ] && curl -fsSL "$URL" -o "$TMPFILE" 2>/dev/null && [ -s 
 }
 PROVEOF
       chmod 600 "$HOME/.lingua-viva/config/providers.json"
-      echo "  ✓ Connected to Ollama / qwen3:8b"
+      echo "  ✓ Connected to Ollama / qwen2.5:3b"
     fi
   fi
 

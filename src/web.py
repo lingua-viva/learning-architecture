@@ -191,6 +191,14 @@ def _seed_demo_roster(store) -> None:
         home_languages=["it"],
         rti_current_tier=2,
     )
+    store.create_lens(
+        student_id="student-luca",
+        display_name="Luca",
+        campus="local",
+        grade_level="G3",
+        home_languages=["it", "en"],
+        rti_current_tier=1,
+    )
 
 
 def _with_student_store(callback):
@@ -544,11 +552,53 @@ async def prepare_activity(payload: dict):
         language_of_instruction="it",
         created_by="teacher",
     )
-    pack = await asyncio.to_thread(ContentDifferentiator().generate, lesson)
+    pack = await asyncio.to_thread(_generate_activity_pack, lesson)
     result = pack.to_dict()
     result["source_citation"] = f"Generated from Manuale §{unit['manuale_section']}, Grade {grade_number}"
     result["source_status"] = "authoritative"
     result["cefr_rule"] = unit["cefr_language"]
+    return result
+
+
+def _generate_activity_pack(lesson):
+    """Try document-backed generation first; fall back to template."""
+    from src.education.content_differentiator import ContentDifferentiator
+    from src.lingua_viva.ingest import document_retriever
+
+    diff = ContentDifferentiator()
+    retriever = document_retriever()
+    if retriever is not None:
+        return diff.generate_from_documents(lesson, retriever, domain="curriculum")
+    return diff.generate(lesson)
+
+
+@app.get("/api/prepare/tier-assignments")
+async def tier_assignments():
+    """Show which tier each student would receive for the next lesson pack.
+
+    This is the demo story: given a roster of students with varying
+    RTI tiers and CEFR levels, the system assigns each to the right
+    content tier — foundational, on_track, or extended.
+    """
+    from src.education.content_differentiator import ContentDifferentiator
+
+    diff = ContentDifferentiator()
+
+    def compute(store):
+        roster = store.list_lenses()
+        assignments = []
+        for lens in roster:
+            tier = diff.assign_tier_for_student(lens)
+            assignments.append({
+                "student_id": lens["student_id"],
+                "display_name": lens.get("display_name"),
+                "rti_current_tier": lens.get("rti_current_tier"),
+                "cefr_snapshot": lens.get("cefr_snapshot"),
+                "assigned_tier": tier,
+            })
+        return {"assignments": assignments, "logic": "RTI tier is primary; CEFR adjusts within tier (see content-differentiation.md)"}
+
+    result = await asyncio.to_thread(_with_student_store, compute)
     return result
 
 
