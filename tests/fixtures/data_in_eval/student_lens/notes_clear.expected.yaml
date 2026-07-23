@@ -1,0 +1,13 @@
+# Ground truth for notes_clear.txt — Elio is an invented name, not a real student.
+acceptable:
+  display_name: ["Elio"]
+  grade_level: ["G3"]
+  "cefr_snapshot.listening": ["A2"]
+  "cefr_snapshot.speaking": ["A2+"]
+  home_languages: [["it", "en"], ["en", "it"]]
+must_verify:
+  - grade_level
+  - "cefr_snapshot.listening"
+  - "cefr_snapshot.speaking"
+never_verify:
+  - trauma_flag   # never stated in this text at all — must never appear verified

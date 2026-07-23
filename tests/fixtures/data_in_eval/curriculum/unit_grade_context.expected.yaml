@@ -1,0 +1,9 @@
+# Ground truth for unit_grade_context.txt — synthetic. Second clear case with
+# different content, to check the engine isn't overfit to unit_clear's exact
+# phrasing.
+acceptable:
+  grade: ["G4"]
+  cefr_target: ["A2+"]
+must_verify:
+  - grade
+never_verify: []

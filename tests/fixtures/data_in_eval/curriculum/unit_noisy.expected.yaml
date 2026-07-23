@@ -1,0 +1,10 @@
+# Ground truth for unit_noisy.txt — real unit content buried between
+# unrelated administrative noise (timesheets, parking, a printer). Tests that
+# the engine finds the real signal and doesn't get confused by surrounding
+# irrelevant text.
+acceptable:
+  grade: ["G2"]
+  cefr_target: ["A1+"]
+must_verify:
+  - grade
+never_verify: []

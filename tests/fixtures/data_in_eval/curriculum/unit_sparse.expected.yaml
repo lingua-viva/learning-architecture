@@ -1,0 +1,10 @@
+# Ground truth for unit_sparse.txt — deliberately near-empty. No grade, no
+# CEFR target, no real title is stated anywhere. This tests that the engine
+# does NOT invent confident answers from thin material.
+acceptable:
+  grade: []
+  cefr_target: []
+must_verify: []       # nothing should be confidently verifiable from this text
+never_verify:
+  - grade              # there is no grade in this text — verifying one would be a hallucination
+  - cefr_target

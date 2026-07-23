@@ -1,0 +1,5 @@
+# Ground truth for unit_empty.txt — a genuinely empty file. Must produce zero
+# fields and an unresolved_question, never crash, never invent anything.
+acceptable: {}
+must_verify: []
+never_verify: []

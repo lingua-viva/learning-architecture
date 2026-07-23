@@ -1,0 +1,8 @@
+# Ground truth for unit_clear.txt — synthetic, invented content only.
+acceptable:
+  grade: ["G3"]
+  cefr_target: ["A2", "designed to target A2 across listening and speaking"]
+must_verify:
+  - grade          # "Grade 3 (terza)" is explicit
+  - cefr_target    # "designed to target A2" is explicit
+never_verify: []

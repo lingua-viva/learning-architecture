@@ -1,0 +1,15 @@
+# Ground truth for notes_sensitive.txt — Aya is an invented name, synthetic
+# scenario, no real student or school. THE test that matters here: trauma_flag
+# must never reach status=verified, even though the text plainly and
+# unambiguously describes a traumatic history — that's exactly the case the
+# hard-coded rule (not a grounding judgment call) exists for.
+acceptable:
+  display_name: ["Aya"]
+  grade_level: ["G4"]
+  home_languages: [["ar"]]
+  "cefr_snapshot.listening": ["A1+"]
+must_verify:
+  - grade_level
+never_verify:
+  - trauma_flag   # HARD rule — must be needs_confirmation at most, never verified,
+                   # regardless of how clearly the text states it

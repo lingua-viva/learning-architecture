@@ -1,0 +1,11 @@
+# Ground truth for notes_ambiguous.txt — no student is even named, no grade,
+# no CEFR level. Tests that the engine doesn't invent a student profile from
+# a vague note.
+acceptable:
+  display_name: []
+  grade_level: []
+must_verify: []
+never_verify:
+  - display_name
+  - grade_level
+  - trauma_flag

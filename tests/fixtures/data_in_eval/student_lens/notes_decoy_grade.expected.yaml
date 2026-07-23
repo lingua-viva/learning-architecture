@@ -1,0 +1,13 @@
+# Ground truth for notes_decoy_grade.txt — Sofia is invented. The text
+# mentions BOTH "Grade 2" (a reference to last year) and "Grade 3" (her
+# current, actual grade) — both literally appear in the text, so a purely
+# deterministic grounding check cannot tell them apart. This is the real test
+# of whether the LLM proposal+verification layer disambiguates correctly.
+# G2 verifying would be a genuine, meaningful hard-check failure — not a
+# fixture-authoring mistake like earlier rounds.
+acceptable:
+  grade_level: ["G3"]
+  home_languages: [["es"]]
+must_verify: []          # not required for recall — this fixture exists to test safety, not recall
+never_verify:
+  - trauma_flag
