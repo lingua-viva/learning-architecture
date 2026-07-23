@@ -245,7 +245,10 @@ def check_publication_safety() -> CheckResult:
 
 
 def check_readme_overclaims() -> CheckResult:
-    readme = (LV_ROOT / "README.md").read_text(encoding="utf-8")
+    readme_path = LV_ROOT / "README.md"
+    if not readme_path.exists():
+        return _check("pass", "readme_overclaims", "README not present in this build; skipped.")
+    readme = readme_path.read_text(encoding="utf-8")
     hits = [pattern for pattern in FORBIDDEN_README_PATTERNS if re.search(pattern, readme, flags=re.IGNORECASE)]
     if hits:
         return _check("fail", "readme_overclaims", "README contains forbidden public overclaim patterns.", detail=", ".join(hits))

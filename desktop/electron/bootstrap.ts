@@ -356,9 +356,15 @@ export function startBackend(repoRoot: string, port = DEFAULT_PORT, pythonComman
       PYTHONUNBUFFERED: "1",
       LV_DESKTOP: "1"
     },
-    stdio: "pipe",
+    stdio: ["pipe", "pipe", "pipe"],
     windowsHide: true
   });
+
+  // CRITICAL: drain stdout/stderr so the OS pipe buffer never fills.
+  // An undrained pipe causes the Python process to block on write() and
+  // deadlock the entire event loop (diagnosed in v0.2.4 install report).
+  child.stdout?.resume();
+  child.stderr?.resume();
 
   return {
     process: child,

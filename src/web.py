@@ -160,8 +160,13 @@ async def icon_asset(name: str):
 
 @app.get("/api/health")
 async def health():
-    from doctor.support_loop.doctor import run_doctor
-    return await asyncio.to_thread(run_doctor)
+    try:
+        from doctor.support_loop.doctor import run_doctor
+        return await asyncio.to_thread(run_doctor)
+    except Exception as e:
+        # Never let the health endpoint crash — a crashing health probe
+        # fills stdio pipes and deadlocks the Electron wrapper (Bug 2, v0.2.4 report).
+        return {"status": "degraded", "error": str(e)}
 
 
 def _student_db_path() -> Path:
