@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -16,6 +17,22 @@ from .schemas import CheckResult, utc_now, worst_status
 EXPECTED_BRANCHES = ("main", "LINGUA-VIVA-UPDATE")
 EXPECTED_BRANCH = EXPECTED_BRANCHES[0]
 MANUAL_DOCX = "Manuale_Italiano_Laboratorio_Linguistico_G1-G5.docx"
+
+# Files/checks that only make sense against the authoring git repo — never shipped
+# in the packaged desktop build (see desktop/package.json extraResources.filter).
+# bootstrap.ts has set LV_DESKTOP=1 on the spawned server since v0.2.x; nothing
+# read it until now, so every desktop install permanently reported BLOCKED.
+DESKTOP_EXCLUDED_FILES = {
+    "README.md",
+    MANUAL_DOCX,
+    "dev/specs/LV_PUBLICATION_READINESS_AUDIT_2026-07-16.md",
+    "dev/lv_revision_log.ndjson",
+    "dev/lv_deferred_candidates.yaml",
+}
+
+
+def _desktop_mode() -> bool:
+    return os.environ.get("LV_DESKTOP") == "1"
 
 REQUIRED_FILES = [
     "README.md",
@@ -132,7 +149,14 @@ def _load_yaml(rel: str) -> tuple[dict[str, Any] | None, str | None]:
 
 def check_branch() -> CheckResult:
     code, output = _git(["branch", "--show-current"])
-    branch = output.strip() if code == 0 else "unknown"
+    if code != 0:
+        if _desktop_mode():
+            # A packaged build never has a .git dir, on any machine, ever — this
+            # isn't a transient thing to warn about, it's the permanent, expected
+            # shape of a desktop install. Don't make "System: WARN" the norm.
+            return _check("pass", "branch", "Not a git checkout (desktop build).", "recommended", output)
+        return _check("warn", "branch", "Could not read branch (not a git checkout).", "recommended", output)
+    branch = output.strip()
     if branch in EXPECTED_BRANCHES:
         return _check("pass", "branch", f"Branch is allowed: {branch}.", detail=branch)
     expected = " or ".join(EXPECTED_BRANCHES)
@@ -141,15 +165,23 @@ def check_branch() -> CheckResult:
 
 def check_required_files() -> list[CheckResult]:
     checks: list[CheckResult] = []
+    desktop = _desktop_mode()
     for rel in REQUIRED_FILES:
         path = LV_ROOT / rel
-        checks.append(_check("pass" if path.exists() else "fail", f"required_file:{rel}", f"Required file present: {rel}" if path.exists() else f"Required file missing: {rel}"))
+        if path.exists():
+            checks.append(_check("pass", f"required_file:{rel}", f"Required file present: {rel}"))
+        elif desktop and rel in DESKTOP_EXCLUDED_FILES:
+            checks.append(_check("pass", f"required_file:{rel}", "Not shipped in desktop build; skipped.", "recommended"))
+        else:
+            checks.append(_check("fail", f"required_file:{rel}", f"Required file missing: {rel}"))
     return checks
 
 
 def check_lingua_viva_worktree() -> CheckResult:
     code, output = _git(["status", "--short", "--", _rel(".")])
     if code != 0:
+        if _desktop_mode():
+            return _check("pass", "worktree_status", "Not a git checkout (desktop build).", "recommended", output)
         return _check("warn", "worktree_status", "Could not read Lingua Viva package git status.", "recommended", output)
     lines = [line for line in output.splitlines() if line.strip()]
     if not lines:
@@ -158,6 +190,10 @@ def check_lingua_viva_worktree() -> CheckResult:
 
 
 def check_docx_not_modified() -> CheckResult:
+    if _desktop_mode() and not (LV_ROOT / MANUAL_DOCX).exists():
+        # The .docx is deliberately excluded from the desktop bundle
+        # (desktop/package.json extraResources filter) — nothing to diff.
+        return _check("pass", "docx_no_diff", "Not shipped in desktop build; skipped.", "recommended")
     rel = _rel(MANUAL_DOCX)
     code, output = _git(["status", "--short", "--", rel])
     if code != 0:
@@ -172,7 +208,12 @@ def check_docx_not_modified() -> CheckResult:
 
 def check_yaml_files() -> list[CheckResult]:
     checks: list[CheckResult] = []
+    desktop = _desktop_mode()
     for rel in YAML_FILES:
+        path = LV_ROOT / rel
+        if desktop and rel in DESKTOP_EXCLUDED_FILES and not path.exists():
+            checks.append(_check("pass", f"yaml:{rel}", "Not shipped in desktop build; skipped.", "recommended"))
+            continue
         data, error = _load_yaml(rel)
         if error:
             checks.append(_check("fail", f"yaml:{rel}", f"YAML parse failed: {rel}", detail=error))
@@ -183,6 +224,8 @@ def check_yaml_files() -> list[CheckResult]:
 
 def check_revision_log_schema() -> CheckResult:
     path = LV_ROOT / "dev/lv_revision_log.ndjson"
+    if _desktop_mode() and not path.exists():
+        return _check("pass", "revision_log_schema", "Revision log not shipped in desktop build; skipped.", "recommended")
     try:
         lines = [line for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
         if not lines:
@@ -202,6 +245,11 @@ def check_revision_log_schema() -> CheckResult:
 
 
 def check_artifact_gauntlet() -> CheckResult:
+    if _desktop_mode():
+        # The gauntlet is a publication/authoring-repo gate (README wording, revision
+        # log schema, reference-doc presence) — meaningless against a packaged build
+        # that intentionally ships none of those files.
+        return _check("pass", "lv_artifact_gauntlet", "Publication gauntlet is an authoring-repo check; skipped in desktop build.", "recommended")
     script = LV_ROOT / "doctor/lv_artifact_gauntlet.py"
     completed = subprocess.run(["python3", str(script)], cwd=REPO_ROOT, text=True, capture_output=True, check=False)
     output = redact_text("\n".join(part for part in (completed.stdout, completed.stderr) if part).strip())
