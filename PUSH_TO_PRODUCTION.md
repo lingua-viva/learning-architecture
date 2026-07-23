@@ -324,3 +324,89 @@ time (Rule 1), followed by discovering the live desktop download (`desktop-v0.2.
 ad-hoc-signed and would have failed Gatekeeper live in front of the demo audience (Rule 2). This
 class of error — "looks green, actually broken" — had reportedly recurred 20-30 times before this
 doc existed. If it recurs again, the gap is in this doc, not in memory; fix the doc.*
+
+
+---
+
+## The Onboarding Flow (what happens AFTER the download works)
+
+The desktop app runs a setup wizard on first launch. This wizard has failed on every Mac tested
+until v0.2.5. These are the requirements for the wizard to succeed — if any regress, the app
+will show "Server did not start" even if the download/signing/notarization are perfect.
+
+### The flow (in order)
+
+```
+1. Detect Python (checkPython)
+2. If missing → download .pkg → open → poll until detected
+3. Detect Ollama (checkOllama via HTTP localhost:11434)
+4. If missing → download → install → poll (or skip)
+5. Install pip dependencies (installPythonDeps — 4-strategy cascade)
+6. Start server (startBackend — spawn web.py on port 8787)
+7. Poll /api/health until 200
+8. Load the app UI
+```
+
+### What breaks it (all proven on real machines, 2026-07-22)
+
+| Failure | Root Cause | How We Fixed It |
+|---|---|---|
+| "Install Python" opens browser, user stuck | macOS handler just called `shell.openExternal` | Download .pkg directly + open + auto-poll |
+| Asks to install Python when already installed | Electron PATH doesn't include `/usr/local/bin` | `detectPythonBroad()` checks 5 macOS paths |
+| Ollama detected as missing when it's running | Checked CLI (`ollama --version`) not daemon | Check HTTP `localhost:11434/api/tags` first |
+| pip install fails silently | macOS Python has no SSL certs + PEP 668 | 4-strategy cascade: `--break-system-packages` + `--trusted-host` |
+| Server starts but health returns 500 | `run_doctor()` reads `README.md` which isn't in packaged app | try/except on health endpoint + skip check if file missing |
+| Server hangs permanently after ~10 seconds | Electron doesn't read stdout/stderr, pipe buffer fills | `child.stdout.resume()` + `child.stderr.resume()` |
+| Retry restarts entire wizard (re-asks Python/Ollama) | `runSetupFlow()` called from scratch on server exit | Only retry the server start, not the whole wizard |
+| Port 8787 "already in use" on retry | Previous server process still dying | `lsof + kill -9` before each spawn |
+
+### Rules for not breaking the onboarding
+
+1. **`/api/health` must NEVER crash.** It's the readiness probe. Wrap it in try/except permanently.
+   A health endpoint that raises = app that won't open.
+
+2. **Any file read in `run_doctor()` or health checks must check `exists()` first.** The packaged
+   app (`Contents/Resources/app/`) does NOT contain README.md, `.git/`, or other repo-only files.
+   Every doctor check must degrade gracefully in packaged mode.
+
+3. **pip install must handle the SSL-less Python.** `python.org` .pkg installs ship without root
+   CA certs. The `--trusted-host` fallback is required. Do not remove it.
+
+4. **Python detection must check macOS-specific paths**, not just PATH. The Electron process
+   inherits a minimal PATH that often doesn't include `/usr/local/bin` or `/Library/Frameworks/`.
+
+5. **Stdio pipes must always be drained.** If you spawn a child process with `stdio: "pipe"`,
+   attach `.on("data")` handlers OR call `.resume()`. An undrained pipe deadlocks the child after
+   64KB of output.
+
+6. **Don't re-run the full setup wizard on server crash.** Only retry the server start. The user
+   already answered the Python/Ollama questions — don't ask again.
+
+### How to verify the onboarding after changes
+
+```bash
+# On a Mac with Python already installed:
+# - Open the app → wizard should show Python ✓ immediately (no install prompt)
+# - Ollama ✓ if running, or skip option if not
+# - Server starts → app loads
+
+# Backend health check (from Terminal while app is running):
+curl -s http://127.0.0.1:8787/api/health | python3 -c "import sys,json; r=json.loads(sys.stdin.read()); print(r.get('status','healthy'))"
+# Must return something (even "degraded") — never hang, never 500
+
+# After quitting the app:
+lsof -i :8787
+# Must be empty — no orphaned Python processes
+```
+
+### Files that control the onboarding
+
+| File | What it does |
+|---|---|
+| `desktop/electron/main.ts` | Setup flow, Python/Ollama detection, install handlers |
+| `desktop/electron/bootstrap.ts` | `checkPython`, `checkOllama`, `installPythonDeps`, `startBackend` |
+| `desktop/electron/setup-wizard.html` | Wizard UI states and button actions |
+| `src/web.py` | The backend server (health endpoint at `/api/health`) |
+| `doctor/support_loop/doctor.py` | Health checks (must never crash in packaged mode) |
+
+---
