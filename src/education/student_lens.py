@@ -208,6 +208,15 @@ class StudentLensStore:
 
             CREATE INDEX IF NOT EXISTS idx_obs_student
                 ON observations(student_id, recorded_at);
+
+            CREATE TABLE IF NOT EXISTS rti_decisions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                student_id TEXT NOT NULL,
+                decision TEXT NOT NULL,
+                note TEXT NOT NULL DEFAULT '',
+                decided_at TEXT NOT NULL,
+                FOREIGN KEY (student_id) REFERENCES students(student_id)
+            );
             """
         )
         self._conn.commit()
@@ -293,6 +302,25 @@ class StudentLensStore:
         self._conn.execute(
             "UPDATE students SET avoid_pairing_with = ?, updated_at = ? WHERE student_id = ?",
             (json.dumps(avoid_ids or []), _now_iso(), student_id),
+        )
+        self._conn.commit()
+
+    def record_rti_decision(self, student_id: str, decision: str, note: str = "") -> None:
+        """Record a teacher's confirm/defer decision on an RTI proposal.
+
+        This is a separate decision record, not an observation — it does NOT
+        modify rti_tier_history or the append-only observation log.
+        """
+        if decision not in ("confirm", "defer"):
+            raise ObservationValidationError(
+                f"decision must be 'confirm' or 'defer', got '{decision}'"
+            )
+        row = self._get_student_row(student_id)
+        if row is None:
+            raise LensNotFoundError(student_id)
+        self._conn.execute(
+            "INSERT INTO rti_decisions (student_id, decision, note, decided_at) VALUES (?, ?, ?, ?)",
+            (student_id, decision, note, _now_iso()),
         )
         self._conn.commit()
 
