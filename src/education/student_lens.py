@@ -126,35 +126,44 @@ def support_profile_default() -> dict:
     }
 
 
-def _normalize_support_profile(raw: str | dict | None) -> dict:
+def _normalize_support_profile_with_warnings(raw: str | dict | None) -> tuple[dict, list[str]]:
     default = support_profile_default()
+    warnings = []
     if not raw:
-        return default
+        return default, warnings
     if isinstance(raw, str):
         try:
             sp = json.loads(raw)
         except Exception:
-            return default
+            return default, ["support_profile contained invalid JSON; default v2 profile returned"]
     elif isinstance(raw, dict):
         sp = raw
     else:
-        return default
+        return default, ["support_profile had an invalid storage type; default v2 profile returned"]
 
     if not isinstance(sp, dict):
-        return default
+        return default, ["support_profile root was not an object; default v2 profile returned"]
 
     categories = sp.get("categories")
     if not isinstance(categories, dict):
         categories = {}
+        warnings.append("support_profile categories were missing or invalid; defaults filled")
 
     normalized_categories = {}
     for cat_id in SUPPORT_CATEGORY_IDS:
         cat_data = categories.get(cat_id)
         if not isinstance(cat_data, dict):
             cat_data = {}
+            warnings.append(
+                f"support_profile category '{cat_id}' was missing or invalid; defaults filled"
+            )
         normalized_categories[cat_id] = {
             "needs": cat_data.get("needs") if isinstance(cat_data.get("needs"), list) else [],
-            "strengths": cat_data.get("strengths") if isinstance(cat_data.get("strengths"), list) else [],
+            "strengths": (
+                cat_data.get("strengths")
+                if isinstance(cat_data.get("strengths"), list)
+                else []
+            ),
             "strategies_worked": (
                 cat_data.get("strategies_worked")
                 if isinstance(cat_data.get("strategies_worked"), list)
@@ -165,7 +174,11 @@ def _normalize_support_profile(raw: str | dict | None) -> dict:
                 if isinstance(cat_data.get("strategies_not_worked"), list)
                 else []
             ),
-            "evidence": cat_data.get("evidence") if isinstance(cat_data.get("evidence"), list) else [],
+            "evidence": (
+                cat_data.get("evidence")
+                if isinstance(cat_data.get("evidence"), list)
+                else []
+            ),
             "open_questions": (
                 cat_data.get("open_questions")
                 if isinstance(cat_data.get("open_questions"), list)
@@ -173,12 +186,34 @@ def _normalize_support_profile(raw: str | dict | None) -> dict:
             ),
         }
 
-    return {
-        "schema_version": 2,
-        "categories": normalized_categories,
-        "last_reviewed_at": sp.get("last_reviewed_at"),
-        "last_reviewed_by": sp.get("last_reviewed_by"),
-    }
+        for bucket in (*VALID_SUPPORT_BUCKETS, "evidence"):
+            if bucket in cat_data and not isinstance(cat_data.get(bucket), list):
+                warnings.append(
+                    f"support_profile category '{cat_id}' bucket '{bucket}' was invalid; "
+                    "defaulted to []"
+                )
+
+    return (
+        {
+            "schema_version": 2,
+            "categories": normalized_categories,
+            "last_reviewed_at": sp.get("last_reviewed_at"),
+            "last_reviewed_by": sp.get("last_reviewed_by"),
+        },
+        warnings,
+    )
+
+
+def _normalize_support_profile(raw: str | dict | None) -> dict:
+    return _normalize_support_profile_with_warnings(raw)[0]
+
+
+def _validate_non_empty_string(value: Optional[str], field_name: str) -> Optional[str]:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field_name} must be a non-empty string")
+    return value.strip()
 
 
 def _validate_source_ref_ids(source_ref_ids: Optional[list[str]]) -> list[str]:
@@ -202,6 +237,8 @@ def _validate_support_entry(entry: dict) -> None:
         raise ValueError(
             f"Invalid confidence '{confidence}'. Allowed: {VALID_CONFIDENCE_VALUES}"
         )
+    _validate_non_empty_string(entry.get("created_by"), "created_by")
+    _validate_non_empty_string(entry.get("source_observation_id"), "source_observation_id")
     _validate_source_ref_ids(entry.get("source_ref_ids"))
 
 
@@ -216,6 +253,8 @@ def _validate_support_evidence(item: dict) -> None:
         raise ValueError(
             f"Invalid evidence_type '{evidence_type}'. Allowed: {VALID_EVIDENCE_TYPES}"
         )
+    _validate_non_empty_string(item.get("created_by"), "created_by")
+    _validate_non_empty_string(item.get("source_observation_id"), "source_observation_id")
     _validate_source_ref_ids(item.get("source_ref_ids"))
 
 
@@ -805,6 +844,7 @@ class StudentLensStore:
         if row is None:
             raise LensNotFoundError(student_id)
         _validate_support_profile(profile)
+        reviewed_by = _validate_non_empty_string(reviewed_by, "reviewed_by")
 
         now = _now_iso()
         normalized = _normalize_support_profile(profile)
@@ -850,6 +890,10 @@ class StudentLensStore:
             raise ValueError(
                 f"Invalid confidence '{confidence}'. Allowed: {VALID_CONFIDENCE_VALUES}"
             )
+        created_by = _validate_non_empty_string(created_by, "created_by")
+        source_observation_id = _validate_non_empty_string(
+            source_observation_id, "source_observation_id"
+        )
 
         row = self._get_student_row(student_id, include_deleted=False)
         if row is None:
@@ -902,6 +946,10 @@ class StudentLensStore:
             raise ValueError(
                 f"Invalid evidence_type '{evidence_type}'. Allowed: {VALID_EVIDENCE_TYPES}"
             )
+        created_by = _validate_non_empty_string(created_by, "created_by")
+        source_observation_id = _validate_non_empty_string(
+            source_observation_id, "source_observation_id"
+        )
 
         row = self._get_student_row(student_id, include_deleted=False)
         if row is None:
@@ -956,7 +1004,9 @@ class StudentLensStore:
         d["cefr_snapshot"] = json.loads(d["cefr_snapshot"])
         d["sel_summary"] = json.loads(d["sel_summary"])
         raw_sp = d.get("support_profile")
-        d["support_profile"] = _normalize_support_profile(raw_sp)
+        d["support_profile"], d["support_profile_warnings"] = (
+            _normalize_support_profile_with_warnings(raw_sp)
+        )
         d["deleted"] = bool(d["deleted"])
         return d
 

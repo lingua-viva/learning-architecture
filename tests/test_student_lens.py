@@ -9,6 +9,7 @@ Test: RTI escalation rules (A-E) trigger on the conditions they specify
 Test: soft delete hides from get_lens but export/hard-delete still work
 """
 
+import json
 import sys
 import tempfile
 from pathlib import Path
@@ -331,6 +332,22 @@ def test_malformed_support_json_degrades_to_default(store):
     lens = store.get_lens(sid)
     assert lens["support_profile"]["schema_version"] == 2
     assert len(lens["support_profile"]["categories"]) == 8
+    assert lens["support_profile_warnings"]
+
+
+def test_malformed_support_bucket_warns_and_defaults(store):
+    sid = store.create_lens(display_name="Bad Bucket")
+    bad_profile = store.support_profile_default()
+    bad_profile["categories"]["social_skills"]["needs"] = "not-a-list"
+    store._conn.execute(
+        "UPDATE students SET support_profile = ? WHERE student_id = ?",
+        (json.dumps(bad_profile), sid),
+    )
+    store._conn.commit()
+
+    lens = store.get_lens(sid)
+    assert lens["support_profile"]["categories"]["social_skills"]["needs"] == []
+    assert any("social_skills" in warning for warning in lens["support_profile_warnings"])
 
 
 def test_add_support_entry_increments_profile_version(store):
@@ -451,3 +468,28 @@ def test_replace_support_profile_rejects_invalid_evidence_type(store):
     )
     with pytest.raises(ValueError, match="Invalid evidence_type"):
         store.replace_support_profile(sid, profile, reviewed_by="t1")
+
+
+def test_add_support_entry_rejects_missing_created_by(store):
+    sid = store.create_lens()
+    with pytest.raises(ValueError, match="created_by"):
+        store.add_support_entry(
+            student_id=sid,
+            category_id="learning_and_cognition",
+            bucket="needs",
+            text="Needs manipulatives.",
+            created_by="",
+        )
+
+
+def test_add_support_entry_rejects_invalid_source_refs(store):
+    sid = store.create_lens()
+    with pytest.raises(ValueError, match="source_ref_ids"):
+        store.add_support_entry(
+            student_id=sid,
+            category_id="learning_and_cognition",
+            bucket="needs",
+            text="Needs manipulatives.",
+            created_by="t1",
+            source_ref_ids=["valid", ""],
+        )
