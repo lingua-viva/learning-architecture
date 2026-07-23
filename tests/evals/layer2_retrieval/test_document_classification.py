@@ -10,47 +10,58 @@ from pathlib import Path
 
 import pytest
 
+from src.education.teacher_lens_builder import TeacherLensBuilder
 from src.lingua_viva.ingest import ALLOWED_DOC_TYPES, BLOCKED_DOC_TYPES, ingest_document
 
 
-SKIP_CLASSIFY = "awaiting TeacherLensBuilder.classify() implementation"
-
-
-@pytest.mark.skip(reason=SKIP_CLASSIFY)
 def test_L2_CLASS_001_graded_exam_classified(teacher_history_dir):
     """L2-CLASS-001: System classifies graded exam correctly.
 
     Pass: classify(graded_exam_g3_u1.json).doc_type == "exam"
     Calls: TeacherLensBuilder.classify(file_path)
     """
-    pass
+    with tempfile.TemporaryDirectory() as tmp:
+        builder = TeacherLensBuilder("teacher-eval", Path(tmp))
+        result = builder.classify(teacher_history_dir / "graded_exam_g3_u1.json")
+        assert result.doc_type == "exam"
+        assert result.confidence > 0.0
+        assert result.signals
 
 
-@pytest.mark.skip(reason=SKIP_CLASSIFY)
 def test_L2_CLASS_002_parent_update_classified(teacher_history_dir):
     """L2-CLASS-002: System classifies parent update correctly.
 
     Pass: classify(parent_update_marco.json).doc_type == "parent_update"
     """
-    pass
+    with tempfile.TemporaryDirectory() as tmp:
+        builder = TeacherLensBuilder("teacher-eval", Path(tmp))
+        result = builder.classify(teacher_history_dir / "parent_update_marco.json")
+        assert result.doc_type == "parent_update"
+        assert result.confidence > 0.0
 
 
-@pytest.mark.skip(reason=SKIP_CLASSIFY)
 def test_L2_CLASS_003_lesson_plan_classified(teacher_history_dir):
     """L2-CLASS-003: System classifies lesson plan correctly.
 
     Pass: classify(lesson_plan_g3_u1.json).doc_type == "lesson_plan"
     """
-    pass
+    with tempfile.TemporaryDirectory() as tmp:
+        builder = TeacherLensBuilder("teacher-eval", Path(tmp))
+        result = builder.classify(teacher_history_dir / "lesson_plan_g3_u1.json")
+        assert result.doc_type == "lesson_plan"
+        assert result.confidence > 0.0
 
 
-@pytest.mark.skip(reason=SKIP_CLASSIFY)
 def test_L2_CLASS_004_evaluation_classified(teacher_history_dir):
     """L2-CLASS-004: System classifies student evaluation correctly.
 
     Pass: classify(student_evaluation_q1.json).doc_type == "evaluation"
     """
-    pass
+    with tempfile.TemporaryDirectory() as tmp:
+        builder = TeacherLensBuilder("teacher-eval", Path(tmp))
+        result = builder.classify(teacher_history_dir / "student_evaluation_q1.json")
+        assert result.doc_type == "evaluation"
+        assert result.confidence > 0.0
 
 
 def test_L2_CLASS_005_student_records_blocked():

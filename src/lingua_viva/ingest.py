@@ -6,7 +6,10 @@ from pathlib import Path
 
 DOCUMENT_STORE_PATH: Path | None = None
 
-ALLOWED_DOC_TYPES = {"curriculum", "organizational"}
+ALLOWED_DOC_TYPES = {
+    "curriculum", "organizational",
+    "exam", "parent_update", "evaluation", "lesson_plan", "rubric",
+}
 BLOCKED_DOC_TYPES = {"student-records"}
 
 

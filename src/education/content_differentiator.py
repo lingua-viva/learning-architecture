@@ -526,6 +526,74 @@ class ContentDifferentiator:
         chunks = retriever.retrieve(search_query, domain=domain, k=k)
         return self.generate(lesson, source_chunks=chunks or None)
 
+    def generate_with_teacher_lens(
+        self,
+        lesson: LessonInput,
+        teacher_lens,
+        retriever=None,
+        domain: str = "curriculum",
+    ) -> ContentPack:
+        """
+        Generate a pack that matches this specific teacher's style, per
+        tests/evals/CONTRACTS.md Section 2. Layers a TeacherLens
+        (src/education/teacher_lens_builder.py) on top of the normal
+        generate()/generate_from_documents() output rather than
+        reimplementing tier content from scratch — the teacher's patterns
+        (scaffolding choices, grading weights, communication register)
+        augment the same base pack every other caller gets.
+
+        Falls back to generate_from_documents() if teacher_lens is None
+        (and a retriever was supplied), or generate() if both are None —
+        a teacher with no ingested history yet must still get a pack.
+        """
+        if teacher_lens is None:
+            if retriever is None:
+                return self.generate(lesson)
+            return self.generate_from_documents(lesson, retriever, domain)
+
+        if retriever is not None:
+            base_pack = self.generate_from_documents(lesson, retriever, domain)
+        else:
+            base_pack = self.generate(lesson)
+
+        differentiation_style = getattr(teacher_lens, "differentiation_style", {}) or {}
+        grading_calibration = getattr(teacher_lens, "grading_calibration", {}) or {}
+        communication_voice = getattr(teacher_lens, "communication_voice", {}) or {}
+
+        assessment_criteria = [
+            {"criterion": name, "weight": spec.get("weight", 0.0)}
+            for name, spec in sorted(grading_calibration.items())
+        ]
+
+        tiers = {}
+        for tier_name, tier_content in base_pack.tiers.items():
+            tier_content = dict(tier_content)
+
+            scaffolding = (differentiation_style.get(tier_name) or {}).get("scaffolding") or []
+            if scaffolding:
+                tier_content["teacher_scaffolding"] = list(scaffolding)
+
+            if assessment_criteria:
+                tier_content["teacher_assessment_criteria"] = assessment_criteria
+
+            if communication_voice.get("formality"):
+                tier_content["teacher_voice"] = {
+                    "formality": communication_voice["formality"],
+                    "l1_l2_ratio": communication_voice.get("l1_l2_ratio", 0.5),
+                }
+
+            tiers[tier_name] = tier_content
+
+        return ContentPack(
+            pack_id=base_pack.pack_id,
+            lesson=base_pack.lesson,
+            generated_at=base_pack.generated_at,
+            content_version=base_pack.content_version,
+            tiers=tiers,
+            source_mode="teacher_adapted",
+            source_provenance=base_pack.source_provenance,
+        )
+
     def assign_tier_for_student(self, student_lens: dict) -> str:
         """
         Map a student's lens (as returned by
