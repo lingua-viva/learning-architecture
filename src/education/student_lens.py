@@ -59,6 +59,192 @@ VALID_CEFR_DIRECTIONS = ("progressing", "plateaued", "regressing")
 VALID_SEL_VALENCE = ("positive", "concern", "neutral")
 VALID_TEMPLATE_TYPES = ("literacy", "cefr", "sel_incident", "sel_positive", "rti_flag")
 
+SUPPORT_CATEGORY_IDS = (
+    "learning_and_cognition",
+    "communication_and_language",
+    "executive_functioning",
+    "social_skills",
+    "emotional_regulation",
+    "physical_sensory_needs",
+    "attendance_and_engagement",
+    "advanced_enrichment",
+)
+
+SUPPORT_CATEGORY_LABELS = {
+    "learning_and_cognition": "Learning and Cognition",
+    "communication_and_language": "Communication and Language",
+    "executive_functioning": "Executive Functioning",
+    "social_skills": "Social Skills",
+    "emotional_regulation": "Emotional Regulation",
+    "physical_sensory_needs": "Physical/Sensory Needs",
+    "attendance_and_engagement": "Attendance and Engagement",
+    "advanced_enrichment": "Advanced Students / Enrichment",
+}
+
+VALID_CONFIDENCE_VALUES = (
+    "teacher_confirmed",
+    "model_suggested",
+    "imported_verified",
+    "imported_needs_confirmation",
+)
+
+VALID_EVIDENCE_TYPES = (
+    "observation",
+    "slack",
+    "google_drive",
+    "local_file",
+    "report",
+    "teacher_note",
+)
+
+VALID_SUPPORT_BUCKETS = (
+    "needs",
+    "strengths",
+    "strategies_worked",
+    "strategies_not_worked",
+    "open_questions",
+)
+
+
+def support_profile_default() -> dict:
+    """Return default v2 support profile with all canonical categories initialized."""
+    return {
+        "schema_version": 2,
+        "categories": {
+            cat_id: {
+                "needs": [],
+                "strengths": [],
+                "strategies_worked": [],
+                "strategies_not_worked": [],
+                "evidence": [],
+                "open_questions": [],
+            }
+            for cat_id in SUPPORT_CATEGORY_IDS
+        },
+        "last_reviewed_at": None,
+        "last_reviewed_by": None,
+    }
+
+
+def _normalize_support_profile(raw: str | dict | None) -> dict:
+    default = support_profile_default()
+    if not raw:
+        return default
+    if isinstance(raw, str):
+        try:
+            sp = json.loads(raw)
+        except Exception:
+            return default
+    elif isinstance(raw, dict):
+        sp = raw
+    else:
+        return default
+
+    if not isinstance(sp, dict):
+        return default
+
+    categories = sp.get("categories")
+    if not isinstance(categories, dict):
+        categories = {}
+
+    normalized_categories = {}
+    for cat_id in SUPPORT_CATEGORY_IDS:
+        cat_data = categories.get(cat_id)
+        if not isinstance(cat_data, dict):
+            cat_data = {}
+        normalized_categories[cat_id] = {
+            "needs": cat_data.get("needs") if isinstance(cat_data.get("needs"), list) else [],
+            "strengths": cat_data.get("strengths") if isinstance(cat_data.get("strengths"), list) else [],
+            "strategies_worked": (
+                cat_data.get("strategies_worked")
+                if isinstance(cat_data.get("strategies_worked"), list)
+                else []
+            ),
+            "strategies_not_worked": (
+                cat_data.get("strategies_not_worked")
+                if isinstance(cat_data.get("strategies_not_worked"), list)
+                else []
+            ),
+            "evidence": cat_data.get("evidence") if isinstance(cat_data.get("evidence"), list) else [],
+            "open_questions": (
+                cat_data.get("open_questions")
+                if isinstance(cat_data.get("open_questions"), list)
+                else []
+            ),
+        }
+
+    return {
+        "schema_version": 2,
+        "categories": normalized_categories,
+        "last_reviewed_at": sp.get("last_reviewed_at"),
+        "last_reviewed_by": sp.get("last_reviewed_by"),
+    }
+
+
+def _validate_source_ref_ids(source_ref_ids: Optional[list[str]]) -> list[str]:
+    if source_ref_ids is None:
+        return []
+    if not isinstance(source_ref_ids, list) or not all(
+        isinstance(item, str) and item.strip() for item in source_ref_ids
+    ):
+        raise ValueError("source_ref_ids must be a list of non-empty strings")
+    return source_ref_ids
+
+
+def _validate_support_entry(entry: dict) -> None:
+    if not isinstance(entry, dict):
+        raise ValueError("support profile entries must be objects")
+    text = entry.get("text")
+    if not (isinstance(text, str) and text.strip() and len(text) <= 2000):
+        raise ValueError("Entry text must be non-empty and <= 2000 characters")
+    confidence = entry.get("confidence", "teacher_confirmed")
+    if confidence not in VALID_CONFIDENCE_VALUES:
+        raise ValueError(
+            f"Invalid confidence '{confidence}'. Allowed: {VALID_CONFIDENCE_VALUES}"
+        )
+    _validate_source_ref_ids(entry.get("source_ref_ids"))
+
+
+def _validate_support_evidence(item: dict) -> None:
+    if not isinstance(item, dict):
+        raise ValueError("support profile evidence items must be objects")
+    summary = item.get("summary")
+    if not (isinstance(summary, str) and summary.strip() and len(summary) <= 2000):
+        raise ValueError("Evidence summary must be non-empty and <= 2000 characters")
+    evidence_type = item.get("evidence_type", "observation")
+    if evidence_type not in VALID_EVIDENCE_TYPES:
+        raise ValueError(
+            f"Invalid evidence_type '{evidence_type}'. Allowed: {VALID_EVIDENCE_TYPES}"
+        )
+    _validate_source_ref_ids(item.get("source_ref_ids"))
+
+
+def _validate_support_profile(profile: dict) -> None:
+    if not isinstance(profile, dict):
+        raise ValueError("profile must be a dictionary")
+    cats = profile.get("categories", {})
+    if not isinstance(cats, dict):
+        raise ValueError("support profile categories must be a dictionary")
+    for cat_id, cat_data in cats.items():
+        if cat_id not in SUPPORT_CATEGORY_IDS:
+            raise ValueError(
+                f"Unknown category ID '{cat_id}'. Allowed: {SUPPORT_CATEGORY_IDS}"
+            )
+        if not isinstance(cat_data, dict):
+            raise ValueError("support profile category values must be objects")
+        for bucket in VALID_SUPPORT_BUCKETS:
+            items = cat_data.get(bucket, [])
+            if not isinstance(items, list):
+                raise ValueError(f"{bucket} must be a list")
+            for entry in items:
+                _validate_support_entry(entry)
+        evidence = cat_data.get("evidence", [])
+        if not isinstance(evidence, list):
+            raise ValueError("evidence must be a list")
+        for item in evidence:
+            _validate_support_evidence(item)
+
+
 
 class LensNotFoundError(Exception):
     """Raised when an operation targets a student_id with no lens."""
@@ -156,6 +342,10 @@ class StudentLensStore:
     def __exit__(self, *_exc) -> None:
         self.close()
 
+    @staticmethod
+    def support_profile_default() -> dict:
+        return support_profile_default()
+
     # ------------------------------------------------------------------
     # Schema
     # ------------------------------------------------------------------
@@ -177,6 +367,7 @@ class StudentLensStore:
                 cefr_snapshot TEXT NOT NULL DEFAULT '{}',
                 cefr_trajectory_30d TEXT NOT NULL DEFAULT 'insufficient_data',
                 sel_summary TEXT NOT NULL DEFAULT '{}',
+                support_profile TEXT NOT NULL DEFAULT '{}',
                 profile_version INTEGER NOT NULL DEFAULT 1,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
@@ -219,6 +410,13 @@ class StudentLensStore:
             );
             """
         )
+        cursor = self._conn.cursor()
+        cursor.execute("PRAGMA table_info(students)")
+        columns = [row[1] for row in cursor.fetchall()]
+        if "support_profile" not in columns:
+            self._conn.execute(
+                "ALTER TABLE students ADD COLUMN support_profile TEXT NOT NULL DEFAULT '{}'"
+            )
         self._conn.commit()
 
     # ------------------------------------------------------------------
@@ -251,9 +449,9 @@ class StudentLensStore:
                 home_languages, learning_differences, trauma_flag,
                 avoid_pairing_with,
                 rti_current_tier, rti_tier_history, cefr_snapshot,
-                cefr_trajectory_30d, sel_summary, profile_version,
-                created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+                cefr_trajectory_30d, sel_summary, support_profile,
+                profile_version, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
             """,
             (
                 student_id,
@@ -278,6 +476,7 @@ class StudentLensStore:
                         "last_urgency_flag": None,
                     }
                 ),
+                json.dumps(support_profile_default()),
                 now,
                 now,
             ),
@@ -589,6 +788,152 @@ class StudentLensStore:
         return lens
 
     # ------------------------------------------------------------------
+    # Support profile v2 methods
+    # ------------------------------------------------------------------
+
+    def get_support_profile(self, student_id: str) -> dict:
+        row = self._get_student_row(student_id, include_deleted=False)
+        if row is None:
+            raise LensNotFoundError(student_id)
+        lens = self._row_to_lens_dict(row)
+        return lens["support_profile"]
+
+    def replace_support_profile(
+        self, student_id: str, profile: dict, reviewed_by: Optional[str] = None
+    ) -> dict:
+        row = self._get_student_row(student_id, include_deleted=False)
+        if row is None:
+            raise LensNotFoundError(student_id)
+        _validate_support_profile(profile)
+
+        now = _now_iso()
+        normalized = _normalize_support_profile(profile)
+        normalized["last_reviewed_at"] = now
+        if reviewed_by is not None:
+            normalized["last_reviewed_by"] = reviewed_by
+
+        self._conn.execute(
+            """
+            UPDATE students SET
+                support_profile = ?,
+                profile_version = profile_version + 1,
+                updated_at = ?
+            WHERE student_id = ?
+            """,
+            (json.dumps(normalized), now, student_id),
+        )
+        self._conn.commit()
+        return normalized
+
+    def add_support_entry(
+        self,
+        student_id: str,
+        category_id: str,
+        bucket: str,
+        text: str,
+        created_by: str,
+        source_observation_id: Optional[str] = None,
+        source_ref_ids: Optional[list[str]] = None,
+        confidence: str = "teacher_confirmed",
+    ) -> dict:
+        if category_id not in SUPPORT_CATEGORY_IDS:
+            raise ValueError(
+                f"Unknown category ID '{category_id}'. Allowed: {SUPPORT_CATEGORY_IDS}"
+            )
+        if bucket not in VALID_SUPPORT_BUCKETS:
+            raise ValueError(
+                f"Unknown bucket '{bucket}'. Allowed: {VALID_SUPPORT_BUCKETS}"
+            )
+        if not (isinstance(text, str) and text.strip() and len(text) <= 2000):
+            raise ValueError("Entry text must be non-empty and <= 2000 characters")
+        if confidence not in VALID_CONFIDENCE_VALUES:
+            raise ValueError(
+                f"Invalid confidence '{confidence}'. Allowed: {VALID_CONFIDENCE_VALUES}"
+            )
+
+        row = self._get_student_row(student_id, include_deleted=False)
+        if row is None:
+            raise LensNotFoundError(student_id)
+
+        sp = self._row_to_lens_dict(row)["support_profile"]
+        entry = {
+            "id": str(uuid.uuid4()),
+            "text": text,
+            "created_at": _now_iso(),
+            "created_by": created_by,
+            "source_observation_id": source_observation_id,
+            "source_ref_ids": _validate_source_ref_ids(source_ref_ids),
+            "confidence": confidence,
+            "active": True,
+        }
+        sp["categories"][category_id][bucket].append(entry)
+
+        now = _now_iso()
+        self._conn.execute(
+            """
+            UPDATE students SET
+                support_profile = ?,
+                profile_version = profile_version + 1,
+                updated_at = ?
+            WHERE student_id = ?
+            """,
+            (json.dumps(sp), now, student_id),
+        )
+        self._conn.commit()
+        return sp
+
+    def add_support_evidence(
+        self,
+        student_id: str,
+        category_id: str,
+        summary: str,
+        created_by: str,
+        evidence_type: str = "observation",
+        source_observation_id: Optional[str] = None,
+        source_ref_ids: Optional[list[str]] = None,
+    ) -> dict:
+        if category_id not in SUPPORT_CATEGORY_IDS:
+            raise ValueError(
+                f"Unknown category ID '{category_id}'. Allowed: {SUPPORT_CATEGORY_IDS}"
+            )
+        if not (isinstance(summary, str) and summary.strip() and len(summary) <= 2000):
+            raise ValueError("Evidence summary must be non-empty and <= 2000 characters")
+        if evidence_type not in VALID_EVIDENCE_TYPES:
+            raise ValueError(
+                f"Invalid evidence_type '{evidence_type}'. Allowed: {VALID_EVIDENCE_TYPES}"
+            )
+
+        row = self._get_student_row(student_id, include_deleted=False)
+        if row is None:
+            raise LensNotFoundError(student_id)
+
+        sp = self._row_to_lens_dict(row)["support_profile"]
+        item = {
+            "id": str(uuid.uuid4()),
+            "summary": summary,
+            "evidence_type": evidence_type,
+            "source_observation_id": source_observation_id,
+            "source_ref_ids": _validate_source_ref_ids(source_ref_ids),
+            "created_at": _now_iso(),
+            "created_by": created_by,
+        }
+        sp["categories"][category_id]["evidence"].append(item)
+
+        now = _now_iso()
+        self._conn.execute(
+            """
+            UPDATE students SET
+                support_profile = ?,
+                profile_version = profile_version + 1,
+                updated_at = ?
+            WHERE student_id = ?
+            """,
+            (json.dumps(sp), now, student_id),
+        )
+        self._conn.commit()
+        return sp
+
+    # ------------------------------------------------------------------
     # Internal: recalculation + RTI escalation (observation-capture.md
     # Stage 3 Local Enrichment + Stage 6 RTI Escalation Logic)
     # ------------------------------------------------------------------
@@ -610,6 +955,8 @@ class StudentLensStore:
         d["rti_tier_history"] = json.loads(d["rti_tier_history"])
         d["cefr_snapshot"] = json.loads(d["cefr_snapshot"])
         d["sel_summary"] = json.loads(d["sel_summary"])
+        raw_sp = d.get("support_profile")
+        d["support_profile"] = _normalize_support_profile(raw_sp)
         d["deleted"] = bool(d["deleted"])
         return d
 
