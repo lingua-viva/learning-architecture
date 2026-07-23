@@ -30,8 +30,9 @@ REPO = Path(__file__).resolve().parent.parent
 #   v11 (2026-07-22): Slack utility view and Events API integration.
 #   v12 (2026-07-22): Slack setup-scope and network-boundary hardening.
 #   v13 (2026-07-22): convergence re-lock for combined protected UI work.
-#   v14-v15 (2026-07-22): convergence plus Observe/Ask voice workflow.
-EXPECTED_VERSION = 15
+#   v14-v18 (2026-07-22): convergence plus local-only Observe/Ask voice workflow.
+#   v19 (2026-07-22): 15-pass Observe/Ask Oka voice hardening.
+EXPECTED_VERSION = 19
 
 
 def _html() -> str:

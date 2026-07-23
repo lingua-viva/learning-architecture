@@ -862,7 +862,7 @@ def _parse_observation_proposal(content: str) -> dict:
     )
 
     proposal = _empty_observation_proposal()
-    match = re.search(r"\{.*\}", str(content or ""), flags=re.DOTALL)
+    match = re.search(r"\{.*?\}", str(content or ""), flags=re.DOTALL)
     if not match:
         return proposal
     try:
@@ -885,7 +885,7 @@ def _parse_observation_proposal(content: str) -> dict:
 
     sel_domain = parsed.get("sel_domain")
     if isinstance(sel_domain, str) and sel_domain.strip():
-        proposal["sel_domain"] = sel_domain.strip()[:80]
+        proposal["sel_domain"] = " ".join(sel_domain.split())[:80]
     if isinstance(parsed.get("urgency_flag"), bool):
         proposal["urgency_flag"] = parsed["urgency_flag"]
     return proposal
@@ -900,6 +900,7 @@ async def observe_classify(payload: dict):
         VALID_SEL_VALENCE,
         VALID_TEMPLATE_TYPES,
     )
+    from src.lingua_viva import config as lv_config
     from src.lingua_viva.reasoning import ReasoningEngine
 
     student_id = str(payload.get("student_id") or "").strip()
@@ -908,6 +909,11 @@ async def observe_classify(payload: dict):
         return JSONResponse({"error": "student_id is required"}, status_code=400)
     if not transcript:
         return JSONResponse({"error": "raw_transcript is required"}, status_code=400)
+    if len(transcript) > 4000:
+        return JSONResponse(
+            {"error": "raw_transcript must be 4000 characters or fewer"},
+            status_code=413,
+        )
 
     system_prompt = (
         "You classify one teacher observation for a form the teacher will review. "
@@ -925,22 +931,34 @@ async def observe_classify(payload: dict):
         "cefr_level_observed, cefr_direction, sel_domain, sel_valence, urgency_flag."
     )
     try:
-        result = await ReasoningEngine().reason(
-            transcript,
-            context={"domain": "observation", "student_id": "selected-local-student"},
-            system_prompt=system_prompt,
+        result = await asyncio.wait_for(
+            ReasoningEngine().reason(
+                transcript,
+                context={"domain": "observation", "student_id": "selected-local-student"},
+                model=lv_config.detect_model(),
+                system_prompt=system_prompt,
+            ),
+            timeout=15,
         )
     except Exception:
         result = None
 
+    degraded = (
+        result is None
+        or result.model_used == "none"
+        or result.confidence <= 0
+        or "appears to be down" in result.content.lower()
+        or "no model available" in result.content.lower()
+    )
     proposal = (
         _empty_observation_proposal()
-        if result is None or result.model_used == "none"
+        if degraded
         else _parse_observation_proposal(result.content)
     )
     return {
         "proposal": proposal,
-        "model_used": getattr(result, "model_used", "none"),
+        "model_used": "none" if degraded else result.model_used,
+        "suggestions_available": not degraded and any(value is not None for value in proposal.values()),
         "writes_made": 0,
         "teacher_confirmation_required": True,
     }

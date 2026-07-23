@@ -46,9 +46,13 @@
 #     precise channel scopes and path-only reverse-proxy safety guidance.
 #   v13 (2026-07-22): convergence re-lock after concurrent file-map UI
 #     accessibility/error-handling and student-assignment work landed.
-#   v14-v15 (2026-07-22): concurrent convergence plus Observe field suggestions,
-#     live lens context, and Oka-style voice interaction in Ask.
-version: 15
+#   v14-v18 (2026-07-22): concurrent convergence plus Observe field suggestions,
+#     local-only classification, live lens context, resilient Oka-style voice in Ask,
+#     and the final combined protected-file re-lock.
+#   v19 (2026-07-22): 15-pass Observe/Ask Oka voice hardening:
+#     bounded classification, truthful degrade states, resilient speech lifecycle,
+#     explicit review gates, accessibility, and visible save/network recovery.
+version: 19
 files:
   - static/index.html
   - static/sw.js

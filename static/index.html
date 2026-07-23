@@ -505,8 +505,20 @@
     const voiceRuntime = {
       recognition: null,
       listening: false,
+      busy: false,
       silenceTimer: null,
       finalText: "",
+      gotSpeech: false,
+      recognitionError: "",
+      get(id) {
+        return document.getElementById(id);
+      },
+      resetRecognition() {
+        clearTimeout(this.silenceTimer);
+        this.silenceTimer = null;
+        this.listening = false;
+        this.recognition = null;
+      },
       stopSpeaking() {
         if ("speechSynthesis" in window) window.speechSynthesis.cancel();
       },
@@ -526,64 +538,169 @@
         utterance.rate = 0.94;
         utterance.pitch = 1.02;
         utterance.volume = 1;
+        utterance.onend = () => {
+          const status = this.get("ask-voice-status");
+          if (status) status.textContent = "Tap once to talk. Pause when finished, or tap again to stop.";
+        };
+        utterance.onerror = () => {
+          const status = this.get("ask-voice-status");
+          if (status) status.textContent = "The answer is ready above. Spoken playback was unavailable.";
+        };
         window.speechSynthesis.speak(utterance);
       },
       toggleAsk() {
+        if (this.busy) return;
         if (this.listening && this.recognition) {
           this.recognition.stop();
           return;
         }
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SpeechRecognition) {
-          $("ask-voice-status").textContent = "Voice input is unavailable in this browser. You can still type.";
+          const status = this.get("ask-voice-status");
+          if (status) status.textContent = "Voice input is unavailable in this browser. You can still type.";
           return;
         }
         this.stopSpeaking();
         this.finalText = "";
+        this.gotSpeech = false;
+        this.recognitionError = "";
         const recognition = new SpeechRecognition();
         this.recognition = recognition;
         recognition.lang = "en-US";
-        recognition.continuous = true;
+        recognition.continuous = false;
         recognition.interimResults = true;
         recognition.onstart = () => {
           this.listening = true;
-          $("ask-mic").classList.add("is-listening");
-          $("ask-voice-status").textContent = "Listening… pause when you are finished.";
+          const mic = this.get("ask-mic");
+          if (mic) {
+            mic.classList.add("is-listening");
+            mic.setAttribute("aria-pressed", "true");
+          }
+          const status = this.get("ask-voice-status");
+          if (status) status.textContent = "Listening… pause when you are finished.";
         };
         recognition.onresult = event => {
           let interim = "";
           for (let i = event.resultIndex; i < event.results.length; i += 1) {
             const words = event.results[i][0].transcript;
-            if (event.results[i].isFinal) this.finalText += `${words} `;
+            if (event.results[i].isFinal) {
+              this.finalText += `${words} `;
+              this.gotSpeech = true;
+            }
             else interim += words;
           }
-          $("ask-input").value = `${this.finalText}${interim}`.trim();
+          if (interim) this.gotSpeech = true;
+          const input = this.get("ask-input");
+          if (input) input.value = `${this.finalText}${interim}`.trim();
           clearTimeout(this.silenceTimer);
           this.silenceTimer = setTimeout(() => {
             if (this.listening && this.recognition) this.recognition.stop();
           }, 2500);
         };
         recognition.onerror = event => {
-          this.listening = false;
-          $("ask-mic")?.classList.remove("is-listening");
-          $("ask-voice-status").textContent = event.error === "not-allowed"
-            ? "Microphone access is off. You can still type."
-            : "I missed that. Tap and try again.";
+          this.recognitionError = event.error || "unknown";
+          const status = this.get("ask-voice-status");
+          if (status) status.textContent = event.error === "not-allowed"
+              ? "Microphone access is off. You can still type."
+              : "I missed that. Tap and try again.";
         };
         recognition.onend = () => {
-          clearTimeout(this.silenceTimer);
-          this.listening = false;
-          $("ask-mic")?.classList.remove("is-listening");
-          const text = this.finalText.trim() || $("ask-input")?.value.trim();
+          const mic = this.get("ask-mic");
+          if (mic) {
+            mic.classList.remove("is-listening");
+            mic.setAttribute("aria-pressed", "false");
+          }
+          const input = this.get("ask-input");
+          const text = this.gotSpeech ? this.finalText.trim() || input?.value.trim() : "";
+          const hadError = Boolean(this.recognitionError);
           this.finalText = "";
-          if (text) {
-            $("ask-voice-status").textContent = "Thinking…";
+          this.resetRecognition();
+          if (text && !hadError) {
+            const status = this.get("ask-voice-status");
+            if (status) status.textContent = "Thinking…";
             submitAskText(text, true);
-          } else if ($("ask-voice-status")) {
-            $("ask-voice-status").textContent = "Tap once to talk. Tap again to stop.";
+          } else if (!hadError) {
+            const status = this.get("ask-voice-status");
+            if (status) status.textContent = "I did not hear anything. Tap to try again.";
           }
         };
-        recognition.start();
+        try {
+          recognition.start();
+        } catch {
+          this.resetRecognition();
+          const status = this.get("ask-voice-status");
+          if (status) status.textContent = "Voice could not start. You can still type.";
+        }
+      },
+      toggleObserve() {
+        if (this.listening && this.recognition) {
+          this.recognition.stop();
+          return;
+        }
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const status = this.get("mic-status");
+        if (!SpeechRecognition) {
+          if (status) status.textContent = "speech unavailable";
+          return;
+        }
+        this.stopSpeaking();
+        this.finalText = "";
+        this.gotSpeech = false;
+        this.recognitionError = "";
+        const recognition = new SpeechRecognition();
+        this.recognition = recognition;
+        recognition.lang = "en-US";
+        recognition.continuous = false;
+        recognition.interimResults = true;
+        recognition.onstart = () => {
+          this.listening = true;
+          const mic = this.get("mic");
+          if (mic) {
+            mic.classList.add("is-listening");
+            mic.setAttribute("aria-pressed", "true");
+          }
+          if (status) status.textContent = "listening";
+        };
+        recognition.onresult = event => {
+          let interim = "";
+          for (let i = event.resultIndex; i < event.results.length; i += 1) {
+            const words = event.results[i][0].transcript;
+            if (event.results[i].isFinal) {
+              this.finalText += `${words} `;
+              this.gotSpeech = true;
+            } else {
+              interim += words;
+              this.gotSpeech = true;
+            }
+          }
+          const input = this.get("obs-text");
+          if (input) input.value = `${this.finalText}${interim}`.trim();
+          clearTimeout(this.silenceTimer);
+          this.silenceTimer = setTimeout(() => {
+            if (this.listening && this.recognition) this.recognition.stop();
+          }, 2500);
+        };
+        recognition.onerror = event => {
+          this.recognitionError = event.error || "unknown";
+          if (status) status.textContent = event.error === "not-allowed" ? "microphone access off" : "try again";
+        };
+        recognition.onend = () => {
+          const mic = this.get("mic");
+          if (mic) {
+            mic.classList.remove("is-listening");
+            mic.setAttribute("aria-pressed", "false");
+          }
+          const captured = this.gotSpeech && !this.recognitionError;
+          const hadError = Boolean(this.recognitionError);
+          this.resetRecognition();
+          if (status && !hadError) status.textContent = captured ? "captured" : "ready";
+        };
+        try {
+          recognition.start();
+        } catch {
+          this.resetRecognition();
+          if (status) status.textContent = "try again";
+        }
       }
     };
 
@@ -861,13 +978,13 @@
         <div class="grid two">
           <div class="panel">
             <label>Student<select id="obs-student">${studentOptions()}</select></label>
-            <div class="row" style="margin:14px 0;"><button id="mic" class="mic" type="button" title="Start speech capture">🎙</button><span id="mic-status" class="badge">ready</span></div>
+            <div class="row" style="margin:14px 0;"><button id="mic" class="mic" type="button" aria-label="Start observation speech capture" aria-pressed="false" title="Start speech capture">🎙</button><span id="mic-status" class="badge" aria-live="polite">ready</span></div>
             <textarea id="obs-text" placeholder="A learner self-corrected passato prossimo, used essere correctly in context"></textarea>
-            <div class="row" style="margin-top:10px;"><button id="suggest-observation" type="button">Suggest fields</button><span id="obs-suggest-status" class="voice-hint">Nothing is saved until you review and press Save.</span></div>
+            <div class="row" style="margin-top:10px;"><button id="suggest-observation" type="button">Suggest fields</button><span id="obs-suggest-status" class="voice-hint" aria-live="polite">Nothing is saved until you review and press Save.</span></div>
             <div class="form-grid" style="margin-top:12px;">
-              <label>Observation type<select id="obs-template"><option value="cefr">CEFR skill</option><option value="literacy">Literacy</option><option value="sel_incident">SEL concern</option><option value="sel_positive">SEL positive</option><option value="rti_flag">Support flag</option></select></label>
-              <label>CEFR skill<select id="obs-dim"><option>speaking</option><option>listening</option><option>reading</option><option>writing</option></select></label>
-              <label>Observed level<select id="obs-level"><option>A1</option><option>A1+</option><option>A2</option><option>A2+</option><option>B1</option></select></label>
+              <label>Observation type<select id="obs-template"><option value="">Choose after review</option><option value="cefr">CEFR skill</option><option value="literacy">Literacy</option><option value="sel_incident">SEL concern</option><option value="sel_positive">SEL positive</option><option value="rti_flag">Support flag</option></select></label>
+              <label>CEFR skill<select id="obs-dim"><option value="">Not tagged</option><option>speaking</option><option>listening</option><option>reading</option><option>writing</option></select></label>
+              <label>Observed level<select id="obs-level"><option value="">Not tagged</option><option>A1</option><option>A1+</option><option>A2</option><option>A2+</option><option>B1</option><option>B1+</option><option>B2</option><option>C1</option><option>C2</option></select></label>
               <label>Direction<select id="obs-direction"><option value="">Not stated</option><option>progressing</option><option>plateaued</option><option>regressing</option><option>mixed</option></select></label>
               <label>SEL area<input id="obs-sel-domain" placeholder="Leave blank when not relevant"></label>
               <label>SEL tone<select id="obs-sel-valence"><option value="">Not stated</option><option>positive</option><option>concern</option><option>neutral</option></select></label>
@@ -877,7 +994,7 @@
           </div>
           <div>
             <div id="obs-lens" class="panel"><p>Loading this learner's current lens...</p></div>
-            <div id="obs-result" class="panel" style="margin-top:14px;"><h3>Saved notes appear here</h3><p>Student data stays on this machine.</p></div>
+            <div id="obs-result" class="panel" style="margin-top:14px;" aria-live="polite"><h3>Saved notes appear here</h3><p>Student data stays on this machine.</p></div>
           </div>
         </div>`;
       $("mic").addEventListener("click", startSpeech);
@@ -892,21 +1009,7 @@
     }
 
     function startSpeech() {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!SpeechRecognition) {
-        $("mic-status").textContent = "speech unavailable";
-        return;
-      }
-      const recognition = new SpeechRecognition();
-      recognition.lang = "en-US";
-      recognition.interimResults = false;
-      recognition.onstart = () => $("mic-status").textContent = "listening";
-      recognition.onerror = () => $("mic-status").textContent = "try again";
-      recognition.onresult = event => {
-        $("obs-text").value = event.results[0][0].transcript;
-        $("mic-status").textContent = "captured";
-      };
-      recognition.start();
+      voiceRuntime.toggleObserve();
     }
 
     async function suggestObservation() {
@@ -931,6 +1034,7 @@
           sel_domain: "obs-sel-domain",
           sel_valence: "obs-sel-valence"
         };
+        Object.values(fieldMap).forEach(id => { $(id).value = ""; });
         Object.entries(fieldMap).forEach(([field, id]) => {
           if (proposal[field] !== null && proposal[field] !== undefined) $(id).value = proposal[field];
         });
@@ -943,7 +1047,9 @@
         $("obs-urgency-suggestion").className = `badge ${proposal.urgency_flag === true ? "warn" : ""}`;
         $("obs-suggest-status").textContent = data.model_used === "none"
           ? "Local model unavailable. Continue with manual fields."
-          : "Suggestions ready. Review every field before saving.";
+          : data.suggestions_available
+            ? "Suggestions ready. Review every field before saving."
+            : "No reliable suggestions. Choose the fields manually.";
       } catch {
         $("obs-suggest-status").textContent = "Suggestions unavailable. Continue with manual fields.";
       } finally {
@@ -952,22 +1058,44 @@
     }
 
     async function saveObservation() {
-      const result = await api("/api/observe/capture", {
-        method: "POST",
-        body: JSON.stringify({
-          student_id: $("obs-student").value,
-          transcript: $("obs-text").value,
-          template_type: $("obs-template").value,
-          cefr_dimension: $("obs-dim").value,
-          cefr_level_observed: $("obs-level").value,
-          cefr_direction: $("obs-direction").value || null,
-          sel_domain: $("obs-sel-domain").value.trim() || null,
-          sel_valence: $("obs-sel-valence").value || null,
-          urgency_flag: $("obs-urgency").checked
-        })
-      });
-      $("obs-result").innerHTML = `<h3>Saved</h3><div class="source-line"><span class="badge ok">Saved locally. Not uploaded. Not shared.</span><span class="badge">Domain: observation</span></div><p>Observation ${escapeHtml(result.observation.observation_id)} is attached to the local lens.</p><div class="output">${escapeHtml(result.observation.raw_transcript)}</div>`;
-      await loadLens("obs-lens", false);
+      const transcript = $("obs-text").value.trim();
+      const templateType = $("obs-template").value;
+      if (!transcript) {
+        $("obs-result").innerHTML = "<h3>Not saved</h3><p>Add an observation first.</p>";
+        return;
+      }
+      if (!templateType) {
+        $("obs-result").innerHTML = "<h3>Review needed</h3><p>Choose an observation type before saving.</p>";
+        return;
+      }
+      if (templateType === "cefr" && (!$("obs-dim").value || !$("obs-level").value)) {
+        $("obs-result").innerHTML = "<h3>Review needed</h3><p>Choose both a CEFR skill and observed level.</p>";
+        return;
+      }
+      const button = $("save-observation");
+      button.disabled = true;
+      try {
+        const result = await api("/api/observe/capture", {
+          method: "POST",
+          body: JSON.stringify({
+            student_id: $("obs-student").value,
+            transcript,
+            template_type: templateType,
+            cefr_dimension: $("obs-dim").value || null,
+            cefr_level_observed: $("obs-level").value || null,
+            cefr_direction: $("obs-direction").value || null,
+            sel_domain: $("obs-sel-domain").value.trim() || null,
+            sel_valence: $("obs-sel-valence").value || null,
+            urgency_flag: $("obs-urgency").checked
+          })
+        });
+        $("obs-result").innerHTML = `<h3>Saved</h3><div class="source-line"><span class="badge ok">Saved locally. Not uploaded. Not shared.</span><span class="badge">Domain: observation</span></div><p>Observation ${escapeHtml(result.observation.observation_id)} is attached to the local lens.</p><div class="output">${escapeHtml(result.observation.raw_transcript)}</div>`;
+        await loadLens("obs-lens", false);
+      } catch (error) {
+        $("obs-result").innerHTML = `<h3>Not saved</h3><p>${escapeHtml(error.message || "The local save failed. Your text is still in the form.")}</p>`;
+      } finally {
+        button.disabled = false;
+      }
     }
 
     async function renderStudents() {
@@ -1015,19 +1143,18 @@
     async function loadLens(targetId = "lens", showDecisionControls = true) {
       const lens = await api(`/api/students/${state.selectedStudent}/lens`);
       const observations = (lens.observations || []).slice(-3).reverse();
+      const decisionControls = showDecisionControls ? `
+        <div class="source-line"><span class="badge warn">System suggests; teacher reviews before any support-tier decision</span></div>
+        <div class="row"><button type="button" id="rti-confirm">Confirm</button><button type="button" id="rti-defer">Defer</button><span id="rti-decision-status"></span></div>` : "";
       $(targetId).innerHTML = `
         <h3>${escapeHtml(lens.display_name)}</h3>
         <p>CEFR trajectory: <strong>${escapeHtml(lens.cefr_trajectory_30d)}</strong> · support tier <strong>${lens.rti_current_tier}</strong></p>
-        <div class="source-line"><span class="badge warn">System suggests; teacher reviews before any support-tier decision</span></div>
-        <div class="row"><button type="button" id="rti-confirm">Confirm</button><button type="button" id="rti-defer">Defer</button><span id="rti-decision-status"></span></div>
+        ${decisionControls}
         <h3 style="margin-top:16px;">Recent observations</h3>
         <div class="list">${observations.length ? observations.map(o => `<div class="item"><p>${escapeHtml(o.raw_transcript)}</p><span class="badge">${escapeHtml(o.cefr_level_observed || "not tagged")}</span></div>`).join("") : "<p>No observations yet.</p>"}</div>
         <h3 style="margin-top:16px;">Grouping</h3>
         <p>Avoid-pairing notes: ${escapeHtml((lens.avoid_pairing_with || []).join(", ") || "none")}</p>`;
-      if (!showDecisionControls) {
-        $("rti-confirm").closest(".row").remove();
-        return;
-      }
+      if (!showDecisionControls) return;
       async function handleRtiDecision(decision) {
         const res = await fetch(`/api/students/${state.selectedStudent}/rti/decision`, {
           method: "POST", headers: {"Content-Type": "application/json"},
@@ -1073,8 +1200,8 @@
         <div class="panel">
           <div id="chat-log" class="chat-log">${state.chat.map(renderMessage).join("")}</div>
           <div class="voice-controls" style="margin-top:14px;">
-            <button id="ask-mic" class="mic" type="button" aria-label="Talk to Lingua Viva" title="Tap to talk">🎙</button>
-            <div><strong>Talk to Lingua Viva</strong><div id="ask-voice-status" class="voice-hint">Tap once to talk. Pause when finished, or tap again to stop.</div></div>
+            <button id="ask-mic" class="mic ${voiceRuntime.busy ? "is-thinking" : ""}" type="button" aria-label="Talk to Lingua Viva" aria-pressed="false" ${voiceRuntime.busy ? "disabled" : ""} title="Tap to talk">🎙</button>
+            <div><strong>Talk to Lingua Viva</strong><div id="ask-voice-status" class="voice-hint" aria-live="polite">Tap once to talk. Pause when finished, or tap again to stop.</div></div>
           </div>
           <form id="ask-form" class="row" style="margin-top:12px;"><input id="ask-input" placeholder="How do I scaffold articles for mixed-level Grade 3?"><button class="primary" type="submit">Send</button></form>
         </div>`;
@@ -1098,19 +1225,25 @@
     }
 
     async function submitAskText(text, fromVoice = false) {
-      if (!text) return;
+      if (!text || voiceRuntime.busy) return;
+      voiceRuntime.busy = true;
       state.chat.push({role: "teacher", text});
       if ($("ask-input")) $("ask-input").value = "";
       renderAsk();
       const mic = $("ask-mic");
       if (mic) mic.classList.add("is-thinking");
       if ($("ask-voice-status")) $("ask-voice-status").textContent = "Thinking…";
-      const response = await fetch("/api/query", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({query: text, intent: "TEACH"})
-      });
-      const data = await response.json();
+      let data;
+      try {
+        const response = await fetch("/api/query", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({query: text, intent: "TEACH"})
+        });
+        data = await response.json();
+      } catch {
+        data = {error: "I could not reach the local reasoning service. Your question is still visible above; check Health and try again."};
+      }
       if (data.error && !data.result) {
         state.chat.push({
           role: "Lingua Viva",
@@ -1130,10 +1263,14 @@
           }
         });
       }
+      voiceRuntime.busy = false;
       renderAsk();
-      if (fromVoice) {
+      if (fromVoice && !data.error) {
         const reply = state.chat[state.chat.length - 1];
         voiceRuntime.speak(reply.text);
+      } else if (fromVoice && data.error) {
+        const status = voiceRuntime.get("ask-voice-status");
+        if (status) status.textContent = "I could not answer aloud. The error is shown above.";
       }
     }
 
