@@ -1,0 +1,22 @@
+{
+  "doc_type": "exam",
+  "grade": "G3",
+  "unit": "U1",
+  "title": "Valutazione Trimestrale — La Routine Quotidiana",
+  "date": "2025-10-15",
+  "criteria": [
+    {"name": "grammatical_accuracy", "weight": 0.35, "descriptor": "Correct use of present tense regular verbs, articles, subject-verb agreement"},
+    {"name": "vocabulary_range", "weight": 0.25, "descriptor": "Uses 10+ daily routine verbs correctly in context"},
+    {"name": "communicative_effectiveness", "weight": 0.25, "descriptor": "Message is understood by an Italian speaker without clarification"},
+    {"name": "creative_expression", "weight": 0.15, "descriptor": "Goes beyond minimum requirements with personal detail"}
+  ],
+  "rubric_levels": ["eccellente", "buono", "sufficiente", "insufficiente"],
+  "sample_grading_notes": "This teacher consistently weighs grammatical accuracy highest — a student who communicates well but with errors gets 'buono' not 'eccellente'. Creative expression is rewarded but never compensates for grammar gaps.",
+  "language_of_instruction": "it",
+  "assessment_format": "written_production",
+  "duration_minutes": 30,
+  "adaptations_provided": {
+    "foundational": "word bank, sentence starters, reduced length (5 sentences)",
+    "extended": "no scaffold, minimum 10 sentences, include reflexive verbs"
+  }
+}

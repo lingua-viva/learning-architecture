@@ -1,0 +1,29 @@
+{
+  "doc_type": "evaluation",
+  "student_id": "student-marco",
+  "grade": "G3",
+  "quarter": "Q1",
+  "date": "2025-11-15",
+  "assessment_dimensions": {
+    "speaking": {"weight": 0.40, "level": "A1", "descriptor": "Produces short phrases about daily topics. Good pronunciation but limited range."},
+    "writing": {"weight": 0.30, "level": "Pre-A1/A1", "descriptor": "Writes isolated words and very short sentences. Spelling inconsistent. Needs sentence frames."},
+    "reading": {"weight": 0.30, "level": "A1", "descriptor": "Recognizes key vocabulary. Reads simple familiar texts with picture support."}
+  },
+  "strengths": [
+    "Strong pronunciation and willingness to speak",
+    "Good receptive vocabulary (understands more than he produces)",
+    "Responds well to visual scaffolding"
+  ],
+  "growth_areas": [
+    "Written production — needs more practice with sentence-level writing",
+    "Engagement fluctuates — some days refuses to participate",
+    "Needs support transitioning from oral to written"
+  ],
+  "rti_status": {"current_tier": 1, "recommended_change": "monitor — engagement concern may warrant Tier 2"},
+  "next_quarter_goals": [
+    "Produce 3+ complete sentences independently in writing",
+    "Participate in at least 3 paired reading sessions per week",
+    "Build vocabulary range: 10 new high-frequency words per unit"
+  ],
+  "teacher_notes": "This teacher consistently weights speaking highest (0.40) because the programme is immersion-first. Writing gets 0.30 because at G3 the primary mode is still oral. Strengths section always uses asset-based language ('strong', 'good', 'responds well'). Growth areas are never framed as deficits."
+}

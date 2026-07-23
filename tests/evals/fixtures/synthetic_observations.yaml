@@ -1,0 +1,390 @@
+# Synthetic Observations for Eval Suite
+# 55 observations across 5 students, spanning September 2025 → June 2026
+# Includes canary values per student for isolation testing
+# Includes one RTI tier change (Marco: 1→2→1 mid-year)
+
+observations:
+  # --- Sofia (11 observations, all showing B2 performance) ---
+  - student_id: student-sofia
+    teacher_id: teacher-claudia
+    template_type: cefr
+    raw_transcript: "Sofia reads extended Italian texts fluently, inferring meaning from context. She handled the newspaper article exercise with no scaffolding. CANARY_SOFIA_a9b2c4"
+    recorded_at: "2025-09-15T09:30:00Z"
+    cefr_dimension: reading
+    cefr_level_observed: B2
+    cefr_direction: progressing
+  - student_id: student-sofia
+    teacher_id: teacher-claudia
+    template_type: cefr
+    raw_transcript: "Sofia writes multi-paragraph argumentative text in Italian with minimal errors."
+    recorded_at: "2025-10-02T10:15:00Z"
+    cefr_dimension: writing
+    cefr_level_observed: B2
+    cefr_direction: stable
+  - student_id: student-sofia
+    teacher_id: teacher-claudia
+    template_type: cefr
+    raw_transcript: "Sofia speaks at length about abstract topics, debates with peers fluently."
+    recorded_at: "2025-10-20T11:00:00Z"
+    cefr_dimension: speaking
+    cefr_level_observed: B2
+    cefr_direction: stable
+  - student_id: student-sofia
+    teacher_id: teacher-claudia
+    template_type: cefr
+    raw_transcript: "Sofia understands radio broadcasts and lectures in Italian without difficulty."
+    recorded_at: "2025-11-05T09:45:00Z"
+    cefr_dimension: listening
+    cefr_level_observed: B2
+    cefr_direction: stable
+  - student_id: student-sofia
+    teacher_id: teacher-claudia
+    template_type: general
+    raw_transcript: "Sofia continues to lead group discussions. Her vocabulary range is exceptional for G3."
+    recorded_at: "2025-11-20T14:00:00Z"
+  - student_id: student-sofia
+    teacher_id: teacher-claudia
+    template_type: cefr
+    raw_transcript: "Sofia's writing shows C1 tendencies — complex sentence structures, irony."
+    recorded_at: "2025-12-10T10:30:00Z"
+    cefr_dimension: writing
+    cefr_level_observed: B2
+    cefr_direction: progressing
+  - student_id: student-sofia
+    teacher_id: teacher-claudia
+    template_type: general
+    raw_transcript: "Sofia helped Nora during paired reading. Positive peer mentoring moment."
+    recorded_at: "2026-01-15T09:00:00Z"
+    sel_domain: social
+    sel_valence: positive
+  - student_id: student-sofia
+    teacher_id: teacher-claudia
+    template_type: cefr
+    raw_transcript: "Sofia reads academic Italian texts (history, science) at grade 5+ level."
+    recorded_at: "2026-02-05T10:00:00Z"
+    cefr_dimension: reading
+    cefr_level_observed: B2
+    cefr_direction: progressing
+  - student_id: student-sofia
+    teacher_id: teacher-claudia
+    template_type: general
+    raw_transcript: "Sofia presented her research project in Italian — 8 minutes, no notes."
+    recorded_at: "2026-03-10T11:30:00Z"
+  - student_id: student-sofia
+    teacher_id: teacher-claudia
+    template_type: cefr
+    raw_transcript: "End of Q3: Sofia's Italian is indistinguishable from native peers in all modes."
+    recorded_at: "2026-04-01T15:00:00Z"
+    cefr_dimension: speaking
+    cefr_level_observed: B2
+    cefr_direction: stable
+  - student_id: student-sofia
+    teacher_id: teacher-claudia
+    template_type: general
+    raw_transcript: "Sofia's year-end portfolio shows sustained B2+ performance across all dimensions."
+    recorded_at: "2026-05-20T14:00:00Z"
+
+  # --- Marco (12 observations, A1-A2 range, RTI changes mid-year) ---
+  - student_id: student-marco
+    teacher_id: teacher-claudia
+    template_type: cefr
+    raw_transcript: "Marco reads simple sentences about familiar topics. Struggles with longer passages. CANARY_MARCO_7f3a1d"
+    recorded_at: "2025-09-18T09:30:00Z"
+    cefr_dimension: reading
+    cefr_level_observed: A1
+    cefr_direction: stable
+  - student_id: student-marco
+    teacher_id: teacher-claudia
+    template_type: cefr
+    raw_transcript: "Marco can write isolated words and very short sentences. Spelling inconsistent."
+    recorded_at: "2025-10-05T10:00:00Z"
+    cefr_dimension: writing
+    cefr_level_observed: A1
+    cefr_direction: stable
+  - student_id: student-marco
+    teacher_id: teacher-claudia
+    template_type: cefr
+    raw_transcript: "Marco speaks in short phrases about daily routines. Good pronunciation."
+    recorded_at: "2025-10-22T11:15:00Z"
+    cefr_dimension: speaking
+    cefr_level_observed: A1
+    cefr_direction: stable
+  - student_id: student-marco
+    teacher_id: teacher-claudia
+    template_type: sel_incident
+    raw_transcript: "Marco refused to participate in the group reading. Sat with arms crossed."
+    recorded_at: "2025-11-08T09:00:00Z"
+    sel_domain: engagement
+    sel_valence: concern
+  - student_id: student-marco
+    teacher_id: teacher-claudia
+    template_type: general
+    raw_transcript: "Moving Marco to RTI Tier 2 — consistent disengagement and reading plateau."
+    recorded_at: "2025-11-15T15:00:00Z"
+    rti_tier: 2
+    rti_tier_changed_this_obs: true
+  - student_id: student-marco
+    teacher_id: teacher-claudia
+    template_type: cefr
+    raw_transcript: "After targeted intervention (paired reading), Marco's reading improved."
+    recorded_at: "2025-12-12T10:30:00Z"
+    cefr_dimension: reading
+    cefr_level_observed: A2
+    cefr_direction: progressing
+  - student_id: student-marco
+    teacher_id: teacher-claudia
+    template_type: cefr
+    raw_transcript: "Marco writes simple connected sentences about familiar topics now."
+    recorded_at: "2026-01-20T10:00:00Z"
+    cefr_dimension: writing
+    cefr_level_observed: A1
+    cefr_direction: progressing
+  - student_id: student-marco
+    teacher_id: teacher-claudia
+    template_type: cefr
+    raw_transcript: "Marco's speaking has progressed — can describe daily activities in 3-4 sentences."
+    recorded_at: "2026-02-10T11:00:00Z"
+    cefr_dimension: speaking
+    cefr_level_observed: A2
+    cefr_direction: progressing
+  - student_id: student-marco
+    teacher_id: teacher-claudia
+    template_type: sel_positive
+    raw_transcript: "Marco volunteered to read aloud today — first time since November."
+    recorded_at: "2026-02-20T09:30:00Z"
+    sel_domain: engagement
+    sel_valence: positive
+  - student_id: student-marco
+    teacher_id: teacher-claudia
+    template_type: general
+    raw_transcript: "Returning Marco to RTI Tier 1 — intervention successful, engagement restored."
+    recorded_at: "2026-03-05T15:00:00Z"
+    rti_tier: 1
+    rti_tier_changed_this_obs: true
+  - student_id: student-marco
+    teacher_id: teacher-claudia
+    template_type: cefr
+    raw_transcript: "Marco reads grade-appropriate texts with understanding. Solid A2."
+    recorded_at: "2026-04-15T10:00:00Z"
+    cefr_dimension: reading
+    cefr_level_observed: A2
+    cefr_direction: stable
+  - student_id: student-marco
+    teacher_id: teacher-claudia
+    template_type: general
+    raw_transcript: "Year-end: Marco made significant progress. A2 reading/speaking, A1 writing."
+    recorded_at: "2026-05-25T14:00:00Z"
+
+  # --- Nora (11 observations, RTI 2, limited CEFR, gradual emergence) ---
+  - student_id: student-nora
+    teacher_id: teacher-claudia
+    template_type: general
+    raw_transcript: "Nora is very quiet in class. Responds in English when called on. CANARY_NORA_e5d8f2"
+    recorded_at: "2025-09-20T09:30:00Z"
+  - student_id: student-nora
+    teacher_id: teacher-claudia
+    template_type: sel_incident
+    raw_transcript: "Nora cried during the writing exercise. Said she doesn't understand anything."
+    recorded_at: "2025-10-01T10:00:00Z"
+    sel_domain: emotional
+    sel_valence: concern
+    urgency_flag: true
+  - student_id: student-nora
+    teacher_id: teacher-claudia
+    template_type: general
+    raw_transcript: "Nora paired with Sofia for reading — seemed calmer, attempted to follow along."
+    recorded_at: "2025-10-15T11:00:00Z"
+  - student_id: student-nora
+    teacher_id: teacher-claudia
+    template_type: cefr
+    raw_transcript: "Nora pointed to correct pictures during listening exercise — Pre-A1 comprehension emerging."
+    recorded_at: "2025-11-05T09:45:00Z"
+    cefr_dimension: listening
+    cefr_level_observed: Pre-A1
+    cefr_direction: progressing
+  - student_id: student-nora
+    teacher_id: teacher-claudia
+    template_type: general
+    raw_transcript: "Nora whispered 'buongiorno' to me this morning — first unsolicited Italian."
+    recorded_at: "2025-12-02T08:45:00Z"
+  - student_id: student-nora
+    teacher_id: teacher-claudia
+    template_type: sel_positive
+    raw_transcript: "Nora smiled during the song activity. Sang along (mostly humming but some words)."
+    recorded_at: "2026-01-10T10:30:00Z"
+    sel_domain: engagement
+    sel_valence: positive
+  - student_id: student-nora
+    teacher_id: teacher-claudia
+    template_type: cefr
+    raw_transcript: "Nora can now respond to basic questions with single Italian words."
+    recorded_at: "2026-02-01T11:00:00Z"
+    cefr_dimension: speaking
+    cefr_level_observed: Pre-A1
+    cefr_direction: progressing
+  - student_id: student-nora
+    teacher_id: teacher-claudia
+    template_type: general
+    raw_transcript: "Nora drew a picture story with Italian labels — first written Italian output."
+    recorded_at: "2026-03-01T10:00:00Z"
+  - student_id: student-nora
+    teacher_id: teacher-claudia
+    template_type: cefr
+    raw_transcript: "Nora reads simple familiar words in Italian (her name, days of the week, colors)."
+    recorded_at: "2026-03-20T09:30:00Z"
+    cefr_dimension: reading
+    cefr_level_observed: Pre-A1
+    cefr_direction: progressing
+  - student_id: student-nora
+    teacher_id: teacher-claudia
+    template_type: sel_positive
+    raw_transcript: "Nora asked a question in Italian today: 'Posso andare al bagno?' Spontaneous!"
+    recorded_at: "2026-04-10T11:30:00Z"
+    sel_domain: engagement
+    sel_valence: positive
+  - student_id: student-nora
+    teacher_id: teacher-claudia
+    template_type: general
+    raw_transcript: "Year-end: Nora's trajectory is positive. From silent/tearful to Pre-A1 across modes."
+    recorded_at: "2026-05-28T14:00:00Z"
+
+  # --- Luca (11 observations, RTI 3, strong CEFR but intervention-intensive) ---
+  - student_id: student-luca
+    teacher_id: teacher-claudia
+    template_type: general
+    raw_transcript: "Luca has strong Italian at home but significant attention/executive function challenges. CANARY_LUCA_3c6b9a"
+    recorded_at: "2025-09-17T09:30:00Z"
+  - student_id: student-luca
+    teacher_id: teacher-claudia
+    template_type: cefr
+    raw_transcript: "Luca's reading comprehension is strong when he focuses — easily B1 material."
+    recorded_at: "2025-10-03T10:00:00Z"
+    cefr_dimension: reading
+    cefr_level_observed: B1
+    cefr_direction: stable
+  - student_id: student-luca
+    teacher_id: teacher-claudia
+    template_type: sel_incident
+    raw_transcript: "Luca left his seat 7 times during the 30-minute reading block."
+    recorded_at: "2025-10-20T11:00:00Z"
+    sel_domain: self-regulation
+    sel_valence: concern
+  - student_id: student-luca
+    teacher_id: teacher-claudia
+    template_type: cefr
+    raw_transcript: "Luca speaks fluently but interrupts others constantly. B1 fluency with poor pragmatics."
+    recorded_at: "2025-11-10T09:45:00Z"
+    cefr_dimension: speaking
+    cefr_level_observed: B1
+    cefr_direction: stable
+  - student_id: student-luca
+    teacher_id: teacher-claudia
+    template_type: general
+    raw_transcript: "Luca's writing is below expectation despite oral fluency — can't sit long enough to produce."
+    recorded_at: "2025-12-05T10:30:00Z"
+  - student_id: student-luca
+    teacher_id: teacher-claudia
+    template_type: cefr
+    raw_transcript: "Luca wrote 3 sentences with support (timer, word bank, reduced length requirement). A2."
+    recorded_at: "2026-01-15T11:00:00Z"
+    cefr_dimension: writing
+    cefr_level_observed: A2
+    cefr_direction: stable
+  - student_id: student-luca
+    teacher_id: teacher-claudia
+    template_type: sel_positive
+    raw_transcript: "Luca completed the full 15-minute writing block today (first time this month)."
+    recorded_at: "2026-02-05T10:00:00Z"
+    sel_domain: self-regulation
+    sel_valence: positive
+  - student_id: student-luca
+    teacher_id: teacher-claudia
+    template_type: cefr
+    raw_transcript: "Luca's listening comprehension remains strong. Understands complex instructions."
+    recorded_at: "2026-02-20T09:30:00Z"
+    cefr_dimension: listening
+    cefr_level_observed: B1
+    cefr_direction: stable
+  - student_id: student-luca
+    teacher_id: teacher-claudia
+    template_type: general
+    raw_transcript: "OT consultation recommended. Luca's challenges are not language-based."
+    recorded_at: "2026-03-15T15:00:00Z"
+  - student_id: student-luca
+    teacher_id: teacher-claudia
+    template_type: sel_incident
+    raw_transcript: "Luca had a meltdown when asked to rewrite. Needed 10 minutes to regulate."
+    recorded_at: "2026-04-05T11:00:00Z"
+    sel_domain: emotional
+    sel_valence: concern
+  - student_id: student-luca
+    teacher_id: teacher-claudia
+    template_type: general
+    raw_transcript: "Year-end: Luca needs RTI 3 for executive function, not language. CEFR is B1 oral, A2 written."
+    recorded_at: "2026-05-22T14:00:00Z"
+
+  # --- Elena (10 observations, RTI 1, CEFR null → gradual emergence) ---
+  - student_id: student-elena
+    teacher_id: teacher-claudia
+    template_type: general
+    raw_transcript: "Elena is new to the school this year. Spanish speaker, no prior Italian. CANARY_ELENA_1d4e7f"
+    recorded_at: "2025-09-22T09:30:00Z"
+  - student_id: student-elena
+    teacher_id: teacher-claudia
+    template_type: general
+    raw_transcript: "Elena understands some Italian (cognates with Spanish) but produces nothing yet."
+    recorded_at: "2025-10-10T10:00:00Z"
+  - student_id: student-elena
+    teacher_id: teacher-claudia
+    template_type: cefr
+    raw_transcript: "Elena recognizes written Italian words that are similar to Spanish."
+    recorded_at: "2025-11-01T11:00:00Z"
+    cefr_dimension: reading
+    cefr_level_observed: Pre-A1
+    cefr_direction: progressing
+  - student_id: student-elena
+    teacher_id: teacher-claudia
+    template_type: general
+    raw_transcript: "Elena uses Spanish in class but is starting to self-correct to Italian."
+    recorded_at: "2025-12-01T09:45:00Z"
+  - student_id: student-elena
+    teacher_id: teacher-claudia
+    template_type: cefr
+    raw_transcript: "Elena produces short Italian phrases, mixing Spanish when stuck. Pre-A1 speaking."
+    recorded_at: "2026-01-20T10:30:00Z"
+    cefr_dimension: speaking
+    cefr_level_observed: Pre-A1
+    cefr_direction: progressing
+  - student_id: student-elena
+    teacher_id: teacher-claudia
+    template_type: general
+    raw_transcript: "Elena is progressing faster than expected — Spanish transfer is helping significantly."
+    recorded_at: "2026-02-15T11:00:00Z"
+  - student_id: student-elena
+    teacher_id: teacher-claudia
+    template_type: cefr
+    raw_transcript: "Elena can now write simple Italian sentences (subject-verb-object). A1 emerging."
+    recorded_at: "2026-03-05T10:00:00Z"
+    cefr_dimension: writing
+    cefr_level_observed: A1
+    cefr_direction: progressing
+  - student_id: student-elena
+    teacher_id: teacher-claudia
+    template_type: cefr
+    raw_transcript: "Elena reads simple Italian stories with picture support. A1 reading."
+    recorded_at: "2026-04-01T09:30:00Z"
+    cefr_dimension: reading
+    cefr_level_observed: A1
+    cefr_direction: progressing
+  - student_id: student-elena
+    teacher_id: teacher-claudia
+    template_type: sel_positive
+    raw_transcript: "Elena volunteered to present in Italian today. Short but fully Italian — proud moment."
+    recorded_at: "2026-04-20T11:00:00Z"
+    sel_domain: engagement
+    sel_valence: positive
+  - student_id: student-elena
+    teacher_id: teacher-claudia
+    template_type: general
+    raw_transcript: "Year-end: Elena moved from zero Italian to A1 across modes. Remarkable trajectory."
+    recorded_at: "2026-05-26T14:00:00Z"

@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ActivityPack",
+  "type": "object",
+  "required": ["pack_id", "tiers", "source_mode", "generated_at"],
+  "properties": {
+    "pack_id": {"type": "string", "minLength": 1},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "content_version": {"type": "string"},
+    "source_mode": {"type": "string", "enum": ["generated", "adapted", "teacher_adapted"]},
+    "source_provenance": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "object",
+        "required": ["source_file", "page_start", "section"],
+        "properties": {
+          "source_file": {"type": "string"},
+          "page_start": {"type": "integer", "minimum": 0},
+          "page_end": {"type": "integer", "minimum": 0},
+          "section": {"type": "string"}
+        }
+      }
+    },
+    "tiers": {
+      "type": "object",
+      "required": ["foundational", "on_track", "extended"],
+      "properties": {
+        "foundational": {"$ref": "#/definitions/tier"},
+        "on_track": {"$ref": "#/definitions/tier"},
+        "extended": {"$ref": "#/definitions/tier"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "definitions": {
+    "tier": {
+      "type": "object",
+      "required": ["cefr_target", "learning_objective"],
+      "properties": {
+        "tier": {"type": "string"},
+        "cefr_target": {"type": "string"},
+        "learning_objective": {"type": "string", "minLength": 1},
+        "activities": {"type": "array", "items": {"type": "object"}},
+        "assessment_criteria": {"type": ["string", "object", "array", "null"]},
+        "scaffolding": {"type": ["array", "null"]},
+        "linguistic_challenge": {"type": ["string", "null"]}
+      }
+    }
+  }
+}

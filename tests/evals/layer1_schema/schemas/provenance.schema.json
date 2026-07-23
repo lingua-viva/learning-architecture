@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Provenance",
+  "type": "object",
+  "required": ["source_file", "page_start", "section"],
+  "properties": {
+    "source_file": {"type": "string", "minLength": 1},
+    "page_start": {"type": "integer", "minimum": 0},
+    "page_end": {"type": "integer", "minimum": 0},
+    "section": {"type": "string", "minLength": 1},
+    "chunk_id": {"type": ["string", "null"]},
+    "distance": {"type": ["number", "null"]}
+  }
+}

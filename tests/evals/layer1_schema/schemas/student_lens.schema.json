@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "StudentLens",
+  "type": "object",
+  "required": ["student_id", "display_name", "grade_level", "rti_current_tier", "cefr_snapshot", "cefr_trajectory_30d"],
+  "properties": {
+    "student_id": {"type": "string", "minLength": 1},
+    "display_name": {"type": "string", "minLength": 1},
+    "grade_level": {"type": "string", "pattern": "^G[1-5]$"},
+    "campus": {"type": "string"},
+    "home_languages": {"type": "array", "items": {"type": "string"}},
+    "rti_current_tier": {"type": "integer", "minimum": 1, "maximum": 3},
+    "rti_tier_history": {"type": "array", "items": {"type": "object"}},
+    "cefr_snapshot": {
+      "type": "object",
+      "properties": {
+        "reading": {"type": ["string", "null"]},
+        "writing": {"type": ["string", "null"]},
+        "speaking": {"type": ["string", "null"]},
+        "listening": {"type": ["string", "null"]}
+      }
+    },
+    "cefr_trajectory_30d": {"type": "string", "enum": ["progressing", "plateaued", "regressing", "mixed", "insufficient_data"]},
+    "sel_summary": {"type": "object"},
+    "profile_version": {"type": "integer", "minimum": 0},
+    "updated_at": {"type": "string", "format": "date-time"},
+    "created_at": {"type": "string", "format": "date-time"}
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,88 @@
+# Tier Assignment Truth Table — complete deterministic mapping
+# Source of truth for L4-TIER tests
+# Rule: RTI tier is primary. CEFR adjusts within tier.
+
+truth_table:
+  # RTI 3: always foundational regardless of CEFR
+  - rti_tier: 3
+    weakest_cefr: null
+    expected_tier: foundational
+  - rti_tier: 3
+    weakest_cefr: "Pre-A1"
+    expected_tier: foundational
+  - rti_tier: 3
+    weakest_cefr: "A1"
+    expected_tier: foundational
+  - rti_tier: 3
+    weakest_cefr: "B1"
+    expected_tier: foundational
+  - rti_tier: 3
+    weakest_cefr: "B2"
+    expected_tier: foundational
+  - rti_tier: 3
+    weakest_cefr: "C2"
+    expected_tier: foundational
+
+  # RTI 2: foundational unless CEFR >= B1
+  - rti_tier: 2
+    weakest_cefr: null
+    expected_tier: foundational
+  - rti_tier: 2
+    weakest_cefr: "Pre-A1"
+    expected_tier: foundational
+  - rti_tier: 2
+    weakest_cefr: "A1"
+    expected_tier: foundational
+  - rti_tier: 2
+    weakest_cefr: "A1+"
+    expected_tier: foundational
+  - rti_tier: 2
+    weakest_cefr: "A2"
+    expected_tier: foundational
+  - rti_tier: 2
+    weakest_cefr: "B1"
+    expected_tier: on_track
+  - rti_tier: 2
+    weakest_cefr: "B2"
+    expected_tier: on_track
+  - rti_tier: 2
+    weakest_cefr: "C1"
+    expected_tier: on_track
+  - rti_tier: 2
+    weakest_cefr: "C2"
+    expected_tier: on_track
+
+  # RTI 1: on_track unless CEFR >= B2 → extended
+  # NOTE: Current implementation returns on_track for null CEFR.
+  #   Exec prompt says foundational is "safest default" — DISPUTED, flagged for human decision.
+  - rti_tier: 1
+    weakest_cefr: null
+    expected_tier: foundational
+    # RESOLVED 2026-07-22: foundational is perfect state.
+    # Rationale: null CEFR = "we don't know yet." Scaffold more, not less.
+    # Under-challenge for a week is harmless; over-challenge is a missed intervention.
+    # Current code returns on_track — that is a known gap, not the target.
+  - rti_tier: 1
+    weakest_cefr: "Pre-A1"
+    expected_tier: on_track
+  - rti_tier: 1
+    weakest_cefr: "A1"
+    expected_tier: on_track
+  - rti_tier: 1
+    weakest_cefr: "A1+"
+    expected_tier: on_track
+  - rti_tier: 1
+    weakest_cefr: "A2"
+    expected_tier: on_track
+  - rti_tier: 1
+    weakest_cefr: "B1"
+    expected_tier: on_track
+  - rti_tier: 1
+    weakest_cefr: "B2"
+    expected_tier: extended
+  - rti_tier: 1
+    weakest_cefr: "C1"
+    expected_tier: extended
+  - rti_tier: 1
+    weakest_cefr: "C2"
+    expected_tier: extended

@@ -1,0 +1,46 @@
+# Golden Retrieval Map — expected source → grade/unit mapping
+# Used by Layer 2 grade fencing tests to verify correct retrieval
+
+queries:
+  - query: "vocabulary for daily routines Italian G3"
+    expected_grade: G3
+    expected_sources_contain: ["Criteri_Fondanti_Curricolo_Italiano_K-5"]
+    must_not_contain_grades: [G1, G2, G4, G5]
+
+  - query: "reading fluency assessment Grade 2"
+    expected_grade: G2
+    must_not_contain_grades: [G3, G4, G5]
+
+  - query: "portfolio evidence writing Grade 5 B1"
+    expected_grade: G5
+    must_not_contain_grades: [G1, G2, G3, G4]
+
+  - query: "first sentences alphabet Grade 1 Pre-A1"
+    expected_grade: G1
+    must_not_contain_grades: [G2, G3, G4, G5]
+
+  - query: "advanced comprehension inquiry Grade 4 A2+"
+    expected_grade: G4
+    must_not_contain_grades: [G1, G2, G3, G5]
+
+  - query: "nonexistent grade G9 curriculum"
+    expected_grade: null
+    expected_error: true
+    reason: "G9 does not exist in K-5 system"
+
+document_classification:
+  - file: "graded_exam_g3_u1.json"
+    expected_type: "exam"
+    signals: ["criteria", "rubric_levels", "sample_grading_notes"]
+
+  - file: "parent_update_marco.json"
+    expected_type: "parent_update"
+    signals: ["sections with bilingual content", "l1_l2_ratio", "voice_notes"]
+
+  - file: "lesson_plan_g3_u1.json"
+    expected_type: "lesson_plan"
+    signals: ["learning_objectives", "scaffolding_pattern", "activities with time blocks"]
+
+  - file: "student_evaluation_q1.json"
+    expected_type: "evaluation"
+    signals: ["assessment_dimensions with weights", "strengths", "growth_areas"]

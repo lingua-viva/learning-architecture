@@ -1,0 +1,22 @@
+{
+  "doc_type": "exam",
+  "grade": "G3",
+  "unit": "U2",
+  "title": "Valutazione Trimestrale — La Famiglia e le Relazioni",
+  "date": "2025-12-12",
+  "criteria": [
+    {"name": "grammatical_accuracy", "weight": 0.35, "descriptor": "Correct use of possessive adjectives, irregular verbs (avere, essere, fare)"},
+    {"name": "vocabulary_range", "weight": 0.25, "descriptor": "Uses family/relationship vocabulary (15+ terms) correctly"},
+    {"name": "communicative_effectiveness", "weight": 0.25, "descriptor": "Describes family members and relationships clearly"},
+    {"name": "creative_expression", "weight": 0.15, "descriptor": "Adds anecdotes, comparisons, or personal reflections"}
+  ],
+  "rubric_levels": ["eccellente", "buono", "sufficiente", "insufficiente"],
+  "sample_grading_notes": "Same pattern: grammar is gate for 'eccellente'. A creative piece with errors cannot score top marks. This is consistent across all units.",
+  "language_of_instruction": "it",
+  "assessment_format": "oral_and_written",
+  "duration_minutes": 40,
+  "adaptations_provided": {
+    "foundational": "picture prompts, fill-in-the-blank for written portion, oral part allows English bridge",
+    "extended": "no scaffold, compare Italian and American family structures, use passato prossimo"
+  }
+}

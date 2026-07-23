@@ -1,0 +1,81 @@
+# Synthetic Student Roster for Eval Suite
+# 5 students with varying RTI/CEFR profiles for deterministic tier testing
+
+students:
+  - student_id: student-sofia
+    display_name: Sofia
+    grade_level: G3
+    campus: local
+    home_languages: [it]
+    rti_current_tier: 1
+    cefr_snapshot:
+      reading: B2
+      writing: B2
+      speaking: B2
+      listening: B2
+    expected_tier: extended
+    rationale: "RTI 1 + weakest CEFR B2 → extended"
+
+  - student_id: student-marco
+    display_name: Marco
+    grade_level: G3
+    campus: local
+    home_languages: [it]
+    rti_current_tier: 1
+    cefr_snapshot:
+      reading: A2
+      writing: A1
+      speaking: A2
+      listening: null
+    expected_tier: on_track
+    rationale: "RTI 1 + weakest CEFR A1 → on_track"
+
+  - student_id: student-nora
+    display_name: Nora
+    grade_level: G3
+    campus: local
+    home_languages: [it, ar]
+    rti_current_tier: 2
+    cefr_snapshot:
+      reading: null
+      writing: null
+      speaking: null
+      listening: null
+    expected_tier: foundational
+    rationale: "RTI 2 + CEFR null → foundational"
+
+  - student_id: student-luca
+    display_name: Luca
+    grade_level: G3
+    campus: local
+    home_languages: [it, en]
+    rti_current_tier: 3
+    cefr_snapshot:
+      reading: B1
+      writing: A2
+      speaking: B1
+      listening: B1
+    expected_tier: foundational
+    rationale: "RTI 3 (any CEFR) → foundational (RTI 3 overrides all CEFR)"
+
+  - student_id: student-elena
+    display_name: Elena
+    grade_level: G3
+    campus: local
+    home_languages: [it, es]
+    rti_current_tier: 1
+    cefr_snapshot:
+      reading: null
+      writing: null
+      speaking: null
+      listening: null
+    expected_tier: on_track
+    rationale: "RTI 1 + CEFR null → on_track (current behavior) — DISPUTED: exec prompt says foundational"
+
+# Canary values for isolation testing (Layer 3)
+canaries:
+  student-sofia: "CANARY_SOFIA_a9b2c4"
+  student-marco: "CANARY_MARCO_7f3a1d"
+  student-nora: "CANARY_NORA_e5d8f2"
+  student-luca: "CANARY_LUCA_3c6b9a"
+  student-elena: "CANARY_ELENA_1d4e7f"

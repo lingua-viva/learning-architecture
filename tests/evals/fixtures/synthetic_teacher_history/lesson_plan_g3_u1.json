@@ -1,0 +1,29 @@
+{
+  "doc_type": "lesson_plan",
+  "grade": "G3",
+  "unit": "U1",
+  "title": "La Routine Quotidiana — Lezione 3: Le Azioni della Mattina",
+  "date": "2025-09-25",
+  "duration_minutes": 45,
+  "ib_programme": "PYP",
+  "language_of_instruction": "it",
+  "italian_percentage_target": 0.75,
+  "learning_objectives": {
+    "foundational": "Students name 5+ morning routine actions using picture support",
+    "on_track": "Students describe their own morning routine in 4+ complete sentences",
+    "extended": "Students compare two different morning routines (theirs vs. a character's) using temporal connectors"
+  },
+  "scaffolding_pattern": {
+    "foundational": ["visual word bank", "sentence frames with gaps", "partner reading", "reduced output length (5 items)"],
+    "on_track": ["sentence starters available but optional", "self-check rubric"],
+    "extended": ["no scaffold", "open-ended prompt", "peer editing required", "reflexive verb challenge"]
+  },
+  "activities": [
+    {"time": "0-10min", "type": "warm_up", "description": "Total Physical Response (TPR) — teacher mimes morning actions, students guess and repeat in Italian"},
+    {"time": "10-25min", "type": "guided_practice", "description": "Students sequence picture cards of morning routine, then write sentences describing each step"},
+    {"time": "25-40min", "type": "independent_practice", "description": "Students write their own morning routine (differentiated by tier)"},
+    {"time": "40-45min", "type": "closing", "description": "2 students share orally; class identifies temporal connectors used"}
+  ],
+  "assessment_evidence": "Written morning routine description (collected, not graded — formative)",
+  "differentiation_notes": "This teacher ALWAYS gives foundational students visual scaffolds + word banks. Extended students ALWAYS get open-ended prompts with a linguistic challenge (here: reflexive verbs). The on_track group has scaffolds available but not required — choice-based."
+}

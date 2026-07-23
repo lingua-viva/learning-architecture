@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PrivacyTrace",
+  "type": "object",
+  "required": ["trace_id", "query_hash", "route_id", "external_calls", "timestamp"],
+  "properties": {
+    "trace_id": {"type": "string", "minLength": 1},
+    "query_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "query_text": {"type": "null", "description": "Must NEVER be present or must be null"},
+    "route_id": {"type": "string"},
+    "external_calls": {"type": "integer", "minimum": 0},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "model_used": {"type": ["string", "null"]},
+    "tokens_used": {"type": ["integer", "null"]},
+    "duration_ms": {"type": ["number", "null"]},
+    "confidence": {"type": ["number", "null"]}
+  }
+}

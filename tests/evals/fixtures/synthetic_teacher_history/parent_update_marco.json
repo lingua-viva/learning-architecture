@@ -1,0 +1,28 @@
+{
+  "doc_type": "parent_update",
+  "student_id": "student-marco",
+  "grade": "G3",
+  "quarter": "Q1",
+  "date": "2025-11-20",
+  "language": "bilingual_it_en",
+  "formality": "warm_formal",
+  "sections": [
+    {
+      "heading": "Social-Emotional Growth / Crescita Socio-Emotiva",
+      "content_it": "Marco ha mostrato una buona capacità di lavorare in gruppo durante le attività di lettura condivisa. Sta sviluppando fiducia nel partecipare alle discussioni di classe.",
+      "content_en": "Marco has shown good teamwork during shared reading activities. He is developing confidence in participating in class discussions."
+    },
+    {
+      "heading": "Italian Language Progress / Progresso in Italiano",
+      "content_it": "In lettura, Marco riconosce le parole chiave e comprende frasi semplici su argomenti familiari (livello A1). La scrittura è ancora in fase emergente — scrive parole isolate e frasi molto brevi.",
+      "content_en": "In reading, Marco recognizes key words and understands simple sentences about familiar topics (A1 level). Writing is still emerging — he writes isolated words and very short sentences."
+    },
+    {
+      "heading": "Next Steps / Prossimi Passi",
+      "content_it": "Continuiamo a lavorare sulla lettura quotidiana a casa (10 minuti) e sull'uso del vocabolario nelle situazioni quotidiane.",
+      "content_en": "We will continue working on daily reading at home (10 minutes) and vocabulary use in everyday situations."
+    }
+  ],
+  "voice_notes": "This teacher always leads with social-emotional before academic. Italian comes first in bilingual sections. Tone is encouraging even when reporting gaps — 'still emerging' rather than 'behind'.",
+  "l1_l2_ratio": 0.55
+}

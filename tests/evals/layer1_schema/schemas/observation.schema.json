@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Observation",
+  "type": "object",
+  "required": ["student_id", "teacher_id", "template_type", "raw_transcript", "observation_id", "recorded_at"],
+  "properties": {
+    "student_id": {"type": "string", "minLength": 1},
+    "teacher_id": {"type": "string", "minLength": 1},
+    "template_type": {"type": "string"},
+    "raw_transcript": {"type": "string", "minLength": 1},
+    "observation_id": {"type": "string", "minLength": 1},
+    "recorded_at": {"type": "string", "format": "date-time"},
+    "teacher_edited_transcript": {"type": ["string", "null"]},
+    "rti_tier": {"type": ["integer", "null"], "minimum": 1, "maximum": 3},
+    "rti_tier_changed_this_obs": {"type": "boolean"},
+    "cefr_dimension": {"type": ["string", "null"]},
+    "cefr_level_observed": {"type": ["string", "null"]},
+    "cefr_direction": {"type": ["string", "null"]},
+    "sel_domain": {"type": ["string", "null"]},
+    "sel_valence": {"type": ["string", "null"]},
+    "urgency_flag": {"type": "boolean"},
+    "ontology_node": {"type": ["string", "null"]},
+    "sync_status": {"type": "string"}
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "doc_type": "parent_update",
+  "student_id": "student-nora",
+  "grade": "G3",
+  "quarter": "Q1",
+  "date": "2025-11-20",
+  "language": "bilingual_it_en",
+  "formality": "warm_formal",
+  "sections": [
+    {
+      "heading": "Social-Emotional Growth / Crescita Socio-Emotiva",
+      "content_it": "Nora sta iniziando ad ambientarsi nella classe. I primi giorni sono stati difficili, ma ora partecipa volentieri alle attività di gruppo quando è con compagni che la rassicurano.",
+      "content_en": "Nora is beginning to settle into the classroom. The first days were difficult, but she now participates willingly in group activities when paired with reassuring classmates."
+    },
+    {
+      "heading": "Italian Language Progress / Progresso in Italiano",
+      "content_it": "Nora è nella fase iniziale del percorso linguistico. Comprende alcune parole e istruzioni semplici. La produzione orale è ancora limitata — risponde più volentieri in inglese, ma inizia a usare saluti e formule quotidiane in italiano.",
+      "content_en": "Nora is at the beginning of her language journey. She understands some words and simple instructions. Oral production is still limited — she responds more readily in English but is beginning to use Italian greetings and daily phrases."
+    },
+    {
+      "heading": "Next Steps / Prossimi Passi",
+      "content_it": "A casa: esporre Nora a brevi canzoni o video in italiano (5 minuti al giorno). Non forzare la produzione — l'ascolto è fondamentale in questa fase.",
+      "content_en": "At home: expose Nora to short Italian songs or videos (5 minutes daily). Do not force production — listening is fundamental at this stage."
+    }
+  ],
+  "voice_notes": "Same structure as Marco's update: SEL first, language second, next steps third. Italian first in bilingual pairs. Tone is protective of the child — 'language journey' not 'language deficit'. Parent given very specific, low-pressure home actions.",
+  "l1_l2_ratio": 0.52
+}
