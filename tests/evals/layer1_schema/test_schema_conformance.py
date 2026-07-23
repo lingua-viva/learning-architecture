@@ -108,14 +108,36 @@ def test_L1_PACK_002_tier_required_fields():
         assert tier.get("learning_objective"), f"{tier_name} missing learning_objective"
 
 
-@pytest.mark.skip(reason=SKIP_REASON_PACK)
 def test_L1_PACK_003_adapted_pack_has_provenance(schemas_dir):
     """L1-PACK-003: When source_mode=adapted, source_provenance is non-empty list.
 
     Pass: len(pack["source_provenance"]) >= 1 when source_mode != "generated"
     Calls: ContentDifferentiator.generate_from_documents() or generate_with_teacher_lens()
     """
-    pass
+    from src.education.content_differentiator import ContentDifferentiator, LessonInput
+
+    lesson = LessonInput(
+        ib_programme="PYP",
+        subject="Language",
+        unit_title="La Routine Quotidiana",
+        topic="Daily routines vocabulary in Italian",
+        atl_skills=["COMM-01"],
+        cefr_target="A2",
+        duration_minutes=45,
+        created_by="teacher_eval",
+    )
+    source_chunks = [
+        {
+            "text": "Daily routines are described using present-tense reflexive verbs.",
+            "source_file": "myp_italian_guide.pdf",
+            "section": "DAILY ROUTINES",
+            "page_start": 2,
+            "page_end": 2,
+        }
+    ]
+    pack = ContentDifferentiator().generate(lesson, source_chunks=source_chunks)
+    assert pack.source_mode == "adapted"
+    assert len(pack.source_provenance) >= 1
 
 
 # --- Rubric Schema (L1-RUBRIC) ---
@@ -214,53 +236,144 @@ def test_L1_TRACE_002_trace_has_routing_metadata():
 # --- Provenance Schema (L1-PROV) ---
 
 
-@pytest.mark.skip(reason="awaiting provenance validation against live packs")
-def test_L1_PROV_001_provenance_has_grounding_metadata():
+def test_L1_PROV_001_provenance_has_grounding_metadata(teacher_history_dir):
     """L1-PROV-001: Provenance entry has source_file, page_start, section.
 
     Pass: All three fields present and non-null for every provenance entry.
     Calls: ContentDifferentiator.generate_from_documents() → pack.source_provenance
     """
-    pass
+    from src.education.content_differentiator import ContentDifferentiator, LessonInput
+
+    class FakeRetriever:
+        def __init__(self, chunks):
+            self.chunks = chunks
+
+        def retrieve(self, query, domain, k=3):
+            return self.chunks
+
+    source_file = teacher_history_dir / "lesson_plan_g3_u1.json"
+    chunks = [
+        {
+            "text": "Morning routine actions are practiced with picture cards and TPR.",
+            "source_file": str(source_file),
+            "section": "MORNING ROUTINE",
+            "page_start": 1,
+            "page_end": 1,
+        }
+    ]
+    lesson = LessonInput(
+        ib_programme="PYP",
+        subject="Language",
+        unit_title="La Routine Quotidiana",
+        topic="Daily routines vocabulary in Italian",
+        atl_skills=["COMM-01"],
+        cefr_target="A2",
+        duration_minutes=45,
+        created_by="teacher_eval",
+    )
+    pack = ContentDifferentiator().generate_from_documents(lesson, FakeRetriever(chunks), domain="curriculum")
+
+    assert pack.source_provenance
+    for entry in pack.source_provenance:
+        assert entry.get("source_file")
+        assert entry.get("page_start") is not None
+        assert entry.get("section")
 
 
-@pytest.mark.skip(reason="awaiting provenance validation against live packs")
-def test_L1_PROV_002_provenance_source_files_exist():
+def test_L1_PROV_002_provenance_source_files_exist(teacher_history_dir):
     """L1-PROV-002: Every source_file referenced in provenance exists on disk.
 
     Pass: Path(source_file).exists() is True for all provenance entries.
     """
-    pass
+    from src.education.content_differentiator import ContentDifferentiator, LessonInput
+
+    class FakeRetriever:
+        def __init__(self, chunks):
+            self.chunks = chunks
+
+        def retrieve(self, query, domain, k=3):
+            return self.chunks
+
+    source_file = teacher_history_dir / "lesson_plan_g3_u1.json"
+    assert source_file.exists()  # sanity: the fixture backing this test is real
+    chunks = [
+        {
+            "text": "Morning routine actions are practiced with picture cards and TPR.",
+            "source_file": str(source_file),
+            "section": "MORNING ROUTINE",
+            "page_start": 1,
+            "page_end": 1,
+        }
+    ]
+    lesson = LessonInput(
+        ib_programme="PYP",
+        subject="Language",
+        unit_title="La Routine Quotidiana",
+        topic="Daily routines vocabulary in Italian",
+        atl_skills=["COMM-01"],
+        cefr_target="A2",
+        duration_minutes=45,
+        created_by="teacher_eval",
+    )
+    pack = ContentDifferentiator().generate_from_documents(lesson, FakeRetriever(chunks), domain="curriculum")
+
+    for entry in pack.source_provenance:
+        assert Path(entry["source_file"]).exists()
 
 
 # --- Teacher Lens Schema (L1-TLENS) ---
 
 
-@pytest.mark.skip(reason=SKIP_REASON_LENS)
-def test_L1_TLENS_001_teacher_lens_core_dimensions():
+def _build_teacher_lens(tmp_path, teacher_history_dir):
+    from src.education.teacher_lens_builder import TeacherLensBuilder
+
+    builder = TeacherLensBuilder("teacher-eval", tmp_path)
+    for name in ("graded_exam_g3_u1.json", "graded_exam_g3_u2.json", "lesson_plan_g3_u1.json"):
+        builder.ingest(teacher_history_dir / name)
+    return builder.build_lens()
+
+
+def test_L1_TLENS_001_teacher_lens_core_dimensions(teacher_history_dir):
     """L1-TLENS-001: Teacher Lens has grading_calibration, differentiation_style, communication_voice.
 
     Pass: All three top-level keys present and are dicts.
     Calls: TeacherLensBuilder.build_lens() → validate against teacher_lens.schema.json
     """
-    pass
+    with tempfile.TemporaryDirectory() as tmp:
+        lens = _build_teacher_lens(Path(tmp), teacher_history_dir)
+        assert isinstance(lens.grading_calibration, dict)
+        assert isinstance(lens.differentiation_style, dict)
+        assert isinstance(lens.communication_voice, dict)
 
 
-@pytest.mark.skip(reason=SKIP_REASON_LENS)
-def test_L1_TLENS_002_teacher_lens_staleness_metadata():
+def test_L1_TLENS_002_teacher_lens_staleness_metadata(teacher_history_dir):
     """L1-TLENS-002: Teacher Lens has ingested_doc_count >= 0 and valid last_updated.
 
     Pass: ingested_doc_count is int >= 0; last_updated parses as ISO8601.
     Calls: TeacherLensBuilder.build_lens()
     """
-    pass
+    from datetime import datetime
+
+    with tempfile.TemporaryDirectory() as tmp:
+        lens = _build_teacher_lens(Path(tmp), teacher_history_dir)
+        assert isinstance(lens.ingested_doc_count, int)
+        assert lens.ingested_doc_count >= 0
+        datetime.fromisoformat(lens.last_updated)  # raises if not valid ISO8601
 
 
-@pytest.mark.skip(reason=SKIP_REASON_LENS)
-def test_L1_TLENS_003_teacher_lens_patterns_cite_sources():
+def test_L1_TLENS_003_teacher_lens_patterns_cite_sources(teacher_history_dir):
     """L1-TLENS-003: Every pattern entry in grading_calibration references at least one source doc.
 
     Pass: Each criterion in grading_calibration has examples[] with >= 1 item citing a doc_id.
     Calls: TeacherLensBuilder.build_lens().grading_calibration
     """
-    pass
+    with tempfile.TemporaryDirectory() as tmp:
+        lens = _build_teacher_lens(Path(tmp), teacher_history_dir)
+        source_doc_ids = {d["doc_id"] for d in lens.source_documents}
+
+        assert lens.grading_calibration
+        for criterion, spec in lens.grading_calibration.items():
+            assert spec["examples"]
+            assert any(
+                any(doc_id in example for doc_id in source_doc_ids) for example in spec["examples"]
+            )

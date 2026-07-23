@@ -13,6 +13,7 @@ import pytest
 
 from src.lingua_viva.filemap import infer_education_domain, scan_directory, FileMapEntry
 from src.education.content_differentiator import ContentDifferentiator, LessonInput
+from src.education.teacher_lens_builder import TeacherLensBuilder
 
 
 @pytest.mark.skip(reason="awaiting DocumentRetriever + ingested documents for determinism test")
@@ -25,14 +26,36 @@ def test_L2_DETERM_001_same_query_identical_provenance():
     pass
 
 
-@pytest.mark.skip(reason="awaiting TeacherLensBuilder for lens determinism test")
-def test_L2_DETERM_002_same_history_identical_lens():
+def test_L2_DETERM_002_same_history_identical_lens(teacher_history_dir):
     """L2-DETERM-002: Same teacher history ingested 2x → identical Teacher Lens.
 
     Setup: Ingest same docs into two separate TeacherLensBuilder instances.
-    Pass: Both produce byte-identical lens output.
+    Pass: Both produce byte-identical lens output (excluding wall-clock
+    fields that legitimately differ across two separate builder runs).
     """
-    pass
+    docs = sorted(teacher_history_dir.glob("*.json"))
+    assert docs, "no teacher history fixtures found"
+
+    with tempfile.TemporaryDirectory() as tmp1, tempfile.TemporaryDirectory() as tmp2:
+        builder1 = TeacherLensBuilder("teacher-eval", Path(tmp1) / "lens_storage")
+        builder2 = TeacherLensBuilder("teacher-eval", Path(tmp2) / "lens_storage")
+        for f in docs:
+            builder1.ingest(f)
+            builder2.ingest(f)
+
+        lens1 = builder1.build_lens()
+        lens2 = builder2.build_lens()
+
+        def _strip_run_specific(lens) -> dict:
+            d = dict(lens.__dict__)
+            d.pop("last_updated", None)
+            d["source_documents"] = [
+                {k: v for k, v in doc.items() if k != "ingested_at"}
+                for doc in d["source_documents"]
+            ]
+            return d
+
+        assert _strip_run_specific(lens1) == _strip_run_specific(lens2)
 
 
 @pytest.mark.skip(reason="awaiting provenance with page bounds from document-backed generation")

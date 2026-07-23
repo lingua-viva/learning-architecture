@@ -5,7 +5,13 @@ Property proved: Activity packs maintain the specified Italian/English ratio.
 
 import pytest
 
-SKIP = "awaiting bilingual ratio validation against generated content"
+SKIP = (
+    "OUT OF SCOPE tonight: no italian_percentage_target field on LessonInput "
+    "and no Italian-content generation exists anywhere in ContentDifferentiator "
+    "(templates and adaptation are English-only). Not in tests/evals/CONTRACTS.md "
+    "either — building a real bilingual generator is new-feature work, not a gap "
+    "fix. Flagging for a dedicated build, not silently faking a passing assertion."
+)
 
 
 @pytest.mark.skip(reason=SKIP)
