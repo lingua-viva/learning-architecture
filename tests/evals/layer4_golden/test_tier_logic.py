@@ -2,10 +2,6 @@
 
 Property proved: assign_tier_for_student() is deterministic and matches the truth table exactly.
 No model calls. Pure deterministic logic. Runs in <1s.
-
-NOTE: RTI 1 + CEFR null is the known gap — current code returns on_track,
-perfect state is foundational. This test documents the gap as xfail so the
-implementation team knows exactly what to fix.
 """
 
 import pytest
@@ -70,46 +66,23 @@ def test_L4_TIER_005_rti1_cefr_a2_on_track():
     assert diff.assign_tier_for_student(lens) == "on_track"
 
 
-@pytest.mark.xfail(
-    reason="KNOWN GAP: RTI 1 + CEFR null → current code returns on_track; perfect state is foundational",
-    strict=True,
-)
 def test_L4_TIER_NULL_CEFR_perfect_state():
-    """PERFECT STATE: RTI 1 + null CEFR → foundational (we don't know yet → scaffold more).
-
-    This test documents the gap. When implementation fixes it, remove the xfail.
-    """
+    """PERFECT STATE: RTI 1 + null CEFR → foundational (we don't know yet → scaffold more)."""
     diff = ContentDifferentiator()
     lens = _build_lens(1, None)
     assert diff.assign_tier_for_student(lens) == "foundational"
 
 
 def test_L4_TIER_006_full_truth_table():
-    """L4-TIER-006: Full truth table (all rows the code can handle) pass.
+    """L4-TIER-006: Full truth table (all rows) pass.
 
     Loads tier_assignment_truth_table.yaml and asserts every row matches.
-    The disputed row (RTI 1 + null) is tested separately as xfail above.
     """
     truth = yaml.safe_load(TRUTH_TABLE_PATH.read_text())
     diff = ContentDifferentiator()
 
-    # CEFR values the implementation currently supports
-    SUPPORTED_CEFR = {"A1", "A1+", "A2", "A2+", "B1", "B1+", "B2", "C1", "C2", None}
-
     failures = []
-    skipped_unsupported = []
     for row in truth["truth_table"]:
-        # Skip the resolved-as-perfect-state row (tested separately as xfail)
-        if row.get("rti_tier") == 1 and row.get("weakest_cefr") is None:
-            continue
-
-        # Skip CEFR values the implementation doesn't handle yet (Pre-A1)
-        if row.get("weakest_cefr") not in SUPPORTED_CEFR:
-            skipped_unsupported.append(
-                f"RTI {row['rti_tier']} + CEFR {row['weakest_cefr']} (unsupported CEFR value)"
-            )
-            continue
-
         lens = _build_lens(row["rti_tier"], row["weakest_cefr"])
         actual = diff.assign_tier_for_student(lens)
         expected = row["expected_tier"]
@@ -121,15 +94,8 @@ def test_L4_TIER_006_full_truth_table():
             )
 
     assert not failures, f"Truth table failures:\n" + "\n".join(failures)
-    # Report skipped rows so we know what's not covered
-    if skipped_unsupported:
-        pytest.skip(f"Skipped {len(skipped_unsupported)} rows with unsupported CEFR (Pre-A1)")
 
 
-@pytest.mark.xfail(
-    reason="KNOWN GAP: Pre-A1 not in CEFR_ORDER — code crashes with ValueError",
-    strict=True,
-)
 def test_L4_TIER_PRE_A1_handling():
     """PERFECT STATE: Pre-A1 is a valid CEFR level and must not crash.
 

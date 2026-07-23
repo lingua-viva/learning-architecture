@@ -41,7 +41,7 @@ import sqlite3
 import time
 import uuid
 from dataclasses import dataclass, field, asdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -54,7 +54,7 @@ def default_db_path() -> Path:
 
 VALID_RTI_TIERS = (1, 2, 3)
 VALID_CEFR_DIMENSIONS = ("reading", "writing", "speaking", "listening")
-VALID_CEFR_LEVELS = ("A1", "A1+", "A2", "A2+", "B1", "B1+", "B2", "C1", "C2")
+VALID_CEFR_LEVELS = ("Pre-A1", "A1", "A1+", "A2", "A2+", "B1", "B1+", "B2", "C1", "C2")
 VALID_CEFR_DIRECTIONS = ("progressing", "plateaued", "regressing")
 VALID_SEL_VALENCE = ("positive", "concern", "neutral")
 VALID_TEMPLATE_TYPES = ("literacy", "cefr", "sel_incident", "sel_positive", "rti_flag")
@@ -328,6 +328,25 @@ class StudentLensStore:
     # Append observation (the only way a lens changes)
     # ------------------------------------------------------------------
 
+    def validate_observation_timestamp(self, obs: "Observation") -> list[str]:
+        """Reject observations with timestamps in the future.
+
+        Behavioral contracts (per tests/evals/CONTRACTS.md):
+            - Returns empty list if timestamp is valid (<= now + 5 minutes tolerance)
+            - Returns ["Observation timestamp is in the future"] if > now + 5 minutes
+            - Does NOT block save (validation is advisory per existing convention)
+            - "now" is UTC
+        """
+        try:
+            recorded = datetime.fromisoformat(obs.recorded_at)
+        except (TypeError, ValueError):
+            return []
+        if recorded.tzinfo is None:
+            recorded = recorded.replace(tzinfo=timezone.utc)
+        if recorded > datetime.now(timezone.utc) + timedelta(minutes=5):
+            return ["Observation timestamp is in the future"]
+        return []
+
     def append_observation(self, observation: Observation) -> dict:
         """
         Append one observation to a student's history and recalculate the
@@ -340,6 +359,7 @@ class StudentLensStore:
             raise LensNotFoundError(observation.student_id)
 
         errors = observation.validate()
+        errors.extend(self.validate_observation_timestamp(observation))
 
         current_tier = row["rti_current_tier"]
         if observation.rti_tier is not None and observation.rti_tier != current_tier:

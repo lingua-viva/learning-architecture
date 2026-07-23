@@ -133,10 +133,13 @@ def test_assign_tier_rti1_high_cefr_gets_extended():
     assert engine.assign_tier_for_student(lens) == "extended"
 
 
-def test_assign_tier_rti1_default_on_track():
+def test_assign_tier_rti1_no_cefr_defaults_foundational():
+    """RTI 1 + no CEFR evidence -> foundational (safest default, not an
+    optimistic guess). Resolves the DISPUTED Elena case in the eval truth
+    table (operator decision, 2026-07-22)."""
     engine = ContentDifferentiator()
     lens = {"rti_current_tier": 1, "cefr_snapshot": {}}
-    assert engine.assign_tier_for_student(lens) == "on_track"
+    assert engine.assign_tier_for_student(lens) == "foundational"
 
 
 def test_assign_tier_rti2_with_strong_cefr_gets_on_track():

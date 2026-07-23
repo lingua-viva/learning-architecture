@@ -73,7 +73,7 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from typing import Optional
 
-CEFR_ORDER = ["A1", "A1+", "A2", "A2+", "B1", "B1+", "B2", "C1", "C2"]
+CEFR_ORDER = ["Pre-A1", "A1", "A1+", "A2", "A2+", "B1", "B1+", "B2", "C1", "C2"]
 
 TIERS = ("foundational", "on_track", "extended")
 
@@ -164,9 +164,15 @@ class LessonInput:
 
 
 def _cefr_shift(band: str, steps: int) -> str:
-    """Move a CEFR band up/down by `steps` positions, clamped to range."""
+    """Move a CEFR band up/down by `steps` positions, clamped to range.
+
+    Generated lesson content never targets below A1 — Pre-A1 is a valid
+    student-diagnostic level (see assign_tier_for_student) but is not a
+    content-generation target, so the floor here is A1, not index 0.
+    """
     idx = CEFR_ORDER.index(band) if band in CEFR_ORDER else CEFR_ORDER.index("B1")
-    new_idx = max(0, min(len(CEFR_ORDER) - 1, idx + steps))
+    floor_idx = CEFR_ORDER.index("A1")
+    new_idx = max(floor_idx, min(len(CEFR_ORDER) - 1, idx + steps))
     return CEFR_ORDER[new_idx]
 
 
@@ -205,7 +211,7 @@ def _generate_tier(
 ) -> dict:
     tier_cefr = {
         "foundational": _cefr_shift(lesson.cefr_target, -1),
-        "on_track": lesson.cefr_target,
+        "on_track": _cefr_shift(lesson.cefr_target, 0),
         "extended": _cefr_shift(lesson.cefr_target, +1),
     }[tier]
 
@@ -309,7 +315,7 @@ def _adapt_tier_from_source(
     """
     tier_cefr = {
         "foundational": _cefr_shift(lesson.cefr_target, -1),
-        "on_track": lesson.cefr_target,
+        "on_track": _cefr_shift(lesson.cefr_target, 0),
         "extended": _cefr_shift(lesson.cefr_target, +1),
     }[tier]
 
@@ -543,8 +549,14 @@ class ContentDifferentiator:
             if weakest and CEFR_ORDER.index(weakest) >= CEFR_ORDER.index("B1"):
                 return "on_track"
             return "foundational"
-        # RTI tier 1 (universal): CEFR decides between on_track / extended
-        if weakest and CEFR_ORDER.index(weakest) >= CEFR_ORDER.index("B2"):
+        # RTI tier 1 (universal): CEFR decides between on_track / extended.
+        # No CEFR evidence yet (weakest is None) is treated the same as
+        # every other "insufficient data" case in this system: safest
+        # default, not an optimistic guess (operator decision, 2026-07-22 —
+        # resolves the DISPUTED Elena case in the eval truth table).
+        if weakest is None:
+            return "foundational"
+        if CEFR_ORDER.index(weakest) >= CEFR_ORDER.index("B2"):
             return "extended"
         return "on_track"
 

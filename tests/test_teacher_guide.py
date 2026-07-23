@@ -36,9 +36,12 @@ def test_guide_has_tier_counts_matching_roster():
     engine = ContentDifferentiator()
     assignments = engine.assign_packs_for_roster(pack, roster)
     guide = TeacherGuideGenerator().generate(pack, roster, assignments)
-    assert guide.tier_counts["foundational"] == 1
+    # s1: RTI3 -> foundational. s2: RTI1+B2 -> extended.
+    # s3: RTI1+no CEFR evidence -> foundational (safest default, not
+    # on_track — resolves the DISPUTED Elena case, operator decision 2026-07-22).
+    assert guide.tier_counts["foundational"] == 2
     assert guide.tier_counts["extended"] == 1
-    assert guide.tier_counts["on_track"] == 1
+    assert guide.tier_counts["on_track"] == 0
 
 
 def test_guide_distribution_instructions_present_for_all_tiers():
