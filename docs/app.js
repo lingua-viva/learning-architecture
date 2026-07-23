@@ -77,7 +77,7 @@ bannerItems.forEach((el, index) => {
   const chips = [document.getElementById('demoChipOne'), document.getElementById('demoChipTwo')].filter(Boolean);
   if (!capture) return;
 
-  const text = 'Marco self-corrected passato prossimo and used essere correctly in a partner exchange.';
+  const text = 'Amina explained her reasoning to her partner clearly and caught her own error before I prompted.';
   const timers = [];
 
   function at(delay, fn) {

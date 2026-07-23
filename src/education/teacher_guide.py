@@ -166,6 +166,7 @@ class TeacherGuide:
     pack_id: str
     groups: list[Group] = field(default_factory=list)
     unplaced_for_grouping: list[str] = field(default_factory=list)
+    roster_display_names: dict[str, str] = field(default_factory=dict)
 
     def to_markdown(self) -> str:
         lines = [
@@ -204,7 +205,8 @@ class TeacherGuide:
             )
             lines.append("")
             for sid in self.unplaced_for_grouping:
-                lines.append(f"- {sid}")
+                name = self.roster_display_names.get(sid) or sid
+                lines.append(f"- {name}")
             lines.append("")
         if self.trauma_aware_notes:
             lines.append("## Facilitation Notes")
@@ -259,6 +261,8 @@ class TeacherGuideGenerator:
 
         groups, unplaced = build_cross_level_groups(roster, assignments)
 
+        roster_display_names = {s["student_id"]: s.get("display_name", "") for s in roster}
+
         return TeacherGuide(
             lesson_title=pack.lesson.get("unit_title", pack.lesson.get("topic", "")),
             tier_counts=tier_counts,
@@ -268,4 +272,5 @@ class TeacherGuideGenerator:
             pack_id=pack.pack_id,
             groups=groups,
             unplaced_for_grouping=unplaced,
+            roster_display_names=roster_display_names,
         )
