@@ -20,6 +20,8 @@ from src.education.slack_bot import (
     ACK_NEEDS_STUDENT_TAG,
     ACK_ESCALATION,
     ACK_UNKNOWN_STUDENT,
+    ACK_NEEDS_OBSERVATION_TEXT,
+    ACK_OBSERVATION_TOO_LONG,
     InvalidSlackSignatureError,
     verify_slack_signature,
     parse_student_tag,
@@ -74,6 +76,12 @@ def test_verify_slack_signature_stale_timestamp_rejected():
     body = '{"type":"event_callback"}'
     sig = make_signature(ts, body)
     assert verify_slack_signature(SIGNING_SECRET, ts, body, sig) is False
+
+
+def test_verify_slack_signature_rejects_empty_secret_and_nonfinite_timestamp():
+    assert verify_slack_signature("", "1", "{}", "v0=anything", now=1) is False
+    assert verify_slack_signature(SIGNING_SECRET, "nan", "{}", "v0=anything", now=1) is False
+    assert verify_slack_signature(SIGNING_SECRET, "1", "{}", "v0=anything", now=float("inf")) is False
 
 
 # --- parsing helpers ---
@@ -137,6 +145,32 @@ def test_event_id_deduplication(tmp_path):
     assert second == {"ok": True, "skipped": "duplicate_event_id"}
 
 
+def test_event_callback_without_event_id_is_not_processed(tmp_path):
+    bot, store, log = make_bot(tmp_path)
+    store.create_lens(student_id="s1", display_name="Test Student")
+    result = bot.handle_event_payload({
+        "type": "event_callback",
+        "event": {"type": "message", "channel": "C123", "text": "[student:s1] note"},
+    })
+    assert result == {"ok": True, "skipped": "missing_event_id"}
+    assert log == []
+
+
+def test_seen_event_cache_is_bounded(tmp_path, monkeypatch):
+    import src.education.slack_bot as slack_bot_module
+
+    monkeypatch.setattr(slack_bot_module, "MAX_SEEN_EVENT_IDS", 3)
+    bot, _, _ = make_bot(tmp_path)
+    for i in range(5):
+        bot.handle_event_payload({
+            "type": "event_callback",
+            "event_id": f"EvBounded{i}",
+            "event": {"type": "not-a-message"},
+        })
+    assert len(bot._seen_event_ids) == 3
+    assert list(bot._seen_event_order) == ["EvBounded2", "EvBounded3", "EvBounded4"]
+
+
 def test_unregistered_channel_silently_ignored(tmp_path):
     bot, _, log = make_bot(tmp_path)
     payload = {
@@ -161,6 +195,30 @@ def test_missing_student_tag_posts_ack_and_does_not_capture(tmp_path):
     assert log == [("C123", ACK_NEEDS_STUDENT_TAG)]
 
 
+def test_student_tag_without_observation_is_rejected(tmp_path):
+    bot, store, log = make_bot(tmp_path)
+    store.create_lens(student_id="s1", display_name="Test Student")
+    result = bot.handle_event_payload({
+        "type": "event_callback",
+        "event_id": "EvEmpty",
+        "event": {"type": "message", "channel": "C123", "user": "U1", "text": "[student:s1]"},
+    })
+    assert result["skipped"] == "missing_observation_text"
+    assert log == [("C123", ACK_NEEDS_OBSERVATION_TEXT)]
+
+
+def test_oversized_observation_is_rejected_before_capture(tmp_path):
+    bot, store, log = make_bot(tmp_path)
+    store.create_lens(student_id="s1", display_name="Test Student")
+    result = bot.handle_event_payload({
+        "type": "event_callback",
+        "event_id": "EvHuge",
+        "event": {"type": "message", "channel": "C123", "user": "U1", "text": "[student:s1] " + ("x" * 20_001)},
+    })
+    assert result["skipped"] == "observation_too_long"
+    assert log == [("C123", ACK_OBSERVATION_TOO_LONG)]
+
+
 def test_successful_capture_posts_ack_saved(tmp_path):
     bot, store, log = make_bot(tmp_path)
     store.create_lens(student_id="s1", display_name="Test Student")
@@ -176,7 +234,38 @@ def test_successful_capture_posts_ack_saved(tmp_path):
     result = bot.handle_event_payload(payload)
     assert result["ok"] is True
     assert "capture_result" in result
+    assert result["acknowledgement_delivered"] is True
     assert log == [("C123", ACK_SAVED)]
+
+
+def test_ack_transport_failure_does_not_replay_or_lose_local_capture(tmp_path):
+    store = StudentLensStore(db_path=tmp_path / "test.db")
+    store.create_lens(student_id="s1", display_name="Test Student")
+
+    def fail_post(_channel, _text):
+        raise RuntimeError("simulated Slack outage")
+
+    bot = SlackObservationBot(
+        capture_pipeline=ObservationCapturePipeline(store=store),
+        teacher_channel_map={"C123": "teacher_1"},
+        signing_secret=SIGNING_SECRET,
+        post_message=fail_post,
+    )
+    payload = {
+        "type": "event_callback",
+        "event_id": "EvAckFailure",
+        "event": {
+            "type": "message",
+            "channel": "C123",
+            "user": "U1",
+            "text": "[student:s1] Local write survives transport failure",
+        },
+    }
+    result = bot.handle_event_payload(payload)
+    assert result["ok"] is True
+    assert result["acknowledgement_delivered"] is False
+    assert len(store.export_lens("s1")["observations"]) == 1
+    assert bot.handle_event_payload(payload)["skipped"] == "duplicate_event_id"
 
 
 def test_unknown_student_id_posts_ack_and_does_not_crash(tmp_path):
@@ -256,6 +345,25 @@ def test_untagged_message_outside_window_still_requires_tag(tmp_path):
 
     assert result["skipped"] == "missing_student_tag"
     assert log[-1] == ("C123", ACK_NEEDS_STUDENT_TAG)
+
+
+def test_clock_rollback_does_not_reuse_student_context(tmp_path):
+    clock = {"t": 1000.0}
+    bot, store, log = make_bot(tmp_path)
+    bot.now = lambda: clock["t"]
+    store.create_lens(student_id="s1", display_name="Test Student")
+    bot.handle_event_payload({
+        "type": "event_callback",
+        "event_id": "EvClock1",
+        "event": {"type": "message", "channel": "C123", "user": "U1", "text": "[student:s1] First"},
+    })
+    clock["t"] = 900.0
+    result = bot.handle_event_payload({
+        "type": "event_callback",
+        "event_id": "EvClock2",
+        "event": {"type": "message", "channel": "C123", "user": "U1", "text": "Second"},
+    })
+    assert result["skipped"] == "missing_student_tag"
 
 
 def test_new_tag_switches_student_immediately(tmp_path):

@@ -68,8 +68,11 @@ from __future__ import annotations
 
 import hmac
 import hashlib
+import math
+import logging
 import re
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
@@ -95,6 +98,9 @@ MAX_REQUEST_AGE_SECONDS = 60 * 5
 # the window. A cold start (no prior tag in this window) still requires
 # the tag, exactly as before.
 CONTINUATION_WINDOW_SECONDS = 60 * 10
+MAX_TRANSCRIPT_CHARS = 20_000
+MAX_SEEN_EVENT_IDS = 10_000
+logger = logging.getLogger(__name__)
 
 ACK_SAVED = "✓ Observation saved."
 ACK_NEEDS_STUDENT_TAG = (
@@ -105,6 +111,12 @@ ACK_ESCALATION = "🔔 This observation triggered a review flag — check your d
 ACK_UNKNOWN_STUDENT = (
     "⚠️ I don't have a student record for that ID yet — nothing was recorded. "
     "Check the `[student:<id>]` tag, or ask an admin to add this student first."
+)
+ACK_NEEDS_OBSERVATION_TEXT = (
+    "⚠️ I found the student tag but no observation text — nothing was recorded yet."
+)
+ACK_OBSERVATION_TOO_LONG = (
+    "⚠️ This observation is too long to save safely as one note — split it into smaller notes."
 )
 
 
@@ -127,9 +139,13 @@ def verify_slack_signature(
     whether the HMAC itself would match.
     """
     now = now if now is not None else time.time()
+    if not signing_secret:
+        return False
     try:
         ts = float(timestamp)
     except (TypeError, ValueError):
+        return False
+    if not math.isfinite(ts) or not math.isfinite(now):
         return False
     if abs(now - ts) > MAX_REQUEST_AGE_SECONDS:
         return False
@@ -212,7 +228,27 @@ class SlackObservationBot:
     continuation_window_seconds: float = CONTINUATION_WINDOW_SECONDS
     now: Callable[[], float] = field(default_factory=lambda: time.time)
     _seen_event_ids: set = field(default_factory=set, repr=False)
+    _seen_event_order: deque = field(default_factory=deque, repr=False)
     _last_student_by_sender: dict = field(default_factory=dict, repr=False)
+
+    def _post_acknowledgement(self, channel: str, text: str) -> bool:
+        """Best-effort fixed acknowledgement; never replay a saved observation.
+
+        The local write is authoritative. If Slack's Web API is temporarily
+        unavailable after that write, raising would make Slack retry the
+        inbound event and risk confusing delivery semantics. Log only the
+        channel ID and exception type; never log observation content.
+        """
+        try:
+            self.post_message(channel, text)
+            return True
+        except Exception as exc:
+            logger.warning(
+                "Slack acknowledgement failed for channel %s (%s)",
+                channel,
+                type(exc).__name__,
+            )
+            return False
 
     def handle_request(self, headers: dict, raw_body: str) -> dict:
         """Verify signature, parse JSON, dispatch. `headers` keys are
@@ -251,10 +287,15 @@ class SlackObservationBot:
             return {"ok": True, "skipped": "unsupported_payload_type"}
 
         event_id = payload.get("event_id")
+        if not isinstance(event_id, str) or not event_id:
+            return {"ok": True, "skipped": "missing_event_id"}
         if event_id and event_id in self._seen_event_ids:
             return {"ok": True, "skipped": "duplicate_event_id"}
-        if event_id:
-            self._seen_event_ids.add(event_id)
+        self._seen_event_ids.add(event_id)
+        self._seen_event_order.append(event_id)
+        while len(self._seen_event_order) > MAX_SEEN_EVENT_IDS:
+            expired = self._seen_event_order.popleft()
+            self._seen_event_ids.discard(expired)
 
         event = payload.get("event", {})
         if not isinstance(event, dict):
@@ -283,6 +324,9 @@ class SlackObservationBot:
         transcript = extract_transcript(event)
         if not transcript:
             return {"ok": True, "skipped": "no_transcript_available"}
+        if len(transcript) > MAX_TRANSCRIPT_CHARS:
+            self._post_acknowledgement(channel, ACK_OBSERVATION_TOO_LONG)
+            return {"ok": True, "skipped": "observation_too_long"}
 
         sender_id = event.get("user")
         # A missing/empty sender identity (malformed or unusual payload —
@@ -301,13 +345,16 @@ class SlackObservationBot:
             # within the continuation window — otherwise this is a cold
             # start and the tag is genuinely required (never guess).
             cached = self._last_student_by_sender.get(sender_key) if sender_key is not None else None
-            if cached and (now - cached[1]) <= self.continuation_window_seconds:
+            if cached and 0 <= (now - cached[1]) <= self.continuation_window_seconds:
                 student_id = cached[0]
                 observation_text = transcript
 
         if not student_id:
-            self.post_message(channel, ACK_NEEDS_STUDENT_TAG)
-            return {"ok": True, "skipped": "missing_student_tag"}
+                self._post_acknowledgement(channel, ACK_NEEDS_STUDENT_TAG)
+                return {"ok": True, "skipped": "missing_student_tag"}
+        elif not observation_text:
+            self._post_acknowledgement(channel, ACK_NEEDS_OBSERVATION_TEXT)
+            return {"ok": True, "skipped": "missing_observation_text"}
 
         try:
             result = self.capture_pipeline.capture(
@@ -326,7 +373,7 @@ class SlackObservationBot:
             # bad/typo'd tag must not poison follow-up untagged messages
             # into repeatedly failing against a phantom student instead of
             # being asked to retag (hardening sweep 2026-07-14 finding).
-            self.post_message(channel, ACK_UNKNOWN_STUDENT)
+            self._post_acknowledgement(channel, ACK_UNKNOWN_STUDENT)
             return {"ok": True, "skipped": "unknown_student_id"}
 
         # Capture succeeded — only now is it safe to (re)start/refresh the
@@ -335,8 +382,16 @@ class SlackObservationBot:
             self._last_student_by_sender[sender_key] = (student_id, now)
 
         if result["escalations"]:
-            self.post_message(channel, ACK_ESCALATION)
+            acknowledgement_delivered = self._post_acknowledgement(
+                channel, ACK_ESCALATION
+            )
         else:
-            self.post_message(channel, ACK_SAVED)
+            acknowledgement_delivered = self._post_acknowledgement(
+                channel, ACK_SAVED
+            )
 
-        return {"ok": True, "capture_result": result}
+        return {
+            "ok": True,
+            "capture_result": result,
+            "acknowledgement_delivered": acknowledgement_delivered,
+        }
