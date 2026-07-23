@@ -16,24 +16,78 @@ import pytest
 from src.education.student_lens import StudentLensStore, Observation
 
 
-@pytest.mark.skip(reason="awaiting get_lens_as_of() implementation per CONTRACTS.md")
 def test_L3_TIME_001_lens_at_T_excludes_future():
     """L3-TIME-001: Lens at time T contains no observations after T.
 
     Setup: Insert 5 observations with timestamps Sept-Jan. Query as_of=November.
     Pass: Only Sept, Oct, Nov observations present. Dec, Jan excluded.
     """
-    pass
+    with tempfile.TemporaryDirectory() as tmp:
+        store = StudentLensStore(db_path=Path(tmp) / "time001.db")
+        sid = store.create_lens(display_name="Time Test", grade_level="G3")
+
+        levels = {
+            "2025-09-01T10:00:00+00:00": "A1",
+            "2025-10-01T10:00:00+00:00": "A1",
+            "2025-11-01T10:00:00+00:00": "A2",
+            "2025-12-01T10:00:00+00:00": "B1",
+            "2026-01-01T10:00:00+00:00": "B2",
+        }
+        for ts, level in levels.items():
+            store.append_observation(Observation(
+                student_id=sid,
+                teacher_id="teacher-eval",
+                template_type="cefr",
+                raw_transcript=f"Reading check at {ts}",
+                cefr_dimension="reading",
+                cefr_level_observed=level,
+                cefr_direction="progressing",
+                recorded_at=ts,
+            ))
+
+        lens_as_of = store.get_lens_as_of(sid, "2025-11-01T10:00:00+00:00")
+        # As of November, the reading level should reflect the November
+        # observation (A2), not the later Dec/Jan ones (B1/B2).
+        assert lens_as_of["cefr_snapshot"]["reading"] == "A2"
+        store.close()
 
 
-@pytest.mark.skip(reason="awaiting get_lens_as_of() implementation per CONTRACTS.md")
 def test_L3_TIME_002_lens_at_T_includes_all_through_T():
     """L3-TIME-002: Lens at time T contains ALL observations through T.
 
     Setup: Insert 5 observations Sept-Jan. Query as_of=January.
     Pass: All 5 observations are present.
     """
-    pass
+    with tempfile.TemporaryDirectory() as tmp:
+        store = StudentLensStore(db_path=Path(tmp) / "time002.db")
+        sid = store.create_lens(display_name="Time Test", grade_level="G3")
+
+        levels = {
+            "2025-09-01T10:00:00+00:00": "A1",
+            "2025-10-01T10:00:00+00:00": "A1",
+            "2025-11-01T10:00:00+00:00": "A2",
+            "2025-12-01T10:00:00+00:00": "B1",
+            "2026-01-01T10:00:00+00:00": "B2",
+        }
+        for ts, level in levels.items():
+            store.append_observation(Observation(
+                student_id=sid,
+                teacher_id="teacher-eval",
+                template_type="cefr",
+                raw_transcript=f"Reading check at {ts}",
+                cefr_dimension="reading",
+                cefr_level_observed=level,
+                cefr_direction="progressing",
+                recorded_at=ts,
+            ))
+
+        lens_as_of = store.get_lens_as_of(sid, "2026-01-01T10:00:00+00:00")
+        # As of January, the latest (Jan) observation should be reflected.
+        assert lens_as_of["cefr_snapshot"]["reading"] == "B2"
+
+        live_lens = store.get_lens(sid)
+        assert lens_as_of["cefr_snapshot"] == live_lens["cefr_snapshot"]
+        store.close()
 
 
 def test_L3_TIME_003_future_timestamp_rejected():

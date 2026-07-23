@@ -508,6 +508,86 @@ class StudentLensStore:
         independent of whichever observation last triggered the rule."""
         return self._evaluate_rti_rules(student_id)
 
+    def update_rti_tier(self, student_id: str, new_tier: int, trigger: str) -> None:
+        """Manually change a student's RTI tier, with an audit trail.
+
+        Distinct from the tier changes that ride along with an observation
+        (see _recalculate_lens's rti_tier_changed_this_obs branch): this is
+        a teacher decision made independent of any single observation
+        (e.g. a team meeting decision), so it closes/opens
+        rti_tier_history entries directly rather than going through
+        append_observation(). Never touches cefr_snapshot or observations
+        — an RTI tier change is a decision about intervention intensity,
+        not a claim about language ability.
+        """
+        if new_tier not in VALID_RTI_TIERS:
+            raise ValueError(f"new_tier must be one of {VALID_RTI_TIERS}")
+        row = self._get_student_row(student_id)
+        if row is None:
+            raise LensNotFoundError(student_id)
+
+        lens = self._row_to_lens_dict(row)
+        now = _now_iso()
+        history = lens["rti_tier_history"]
+        if history and history[-1]["to"] is None:
+            history[-1]["to"] = now
+        history.append({"tier": new_tier, "from": now, "to": None, "trigger": trigger})
+
+        self._conn.execute(
+            """
+            UPDATE students SET
+                rti_current_tier = ?, rti_tier_history = ?,
+                profile_version = profile_version + 1, updated_at = ?
+            WHERE student_id = ?
+            """,
+            (new_tier, json.dumps(history), now, student_id),
+        )
+        self._conn.commit()
+
+    def get_lens_as_of(self, student_id: str, as_of: str) -> dict:
+        """Return the lens as it stood at a specific point in time.
+
+        Reconstructs cefr_snapshot and rti_current_tier from the
+        append-only observations/history logs, bounded to
+        recorded_at/from <= as_of, rather than mutating live state — the
+        append-only log is the source of truth and this is purely a
+        read-time projection over it.
+        """
+        try:
+            datetime.fromisoformat(as_of)
+        except (TypeError, ValueError):
+            raise ValueError(f"as_of must be a valid ISO8601 timestamp, got {as_of!r}")
+
+        row = self._get_student_row(student_id, include_deleted=True)
+        if row is None:
+            raise LensNotFoundError(student_id)
+        lens = self._row_to_lens_dict(row)
+
+        obs_rows = self._conn.execute(
+            "SELECT * FROM observations WHERE student_id = ? AND recorded_at <= ? "
+            "ORDER BY recorded_at ASC",
+            (student_id, as_of),
+        ).fetchall()
+        obs = [dict(r) for r in obs_rows]
+
+        # CEFR snapshot: latest observed level per dimension, as of that time
+        cefr_snapshot = {d: None for d in VALID_CEFR_DIMENSIONS}
+        for o in obs:
+            if o["cefr_dimension"] and o["cefr_level_observed"]:
+                cefr_snapshot[o["cefr_dimension"]] = o["cefr_level_observed"]
+        lens["cefr_snapshot"] = cefr_snapshot
+
+        # RTI tier: whichever history entry was open ("to" is None or > as_of)
+        # at as_of. rti_tier_history entries are already chronological.
+        current_tier = lens["rti_current_tier"]
+        for entry in lens["rti_tier_history"]:
+            if entry["from"] <= as_of and (entry["to"] is None or entry["to"] > as_of):
+                current_tier = entry["tier"]
+                break
+        lens["rti_current_tier"] = current_tier
+
+        return lens
+
     # ------------------------------------------------------------------
     # Internal: recalculation + RTI escalation (observation-capture.md
     # Stage 3 Local Enrichment + Stage 6 RTI Escalation Logic)
