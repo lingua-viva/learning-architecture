@@ -37,7 +37,18 @@
 #   v9 (2026-07-20): static/index.html — sidebar accessibility + token pass:
 #     nav aria labels/current state, visible focus styling, and documented
 #     nav tuple/state contract.
-version: 9
+#   v10 (2026-07-22): src/web.py/static/index.html - file-map verification:
+#     explicit domain confirmation, opt-in student-zone metadata peek, and
+#     manual file-to-student assignment.
+#   v11 (2026-07-22): src/web.py/static/index.html - Slack integration:
+#     signed Events API receiver, secret-free status route, and Slack app view.
+#   v12 (2026-07-22): Slack 15-pass hardening:
+#     precise channel scopes and path-only reverse-proxy safety guidance.
+#   v13 (2026-07-22): convergence re-lock after concurrent file-map UI
+#     accessibility/error-handling and student-assignment work landed.
+#   v14-v15 (2026-07-22): concurrent convergence plus Observe field suggestions,
+#     live lens context, and Oka-style voice interaction in Ask.
+version: 15
 files:
   - static/index.html
   - static/sw.js

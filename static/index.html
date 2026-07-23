@@ -340,6 +340,19 @@
       border-color: var(--accent);
       font-size: 34px;
     }
+    .mic.is-listening {
+      box-shadow: 0 0 0 7px rgba(178, 75, 49, .18);
+      animation: voicePulse 1.5s ease-in-out infinite;
+    }
+    .mic.is-thinking {
+      background: var(--brand-2);
+      border-color: var(--brand-2);
+    }
+    .voice-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .voice-hint { color: var(--muted); font-size: 12px; }
+    @keyframes voicePulse {
+      50% { transform: scale(1.04); box-shadow: 0 0 0 12px rgba(178, 75, 49, .08); }
+    }
     .hidden {
       display: none !important;
     }
@@ -489,6 +502,91 @@
       selectedTraceId: ""
     };
 
+    const voiceRuntime = {
+      recognition: null,
+      listening: false,
+      silenceTimer: null,
+      finalText: "",
+      stopSpeaking() {
+        if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+      },
+      speak(text) {
+        if (!("speechSynthesis" in window) || !text) return;
+        this.stopSpeaking();
+        const clean = String(text)
+          .replace(/```[\s\S]*?```/g, " ")
+          .replace(/[*_#>`[\]]/g, "")
+          .replace(/\s+/g, " ")
+          .trim();
+        const utterance = new SpeechSynthesisUtterance(clean);
+        const voices = window.speechSynthesis.getVoices();
+        utterance.voice = voices.find(voice => /samantha|aria|serena|google uk english female/i.test(voice.name))
+          || voices.find(voice => /^en[-_]/i.test(voice.lang))
+          || null;
+        utterance.rate = 0.94;
+        utterance.pitch = 1.02;
+        utterance.volume = 1;
+        window.speechSynthesis.speak(utterance);
+      },
+      toggleAsk() {
+        if (this.listening && this.recognition) {
+          this.recognition.stop();
+          return;
+        }
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+          $("ask-voice-status").textContent = "Voice input is unavailable in this browser. You can still type.";
+          return;
+        }
+        this.stopSpeaking();
+        this.finalText = "";
+        const recognition = new SpeechRecognition();
+        this.recognition = recognition;
+        recognition.lang = "en-US";
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.onstart = () => {
+          this.listening = true;
+          $("ask-mic").classList.add("is-listening");
+          $("ask-voice-status").textContent = "Listening… pause when you are finished.";
+        };
+        recognition.onresult = event => {
+          let interim = "";
+          for (let i = event.resultIndex; i < event.results.length; i += 1) {
+            const words = event.results[i][0].transcript;
+            if (event.results[i].isFinal) this.finalText += `${words} `;
+            else interim += words;
+          }
+          $("ask-input").value = `${this.finalText}${interim}`.trim();
+          clearTimeout(this.silenceTimer);
+          this.silenceTimer = setTimeout(() => {
+            if (this.listening && this.recognition) this.recognition.stop();
+          }, 2500);
+        };
+        recognition.onerror = event => {
+          this.listening = false;
+          $("ask-mic")?.classList.remove("is-listening");
+          $("ask-voice-status").textContent = event.error === "not-allowed"
+            ? "Microphone access is off. You can still type."
+            : "I missed that. Tap and try again.";
+        };
+        recognition.onend = () => {
+          clearTimeout(this.silenceTimer);
+          this.listening = false;
+          $("ask-mic")?.classList.remove("is-listening");
+          const text = this.finalText.trim() || $("ask-input")?.value.trim();
+          this.finalText = "";
+          if (text) {
+            $("ask-voice-status").textContent = "Thinking…";
+            submitAskText(text, true);
+          } else if ($("ask-voice-status")) {
+            $("ask-voice-status").textContent = "Tap once to talk. Tap again to stop.";
+          }
+        };
+        recognition.start();
+      }
+    };
+
     /*
       NavItem tuple contract:
       [id, label, icon]
@@ -522,6 +620,7 @@
       ["trends", "Trends", "📊"]
     ];
     const utilityNav = [
+      ["slack", "Slack", "💬"],
       ["why", "Why", "❓"],
       ["health", "Health", "❤️"],
       ["privacy", "Privacy", "🔒"],
@@ -619,6 +718,7 @@
         privacy: renderPrivacy,
         profile: renderProfile,
         settings: renderSettings,
+        slack: renderSlack,
         reflect: renderReflect,
         programme: renderAdmin,
         evidence: renderAdmin,
@@ -763,16 +863,32 @@
             <label>Student<select id="obs-student">${studentOptions()}</select></label>
             <div class="row" style="margin:14px 0;"><button id="mic" class="mic" type="button" title="Start speech capture">🎙</button><span id="mic-status" class="badge">ready</span></div>
             <textarea id="obs-text" placeholder="A learner self-corrected passato prossimo, used essere correctly in context"></textarea>
+            <div class="row" style="margin-top:10px;"><button id="suggest-observation" type="button">Suggest fields</button><span id="obs-suggest-status" class="voice-hint">Nothing is saved until you review and press Save.</span></div>
             <div class="form-grid" style="margin-top:12px;">
+              <label>Observation type<select id="obs-template"><option value="cefr">CEFR skill</option><option value="literacy">Literacy</option><option value="sel_incident">SEL concern</option><option value="sel_positive">SEL positive</option><option value="rti_flag">Support flag</option></select></label>
               <label>CEFR skill<select id="obs-dim"><option>speaking</option><option>listening</option><option>reading</option><option>writing</option></select></label>
               <label>Observed level<select id="obs-level"><option>A1</option><option>A1+</option><option>A2</option><option>A2+</option><option>B1</option></select></label>
+              <label>Direction<select id="obs-direction"><option value="">Not stated</option><option>progressing</option><option>plateaued</option><option>regressing</option><option>mixed</option></select></label>
+              <label>SEL area<input id="obs-sel-domain" placeholder="Leave blank when not relevant"></label>
+              <label>SEL tone<select id="obs-sel-valence"><option value="">Not stated</option><option>positive</option><option>concern</option><option>neutral</option></select></label>
             </div>
+            <label class="row" style="margin:12px 0;"><input id="obs-urgency" type="checkbox" style="width:auto;"><span>Urgent follow-up needed</span><span id="obs-urgency-suggestion" class="badge">teacher must affirm</span></label>
             <button id="save-observation" class="primary" type="button">Save Observation</button>
           </div>
-          <div id="obs-result" class="panel"><h3>Saved notes appear here</h3><p>Student data stays on this machine.</p></div>
+          <div>
+            <div id="obs-lens" class="panel"><p>Loading this learner's current lens...</p></div>
+            <div id="obs-result" class="panel" style="margin-top:14px;"><h3>Saved notes appear here</h3><p>Student data stays on this machine.</p></div>
+          </div>
         </div>`;
       $("mic").addEventListener("click", startSpeech);
+      $("suggest-observation").addEventListener("click", suggestObservation);
+      $("obs-student").addEventListener("change", event => {
+        state.selectedStudent = event.target.value;
+        loadLens("obs-lens", false);
+      });
       $("save-observation").addEventListener("click", saveObservation);
+      state.selectedStudent = $("obs-student").value;
+      await loadLens("obs-lens", false);
     }
 
     function startSpeech() {
@@ -793,17 +909,65 @@
       recognition.start();
     }
 
+    async function suggestObservation() {
+      const transcript = $("obs-text").value.trim();
+      if (!transcript) {
+        $("obs-suggest-status").textContent = "Type or record an observation first.";
+        return;
+      }
+      $("suggest-observation").disabled = true;
+      $("obs-suggest-status").textContent = "Finding the best fields...";
+      try {
+        const data = await api("/api/observe/classify", {
+          method: "POST",
+          body: JSON.stringify({student_id: $("obs-student").value, raw_transcript: transcript})
+        });
+        const proposal = data.proposal || {};
+        const fieldMap = {
+          template_type: "obs-template",
+          cefr_dimension: "obs-dim",
+          cefr_level_observed: "obs-level",
+          cefr_direction: "obs-direction",
+          sel_domain: "obs-sel-domain",
+          sel_valence: "obs-sel-valence"
+        };
+        Object.entries(fieldMap).forEach(([field, id]) => {
+          if (proposal[field] !== null && proposal[field] !== undefined) $(id).value = proposal[field];
+        });
+        // Escalation is never silently accepted. A model can only recommend
+        // that the teacher visibly checks this box.
+        $("obs-urgency").checked = false;
+        $("obs-urgency-suggestion").textContent = proposal.urgency_flag === true
+          ? "suggested — check to affirm"
+          : "teacher must affirm";
+        $("obs-urgency-suggestion").className = `badge ${proposal.urgency_flag === true ? "warn" : ""}`;
+        $("obs-suggest-status").textContent = data.model_used === "none"
+          ? "Local model unavailable. Continue with manual fields."
+          : "Suggestions ready. Review every field before saving.";
+      } catch {
+        $("obs-suggest-status").textContent = "Suggestions unavailable. Continue with manual fields.";
+      } finally {
+        $("suggest-observation").disabled = false;
+      }
+    }
+
     async function saveObservation() {
       const result = await api("/api/observe/capture", {
         method: "POST",
         body: JSON.stringify({
           student_id: $("obs-student").value,
           transcript: $("obs-text").value,
+          template_type: $("obs-template").value,
           cefr_dimension: $("obs-dim").value,
-          cefr_level_observed: $("obs-level").value
+          cefr_level_observed: $("obs-level").value,
+          cefr_direction: $("obs-direction").value || null,
+          sel_domain: $("obs-sel-domain").value.trim() || null,
+          sel_valence: $("obs-sel-valence").value || null,
+          urgency_flag: $("obs-urgency").checked
         })
       });
       $("obs-result").innerHTML = `<h3>Saved</h3><div class="source-line"><span class="badge ok">Saved locally. Not uploaded. Not shared.</span><span class="badge">Domain: observation</span></div><p>Observation ${escapeHtml(result.observation.observation_id)} is attached to the local lens.</p><div class="output">${escapeHtml(result.observation.raw_transcript)}</div>`;
+      await loadLens("obs-lens", false);
     }
 
     async function renderStudents() {
@@ -811,10 +975,36 @@
       await ensureStudents();
       $("content").innerHTML = `
         <div class="view-head"><div><h2>Student Lenses</h2><p>View profiles, observations, CEFR trajectory, grouping notes, and support proposals. The system suggests; the teacher decides.</p></div></div>
+        <div class="panel" style="margin-bottom:14px;">
+          <h3>Add Student</h3>
+          <form id="add-student-form" class="row" style="gap:8px;flex-wrap:wrap;align-items:flex-end;">
+            <label style="display:flex;flex-direction:column;gap:4px;"><span>Name</span><input id="new-student-name" required placeholder="Display name"></label>
+            <label style="display:flex;flex-direction:column;gap:4px;"><span>Grade</span><input id="new-student-grade" placeholder="e.g. G3"></label>
+            <label style="display:flex;flex-direction:column;gap:4px;"><span>Home language</span><input id="new-student-lang" placeholder="e.g. it"></label>
+            <button class="primary" type="submit">Add</button>
+          </form>
+          <p id="add-student-status" style="margin-top:6px;"></p>
+        </div>
         <div class="grid two">
           <div class="panel"><h3>Roster</h3><div class="list">${state.students.map(s => `<button type="button" data-student="${s.student_id}"><strong>${escapeHtml(s.display_name)}</strong><br>${escapeHtml(s.cefr_trajectory_30d || "trajectory pending")} · support tier ${s.rti_current_tier} · ${escapeHtml(s.grade_level)}</button>`).join("")}</div></div>
           <div id="lens" class="panel"></div>
         </div>`;
+      $("add-student-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const name = $("new-student-name").value.trim();
+        if (!name) return;
+        const grade = $("new-student-grade").value.trim();
+        const lang = $("new-student-lang").value.trim();
+        const payload = {display_name: name, grade_level: grade, home_languages: lang ? [lang] : []};
+        try {
+          const res = await fetch("/api/students", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload)});
+          const data = await res.json();
+          if (!res.ok) { $("add-student-status").textContent = data.error || "Failed"; return; }
+          $("add-student-status").textContent = `Added ${data.display_name}.`;
+          state.students = null;
+          await renderStudents();
+        } catch (err) { $("add-student-status").textContent = "Network error."; }
+      });
       document.querySelectorAll("[data-student]").forEach(button => button.addEventListener("click", () => {
         state.selectedStudent = button.dataset.student;
         loadLens();
@@ -822,18 +1012,33 @@
       await loadLens();
     }
 
-    async function loadLens() {
+    async function loadLens(targetId = "lens", showDecisionControls = true) {
       const lens = await api(`/api/students/${state.selectedStudent}/lens`);
       const observations = (lens.observations || []).slice(-3).reverse();
-      $("lens").innerHTML = `
+      $(targetId).innerHTML = `
         <h3>${escapeHtml(lens.display_name)}</h3>
         <p>CEFR trajectory: <strong>${escapeHtml(lens.cefr_trajectory_30d)}</strong> · support tier <strong>${lens.rti_current_tier}</strong></p>
         <div class="source-line"><span class="badge warn">System suggests; teacher reviews before any support-tier decision</span></div>
-        <div class="row"><button type="button">Confirm</button><button type="button">Defer</button></div>
+        <div class="row"><button type="button" id="rti-confirm">Confirm</button><button type="button" id="rti-defer">Defer</button><span id="rti-decision-status"></span></div>
         <h3 style="margin-top:16px;">Recent observations</h3>
         <div class="list">${observations.length ? observations.map(o => `<div class="item"><p>${escapeHtml(o.raw_transcript)}</p><span class="badge">${escapeHtml(o.cefr_level_observed || "not tagged")}</span></div>`).join("") : "<p>No observations yet.</p>"}</div>
         <h3 style="margin-top:16px;">Grouping</h3>
         <p>Avoid-pairing notes: ${escapeHtml((lens.avoid_pairing_with || []).join(", ") || "none")}</p>`;
+      if (!showDecisionControls) {
+        $("rti-confirm").closest(".row").remove();
+        return;
+      }
+      async function handleRtiDecision(decision) {
+        const res = await fetch(`/api/students/${state.selectedStudent}/rti/decision`, {
+          method: "POST", headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({decision})
+        });
+        const data = await res.json();
+        if (res.ok) { $("rti-decision-status").textContent = "Recorded."; }
+        else { $("rti-decision-status").textContent = data.error || "Failed."; }
+      }
+      $("rti-confirm").addEventListener("click", () => handleRtiDecision("confirm"));
+      $("rti-defer").addEventListener("click", () => handleRtiDecision("defer"));
     }
 
     async function renderAssess() {
@@ -867,13 +1072,21 @@
         <div class="view-head"><div><h2>Ask Lingua Viva</h2><p>Free-form teacher questions route through the governed local app runtime.</p></div><span class="badge ok">governance route</span></div>
         <div class="panel">
           <div id="chat-log" class="chat-log">${state.chat.map(renderMessage).join("")}</div>
+          <div class="voice-controls" style="margin-top:14px;">
+            <button id="ask-mic" class="mic" type="button" aria-label="Talk to Lingua Viva" title="Tap to talk">🎙</button>
+            <div><strong>Talk to Lingua Viva</strong><div id="ask-voice-status" class="voice-hint">Tap once to talk. Pause when finished, or tap again to stop.</div></div>
+          </div>
           <form id="ask-form" class="row" style="margin-top:12px;"><input id="ask-input" placeholder="How do I scaffold articles for mixed-level Grade 3?"><button class="primary" type="submit">Send</button></form>
         </div>`;
       $("ask-form").addEventListener("submit", askQuestion);
+      $("ask-mic").addEventListener("click", () => voiceRuntime.toggleAsk());
       attachWhyLinks();
     }
 
     function renderMessage(message) {
+      if (message.isError) {
+        return `<div class="message error-message"><strong>${escapeHtml(message.role)}</strong><p style="color:var(--muted);font-style:italic;">${escapeHtml(message.text)}</p><div class="source-line"><span class="badge warn">unavailable</span></div></div>`;
+      }
       const meta = message.meta ? `<div class="source-line"><span class="badge ok">${escapeHtml(message.meta.route || "local")}</span><span class="badge">${escapeHtml(message.meta.model_used || "model unavailable")}</span><span class="badge">${((message.meta.duration_ms || 0) / 1000).toFixed(1)}s</span><span class="badge">${escapeHtml(message.meta.source_citation || "Manuale v1")}</span><button type="button" data-why="${escapeHtml(message.meta.trace_id || "")}">Why?</button></div>` : "";
       return `<div class="message ${message.role === "teacher" ? "user" : ""}"><strong>${message.role}</strong><p>${escapeHtml(message.text)}</p>${meta}</div>`;
     }
@@ -881,28 +1094,47 @@
     async function askQuestion(event) {
       event.preventDefault();
       const text = $("ask-input").value.trim();
+      await submitAskText(text, false);
+    }
+
+    async function submitAskText(text, fromVoice = false) {
       if (!text) return;
       state.chat.push({role: "teacher", text});
-      $("ask-input").value = "";
+      if ($("ask-input")) $("ask-input").value = "";
       renderAsk();
+      const mic = $("ask-mic");
+      if (mic) mic.classList.add("is-thinking");
+      if ($("ask-voice-status")) $("ask-voice-status").textContent = "Thinking…";
       const response = await fetch("/api/query", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({query: text, intent: "TEACH"})
       });
       const data = await response.json();
-      state.chat.push({
-        role: "Lingua Viva",
-        text: data.result?.content || data.error || "No response.",
-        meta: {
-          trace_id: data.trace_id,
-          route: data.route,
-          model_used: data.model_used,
-          duration_ms: data.duration_ms,
-          source_citation: data.source_citation
-        }
-      });
+      if (data.error && !data.result) {
+        state.chat.push({
+          role: "Lingua Viva",
+          text: data.error,
+          isError: true
+        });
+      } else {
+        state.chat.push({
+          role: "Lingua Viva",
+          text: data.result?.content || "No response.",
+          meta: {
+            trace_id: data.trace_id,
+            route: data.route,
+            model_used: data.model_used,
+            duration_ms: data.duration_ms,
+            source_citation: data.source_citation
+          }
+        });
+      }
       renderAsk();
+      if (fromVoice) {
+        const reply = state.chat[state.chat.length - 1];
+        voiceRuntime.speak(reply.text);
+      }
     }
 
     function attachWhyLinks() {
@@ -1081,6 +1313,73 @@
       await renderFileMapControls();
     }
 
+    async function renderSlack() {
+      setTitle("Slack", "local observation bridge");
+      let status;
+      try {
+        status = await api("/api/slack/status");
+      } catch (error) {
+        $("content").innerHTML = `<div class="panel"><h2>Slack</h2><p>${escapeHtml(error.message)}</p></div>`;
+        return;
+      }
+      const ready = status.configured;
+      const check = (label, value) => `
+        <div class="item">
+          <strong>${escapeHtml(label)}</strong>
+          <span class="badge ${value ? "ok" : "warn"}">${value ? "ready" : "needed"}</span>
+        </div>`;
+      $("content").innerHTML = `
+        <div class="view-head">
+          <div>
+            <h2>Slack observation bot</h2>
+            <p>Capture typed observations or completed Slack voice-note transcripts into the local student lens.</p>
+          </div>
+          <span class="badge ${ready ? "ok" : "warn"}">${ready ? "Ready" : "Setup required"}</span>
+        </div>
+        <div class="grid two">
+          <div class="panel">
+            <h3>Connection</h3>
+            <div class="list">
+              ${check("Signing secret", status.signing_secret_set)}
+              ${check("Bot token", status.bot_token_set)}
+              ${check("Teacher channels", status.channel_map_set)}
+            </div>
+            <p>${status.registered_channel_count} teacher channel${status.registered_channel_count === 1 ? "" : "s"} registered.</p>
+            ${status.config_error ? `<p class="badge warn">${escapeHtml(status.config_error)}</p>` : ""}
+          </div>
+          <div class="panel">
+            <h3>Privacy boundary</h3>
+            <p>Slack receives the original message under your school's workspace policy. Lingua Viva writes the observation to this machine and sends only a fixed saved/review acknowledgement back.</p>
+            <div class="source-line">
+              <span class="badge ok">local student record</span>
+              <span class="badge ok">no external model</span>
+              <span class="badge">voice transcript supported</span>
+            </div>
+          </div>
+        </div>
+        <div class="panel" style="margin-top:14px;">
+          <h3>Set up the Slack app</h3>
+          <ol>
+            <li>Create or open a Slack app and enable Event Subscriptions.</li>
+            <li>Set the HTTPS request URL to your approved public app address plus <code>${escapeHtml(status.event_path)}</code>.</li>
+            <li>For public channels, subscribe to <code>message.channels</code> and grant <code>channels:history</code>. For private teacher channels, use <code>message.groups</code> and <code>groups:history</code>. Grant <code>chat:write</code> for fixed acknowledgements.</li>
+            <li>Set <code>LV_SLACK_SIGNING_SECRET</code>, <code>LV_SLACK_BOT_TOKEN</code>, and <code>LV_SLACK_TEACHER_CHANNEL_MAP</code> in the local app environment, then restart Lingua Viva.</li>
+            <li>Invite the bot only to approved teacher observation channels.</li>
+          </ol>
+          <p><code>LV_SLACK_TEACHER_CHANNEL_MAP={"C012345":"teacher-1"}</code></p>
+          <p><strong>Network safety:</strong> expose only <code>${escapeHtml(status.event_path)}</code> through an approved HTTPS reverse proxy or tunnel. Do not publish the rest of the local teacher app.</p>
+          <div class="row">
+            <button id="open-slack-apps" class="primary" type="button">Open Slack app setup</button>
+            <button id="refresh-slack" type="button">Refresh status</button>
+          </div>
+          <p style="margin-top:12px;">Start a student context with <code>[student:&lt;id&gt;]</code>. Untagged follow-ups from the same teacher can continue that student for ten minutes; Lingua Viva never guesses on a cold start.</p>
+        </div>`;
+      $("open-slack-apps").addEventListener("click", () => {
+        window.open("https://api.slack.com/apps", "_blank", "noopener,noreferrer");
+      });
+      $("refresh-slack").addEventListener("click", renderSlack);
+    }
+
     async function renderScheduleControls(overview) {
       const days = ["monday", "tuesday", "wednesday", "thursday", "friday"];
       const saved = JSON.parse(localStorage.getItem("lvSchedule") || "{}");
@@ -1140,19 +1439,169 @@
       const summary = data.summary || {};
       const domains = Object.entries(summary.domains_detected || {});
       const roots = data.roots || [];
+      const domainEntries = (data.entries || []).filter(entry => entry.inferred_domain);
+      const confirmations = data.confirmations || {};
+      const studentZones = data.student_zones || [];
       status.innerHTML = `<span class="badge ${summary.configured ? "ok" : ""}">${summary.configured ? "configured" : "empty"}</span><span class="badge warn">${data.student_zones_detected || 0} student data zones excluded</span>`;
       target.innerHTML = `
         <div class="grid two">
           <div class="item"><h3>Scanned roots</h3><div class="list">${roots.length ? roots.map(root => `<div class="item"><strong>${escapeHtml(root.path)}</strong><p>${root.entry_count} folders</p></div>`).join("") : "<p>No folders scanned yet.</p>"}</div></div>
-          <div class="item"><h3>Detected domains</h3><div class="source-line">${domains.length ? domains.map(([name, count]) => `<span class="badge">${escapeHtml(name)} ${count}</span>`).join("") : `<span class="badge">none</span>`}</div><p>Student data folders are counted, excluded, and never shown by path.</p></div>
+          <div class="item"><h3>Detected domains</h3><div class="source-line">${domains.length ? domains.map(([name, count]) => `<span class="badge">${escapeHtml(name)} ${count}</span>`).join("") : `<span class="badge">none</span>`}</div><p>Confirm each curriculum source before it is used downstream.</p></div>
+        </div>
+        <div class="item" style="margin-top:12px;">
+          <h3>Domain folders</h3>
+          <div class="list">${domainEntries.length ? domainEntries.map(entry => {
+            const selected = confirmations[entry.path] || "";
+            return `<div class="item">
+              <strong>${escapeHtml(entry.path)}</strong>
+              <p><span class="badge">${escapeHtml(entry.inferred_domain)}</span> ${entry.file_count} files</p>
+              <div class="row">
+                <button type="button" class="${selected === "curriculum_source" ? "primary" : ""}" data-confirm-path="${escapeHtml(entry.path)}" data-confirm-purpose="curriculum_source" aria-pressed="${selected === "curriculum_source"}">Use for curriculum</button>
+                <button type="button" class="${selected === "ignore" ? "primary" : ""}" data-confirm-path="${escapeHtml(entry.path)}" data-confirm-purpose="ignore" aria-pressed="${selected === "ignore"}">Ignore</button>
+                ${selected ? `<span class="badge ok">${escapeHtml(selected.replace("_", " "))}</span>` : `<span class="badge">not confirmed</span>`}
+              </div>
+            </div>`;
+          }).join("") : "<p>No domain-tagged folders found.</p>"}</div>
+        </div>
+        <div class="item" style="margin-top:12px;">
+          <h3>Detected student-data zones</h3>
+          <p>Lingua Viva stayed out during scanning. Nothing below is listed until you explicitly choose a zone.</p>
+          <div class="list">${studentZones.length ? studentZones.map(zone => `<div class="item">
+            <strong>${escapeHtml(zone)}</strong>
+            <button type="button" data-peek-zone="${escapeHtml(zone)}" aria-expanded="false">Show what's inside</button>
+            <div data-zone-results="${escapeHtml(zone)}" aria-live="polite"></div>
+          </div>`).join("") : "<p>No student-data zones detected.</p>"}</div>
         </div>
         <div class="item" style="margin-top:12px;"><h3>Exclusions</h3><div class="list">${(data.exclusions || []).length ? data.exclusions.map(path => `<div class="item"><span>${escapeHtml(path)}</span><button type="button" data-remove-exclusion="${escapeHtml(path)}">Remove</button></div>`).join("") : "<p>No exclusions set.</p>"}</div></div>`;
+      document.querySelectorAll("[data-confirm-path]").forEach(button => {
+        button.addEventListener("click", async () => {
+          button.disabled = true;
+          try {
+            await api("/api/filemap/confirm", {
+              method: "POST",
+              body: JSON.stringify({
+                path: button.dataset.confirmPath,
+                purpose: button.dataset.confirmPurpose
+              })
+            });
+            await loadFileMap();
+          } catch (error) {
+            status.innerHTML = `<span class="badge warn">${escapeHtml(error.message)}</span>`;
+            button.disabled = false;
+          }
+        });
+      });
+      document.querySelectorAll("[data-peek-zone]").forEach(button => {
+        button.addEventListener("click", async () => {
+          button.disabled = true;
+          try {
+            const listed = await peekStudentZone(button.dataset.peekZone);
+            if (listed) {
+              button.setAttribute("aria-expanded", "true");
+              button.textContent = "Refresh listing";
+            }
+          } finally {
+            button.disabled = false;
+          }
+        });
+      });
       document.querySelectorAll("[data-remove-exclusion]").forEach(button => {
         button.addEventListener("click", async () => {
           await api("/api/filemap/exclude", {method: "POST", body: JSON.stringify({path: button.dataset.removeExclusion, action: "remove"})});
           await loadFileMap();
         });
       });
+    }
+
+    async function peekStudentZone(zonePath) {
+      const resultTarget = Array.from(document.querySelectorAll("[data-zone-results]"))
+        .find(node => node.dataset.zoneResults === zonePath);
+      if (!resultTarget) return;
+      resultTarget.innerHTML = `<p>Listing names and metadata only...</p>`;
+      try {
+        const [peek, roster] = await Promise.all([
+          api("/api/filemap/peek", {
+            method: "POST",
+            body: JSON.stringify({zone_path: zonePath})
+          }),
+          api("/api/students")
+        ]);
+        const students = roster.students || [];
+        const assignments = (await api("/api/filemap")).student_assignments || [];
+        const assignedByPath = Object.fromEntries(
+          assignments.map(item => [item.file_path, item.assigned_student_id || ""])
+        );
+        resultTarget.innerHTML = `<div class="list">${peek.items.length ? peek.items.map(item => {
+          if (item.type === "directory") {
+            return `<div class="item"><strong>${escapeHtml(item.name)}/</strong><span class="badge">folder — not opened</span></div>`;
+          }
+          const current = assignedByPath[item.path] || "";
+          return `<div class="item">
+            <strong>${escapeHtml(item.name)}</strong>
+            <p>${Number(item.size_bytes || 0).toLocaleString()} bytes · ${escapeHtml(item.modified_at)}</p>
+            <label>Assign to student
+              <select data-assign-file="${escapeHtml(item.path)}">
+                <option value="">Not assigned</option>
+                ${students.map(student => `<option value="${escapeHtml(student.student_id)}" ${current === student.student_id ? "selected" : ""}>${escapeHtml(student.display_name || student.student_id)}</option>`).join("")}
+                <option value="__new__">New student</option>
+              </select>
+            </label>
+            <span data-assignment-status="${escapeHtml(item.path)}"></span>
+          </div>`;
+        }).join("") : "<p>This zone is empty.</p>"}</div>`;
+        resultTarget.querySelectorAll("[data-assign-file]").forEach(select => {
+          select.addEventListener("change", async () => {
+            const statusNode = Array.from(resultTarget.querySelectorAll("[data-assignment-status]"))
+              .find(node => node.dataset.assignmentStatus === select.dataset.assignFile);
+            if (select.value === "__new__") {
+              statusNode.innerHTML = `
+                <label>Student name <input data-new-student-name placeholder="Display name"></label>
+                <button type="button" data-create-and-assign>Create and assign</button>`;
+              statusNode.querySelector("[data-create-and-assign]").addEventListener("click", async () => {
+                const displayName = statusNode.querySelector("[data-new-student-name]").value.trim();
+                if (!displayName) {
+                  statusNode.querySelector("[data-new-student-name]").focus();
+                  return;
+                }
+                try {
+                  const created = await api("/api/students", {
+                    method: "POST",
+                    body: JSON.stringify({display_name: displayName})
+                  });
+                  await api("/api/filemap/assign", {
+                    method: "POST",
+                    body: JSON.stringify({
+                      file_path: select.dataset.assignFile,
+                      assigned_student_id: created.student_id
+                    })
+                  });
+                  state.students = null;
+                  statusNode.textContent = `Created and assigned to ${created.display_name}.`;
+                } catch (error) {
+                  statusNode.textContent = error.message;
+                }
+              });
+              return;
+            }
+            try {
+              await api("/api/filemap/assign", {
+                method: "POST",
+                body: JSON.stringify({
+                  file_path: select.dataset.assignFile,
+                  assigned_student_id: select.value || null
+                })
+              });
+              statusNode.textContent = select.value ? "Saved" : "Assignment removed";
+            } catch (error) {
+              statusNode.textContent = error.message;
+            }
+          });
+        });
+        return true;
+      } catch (error) {
+        resultTarget.innerHTML = `<p>${escapeHtml(error.message)}</p>`;
+        return false;
+      }
     }
 
     async function scanFileMap() {

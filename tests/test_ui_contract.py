@@ -26,7 +26,12 @@ REPO = Path(__file__).resolve().parent.parent
 #   v8 (2026-07-20): Claudia-lens hardening — copy/register updates for
 #     teacher UI, parent draft route, and quick-capture deterministic feedback.
 #   v9 (2026-07-20): sidebar accessibility + token pass.
-EXPECTED_VERSION = 9
+#   v10 (2026-07-22): file-map confirmation, opt-in zone peek, and assignment UI.
+#   v11 (2026-07-22): Slack utility view and Events API integration.
+#   v12 (2026-07-22): Slack setup-scope and network-boundary hardening.
+#   v13 (2026-07-22): convergence re-lock for combined protected UI work.
+#   v14-v15 (2026-07-22): convergence plus Observe/Ask voice workflow.
+EXPECTED_VERSION = 15
 
 
 def _html() -> str:
@@ -74,7 +79,7 @@ def test_sidebar_nav_contract_counts_and_handlers():
 
     assert len(arrays["teacherNav"]) == 8
     assert len(arrays["adminNav"]) == 4
-    assert len(arrays["utilityNav"]) == 6
+    assert len(arrays["utilityNav"]) == 7
 
     view_map = re.search(r"const views = \{(.*?)\n      \};", html, flags=re.S)
     assert view_map, "renderView() view handler map missing"

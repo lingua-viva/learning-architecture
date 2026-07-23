@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import sys
 import tempfile
 import time
@@ -167,6 +168,111 @@ async def health():
         # Never let the health endpoint crash — a crashing health probe
         # fills stdio pipes and deadlocks the Electron wrapper (Bug 2, v0.2.4 report).
         return {"status": "degraded", "error": str(e)}
+
+
+@app.get("/api/slack/status")
+async def slack_integration_status():
+    """Return Slack readiness without returning credentials or channel IDs."""
+    from src.lingua_viva.slack_integration import slack_status
+
+    return slack_status()
+
+
+_slack_runtime: dict = {}
+
+
+def _get_slack_observation_bot():
+    """Build one process-long bot so dedupe and continuation state persist."""
+    from src.education.observation_capture import ObservationCapturePipeline
+    from src.education.slack_bot import SlackObservationBot
+    from src.education.student_lens import StudentLensStore
+    from src.lingua_viva.slack_integration import (
+        post_slack_message,
+        require_slack_config,
+    )
+
+    signing_secret, bot_token, channels = require_slack_config()
+    fingerprint = (signing_secret, bot_token, tuple(sorted(channels.items())))
+    if _slack_runtime.get("fingerprint") == fingerprint:
+        return _slack_runtime["bot"]
+
+    previous_store = _slack_runtime.get("store")
+    if previous_store is not None:
+        previous_store.close()
+
+    store = StudentLensStore(db_path=_student_db_path())
+    _seed_demo_roster(store)
+    bot = SlackObservationBot(
+        capture_pipeline=ObservationCapturePipeline(store=store),
+        teacher_channel_map=channels,
+        signing_secret=signing_secret,
+        post_message=lambda channel, text: post_slack_message(
+            bot_token, channel, text
+        ),
+    )
+    _slack_runtime.clear()
+    _slack_runtime.update(
+        {"fingerprint": fingerprint, "bot": bot, "store": store}
+    )
+    return bot
+
+
+@app.post("/api/slack/events")
+async def slack_events(request: Request):
+    """Receive signed Slack Events API payloads for local observation capture."""
+    from src.education.slack_bot import (
+        InvalidSlackSignatureError,
+        verify_slack_signature,
+    )
+    from src.lingua_viva.slack_integration import (
+        SlackConfigurationError,
+    )
+
+    raw_bytes = await request.body()
+    if len(raw_bytes) > 1_000_000:
+        return JSONResponse({"error": "Slack payload is too large."}, status_code=413)
+    try:
+        raw_body = raw_bytes.decode("utf-8")
+    except UnicodeDecodeError:
+        return JSONResponse({"error": "Slack payload must be UTF-8."}, status_code=400)
+    headers = {
+        "x-slack-request-timestamp": request.headers.get(
+            "x-slack-request-timestamp", ""
+        ),
+        "x-slack-signature": request.headers.get("x-slack-signature", ""),
+    }
+    signing_secret = os.environ.get("LV_SLACK_SIGNING_SECRET", "").strip()
+    if not signing_secret:
+        return JSONResponse(
+            {"error": "Slack is not configured. Missing: LV_SLACK_SIGNING_SECRET"},
+            status_code=503,
+        )
+    if not verify_slack_signature(
+        signing_secret,
+        headers["x-slack-request-timestamp"],
+        raw_body,
+        headers["x-slack-signature"],
+    ):
+        return JSONResponse({"error": "Invalid Slack signature."}, status_code=401)
+    try:
+        payload = json.loads(raw_body)
+    except json.JSONDecodeError:
+        return JSONResponse({"error": "Invalid Slack JSON payload."}, status_code=400)
+    if not isinstance(payload, dict):
+        return JSONResponse({"error": "Invalid Slack payload shape."}, status_code=400)
+
+    # Slack verifies the callback before the app is fully installed. Only the
+    # signing secret is required for this authenticated one-time handshake.
+    if payload.get("type") == "url_verification":
+        return {"challenge": payload.get("challenge", "")}
+
+    try:
+        result = _get_slack_observation_bot().handle_request(headers, raw_body)
+    except InvalidSlackSignatureError:
+        return JSONResponse({"error": "Invalid Slack signature."}, status_code=401)
+    except SlackConfigurationError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
+    return result
 
 
 def _student_db_path() -> Path:
@@ -378,6 +484,96 @@ async def filemap_get():
     from src.lingua_viva.filemap import load_map, to_api
 
     return await asyncio.to_thread(lambda: to_api(load_map()))
+
+
+@app.post("/api/filemap/confirm")
+async def filemap_confirm(payload: dict):
+    from src.lingua_viva.filemap import confirm_entry, to_api
+
+    path = str(payload.get("path") or "").strip()
+    purpose = str(payload.get("purpose") or "").strip()
+    if not path:
+        return JSONResponse({"error": "path is required"}, status_code=400)
+    try:
+        mapped = await asyncio.to_thread(confirm_entry, path, purpose)
+    except (ValueError, OSError) as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    return {"status": "ok", **to_api(mapped)}
+
+
+@app.post("/api/filemap/peek")
+async def filemap_peek(payload: dict):
+    from src.lingua_viva.filemap import (
+        _normal,
+        _path_from_storage,
+        display_path,
+        list_files_in_zone,
+        load_map,
+    )
+
+    zone_path = str(payload.get("zone_path") or "").strip()
+    if not zone_path:
+        return JSONResponse({"error": "zone_path is required"}, status_code=400)
+    mapped = await asyncio.to_thread(load_map)
+    requested_input = Path(_path_from_storage(zone_path)).expanduser()
+    if requested_input.is_symlink():
+        return JSONResponse(
+            {"error": "zone_path cannot be a symbolic link"},
+            status_code=400,
+        )
+    requested = _normal(_path_from_storage(zone_path))
+    known_zones = {
+        _normal(_path_from_storage(zone))
+        for zone in mapped.student_zones
+    }
+    if requested not in known_zones:
+        return JSONResponse(
+            {"error": "zone_path is not a detected student zone"},
+            status_code=400,
+        )
+    try:
+        files = await asyncio.to_thread(list_files_in_zone, requested)
+    except (ValueError, OSError) as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    return {
+        "status": "ok",
+        "zone_path": display_path(requested),
+        "items": [
+            {**item, "path": display_path(item["path"])}
+            for item in files
+        ],
+    }
+
+
+@app.post("/api/filemap/assign")
+async def filemap_assign(payload: dict):
+    from src.lingua_viva.filemap import assign_student_file, to_api
+
+    file_path = str(payload.get("file_path") or "").strip()
+    student_id = payload.get("assigned_student_id")
+    if not file_path:
+        return JSONResponse({"error": "file_path is required"}, status_code=400)
+    if student_id is not None and not isinstance(student_id, str):
+        return JSONResponse({"error": "assigned_student_id must be a string or null"}, status_code=400)
+    student_id = student_id.strip() if isinstance(student_id, str) else None
+    if student_id:
+        known_student = await asyncio.to_thread(
+            _with_student_store,
+            lambda store: any(
+                lens["student_id"] == student_id
+                for lens in store.list_lenses()
+            ),
+        )
+        if not known_student:
+            return JSONResponse(
+                {"error": "assigned_student_id is not in the current roster"},
+                status_code=400,
+            )
+    try:
+        mapped = await asyncio.to_thread(assign_student_file, file_path, student_id)
+    except (ValueError, OSError) as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    return {"status": "ok", **to_api(mapped)}
 
 
 @app.get("/api/why")
@@ -644,6 +840,112 @@ async def observe_capture(payload: dict):
     return result
 
 
+def _empty_observation_proposal() -> dict:
+    return {
+        "template_type": None,
+        "cefr_dimension": None,
+        "cefr_level_observed": None,
+        "cefr_direction": None,
+        "sel_domain": None,
+        "sel_valence": None,
+        "urgency_flag": None,
+    }
+
+
+def _parse_observation_proposal(content: str) -> dict:
+    from src.education.student_lens import (
+        VALID_CEFR_DIMENSIONS,
+        VALID_CEFR_DIRECTIONS,
+        VALID_CEFR_LEVELS,
+        VALID_SEL_VALENCE,
+        VALID_TEMPLATE_TYPES,
+    )
+
+    proposal = _empty_observation_proposal()
+    match = re.search(r"\{.*\}", str(content or ""), flags=re.DOTALL)
+    if not match:
+        return proposal
+    try:
+        parsed = json.loads(match.group(0))
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return proposal
+    if not isinstance(parsed, dict):
+        return proposal
+
+    allowed = {
+        "template_type": VALID_TEMPLATE_TYPES,
+        "cefr_dimension": VALID_CEFR_DIMENSIONS,
+        "cefr_level_observed": VALID_CEFR_LEVELS,
+        "cefr_direction": (*VALID_CEFR_DIRECTIONS, "mixed"),
+        "sel_valence": VALID_SEL_VALENCE,
+    }
+    for field, values in allowed.items():
+        value = parsed.get(field)
+        proposal[field] = value if value in values else None
+
+    sel_domain = parsed.get("sel_domain")
+    if isinstance(sel_domain, str) and sel_domain.strip():
+        proposal["sel_domain"] = sel_domain.strip()[:80]
+    if isinstance(parsed.get("urgency_flag"), bool):
+        proposal["urgency_flag"] = parsed["urgency_flag"]
+    return proposal
+
+
+@app.post("/api/observe/classify")
+async def observe_classify(payload: dict):
+    """Propose observation tags for teacher review; never writes student data."""
+    from src.education.student_lens import (
+        VALID_CEFR_DIMENSIONS,
+        VALID_CEFR_LEVELS,
+        VALID_SEL_VALENCE,
+        VALID_TEMPLATE_TYPES,
+    )
+    from src.lingua_viva.reasoning import ReasoningEngine
+
+    student_id = str(payload.get("student_id") or "").strip()
+    transcript = str(payload.get("raw_transcript") or "").strip()
+    if not student_id:
+        return JSONResponse({"error": "student_id is required"}, status_code=400)
+    if not transcript:
+        return JSONResponse({"error": "raw_transcript is required"}, status_code=400)
+
+    system_prompt = (
+        "You classify one teacher observation for a form the teacher will review. "
+        "Return one strict JSON object and no prose. Never rewrite the transcript. "
+        "Leave any uncertain or unsupported field null; do not guess. "
+        f"template_type must be one of {list(VALID_TEMPLATE_TYPES)} or null. "
+        f"cefr_dimension must be one of {list(VALID_CEFR_DIMENSIONS)} or null. "
+        f"cefr_level_observed must be one of {list(VALID_CEFR_LEVELS)} or null. "
+        "cefr_direction may be progressing, plateaued, regressing, mixed, or null, "
+        "and must be null unless the utterance itself states a trend. "
+        "sel_domain is a short plain-language label or null. "
+        f"sel_valence must be one of {list(VALID_SEL_VALENCE)} or null. "
+        "urgency_flag must be true, false, or null. "
+        "Use exactly these keys: template_type, cefr_dimension, "
+        "cefr_level_observed, cefr_direction, sel_domain, sel_valence, urgency_flag."
+    )
+    try:
+        result = await ReasoningEngine().reason(
+            transcript,
+            context={"domain": "observation", "student_id": "selected-local-student"},
+            system_prompt=system_prompt,
+        )
+    except Exception:
+        result = None
+
+    proposal = (
+        _empty_observation_proposal()
+        if result is None or result.model_used == "none"
+        else _parse_observation_proposal(result.content)
+    )
+    return {
+        "proposal": proposal,
+        "model_used": getattr(result, "model_used", "none"),
+        "writes_made": 0,
+        "teacher_confirmation_required": True,
+    }
+
+
 @app.get("/api/students")
 async def students():
     def list_roster(store):
@@ -660,6 +962,27 @@ async def students():
         return roster
 
     return {"students": await asyncio.to_thread(_with_student_store, list_roster)}
+
+
+@app.post("/api/students")
+async def create_student(payload: dict):
+    """Create a new student lens from the Add Student form."""
+    display_name = (payload.get("display_name") or "").strip()
+    if not display_name:
+        return JSONResponse({"error": "display_name is required"}, status_code=400)
+
+    def do_create(store):
+        student_id = store.create_lens(
+            display_name=display_name,
+            campus=payload.get("campus", ""),
+            grade_level=payload.get("grade_level", ""),
+            home_languages=payload.get("home_languages") or [],
+            learning_differences=payload.get("learning_differences") or [],
+            rti_current_tier=payload.get("rti_current_tier", 1),
+        )
+        return {"student_id": student_id, "display_name": display_name}
+
+    return await asyncio.to_thread(_with_student_store, do_create)
 
 
 @app.get("/api/students/unobserved")
@@ -712,6 +1035,25 @@ async def student_lens(student_id: str):
 
     try:
         return await asyncio.to_thread(_with_student_store, get_lens)
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=404)
+
+
+@app.post("/api/students/{student_id}/rti/decision")
+async def record_rti_decision(student_id: str, payload: dict):
+    """Record a teacher's confirm/defer decision on an RTI proposal."""
+    decision = (payload.get("decision") or "").strip().lower()
+    if decision not in ("confirm", "defer"):
+        return JSONResponse(
+            {"error": "decision must be 'confirm' or 'defer'"}, status_code=400
+        )
+
+    def do_record(store):
+        store.record_rti_decision(student_id, decision, note=payload.get("note", ""))
+
+    try:
+        await asyncio.to_thread(_with_student_store, do_record)
+        return {"status": "recorded", "student_id": student_id, "decision": decision}
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=404)
 
@@ -1057,6 +1399,16 @@ async def query_endpoint(payload: dict):
             "type": "error",
             "error": "Local reasoning timed out. Check Ollama, then try again.",
             "timeout": True,
+            "timestamp": time.time(),
+        }
+        await broadcaster.broadcast(error)
+        return error
+
+    except (ModuleNotFoundError, ImportError):
+        error = {
+            "type": "error",
+            "error": "Ask isn't able to answer free-form questions in this build yet. Try Plan, Prepare, or Observe for now.",
+            "unavailable": True,
             "timestamp": time.time(),
         }
         await broadcaster.broadcast(error)
