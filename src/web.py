@@ -803,6 +803,81 @@ async def tier_assignments():
     return result
 
 
+def _teacher_lens_storage_dir() -> Path:
+    override = os.environ.get("LV_TEACHER_LENS_STORAGE_PATH")
+    if override:
+        return Path(override)
+    from src.lingua_viva.config import lv_home
+    return lv_home() / "runtime" / "teacher_lenses"
+
+
+def _with_teacher_lens_builder(teacher_id: str, callback):
+    from src.education.teacher_lens_builder import TeacherLensBuilder
+
+    builder = TeacherLensBuilder(teacher_id, _teacher_lens_storage_dir())
+    return callback(builder)
+
+
+@app.get("/api/teacher/lens")
+async def teacher_lens(teacher_id: str = "local-teacher"):
+    from dataclasses import asdict
+
+    def get_lens(builder):
+        return asdict(builder.build_lens())
+
+    try:
+        return await asyncio.to_thread(_with_teacher_lens_builder, teacher_id, get_lens)
+    except ValueError:
+        return JSONResponse(
+            {"error": "No teaching history ingested yet.", "teacher_id": teacher_id, "ingested_doc_count": 0},
+            status_code=404,
+        )
+
+
+@app.post("/api/teacher/ingest")
+async def teacher_ingest(payload: dict):
+    from dataclasses import asdict
+
+    teacher_id = str(payload.get("teacher_id") or "local-teacher")
+    file_path = str(payload.get("file_path") or "").strip()
+    doc_type = str(payload.get("doc_type") or "auto")
+    if not file_path:
+        return JSONResponse({"error": "file_path is required"}, status_code=400)
+    if not Path(file_path).exists():
+        return JSONResponse({"error": f"File not found: {file_path}"}, status_code=400)
+
+    def ingest(builder):
+        return asdict(builder.ingest(Path(file_path), doc_type=doc_type))
+
+    try:
+        result = await asyncio.to_thread(_with_teacher_lens_builder, teacher_id, ingest)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    return result
+
+
+@app.post("/api/teacher/holdout")
+async def teacher_holdout(payload: dict):
+    from dataclasses import asdict
+
+    teacher_id = str(payload.get("teacher_id") or "local-teacher")
+    test_artifact = str(payload.get("test_artifact") or "").strip()
+    artifact_type = str(payload.get("artifact_type") or "").strip()
+    if not test_artifact or not artifact_type:
+        return JSONResponse({"error": "test_artifact and artifact_type are required"}, status_code=400)
+    if not Path(test_artifact).exists():
+        return JSONResponse({"error": f"File not found: {test_artifact}"}, status_code=400)
+
+    def score(builder):
+        return asdict(builder.holdout_score(Path(test_artifact), artifact_type))
+
+    try:
+        result = await asyncio.to_thread(_with_teacher_lens_builder, teacher_id, score)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    return result
+
+
 @app.post("/api/observe/capture")
 async def observe_capture(payload: dict):
     from src.education.observation_capture import ObservationCapturePipeline
@@ -1074,6 +1149,45 @@ async def record_rti_decision(student_id: str, payload: dict):
         return {"status": "recorded", "student_id": student_id, "decision": decision}
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=404)
+
+
+@app.put("/api/students/{student_id}/rti")
+async def student_rti_update(student_id: str, payload: dict):
+    """Record a teacher-confirmed RTI tier change (audit-trailed, never silent)."""
+    try:
+        new_tier = int(payload.get("new_tier"))
+    except (TypeError, ValueError):
+        return JSONResponse({"error": "new_tier must be an integer (1, 2, or 3)."}, status_code=400)
+    trigger = str(payload.get("trigger") or "teacher_decision")
+
+    def update(store):
+        store.update_rti_tier(student_id, new_tier, trigger)
+        return store.export_lens(student_id)
+
+    try:
+        return await asyncio.to_thread(_with_student_store, update)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    except Exception as exc:
+        if "LensNotFoundError" in type(exc).__name__:
+            return JSONResponse({"error": f"Student '{student_id}' not found."}, status_code=404)
+        raise
+
+
+@app.get("/api/students/{student_id}/lens-as-of")
+async def student_lens_as_of(student_id: str, as_of: str):
+    """Reconstruct a student's lens (CEFR snapshot + RTI tier) as it stood at a past timestamp."""
+    def get_lens(store):
+        return store.get_lens_as_of(student_id, as_of)
+
+    try:
+        return await asyncio.to_thread(_with_student_store, get_lens)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    except Exception as exc:
+        if "LensNotFoundError" in type(exc).__name__:
+            return JSONResponse({"error": f"Student '{student_id}' not found."}, status_code=404)
+        raise
 
 
 @app.get("/api/assess/rubric/{unit_id}")

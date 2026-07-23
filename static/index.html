@@ -933,13 +933,31 @@
           </div>
           <button id="generate-activity" class="primary" type="button">Generate Activity</button>
         </div>
-        <div id="activity-output" class="grid three" style="margin-top:14px;"></div>`;
+        <div id="activity-output" class="grid three" style="margin-top:14px;"></div>
+        <div id="differentiated-groups" class="panel" style="margin-top:14px;"><h3>Differentiated Groups</h3><p>Loading tier assignments...</p></div>`;
       $("prep-grade").addEventListener("change", async event => {
         state.grade = event.target.value;
         await populateUnitSelect("prep-unit");
       });
       await populateUnitSelect("prep-unit");
       $("generate-activity").addEventListener("click", generateActivity);
+      await renderDifferentiatedGroups();
+    }
+
+    async function renderDifferentiatedGroups() {
+      const target = $("differentiated-groups");
+      const data = await api("/api/prepare/tier-assignments");
+      const tiers = ["foundational", "on_track", "extended"];
+      const byTier = Object.fromEntries(tiers.map(t => [t, []]));
+      (data.assignments || []).forEach(a => { (byTier[a.assigned_tier] || byTier.foundational).push(a); });
+      target.innerHTML = `
+        <div class="view-head"><div><h3>Differentiated Groups</h3><p>Who lands in which tier for the next activity pack, and why.</p></div></div>
+        <div class="grid three">${tiers.map(tier => `
+          <div class="item">
+            <h4>${tier.replace("_", " ")}</h4>
+            <div class="list">${byTier[tier].length ? byTier[tier].map(a => `<div class="item"><strong>${escapeHtml(a.display_name || a.student_id)}</strong><br><span class="badge">support tier ${escapeHtml(String(a.rti_current_tier))}</span></div>`).join("") : "<p>No students in this group.</p>"}</div>
+          </div>`).join("")}</div>
+        <p style="margin-top:10px;">${escapeHtml(data.logic || "")}</p>`;
     }
 
     async function populateUnitSelect(id) {
@@ -1398,7 +1416,9 @@
           <button id="export-profile" type="button">Export My Data</button>
           <button id="clear-profile" class="primary" type="button">Clear All Data</button>
           <div id="clear-profile-result" style="margin-top:12px;"></div>
-        </div>`;
+        </div>
+        <div id="teaching-style" class="panel" style="margin-top:14px;"><h3>My Teaching Style</h3><p>Loading...</p></div>`;
+      await renderTeachingStyle();
       $("export-profile").addEventListener("click", async () => {
         const response = await fetch("/api/profile/export");
         const blob = await response.blob();
@@ -1414,6 +1434,29 @@
         const data = await api("/api/profile/clear", {method: "POST", body: JSON.stringify({confirm: "clear-all-data"})});
         $("clear-profile-result").innerHTML = `<span class="badge ok">${escapeHtml(data.status)}</span>`;
       });
+    }
+
+    async function renderTeachingStyle() {
+      const target = $("teaching-style");
+      const response = await fetch("/api/teacher/lens");
+      if (!response.ok) {
+        target.innerHTML = `
+          <div class="view-head"><div><h3>My Teaching Style</h3><p>Learned from your past exams, lesson plans, parent updates, and evaluations.</p></div><span class="badge warn">Confidence: no data yet</span></div>
+          <p>Ingest past teaching artifacts to build your style profile.</p>`;
+        return;
+      }
+      const lens = await response.json();
+      const count = lens.ingested_doc_count || 0;
+      const confidence = count >= 3 ? "established" : count >= 1 ? "building" : "no data yet";
+      const confidenceBadge = count >= 3 ? "ok" : "warn";
+      const tiers = ["foundational", "on_track", "extended"];
+      target.innerHTML = `
+        <div class="view-head"><div><h3>My Teaching Style</h3><p>Learned from ${count} past teaching artifact${count === 1 ? "" : "s"}.</p></div><span class="badge ${confidenceBadge}">Confidence: ${escapeHtml(confidence)}</span></div>
+        <div class="grid three">${tiers.map(tier => {
+          const style = (lens.differentiation_style || {})[tier] || {};
+          const scaffolding = style.scaffolding || [];
+          return `<div class="item"><h4>${tier.replace("_", " ")}</h4><p>${scaffolding.length ? scaffolding.map(escapeHtml).join(", ") : "not yet learned"}</p></div>`;
+        }).join("")}</div>`;
     }
 
     async function renderSettings() {

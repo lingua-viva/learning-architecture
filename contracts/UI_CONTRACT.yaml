@@ -52,7 +52,9 @@
 #   v19 (2026-07-22): 15-pass Observe/Ask Oka voice hardening:
 #     bounded classification, truthful degrade states, resilient speech lifecycle,
 #     explicit review gates, accessibility, and visible save/network recovery.
-version: 19
+#   v20 (2026-07-23): teacher-lens/RTI API endpoints (PUT rti, GET lens-as-of)
+#     + Phase 5B surface cards (Differentiated Groups, My Teaching Style).
+version: 20
 files:
   - static/index.html
   - static/sw.js

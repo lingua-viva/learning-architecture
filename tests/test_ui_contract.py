@@ -32,7 +32,8 @@ REPO = Path(__file__).resolve().parent.parent
 #   v13 (2026-07-22): convergence re-lock for combined protected UI work.
 #   v14-v18 (2026-07-22): convergence plus local-only Observe/Ask voice workflow.
 #   v19 (2026-07-22): 15-pass Observe/Ask Oka voice hardening.
-EXPECTED_VERSION = 19
+#   v20 (2026-07-23): teacher-lens/RTI endpoints + Phase 5B surface cards.
+EXPECTED_VERSION = 20
 
 
 def _html() -> str:
