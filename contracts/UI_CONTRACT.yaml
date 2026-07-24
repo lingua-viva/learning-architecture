@@ -75,7 +75,14 @@
 #     calls (LV-BLT-005 reclassify); removed duplicate GET /api/teacher/today
 #     and its orphaned private schedule-resolution helpers (Home retains
 #     /api/brief); docstring added to session_info().
-version: 30
+#   v31–33 (2026-07-23): re-seal lock after pull --rebase merged remote's v30
+#     (stats panel, RTI tier, route removals) with local's v29 (BLT-001/003
+#     provider connect + teaching ingest); LV-BLT-009 Knowledge browser
+#     (admin view with /api/ontology/domains endpoint + domain/node grid);
+#     BLT-006 final: reclassified curriculum/unit and lens-as-of as permanent
+#     backend-only (7 deferred_undecided remain). v33: fix OntologyNode field
+#     name (name, not label) — caught by live endpoint simulation.
+version: 33
 files:
   - static/index.html
   - static/sw.js

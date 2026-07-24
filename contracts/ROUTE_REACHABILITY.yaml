@@ -56,7 +56,11 @@ reachable_from_ui:
 
   - route: "GET /api/stats"
     call_site: 'api("/api/stats")'
-    note: "System-scale cards in the Health view."
+    note: "System-scale cards in the Health view and Knowledge browser."
+
+  - route: "GET /api/ontology/domains"
+    call_site: 'api("/api/ontology/domains")'
+    note: "Knowledge browser domain listing (BLT-009)."
 
   - route: "GET /icons/{name}"
     call_site: 'href="/icons/icon.svg"'
@@ -263,15 +267,21 @@ intentionally_backend_only:
     reason: "Same TeacherLensBuilder origin and same undecided fate as POST /api/teacher/ingest."
 
   - route: "GET /api/students/{student_id}/lens-as-of"
-    status: deferred_undecided
-    reason: "A remaining 4f5e072 partial-batch-wiring gap; unlike the removed duplicate unobserved route and the mounted direct RTI route, this historical lens view still needs an explicit product decision."
+    status: permanent
+    reason: >-
+      Historical lens reconstruction — used by eval harnesses and the brief
+      service to show CEFR trajectory over time. No teacher-facing UI needed;
+      the student lens panel already shows current state, and historical
+      comparisons are a programmatic/testing concern.
 
   - route: "GET /api/curriculum/unit/{unit_id}"
-    status: deferred_undecided
+    status: permanent
     reason: >-
-      Not one of the 9 findings named in ROOT_CAUSE_BUILT_NOT_MOUNTED — a
-      new gap surfaced by building this manifest. No commit trace performed
-      yet; flagged here rather than silently left off the manifest.
+      Thin GET wrapper around CurriculumService.get_unit() — consumed by the
+      extraction pipeline (filemap assigns curriculum_unit_source targets),
+      tests, and any future per-unit deep link. The grade-level list view
+      already surfaces unit titles in schedule setup; a standalone detail page
+      adds no teacher value today.
 
   - route: "GET /api/session"
     status: permanent

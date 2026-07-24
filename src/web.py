@@ -1668,6 +1668,28 @@ async def admin_trends():
     )
 
 
+@app.get("/api/ontology/domains")
+async def ontology_domains():
+    """List all ontology domains with their node counts (BLT-009 knowledge browser)."""
+    try:
+        from ontology.engine import OntologyEngine
+        engine = OntologyEngine()
+        domains = []
+        for domain_name, node_ids in sorted(engine.domains.items()):
+            domains.append({
+                "domain": domain_name,
+                "node_count": len(node_ids),
+                "nodes": [
+                    {"id": n.id, "name": n.name}
+                    for nid in node_ids
+                    if (n := engine.get_node(nid)) is not None
+                ],
+            })
+        return {"domains": domains, "total_domains": len(domains)}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @app.get("/api/stats")
 async def stats():
     try:

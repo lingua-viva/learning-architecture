@@ -48,7 +48,10 @@ REPO = Path(__file__).resolve().parent.parent
 #     GET /api/students/unobserved (brief.py's own _unobserved() is what
 #     Home's reminder actually calls); removed duplicate GET
 #     /api/teacher/today (Home retains /api/brief); session_info() docstring.
-EXPECTED_VERSION = 30
+#   v31–33 (2026-07-23): re-seal lock after pull merged remote v30 with local
+#     v29; BLT-009 Knowledge browser; BLT-006 route reclassification; fix
+#     OntologyNode.name field.
+EXPECTED_VERSION = 33
 
 
 def _html() -> str:
@@ -112,7 +115,7 @@ def test_sidebar_nav_contract_counts_and_handlers():
         arrays[name] = re.findall(r'\["([^"]+)",\s*"([^"]+)",\s*"([^"]+)"\]', match.group(1))
 
     assert len(arrays["teacherNav"]) == 8
-    assert len(arrays["adminNav"]) == 4
+    assert len(arrays["adminNav"]) == 5
     assert len(arrays["utilityNav"]) == 7
 
     view_map = re.search(r"const views = \{(.*?)\n      \};", html, flags=re.S)

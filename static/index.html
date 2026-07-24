@@ -754,7 +754,8 @@
       ["programme", "Programme", "🗺️"],
       ["evidence", "Evidence", "📦"],
       ["capacity", "Capacity", "👥"],
-      ["trends", "Trends", "📊"]
+      ["trends", "Trends", "📊"],
+      ["knowledge", "Knowledge", "🧠"]
     ];
     const utilityNav = [
       ["slack", "Slack", "💬"],
@@ -871,7 +872,8 @@
         programme: renderAdmin,
         evidence: renderAdmin,
         capacity: renderAdmin,
-        trends: renderAdmin
+        trends: renderAdmin,
+        knowledge: renderKnowledge
       };
       try {
         await (views[state.view] || renderHome)();
@@ -2478,6 +2480,33 @@
       $("content").innerHTML = `
         <div class="view-head"><div><h2>${escapeHtml(data.title || title)}</h2><p>${escapeHtml(data.reason || "This coordinator view depends on pilot data.")}</p></div><span class="badge warn">${escapeHtml(data.status || "deferred")}</span></div>
         <div class="panel"><h3>Required Before Activation</h3><ul>${requirements}</ul><p class="muted">${escapeHtml(data.phase || "LV Phase 7 admin dashboard")}</p></div>`;
+    }
+
+    async function renderKnowledge() {
+      setTitle("Knowledge", "ontology and knowledge base browser");
+      $("content").innerHTML = `<div class="panel"><h2>Loading...</h2></div>`;
+      let stats = null;
+      let domains = null;
+      try { stats = await api("/api/stats"); } catch {}
+      try { domains = await api("/api/ontology/domains"); } catch {}
+      const statsCards = stats && !stats.error ? `
+        <div class="grid three" style="margin-top:10px;">
+          <div class="panel"><h3>${stats.ontology_nodes}</h3><p>ontology nodes</p></div>
+          <div class="panel"><h3>${stats.domains}</h3><p>domains</p></div>
+          <div class="panel"><h3>${stats.knowledge_entries}</h3><p>knowledge entries</p></div>
+          <div class="panel"><h3>${stats.citations}</h3><p>citations</p></div>
+          <div class="panel"><h3>${stats.path_records}</h3><p>reasoning paths</p></div>
+          <div class="panel"><h3>${stats.gap_signals}</h3><p>gap signals</p></div>
+        </div>` : `<p class="muted">Stats unavailable.</p>`;
+      const domainList = domains && domains.domains ? domains.domains.map(d => `
+        <div class="item">
+          <h3>${escapeHtml(d.domain)}</h3>
+          <p>${d.node_count} node${d.node_count !== 1 ? "s" : ""}: ${d.nodes.slice(0, 5).map(n => escapeHtml(n.name)).join(", ")}${d.nodes.length > 5 ? "…" : ""}</p>
+        </div>`).join("") : `<div class="item"><p>No domain data available.</p></div>`;
+      $("content").innerHTML = `
+        <div class="view-head"><div><h2>Knowledge Base</h2><p>Ontology domains, nodes, and knowledge library overview</p></div></div>
+        <div class="panel"><h3>System Overview</h3>${statsCards}</div>
+        <div class="panel" style="margin-top:14px;"><h3>Domains (${domains?.total_domains || 0})</h3><div class="list">${domainList}</div></div>`;
     }
 
     function studentOptions() {
