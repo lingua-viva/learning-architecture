@@ -482,15 +482,53 @@ def assign_student_file(file_path: str | Path, assigned_student_id: str | None) 
     return file_map
 
 
+def record_imported_file_assignment(
+    file_path: str | Path,
+    assigned_purpose: str,
+    assigned_student_id: str | None = None,
+) -> FileMap:
+    if assigned_purpose not in {
+        "student_lens_source",
+        "curriculum_unit_source",
+        "teacher_artifact_source",
+    }:
+        raise ValueError("assigned_purpose is not supported for imported files")
+    target = _normal(_path_from_storage(str(file_path)))
+    if not target.exists() or not target.is_file() or target.is_symlink():
+        raise ValueError("file_path must be an existing imported file")
+    file_map = load_map()
+    file_map.student_assignments = [
+        item for item in file_map.student_assignments
+        if _normal(_path_from_storage(str(item["file_path"]))) != target
+    ]
+    file_map.student_assignments.append({
+        "file_path": str(target),
+        "assigned_student_id": assigned_student_id,
+        "assigned_purpose": assigned_purpose,
+        "source": "google_drive_import",
+    })
+    save_map(file_map)
+    return file_map
+
+
 def get_confirmed_extraction_inputs(file_map: FileMap | None = None) -> list[dict]:
     mapped = file_map or load_map()
+    schema_by_purpose = {
+        "student_lens_source": "student_lens",
+        "curriculum_unit_source": "curriculum_unit",
+        "teacher_artifact_source": "teacher_artifact",
+    }
     inputs = [
         {
             "file_path": str(_normal(_path_from_storage(assignment["file_path"]))),
-            "target_schema_id": "student_lens",
+            "target_schema_id": schema_by_purpose.get(
+                assignment.get("assigned_purpose", "student_lens_source"),
+                "student_lens",
+            ),
             "hint": {
                 "assigned_student_id": assignment.get("assigned_student_id"),
                 "assigned_purpose": assignment.get("assigned_purpose", "student_lens_source"),
+                **({"source": assignment["source"]} if assignment.get("source") else {}),
             },
         }
         for assignment in mapped.student_assignments

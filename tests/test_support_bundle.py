@@ -39,6 +39,21 @@ def test_bundle_excludes_student_data_patterns(tmp_path):
     assert "parent_reports" in excluded
 
 
+def test_bundle_excludes_google_drive_imports(tmp_path):
+    repo = tmp_path / "repo"
+    drive_dir = repo / "runtime" / "drive_imports"
+    drive_dir.mkdir(parents=True)
+    (drive_dir / "student.pdf").write_text("student source text", encoding="utf-8")
+    (drive_dir / "import_manifest.json").write_text('{"imports":[]}', encoding="utf-8")
+    service = SupportBundleService(repo_root=repo, support_root=tmp_path / "support")
+    result = service.create_bundle()
+    manifest = json.loads(Path(result["manifest_path"]).read_text())
+
+    excluded = "\n".join(item["path"] for item in manifest["excluded"])
+    assert "runtime/drive_imports/student.pdf" in excluded
+    assert "runtime/drive_imports/import_manifest.json" in excluded
+
+
 def test_bundle_includes_manifest(tmp_path):
     result = _create_bundle(tmp_path)
     manifest_path = Path(result["manifest_path"])

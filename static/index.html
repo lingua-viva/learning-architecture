@@ -978,6 +978,11 @@
     async function renderDifferentiatedGroups() {
       const target = $("differentiated-groups");
       const data = await api("/api/prepare/tier-assignments");
+      let summaryMap = {};
+      try {
+        const sumData = await api("/api/students/support-summary");
+        (sumData.students || []).forEach(s => { summaryMap[s.student_id] = s; });
+      } catch {}
       const tiers = ["foundational", "on_track", "extended"];
       const byTier = Object.fromEntries(tiers.map(t => [t, []]));
       (data.assignments || []).forEach(a => { (byTier[a.assigned_tier] || byTier.foundational).push(a); });
@@ -986,7 +991,12 @@
         <div class="grid three">${tiers.map(tier => `
           <div class="item">
             <h4>${tier.replace("_", " ")}</h4>
-            <div class="list">${byTier[tier].length ? byTier[tier].map(a => `<div class="item"><strong>${escapeHtml(a.display_name || a.student_id)}</strong><br><span class="badge">support tier ${escapeHtml(String(a.rti_current_tier))}</span></div>`).join("") : "<p>No students in this group.</p>"}</div>
+            <div class="list">${byTier[tier].length ? byTier[tier].map(a => {
+              const info = summaryMap[a.student_id] || {};
+              const count = info.total_support_items || 0;
+              const hint = count ? `<br><span class="badge ok">${count} support hint${count === 1 ? "" : "s"}</span>` : "";
+              return `<div class="item"><strong>${escapeHtml(a.display_name || a.student_id)}</strong><br><span class="badge">support tier ${escapeHtml(String(a.rti_current_tier))}</span>${hint}</div>`;
+            }).join("") : "<p>No students in this group.</p>"}</div>
           </div>`).join("")}</div>
         <p style="margin-top:10px;">${escapeHtml(data.logic || "")}</p>`;
     }
@@ -1296,6 +1306,10 @@
       const lens = await api(`/api/students/${state.selectedStudent}/lens`);
       const observations = (lens.observations || []).slice(-3).reverse();
       const supportHtml = renderSupportProfileSummary(lens.support_profile || {});
+      const warnings = lens.support_profile_warnings || [];
+      const warningsHtml = warnings.length
+        ? `<div class="source-line" style="margin-top:6px;"><span class="badge warn">Support Profile Warning: ${escapeHtml(warnings.join("; "))}</span></div>`
+        : "";
       const decisionControls = showDecisionControls ? `
         <div class="source-line"><span class="badge warn">System suggests; teacher reviews before any support-tier decision</span></div>
         <div class="row"><button type="button" id="rti-confirm">Confirm</button><button type="button" id="rti-defer">Defer</button><span id="rti-decision-status"></span></div>` : "";
@@ -1306,6 +1320,7 @@
         <h3 style="margin-top:16px;">Recent observations</h3>
         <div class="list">${observations.length ? observations.map(o => `<div class="item"><p>${escapeHtml(o.raw_transcript)}</p><span class="badge">${escapeHtml(o.cefr_level_observed || "not tagged")}</span></div>`).join("") : "<p>No observations yet.</p>"}</div>
         <h3 style="margin-top:16px;">Support profile</h3>
+        ${warningsHtml}
         ${supportHtml}
         <h3 style="margin-top:16px;">Grouping</h3>
         <p>Avoid-pairing notes: ${escapeHtml((lens.avoid_pairing_with || []).join(", ") || "none")}</p>`;
@@ -1325,21 +1340,52 @@
 
     function renderSupportProfileSummary(profile) {
       const categories = profile.categories || {};
-      const rows = SUPPORT_CATEGORIES.map(([id, label]) => {
+      const regularRows = [];
+      let enrichmentRow = "";
+
+      SUPPORT_CATEGORIES.forEach(([id, label]) => {
         const category = categories[id] || {};
         const count = ["needs", "strengths", "strategies_worked", "strategies_not_worked", "evidence", "open_questions"]
           .reduce((total, bucket) => total + ((category[bucket] || []).length), 0);
-        if (!count) return "";
+        if (!count) return;
+
         const latestNeed = (category.needs || []).slice(-1)[0]?.text;
         const latestStrength = (category.strengths || []).slice(-1)[0]?.text;
         const latestEvidence = (category.evidence || []).slice(-1)[0]?.summary;
-        return `<div class="item">
+        const workedStrats = (category.strategies_worked || []).map(s => s.text).join("; ");
+        const notWorkedStrats = (category.strategies_not_worked || []).map(s => s.text).join("; ");
+
+        let stratSplitHtml = "";
+        if (workedStrats || notWorkedStrats) {
+          const parts = [];
+          if (workedStrats) parts.push(`<span class="badge ok">worked: ${escapeHtml(workedStrats)}</span>`);
+          if (notWorkedStrats) parts.push(`<span class="badge warn">did not work: ${escapeHtml(notWorkedStrats)}</span>`);
+          stratSplitHtml = `<div class="source-line" style="margin-top:4px;">${parts.join(" ")}</div>`;
+        }
+
+        const rowHtml = `<div class="item"${id === "advanced_enrichment" ? ' style="border-left: 3px solid var(--accent, #6366f1);"' : ""}>
           <strong>${escapeHtml(label)}</strong>
           <div class="source-line"><span class="badge">${count} item${count === 1 ? "" : "s"}</span></div>
-          <p>${escapeHtml(latestNeed || latestStrength || latestEvidence || "Updated support evidence saved.")}</p>
+          <p>${escapeHtml(latestNeed ? `Need: ${latestNeed}` : (latestStrength ? `Strength: ${latestStrength}` : (latestEvidence || "Updated support evidence saved.")))}</p>
+          ${stratSplitHtml}
         </div>`;
-      }).filter(Boolean);
-      return rows.length ? `<div class="list">${rows.join("")}</div>` : "<p>No support-profile entries yet.</p>";
+
+        if (id === "advanced_enrichment") {
+          enrichmentRow = rowHtml;
+        } else {
+          regularRows.push(rowHtml);
+        }
+      });
+
+      if (!regularRows.length && !enrichmentRow) {
+        return "<p>No support-profile entries yet.</p>";
+      }
+
+      let html = regularRows.length ? `<div class="list">${regularRows.join("")}</div>` : "";
+      if (enrichmentRow) {
+        html += `<div style="margin-top:12px;"><h4 style="margin:0 0 6px 0;font-size:0.9em;color:var(--muted);">Advanced / Enrichment (Separate from Intervention Tier)</h4><div class="list">${enrichmentRow}</div></div>`;
+      }
+      return html;
     }
 
     async function renderAssess() {
@@ -1619,7 +1665,10 @@
       setTitle("Settings", "local configuration");
       let status = {ollama_reachable: false, model: null};
       try { status = await api("/api/provider"); } catch {}
+      let driveStatus = {configured: false, setup_message: "Google Drive import is not configured on this machine."};
+      try { driveStatus = await api("/api/google-drive/status"); } catch {}
       const overview = await ensureOverview();
+      const students = await ensureStudents();
       $("content").innerHTML = `
         <div class="view-head"><div><h2>Settings</h2><p>Configure the local pieces that support your week.</p></div></div>
         <div class="grid two">
@@ -1644,9 +1693,278 @@
           </div>
           <div id="filemap-status" class="source-line" style="margin-top:12px;"></div>
           <div id="filemap-summary" style="margin-top:12px;"></div>
+        </div>
+        <div class="panel" style="margin-top:14px;">
+          <div class="view-head">
+            <div><h3>Google Drive</h3><p>Explicitly import selected Drive files into this local runtime cache. Nothing syncs back to Drive.</p></div>
+            <span id="drive-status-badge" class="badge ${driveStatus.configured ? "ok" : "warn"}">${driveStatus.configured ? "configured" : "setup required"}</span>
+          </div>
+          <p id="drive-status-message">${escapeHtml(driveStatus.setup_message || "")}</p>
+          <div class="form-grid">
+            <label>Query<input id="drive-query" placeholder="filename or topic"></label>
+            <label>Folder/root filter<input id="drive-folder" placeholder="${driveStatus.root_id_set ? "configured root, or override" : "optional folder ID"}"></label>
+          </div>
+          <div class="row" style="margin-top:12px;">
+            <button id="list-drive-files" class="primary" type="button">List Drive Files</button>
+            <span class="badge">local import only</span>
+            <span class="badge">no Drive upload</span>
+          </div>
+          <div id="drive-list-result" style="margin-top:12px;"></div>
+          <div class="form-grid" style="margin-top:12px;">
+            <label>Purpose<select id="drive-purpose">
+              <option value="unassigned">Unassigned</option>
+              <option value="student_lens_source">Student lens source</option>
+              <option value="curriculum_unit_source">Curriculum unit source</option>
+              <option value="teacher_artifact_source">Teacher artifact source</option>
+            </select></label>
+            <label id="drive-student-label">Student<select id="drive-student">
+              <option value="">Choose student</option>
+              ${students.map(student => `<option value="${escapeHtml(student.student_id)}">${escapeHtml(student.display_name || student.student_id)}</option>`).join("")}
+            </select></label>
+          </div>
+          <button id="import-drive-selected" type="button" style="margin-top:12px;">Import Selected</button>
+          <div id="drive-import-result" style="margin-top:12px;"></div>
+        </div>
+        <div class="panel" style="margin-top:14px;">
+          <div class="view-head">
+            <div><h3>Extraction Sources</h3><p>Extract structured support-profile entries from local files and imported notes with teacher review.</p></div>
+            <span class="badge ok">local extract-fill-verify</span>
+          </div>
+          <div id="extraction-sources-list" style="margin-top:12px;"><p>Loading extraction sources...</p></div>
+          <div class="row" style="margin-top:12px;">
+            <button id="run-extraction" class="primary" type="button">Run Extraction</button>
+            <span id="extraction-status" class="voice-hint">Select a file above to extract.</span>
+          </div>
+          <div id="extraction-review-panel" style="margin-top:14px;display:none;">
+            <h3>Review Extraction</h3>
+            <p class="voice-hint">Review extracted fields and source references before writing to student lens.</p>
+            <div id="extraction-review-content"></div>
+            <div class="row" style="margin-top:12px;">
+              <button id="write-confirmed-lens" class="primary" type="button">Write Confirmed to Lens</button>
+            </div>
+          </div>
+          <div id="extraction-result-area" style="margin-top:12px;"></div>
         </div>`;
       await renderScheduleControls(overview);
       await renderFileMapControls();
+      renderGoogleDriveControls();
+      await renderExtractionControls();
+    }
+
+    function renderGoogleDriveControls() {
+      const purpose = $("drive-purpose");
+      const studentLabel = $("drive-student-label");
+      const updateStudentVisibility = () => {
+        studentLabel.style.display = purpose.value === "student_lens_source" ? "block" : "none";
+      };
+      purpose.addEventListener("change", updateStudentVisibility);
+      updateStudentVisibility();
+      $("list-drive-files").addEventListener("click", listGoogleDriveFiles);
+      $("import-drive-selected").addEventListener("click", importSelectedGoogleDriveFiles);
+    }
+
+    async function listGoogleDriveFiles() {
+      const target = $("drive-list-result");
+      target.innerHTML = `<p>Checking Drive files...</p>`;
+      try {
+        const data = await api("/api/google-drive/list", {
+          method: "POST",
+          body: JSON.stringify({
+            query: $("drive-query").value.trim(),
+            folder_id: $("drive-folder").value.trim()
+          })
+        });
+        const files = data.files || [];
+        target.innerHTML = `<div class="list">${files.length ? files.map(file => `
+          <label class="item row" style="align-items:flex-start;">
+            <input type="checkbox" data-drive-file-id="${escapeHtml(file.id)}" style="width:auto;margin-top:4px;" ${file.supported_for_import ? "" : "disabled"}>
+            <span><strong>${escapeHtml(file.name)}</strong><br>
+            <span class="badge">${escapeHtml(file.mime_type || "unknown")}</span>
+            <span class="badge ${file.supported_for_import ? "ok" : "warn"}">${file.supported_for_import ? "importable" : "unsupported"}</span>
+            <span class="badge ${file.supported_for_extraction ? "ok" : ""}">${file.supported_for_extraction ? "extraction-ready" : "not extraction-ready"}</span></span>
+          </label>`).join("") : "<p>No Drive files returned.</p>"}</div>`;
+      } catch (error) {
+        target.innerHTML = `<p>${escapeHtml(error.message)}</p>`;
+      }
+    }
+
+    async function importSelectedGoogleDriveFiles() {
+      const result = $("drive-import-result");
+      const fileIds = Array.from(document.querySelectorAll("[data-drive-file-id]:checked")).map(input => input.dataset.driveFileId);
+      const purpose = $("drive-purpose").value;
+      const assignedStudentId = purpose === "student_lens_source" ? $("drive-student").value : null;
+      if (!fileIds.length) {
+        result.innerHTML = `<span class="badge warn">Select at least one Drive file.</span>`;
+        return;
+      }
+      if (purpose === "student_lens_source" && !assignedStudentId) {
+        result.innerHTML = `<span class="badge warn">Choose a student before importing student lens sources.</span>`;
+        return;
+      }
+      result.innerHTML = `<p>Importing selected files locally...</p>`;
+      try {
+        const data = await api("/api/google-drive/import", {
+          method: "POST",
+          body: JSON.stringify({
+            file_ids: fileIds,
+            purpose,
+            assigned_student_id: assignedStudentId
+          })
+        });
+        const imported = data.imported || [];
+        const failed = data.failed || [];
+        result.innerHTML = `
+          <div class="source-line"><span class="badge ok">local only after import</span><span class="badge">imported ${imported.length}</span><span class="badge ${failed.length ? "warn" : "ok"}">failed ${failed.length}</span></div>
+          <div class="list">
+            ${imported.map(item => `<div class="item"><strong>${escapeHtml(item.name)}</strong><p>${escapeHtml(item.local_path)}</p><span class="badge">${escapeHtml(item.purpose)}</span><span class="badge ${item.supported_for_extraction ? "ok" : "warn"}">${item.supported_for_extraction ? "extraction-ready" : "not extraction-ready"}</span></div>`).join("")}
+            ${failed.map(item => `<div class="item"><strong>${escapeHtml(item.drive_id)}</strong><p>${escapeHtml(item.message)}</p><span class="badge warn">${escapeHtml(item.status)}</span></div>`).join("")}
+          </div>`;
+        await loadFileMap();
+      } catch (error) {
+        result.innerHTML = `<p>${escapeHtml(error.message)}</p>`;
+      }
+    }
+
+    async function renderExtractionControls() {
+      const listEl = $("extraction-sources-list");
+      listEl.innerHTML = `<p>Loading extraction sources...</p>`;
+      try {
+        const data = await api("/api/extraction/sources");
+        const sources = data.sources || [];
+        state.extractionSources = sources;
+        if (!sources.length) {
+          listEl.innerHTML = `<p>No extraction candidate files available.</p>`;
+          return;
+        }
+        listEl.innerHTML = `<div class="list">${sources.map((s, idx) => `
+          <label class="item row" style="align-items:center;">
+            <input type="radio" name="extraction_source_file" value="${escapeHtml(s.file_path)}" data-student-id="${escapeHtml(s.student_id || "")}" ${idx === 0 ? "checked" : ""} style="width:auto;">
+            <span><strong>${escapeHtml(s.display_name)}</strong> <span class="badge ok">${escapeHtml(s.source_type)}</span></span>
+          </label>
+        `).join("")}</div>`;
+      } catch (err) {
+        listEl.innerHTML = `<p>Failed to load extraction sources.</p>`;
+      }
+      $("run-extraction").onclick = runExtraction;
+      $("write-confirmed-lens").onclick = writeConfirmedToLens;
+    }
+
+    async function runExtraction() {
+      const selected = document.querySelector('input[name="extraction_source_file"]:checked');
+      if (!selected) {
+        $("extraction-status").textContent = "Please select a source file first.";
+        return;
+      }
+      const filePath = selected.value;
+      const studentId = selected.dataset.studentId || state.selectedStudent || null;
+      $("run-extraction").disabled = true;
+      $("extraction-status").textContent = "Running extract-fill-verify...";
+      try {
+        const data = await api("/api/extraction/run", {
+          method: "POST",
+          body: JSON.stringify({file_path: filePath, target_schema_id: "student_lens", student_id: studentId})
+        });
+        state.lastExtractionResult = data;
+        state.lastExtractionFile = filePath;
+        state.lastExtractionStudentId = studentId;
+
+        const verified = data.verified_fields || [];
+        const needsConf = data.needs_confirmation_fields || [];
+        const unresolved = data.unresolved_questions || [];
+
+        let reviewHtml = "";
+        if (verified.length) {
+          reviewHtml += `<h4>Verified Fields (Auto-Confirmed)</h4><div class="list">${verified.map(f => `
+            <div class="item">
+              <strong>${escapeHtml(f.field_path)}</strong>: ${escapeHtml(JSON.stringify(f.value))}
+              <div class="source-line"><span class="badge ok">imported_verified</span> <span class="badge">refs: ${(f.supporting_chunk_ids || []).join(", ")}</span></div>
+            </div>
+          `).join("")}</div>`;
+        }
+
+        if (needsConf.length) {
+          reviewHtml += `<h4 style="margin-top:12px;">Needs Confirmation (Teacher Review)</h4><div class="list">${needsConf.map((f, i) => `
+            <div class="item" data-conf-index="${i}" data-field-path="${escapeHtml(f.field_path)}">
+              <strong>${escapeHtml(f.field_path)}</strong>: ${escapeHtml(JSON.stringify(f.value))}
+              <div class="source-line"><span class="badge warn">imported_needs_confirmation</span> <span class="badge">refs: ${(f.supporting_chunk_ids || []).join(", ")}</span></div>
+              <p class="voice-hint">${escapeHtml(f.review_tip || "Review before writing to lens.")}</p>
+              <div class="row" style="margin-top:6px;">
+                <label class="row" style="margin:0;"><input type="checkbox" data-confirm-field="${escapeHtml(f.field_path)}" checked style="width:auto;"><span>Confirm</span></label>
+              </div>
+            </div>
+          `).join("")}</div>`;
+        }
+
+        if (unresolved.length) {
+          reviewHtml += `<h4 style="margin-top:12px;">Unresolved Questions</h4><div class="list">${unresolved.map(u => `
+            <div class="item"><p>${escapeHtml(u)}</p></div>
+          `).join("")}</div>`;
+        }
+
+        if (!verified.length && !needsConf.length) {
+          reviewHtml = "<p>No structured support profile fields extracted from this document.</p>";
+        }
+
+        $("extraction-review-content").innerHTML = reviewHtml;
+        $("extraction-review-panel").style.display = "block";
+        $("extraction-status").textContent = "Extraction complete. Review items below.";
+      } catch (err) {
+        $("extraction-status").textContent = "Extraction failed: " + (err.message || "error");
+      } finally {
+        $("run-extraction").disabled = false;
+      }
+    }
+
+    async function writeConfirmedToLens() {
+      if (!state.lastExtractionFile) return;
+      const confirmedFields = Array.from(document.querySelectorAll("[data-confirm-field]:checked")).map(cb => cb.dataset.confirmField);
+      const allNeedsConf = (state.lastExtractionResult?.needs_confirmation_fields || []).map(f => f.field_path);
+      const rejectedFields = allNeedsConf.filter(path => !confirmedFields.includes(path));
+
+      const verifiedPaths = (state.lastExtractionResult?.verified_fields || []).map(f => f.field_path);
+      const allConfirmed = [...verifiedPaths, ...confirmedFields];
+
+      $("write-confirmed-lens").disabled = true;
+      try {
+        const res = await api("/api/extraction/review", {
+          method: "POST",
+          body: JSON.stringify({
+            file_path: state.lastExtractionFile,
+            student_id: state.lastExtractionStudentId,
+            confirmed_fields: allConfirmed,
+            rejected_fields: rejectedFields,
+            target_schema_id: "student_lens"
+          })
+        });
+
+        const fb = res.feedback || {};
+        $("extraction-result-area").innerHTML = `
+          <div class="item">
+            <h3>Written to Student Lens</h3>
+            <p>${escapeHtml(fb.message || "Fields written successfully.")}</p>
+            <div class="source-line">
+              <span class="badge ok">written: ${fb.written_count || 0}</span>
+              <span class="badge">confirmed: ${fb.review_confirmed || 0}</span>
+              <span class="badge warn">rejected: ${fb.review_rejected || 0}</span>
+            </div>
+            <p><a href="#" id="view-extracted-student" data-student-id="${escapeHtml(res.student_id)}">View Student Lens in Students tab</a></p>
+          </div>
+        `;
+        const link = $("view-extracted-student");
+        if (link) {
+          link.onclick = (e) => {
+            e.preventDefault();
+            state.selectedStudent = res.student_id;
+            state.view = "students";
+            renderShell();
+            renderView();
+          };
+        }
+      } catch (err) {
+        $("extraction-result-area").innerHTML = `<span class="badge warn">Failed: ${escapeHtml(err.message)}</span>`;
+      } finally {
+        $("write-confirmed-lens").disabled = false;
+      }
     }
 
     async function renderSlack() {

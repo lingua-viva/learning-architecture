@@ -85,6 +85,32 @@ class ExtractionResult:
 # argument set, restated here as the extraction target so Spec 5 (engine) and
 # Spec 6 (lens writer) agree on field names without either importing the other.
 
+SUPPORT_PROFILE_CATEGORIES: tuple[str, ...] = (
+    "learning_and_cognition",
+    "communication_and_language",
+    "executive_functioning",
+    "social_skills",
+    "emotional_regulation",
+    "physical_sensory_needs",
+    "attendance_and_engagement",
+    "advanced_enrichment",
+)
+
+SUPPORT_PROFILE_BUCKETS: tuple[str, ...] = (
+    "needs",
+    "strengths",
+    "strategies_worked",
+    "strategies_not_worked",
+    "evidence",
+    "open_questions",
+)
+
+SUPPORT_PROFILE_EXTRACTION_FIELDS: tuple[str, ...] = tuple(
+    f"support_profile.categories.{cat}.{bucket}"
+    for cat in SUPPORT_PROFILE_CATEGORIES
+    for bucket in SUPPORT_PROFILE_BUCKETS
+)
+
 STUDENT_LENS_FIELDS: tuple[str, ...] = (
     "display_name",
     "campus",
@@ -98,6 +124,7 @@ STUDENT_LENS_FIELDS: tuple[str, ...] = (
     "cefr_snapshot.writing",
     "cefr_snapshot.speaking",
     "cefr_snapshot.listening",
+    *SUPPORT_PROFILE_EXTRACTION_FIELDS,
 )
 
 
@@ -142,22 +169,34 @@ def extract(
     files: list[str],
     target_schema_id: Literal["student_lens", "curriculum_unit"],
     hint: dict | None = None,
-) -> ExtractionResult:
-    """Contract only — implemented in Spec 5. Reads `files` (already located
-    and confirmed by Spec 2's file-map verification step — this function
-    never scans directories itself), chunks them, extracts+fills the target
-    schema's fields via the local model, and returns every field tagged with
-    a verification status. Never raises on partial/messy input — an
-    unreadable file or an unmatched field becomes an unresolved_question,
-    not an exception."""
-    raise NotImplementedError("Spec 5: Extract+Fill+Verify Engine")
+) -> Any:
+    from src.lingua_viva.extraction_engine import extract as _extract
+    import asyncio
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        # Running loop in async test/server environment: schedule coroutine
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(lambda: asyncio.run(_extract(files, target_schema_id, hint)))
+            return future.result()
+    else:
+        return asyncio.run(_extract(files, target_schema_id, hint))
 
 
-def write_student_lens(result: ExtractionResult, teacher_id: str) -> str:
-    """Contract only — implemented in Spec 6. Consumes result.verified_only()
-    ONLY. Returns the student_id. trauma_flag must never be auto-written
-    (see STUDENT_LENS_FIELDS note) regardless of its status."""
-    raise NotImplementedError("Spec 6: Student Lens artifact writer")
+def write_student_lens(
+    result: ExtractionResult,
+    teacher_id: str = "local-teacher",
+    confirmed_fields: list[Any] | None = None,
+    rejected_fields: list[Any] | None = None,
+    hint: dict | None = None,
+    store: Any = None,
+) -> Any:
+    from src.lingua_viva.student_lens_writer import write_student_lens as _write
+    return _write(result, teacher_id=teacher_id, confirmed_fields=confirmed_fields, rejected_fields=rejected_fields, hint=hint, store=store)
 
 
 def write_curriculum_unit(result: ExtractionResult, teacher_id: str) -> str:

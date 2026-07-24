@@ -9,7 +9,9 @@ the comments are the changelog.
 
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
+import shutil
 
 import yaml
 
@@ -35,7 +37,11 @@ REPO = Path(__file__).resolve().parent.parent
 #   v20 (2026-07-23): teacher-lens/RTI endpoints + Phase 5B surface cards.
 #   v21 (2026-07-23): Linux download button.
 #   v22 (2026-07-23): Observe support-profile classification write path.
-EXPECTED_VERSION = 22
+#   v23 (2026-07-23): Google Drive explicit-import Settings mount.
+#   v26 (2026-07-23): Restored unobserved_students return statement in web.py.
+#   v27 (2026-07-23): support-profile summary JavaScript parse fix.
+#   v28 (2026-07-23): Ingestion and extraction mapping v2 UI implementation.
+EXPECTED_VERSION = 28
 
 
 def _html() -> str:
@@ -69,6 +75,23 @@ def test_ui_contract_lock_matches_live_files():
     for rel in contract["files"]:
         actual = hashlib.sha256((REPO / rel).read_bytes()).hexdigest()
         assert lock["hashes"][rel] == actual, f"{rel} hash drifted from lock without a version bump"
+
+
+def test_static_inline_javascript_syntax_is_valid():
+    import pytest
+
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is not available for static JS syntax check")
+    html = _html()
+    start = html.index("<script>") + len("<script>")
+    end = html.index("</script>", start)
+    script = html[start:end]
+    with tempfile.NamedTemporaryFile("w", suffix=".js", encoding="utf-8") as handle:
+        handle.write(script)
+        handle.flush()
+        result = subprocess.run([node, "--check", handle.name], capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_sidebar_nav_contract_counts_and_handlers():

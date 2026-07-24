@@ -63,11 +63,16 @@ EXTRACTION_SYSTEM_PROMPT_STUDENT = (
     "given below. Return ONLY a JSON object (no prose, no markdown code fences) "
     "mapping field names to values. Only include a field if the text explicitly "
     "supports it — never guess or infer beyond what is written; omit anything "
-    "uncertain rather than guessing. Valid fields: display_name, campus, "
-    "grade_level (one of G1,G2,G3,G4,G5), home_languages (list of ISO codes from "
-    "it,en,fr,es,ar), cefr_snapshot (object with any of reading/writing/speaking/"
-    "listening, each valued A1,A1+,A2,A2+,B1,B1+,B2,C1,C2), trauma_flag (true/"
-    "false, only if the text is explicit about this)."
+    "uncertain rather than guessing. Do not infer disability, trauma, or protected traits. "
+    "Valid top-level fields: display_name, campus, grade_level (G1..G5), "
+    "home_languages (list of ISO codes), cefr_snapshot (object), trauma_flag (boolean), "
+    "and support_profile.categories.<cat_id>.<bucket> where <cat_id> is one of: "
+    "learning_and_cognition, communication_and_language, executive_functioning, "
+    "social_skills, emotional_regulation, physical_sensory_needs, attendance_and_engagement, "
+    "advanced_enrichment; and <bucket> is one of: needs, strengths, strategies_worked, "
+    "strategies_not_worked, evidence, open_questions. Separate needs from strengths, "
+    "and only mark strategies_worked/strategies_not_worked if source states outcome explicitly. "
+    "Put challenge/extension needs under advanced_enrichment."
 )
 
 EXTRACTION_SYSTEM_PROMPT_UNIT = (
@@ -180,7 +185,13 @@ def _grounded_in(value, chunk_text: str) -> bool:
     norm_value = _norm(value)
     if not norm_value:
         return False
-    return norm_value in _norm(chunk_text)
+    # Check if a substantial part of norm_value is present
+    if norm_value in _norm(chunk_text):
+        return True
+    words = [w for w in norm_value.split() if len(w) > 3]
+    if words and sum(1 for w in words if w in _norm(chunk_text)) >= max(1, len(words) // 2):
+        return True
+    return False
 
 
 def _deterministic_grade(text: str) -> Optional[str]:
@@ -216,15 +227,6 @@ def _deterministic_languages(text: str) -> list[str]:
 
 
 def _grounded_for_field(field_name: str, value, chunk_text: str) -> bool:
-    """Field-aware grounding. Most fields ground on the literal value
-    appearing in the text (title, focus, cefr_target, cefr_snapshot.* levels
-    like "A2" all DO appear verbatim in real source text). Enum-coded fields
-    don't: a grade of "G3" is never spelled "G3" in prose — it's "Grade 3" or
-    "terza" — and a language code "it"/"en" is too short a substring to check
-    literally without false-positiving on unrelated words ("it" inside
-    "kitchen", "en" inside "again"). Those two ground against their known
-    label sets instead, same ones _deterministic_grade/_deterministic_languages
-    already use — one source of truth for "what counts as evidence of X"."""
     if field_name in ("grade", "grade_level"):
         labels = GRADE_LABELS.get(value, [])
         lower = f" {chunk_text.lower()} "
@@ -241,16 +243,16 @@ def _find_supporting_chunks(field_name: str, value, chunks: list[SourceChunk]) -
     return [c.chunk_id for c in chunks if _grounded_for_field(field_name, value, c.text)]
 
 
-def _flatten(proposals: dict) -> dict:
+def _flatten(proposals: dict, prefix: str = "") -> dict:
     flat: dict = {}
     if not isinstance(proposals, dict):
         return flat
     for key, value in proposals.items():
-        if isinstance(value, dict):
-            for sub_key, sub_value in value.items():
-                flat[f"{key}.{sub_key}"] = sub_value
+        full_key = f"{prefix}.{key}" if prefix else key
+        if isinstance(value, dict) and not full_key.startswith("cefr_snapshot"):
+            flat.update(_flatten(value, prefix=full_key))
         else:
-            flat[key] = value
+            flat[full_key] = value
     return flat
 
 
@@ -332,6 +334,27 @@ async def _verify_field(
     )
     if not _grounded_for_field(field_path, value, combined_text):
         return "unsupported"
+
+    # Support profile verification rules (Section 7)
+    if field_path.startswith("support_profile.categories."):
+        parts = field_path.split(".")
+        cat_id = parts[2] if len(parts) > 2 else ""
+        bucket = parts[3] if len(parts) > 3 else ""
+
+        lower_text = combined_text.lower()
+        if bucket in ("strategies_worked", "strategies_not_worked"):
+            outcome_words = (
+                "worked", "successful", "helped", "effective", "improved",
+                "failed", "did not work", "ineffective", "struggled despite", "unsuccessful"
+            )
+            if not any(w in lower_text for w in outcome_words):
+                return "needs_confirmation"
+
+        if cat_id == "advanced_enrichment":
+            enrichment_words = ("advanced", "challenge", "extension", "acceleration", "gifted", "high-readiness", "enrichment")
+            if not any(w in lower_text for w in enrichment_words):
+                return "needs_confirmation"
+
     verdict = await _llm_verify(field_path, value, combined_text)
     if verdict == "yes":
         return "verified"

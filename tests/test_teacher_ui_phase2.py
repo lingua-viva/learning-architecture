@@ -24,6 +24,14 @@ def test_teacher_sidebar_contract():
     assert "renderSupportProfileSummary" in html
     assert "/api/parents/recommendation" in html
     assert "/api/support-bundle" in html
+    assert "Google Drive" in html
+    assert "/api/google-drive/status" in html
+    assert "/api/google-drive/list" in html
+    assert "/api/google-drive/import" in html
+    assert "List Drive Files" in html
+    assert "Import Selected" in html
+    assert "student_lens_source" in html
+    assert "curriculum_unit_source" in html
     assert "/api/admin/programme" in html
     assert "lvSchedule" in html
     assert "/api/teacher/today" in html or "My Schedule" in html

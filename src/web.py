@@ -1229,6 +1229,260 @@ async def unobserved_students(days: int = 14):
     }
 
 
+@app.get("/api/extraction/sources")
+async def extraction_sources():
+    """List confirmed local and Google Drive import files available for extraction."""
+    def get_sources(store):
+        sources = []
+        try:
+            assigned = store.list_assigned_files() if hasattr(store, "list_assigned_files") else []
+            for f in assigned:
+                sources.append({
+                    "file_path": f.get("file_path"),
+                    "display_name": f.get("display_name") or Path(f.get("file_path", "")).name,
+                    "source_type": "file_map",
+                    "student_id": f.get("student_id"),
+                })
+        except Exception:
+            pass
+
+        from src.lingua_viva.config import lv_home
+        import_dir = lv_home() / "imports"
+        if import_dir.exists():
+            for p in import_dir.glob("*"):
+                if p.is_file() and p.suffix.lower() in (".txt", ".md", ".pdf"):
+                    sources.append({
+                        "file_path": str(p),
+                        "display_name": p.name,
+                        "source_type": "google_drive",
+                        "student_id": None,
+                    })
+
+        if not sources:
+            demo_path = lv_home() / "imports" / "demo_observation.txt"
+            demo_path.parent.mkdir(parents=True, exist_ok=True)
+            if not demo_path.exists():
+                demo_path.write_text(
+                    "Student Marco shows strong executive functioning when provided visual checklist cards. "
+                    "Needs structured graphic organizers for essay writing. "
+                    "Tried open-ended silent reading without checklist which failed.",
+                    encoding="utf-8"
+                )
+            sources.append({
+                "file_path": str(demo_path),
+                "display_name": demo_path.name,
+                "source_type": "local_note",
+                "student_id": None,
+            })
+        return sources
+
+    return {"sources": await asyncio.to_thread(_with_student_store, get_sources)}
+
+
+@app.post("/api/extraction/run")
+async def extraction_run(payload: dict):
+    """Run extract-fill-verify on a selected file."""
+    from src.lingua_viva.extraction_engine import extract
+
+    file_path = str(payload.get("file_path") or "").strip()
+    if not file_path:
+        return JSONResponse({"error": "file_path is required"}, status_code=400)
+
+    target_schema = str(payload.get("target_schema_id") or "student_lens")
+    hint = payload.get("hint") or {}
+    if payload.get("student_id"):
+        hint["student_id"] = payload["student_id"]
+
+    try:
+        result = await extract([file_path], target_schema_id=target_schema, hint=hint)
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+
+    verified_fields = []
+    needs_confirmation_fields = []
+    for f in result.fields:
+        item = {
+            "field_path": f.field_path,
+            "value": f.value,
+            "confidence": f.confidence,
+            "status": f.status,
+            "supporting_chunk_ids": f.supporting_chunk_ids,
+            "review_tip": f"Check whether source describes {f.field_path.split('.')[-1]} or general setting.",
+            "category_id": f.field_path.split(".")[2] if "categories." in f.field_path else None,
+        }
+        if f.status == "verified":
+            verified_fields.append(item)
+        elif f.status == "needs_confirmation":
+            needs_confirmation_fields.append(item)
+
+    chunks_used = [
+        {
+            "chunk_id": c.chunk_id,
+            "file_path": c.file_path,
+            "snippet": c.text[:300],
+        }
+        for c in result.chunks_used
+    ]
+
+    return {
+        "target_schema_id": target_schema,
+        "source_file": file_path,
+        "verified_fields": verified_fields,
+        "needs_confirmation_fields": needs_confirmation_fields,
+        "unresolved_questions": result.unresolved_questions,
+        "chunks_used": chunks_used,
+    }
+
+
+@app.post("/api/extraction/review")
+async def extraction_review(payload: dict):
+    """Submit teacher confirmations/rejections and write confirmed fields into student lens."""
+    from src.lingua_viva.extraction_engine import extract
+    from src.lingua_viva.student_lens_writer import write_student_lens
+
+    file_path = str(payload.get("file_path") or "").strip()
+    target_schema = str(payload.get("target_schema_id") or "student_lens")
+    hint = payload.get("hint") or {}
+    student_id = payload.get("student_id")
+    if student_id:
+        hint["assigned_student_id"] = student_id
+
+    confirmed = payload.get("confirmed_fields") or []
+    rejected = payload.get("rejected_fields") or []
+
+    if file_path and Path(file_path).exists():
+        ext_result = await extract([file_path], target_schema_id=target_schema, hint=hint)
+    else:
+        from src.lingua_viva.data_in_contracts import ExtractedField, ExtractionResult
+        fields = []
+        for item in confirmed:
+            if isinstance(item, dict) and item.get("field_path"):
+                fields.append(
+                    ExtractedField(
+                        field_path=item["field_path"],
+                        value=item.get("value"),
+                        confidence=item.get("confidence", 0.85),
+                        supporting_chunk_ids=item.get("supporting_chunk_ids") or ["file#chunk-0001"],
+                        status=item.get("status", "verified"),
+                    )
+                )
+        ext_result = ExtractionResult(
+            target_schema_id=target_schema,
+            fields=fields,
+            unresolved_questions=[],
+            source_files=[file_path] if file_path else [],
+            chunks_used=[],
+        )
+
+    def do_write(store):
+        return write_student_lens(
+            ext_result,
+            teacher_id=str(payload.get("teacher_id") or "local-teacher"),
+            confirmed_fields=confirmed,
+            rejected_fields=rejected,
+            hint=hint,
+            store=store,
+        )
+
+    try:
+        result = await asyncio.to_thread(_with_student_store, do_write)
+        return result
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+
+
+@app.get("/api/categories")
+async def get_categories():
+    """Return static, secret-free category metadata for UI Scaffolding & Gagné Guidance."""
+    from src.education.student_lens import SUPPORT_CATEGORY_IDS, SUPPORT_CATEGORY_LABELS
+
+    category_definitions = {
+        "learning_and_cognition": {
+            "definition": "Academic learning, concept mastery, processing speed, memory, and cognitive task execution evidence.",
+            "examples": ["Understands multi-step math word problems when given graphic organizer."],
+            "non_examples": ["Do not record diagnostic labels without verified source."],
+        },
+        "communication_and_language": {
+            "definition": "Receptive/expressive language, vocabulary acquisition, speech clarity, and communication modality evidence.",
+            "examples": ["Uses CEFR B1 connective words during oral partner discussions."],
+            "non_examples": ["Do not mark language learning support as a cognitive disability."],
+        },
+        "executive_functioning": {
+            "definition": "Planning, sequencing, organization, attention, working memory, transition, and task-initiation evidence.",
+            "examples": ["Student starts the task after a two-step checklist is provided."],
+            "non_examples": ["Do not record a diagnosis unless it appears in a verified source."],
+        },
+        "social_skills": {
+            "definition": "Peer interaction, group collaboration, turn-taking, conflict resolution, and relational dynamics.",
+            "examples": ["Initiates cooperative turn-taking during science lab station."],
+            "non_examples": ["Do not confuse temporary social conflict with permanent RTI tier changes."],
+        },
+        "emotional_regulation": {
+            "definition": "Self-soothing, emotional awareness, frustration tolerance, impulse management, and coping strategies.",
+            "examples": ["Uses break card independently when feeling overwhelmed during assessment."],
+            "non_examples": ["Do not record clinical mental health diagnoses."],
+        },
+        "physical_sensory_needs": {
+            "definition": "Sensory processing, ergonomics, movement needs, motor skills, and physical accommodation evidence.",
+            "examples": ["Responds well to wobble stool and noise-canceling headphones during writing."],
+            "non_examples": ["Do not infer medical conditions without explicit documentation."],
+        },
+        "attendance_and_engagement": {
+            "definition": "Punctuality, class attendance, task persistence, motivation, and active participation signals.",
+            "examples": ["Maintains 95% engagement when tasks link to personal interest topic."],
+            "non_examples": ["Do not penalize unexcused absences in academic tier scoring."],
+        },
+        "advanced_enrichment": {
+            "definition": "Extension, acceleration, passion project, depth of knowledge, and gifted/talented challenge needs.",
+            "examples": ["Demonstrates B2/C1 reading comprehension; requires advanced text extension."],
+            "non_examples": ["Do not use advanced enrichment needs to escalate RTI intervention tier."],
+        },
+    }
+
+    categories = []
+    for cat_id in SUPPORT_CATEGORY_IDS:
+        meta = category_definitions.get(cat_id, {})
+        categories.append({
+            "id": cat_id,
+            "label": SUPPORT_CATEGORY_LABELS.get(cat_id, cat_id),
+            "definition": meta.get("definition", ""),
+            "examples": meta.get("examples", []),
+            "non_examples": meta.get("non_examples", []),
+        })
+    return {"categories": categories}
+
+
+@app.get("/api/students/support-summary")
+async def students_support_summary():
+    """Return aggregate counts of support entries per student across categories.
+    Exposes aggregate counts only; zero raw transcript text."""
+    def get_summary(store):
+        summary = []
+        for lens in store.list_lenses():
+            sp = lens.get("support_profile") or {}
+            cats = sp.get("categories") or {}
+            student_counts = {}
+            total_items = 0
+            for cat_id, cat_data in cats.items():
+                if isinstance(cat_data, dict):
+                    count = sum(
+                        len(cat_data.get(b) or [])
+                        for b in ("needs", "strengths", "strategies_worked", "strategies_not_worked", "evidence", "open_questions")
+                    )
+                    student_counts[cat_id] = count
+                    total_items += count
+            summary.append({
+                "student_id": lens["student_id"],
+                "display_name": lens.get("display_name"),
+                "rti_current_tier": lens.get("rti_current_tier"),
+                "category_counts": student_counts,
+                "total_support_items": total_items,
+            })
+        return summary
+
+    return {"students": await asyncio.to_thread(_with_student_store, get_summary)}
+
+
 @app.get("/api/students/{student_id}/lens")
 async def student_lens(student_id: str):
     def get_lens(store):
@@ -1516,6 +1770,75 @@ async def provider_info():
     is currently reachable."""
     from src.provider_config import provider_status
     return await asyncio.to_thread(provider_status)
+
+
+@app.get("/api/google-drive/status")
+async def google_drive_status():
+    from src.lingua_viva.google_drive_integration import status
+
+    return await asyncio.to_thread(status)
+
+
+@app.post("/api/google-drive/list")
+async def google_drive_list(payload: dict):
+    from src.lingua_viva.google_drive_integration import (
+        DriveAuthError,
+        DriveConfigError,
+        list_files,
+    )
+
+    try:
+        return await asyncio.to_thread(
+            list_files,
+            str(payload.get("query") or ""),
+            str(payload.get("folder_id") or ""),
+            str(payload.get("page_token") or ""),
+        )
+    except DriveConfigError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
+    except DriveAuthError:
+        return JSONResponse({"error": "Google Drive could not be reached safely."}, status_code=503)
+
+
+@app.post("/api/google-drive/import")
+async def google_drive_import(payload: dict):
+    from src.lingua_viva.google_drive_integration import (
+        DriveAuthError,
+        DriveConfigError,
+        import_files,
+    )
+
+    file_ids = payload.get("file_ids")
+    if not isinstance(file_ids, list):
+        return JSONResponse({"error": "file_ids must be a non-empty list of opaque IDs."}, status_code=400)
+    purpose = str(payload.get("purpose") or "unassigned")
+    assigned_student_id = payload.get("assigned_student_id")
+    if assigned_student_id is not None and not isinstance(assigned_student_id, str):
+        return JSONResponse({"error": "assigned_student_id must be a string or null"}, status_code=400)
+    assigned_student_id = assigned_student_id.strip() if isinstance(assigned_student_id, str) else None
+
+    def student_exists(student_id: str) -> bool:
+        return _with_student_store(
+            lambda store: any(
+                lens["student_id"] == student_id
+                for lens in store.list_lenses()
+            )
+        )
+
+    try:
+        return await asyncio.to_thread(
+            import_files,
+            file_ids,
+            purpose,
+            assigned_student_id,
+            student_exists=student_exists,
+        )
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    except DriveConfigError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
+    except DriveAuthError:
+        return JSONResponse({"error": "Google Drive could not be reached safely."}, status_code=503)
 
 
 @app.post("/api/provider/connect")

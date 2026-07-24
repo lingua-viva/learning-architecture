@@ -57,7 +57,14 @@
 #   v21 (2026-07-23): add Linux download button to landing page.
 #   v22 (2026-07-23): Observe support-profile classification write path:
 #     teacher-reviewed support entries, guidance, feedback, and lens display.
-version: 22
+#   v23 (2026-07-23): Google Drive explicit-import connector mounted in
+#     Settings with status, list, select, purpose, student assignment, and
+#     import-result UI call sites.
+#   v26 (2026-07-23): Restored unobserved_students return statement in web.py.
+#   v27 (2026-07-23): Fixed support-profile summary JavaScript parse error
+#     found during Google Drive 15-pass hardening.
+#   v28 (2026-07-23): Ingestion and extraction mapping v2 UI: Extraction Sources, Run Extraction, Review Extraction modal, and Write Confirmed to Lens.
+version: 28
 files:
   - static/index.html
   - static/sw.js

@@ -118,6 +118,10 @@ class SupportBundleService:
         lowered = rel_text.lower()
         if rel.parts and rel.parts[0] == ".lv_support":
             return "support runtime state and existing bundles are never bundled"
+        if "drive_imports" in rel.parts:
+            return "Google Drive imported local files excluded as possible student/curriculum source material"
+        if rel.name == "import_manifest.json" and "drive_imports" in rel_text:
+            return "Google Drive import manifest excluded from support bundles"
         if rel.suffix.lower() == ".docx":
             return "docx source/private draft excluded; contents were not read"
         if any(token in lowered for token in ("student_lens", "observation", "iep", "progress_report", "parent_report", "individual_score")):
