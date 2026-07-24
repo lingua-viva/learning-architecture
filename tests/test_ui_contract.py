@@ -41,7 +41,7 @@ REPO = Path(__file__).resolve().parent.parent
 #   v26 (2026-07-23): Restored unobserved_students return statement in web.py.
 #   v27 (2026-07-23): support-profile summary JavaScript parse fix.
 #   v28 (2026-07-23): Ingestion and extraction mapping v2 UI implementation.
-EXPECTED_VERSION = 28
+EXPECTED_VERSION = 29
 
 
 def _html() -> str:

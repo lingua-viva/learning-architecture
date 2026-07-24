@@ -64,7 +64,8 @@
 #   v27 (2026-07-23): Fixed support-profile summary JavaScript parse error
 #     found during Google Drive 15-pass hardening.
 #   v28 (2026-07-23): Ingestion and extraction mapping v2 UI: Extraction Sources, Run Extraction, Review Extraction modal, and Write Confirmed to Lens.
-version: 28
+#   v29 (2026-07-23): LV-BLT-001 provider connect form + LV-BLT-003 teaching artifact ingest UI in Settings.
+version: 29
 files:
   - static/index.html
   - static/sw.js

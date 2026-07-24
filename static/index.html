@@ -1644,7 +1644,24 @@
       if (!response.ok) {
         target.innerHTML = `
           <div class="view-head"><div><h3>My Teaching Style</h3><p>Learned from your past exams, lesson plans, parent updates, and evaluations.</p></div><span class="badge warn">Confidence: no data yet</span></div>
-          <p>Ingest past teaching artifacts to build your style profile.</p>`;
+          <p>Ingest past teaching artifacts to build your style profile.</p>
+          <div style="margin-top:12px;">
+            <div class="form-grid">
+              <label>File path<input id="teaching-file-path" placeholder="~/Documents/Teaching/exam-2025.pdf"></label>
+              <label>Doc type<select id="teaching-doc-type">
+                <option value="auto">Auto-detect</option>
+                <option value="exam">Exam</option>
+                <option value="lesson_plan">Lesson Plan</option>
+                <option value="parent_update">Parent Update</option>
+                <option value="evaluation">Evaluation</option>
+              </select></label>
+            </div>
+            <div class="row" style="margin-top:12px;">
+              <button id="ingest-teaching-btn" class="primary" type="button">Ingest Artifact</button>
+              <span id="teaching-ingest-status" class="voice-hint"></span>
+            </div>
+          </div>`;
+        setupTeachingIngest();
         return;
       }
       const lens = await response.json();
@@ -1658,7 +1675,51 @@
           const style = (lens.differentiation_style || {})[tier] || {};
           const scaffolding = style.scaffolding || [];
           return `<div class="item"><h4>${tier.replace("_", " ")}</h4><p>${scaffolding.length ? scaffolding.map(escapeHtml).join(", ") : "not yet learned"}</p></div>`;
-        }).join("")}</div>`;
+        }).join("")}</div>
+        <div style="margin-top:12px;">
+          <div class="form-grid">
+            <label>File path<input id="teaching-file-path" placeholder="~/Documents/Teaching/exam-2025.pdf"></label>
+            <label>Doc type<select id="teaching-doc-type">
+              <option value="auto">Auto-detect</option>
+              <option value="exam">Exam</option>
+              <option value="lesson_plan">Lesson Plan</option>
+              <option value="parent_update">Parent Update</option>
+              <option value="evaluation">Evaluation</option>
+            </select></label>
+          </div>
+          <div class="row" style="margin-top:12px;">
+            <button id="ingest-teaching-btn" type="button">Add More Artifacts</button>
+            <span id="teaching-ingest-status" class="voice-hint"></span>
+          </div>
+        </div>`;
+      setupTeachingIngest();
+    }
+
+    function setupTeachingIngest() {
+      const btn = $("ingest-teaching-btn");
+      const pathInput = $("teaching-file-path");
+      const docType = $("teaching-doc-type");
+      const statusEl = $("teaching-ingest-status");
+      if (!btn) return;
+      btn.onclick = async () => {
+        const filePath = (pathInput.value || "").trim();
+        if (!filePath) { statusEl.textContent = "Enter a file path."; return; }
+        btn.disabled = true;
+        statusEl.textContent = "Ingesting...";
+        try {
+          const res = await api("/api/teacher/ingest", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ file_path: filePath, doc_type: docType.value })
+          });
+          statusEl.textContent = `✓ Ingested — ${res.ingested_doc_count || "?"} artifacts total`;
+          pathInput.value = "";
+          setTimeout(() => renderTeachingStyle(), 1000);
+        } catch (e) {
+          statusEl.textContent = e.message || "Ingest failed.";
+        }
+        btn.disabled = false;
+      };
     }
 
     async function renderSettings() {
@@ -1674,6 +1735,25 @@
         <div class="grid two">
           <div class="panel"><h3>Local model</h3><select><option>${escapeHtml(status.model || "qwen2.5:3b")}</option><option>qwen3:8b</option><option>llama3.1:8b</option></select><p>Ollama reachable: ${status.ollama_reachable ? "yes" : "no"}</p></div>
           <div class="panel"><h3>Local app port</h3><input value="8787"><p>Desktop shell loads http://127.0.0.1:8787.</p></div>
+        </div>
+        <div class="panel" style="margin-top:14px;">
+          <div class="view-head"><div><h3>Cloud Provider</h3><p>Optional — connect a cloud model for faster answers on non-sensitive queries. Sensitive data always stays local.</p></div></div>
+          <div id="provider-connect-area">
+            <div class="form-grid">
+              <label>Provider<select id="provider-select">
+                <option value="">Choose a provider...</option>
+                <option value="openai">OpenAI (GPT-4o)</option>
+                <option value="groq">Groq (fast, free tier)</option>
+                <option value="mistral">Mistral</option>
+              </select></label>
+              <label>API Key<input id="provider-key-input" type="password" placeholder="Paste API key"></label>
+            </div>
+            <div class="row" style="margin-top:12px;">
+              <button id="provider-connect-btn" class="primary" type="button">Connect</button>
+              <button id="provider-disconnect-btn" type="button">Disconnect</button>
+              <span id="provider-connect-status" class="voice-hint"></span>
+            </div>
+          </div>
         </div>
         <div class="panel" style="margin-top:14px;">
           <h3>My week</h3>
@@ -1748,7 +1828,58 @@
       await renderScheduleControls(overview);
       await renderFileMapControls();
       renderGoogleDriveControls();
+      renderProviderControls();
       await renderExtractionControls();
+    }
+
+    function renderProviderControls() {
+      const DEFAULT_MODELS = {
+        openai: "gpt-4o-mini",
+        groq: "llama-3.1-8b-instant",
+        mistral: "mistral-small-latest"
+      };
+      const btn = $("provider-connect-btn");
+      const disconnectBtn = $("provider-disconnect-btn");
+      const statusEl = $("provider-connect-status");
+      const selectEl = $("provider-select");
+      const keyInput = $("provider-key-input");
+      if (!btn) return;
+
+      btn.onclick = async () => {
+        const provider = selectEl.value;
+        const apiKey = keyInput.value.trim();
+        if (!provider) { statusEl.textContent = "Choose a provider first."; return; }
+        if (!apiKey) { statusEl.textContent = "Paste an API key."; return; }
+        btn.disabled = true;
+        statusEl.textContent = "Verifying...";
+        try {
+          const res = await api("/api/provider/connect", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ provider, api_key: apiKey, model: DEFAULT_MODELS[provider] || "" })
+          });
+          statusEl.textContent = `✓ ${res.provider || provider} connected`;
+          keyInput.value = "";
+        } catch (e) {
+          statusEl.textContent = e.message || "Verification failed.";
+        }
+        btn.disabled = false;
+      };
+
+      disconnectBtn.onclick = async () => {
+        const provider = selectEl.value;
+        if (!provider) { statusEl.textContent = "Choose a provider to disconnect."; return; }
+        try {
+          await api("/api/provider/disconnect", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ provider })
+          });
+          statusEl.textContent = `${provider} disconnected`;
+        } catch (e) {
+          statusEl.textContent = e.message || "Disconnect failed.";
+        }
+      };
     }
 
     function renderGoogleDriveControls() {
