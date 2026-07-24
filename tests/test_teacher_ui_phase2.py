@@ -34,6 +34,6 @@ def test_teacher_sidebar_contract():
     assert "curriculum_unit_source" in html
     assert "/api/admin/programme" in html
     assert "lvSchedule" in html
-    assert "/api/teacher/today" in html or "My Schedule" in html
+    assert "My Schedule" in html
     assert "Review before sending. No AI attribution in final message." in html
     assert "No external calls" in html

@@ -357,31 +357,6 @@ def _parse_schedule(schedule_text: str | None) -> dict:
     return schedule if isinstance(schedule, dict) else {}
 
 
-def _schedule_day_key(day: str | None = None) -> str:
-    if day:
-        return str(day).strip().lower()
-    return datetime.now().strftime("%A").lower()
-
-
-def _today_from_schedule(schedule: dict, day: str | None = None) -> dict:
-    day_key = _schedule_day_key(day)
-    entry = schedule.get(day_key) or schedule.get(day_key.title()) or {}
-    if not isinstance(entry, dict) or not entry.get("grade"):
-        return {"configured": False, "day": day_key.title()}
-
-    unit = _safe_unit(str(entry.get("unit_id") or ""), str(entry.get("grade") or ""))
-    return {
-        "configured": True,
-        "day": day_key.title(),
-        "grade": unit["grade"],
-        "unit": unit["title"],
-        "unit_id": unit["unit_id"],
-        "cefr_targets": [unit["cefr_language"]],
-        "source": f"Manuale §{unit['manuale_section']}",
-        "source_citation": unit["source_citation"],
-    }
-
-
 def _strip_parent_output(text: str, names: list[str]) -> str:
     from src.lingua_viva.privacy import redact_runtime_text
     from src.lingua_viva.privacy_log import log_event
@@ -432,12 +407,6 @@ async def curriculum_unit(unit_id: str):
         return await asyncio.to_thread(service.get_unit, unit_id)
     except KeyError:
         return JSONResponse({"error": "Unknown curriculum unit."}, status_code=404)
-
-
-@app.get("/api/teacher/today")
-async def teacher_today(request: Request, schedule: str | None = None, day: str | None = None):
-    schedule_payload = schedule or request.headers.get("X-LV-Schedule")
-    return _today_from_schedule(_parse_schedule(schedule_payload), day)
 
 
 @app.get("/api/brief")
@@ -1722,6 +1691,9 @@ async def stats():
 
 @app.get("/api/session")
 async def session_info():
+    """Reports .mc_session status — permanently inactive in this app; only the archived MC CLI
+    (archive/mc-engine/mc_cli.py, excluded from the packaged build) ever creates that file.
+    See dev/specs/SPEC_LV_SESSION_ROUTE_RECLASSIFY_2026-07-23.md."""
     from src.session import session_status
     status = session_status()
     return status or {"active": False}

@@ -240,13 +240,6 @@ intentionally_backend_only:
       new gap surfaced by building this manifest. No commit trace performed
       yet; flagged here rather than silently left off the manifest.
 
-  - route: "GET /api/teacher/today"
-    status: deferred_undecided
-    reason: >-
-      Same as GET /api/curriculum/unit/{unit_id} — newly surfaced by this
-      manifest, not one of the original 9 named findings. No commit trace
-      performed yet.
-
   - route: "GET /api/session"
     status: permanent
     reason: >-
