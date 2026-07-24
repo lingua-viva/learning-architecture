@@ -17,6 +17,11 @@ def test_teacher_sidebar_contract():
     assert "I am a teacher" in html
     assert "/api/prepare/activity" in html
     assert "/api/observe/capture" in html
+    assert "/api/observe/classify" in html
+    assert "Support Profile Review" in html
+    assert "support_entries" in html
+    assert "data-support-field=\"support_category\"" in html
+    assert "renderSupportProfileSummary" in html
     assert "/api/parents/recommendation" in html
     assert "/api/support-bundle" in html
     assert "/api/admin/programme" in html

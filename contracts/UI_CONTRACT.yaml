@@ -55,7 +55,9 @@
 #   v20 (2026-07-23): teacher-lens/RTI API endpoints (PUT rti, GET lens-as-of)
 #     + Phase 5B surface cards (Differentiated Groups, My Teaching Style).
 #   v21 (2026-07-23): add Linux download button to landing page.
-version: 21
+#   v22 (2026-07-23): Observe support-profile classification write path:
+#     teacher-reviewed support entries, guidance, feedback, and lens display.
+version: 22
 files:
   - static/index.html
   - static/sw.js

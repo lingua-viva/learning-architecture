@@ -900,6 +900,16 @@ async def observe_capture(payload: dict):
             sel_domain=payload.get("sel_domain"),
             sel_valence=payload.get("sel_valence"),
             urgency_flag=bool(payload.get("urgency_flag", False)),
+            support_category=payload.get("support_category"),
+            need_statement=payload.get("need_statement"),
+            strength_statement=payload.get("strength_statement"),
+            strategy_statement=payload.get("strategy_statement"),
+            strategy_outcome=payload.get("strategy_outcome"),
+            evidence_summary=payload.get("evidence_summary"),
+            source_type=payload.get("source_type"),
+            support_entries=payload.get("support_entries") or [],
+            classification_guidance=payload.get("classification_guidance"),
+            teacher_feedback=payload.get("teacher_feedback"),
         )
 
     try:
@@ -924,27 +934,79 @@ def _empty_observation_proposal() -> dict:
         "sel_domain": None,
         "sel_valence": None,
         "urgency_flag": None,
+        "support_category": None,
+        "need_statement": None,
+        "strength_statement": None,
+        "strategy_statement": None,
+        "strategy_outcome": None,
+        "evidence_summary": None,
+        "support_entries": [],
+        "classification_guidance": {
+            "scaffolding_level": "intermediate",
+            "category_definitions": [],
+            "examples": [],
+            "non_examples": [],
+        },
+        "teacher_feedback": {"message": None, "review_prompt": None},
+    }
+
+
+def _first_json_object(content: str) -> dict | None:
+    decoder = json.JSONDecoder()
+    text = str(content or "")
+    for match in re.finditer(r"\{", text):
+        try:
+            parsed, _end = decoder.raw_decode(text[match.start():])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict):
+            return parsed
+    return None
+
+
+def _category_guidance(category_ids: list[str]) -> dict:
+    from src.education.student_lens import SUPPORT_CATEGORY_LABELS, support_category_definition
+
+    seen = []
+    for cat_id in category_ids:
+        if cat_id and cat_id not in seen:
+            seen.append(cat_id)
+    return {
+        "scaffolding_level": "intermediate",
+        "category_definitions": [
+            {
+                "category_id": cat_id,
+                "label": SUPPORT_CATEGORY_LABELS.get(cat_id, cat_id),
+                "definition": support_category_definition(cat_id),
+            }
+            for cat_id in seen
+        ],
+        "examples": [
+            "Student starts the task after a two-step checklist is provided.",
+            "Student explains the idea orally but needs vocabulary support in writing.",
+        ][: max(1, min(2, len(seen) or 1))],
+        "non_examples": [
+            "Do not record a clinical diagnosis unless it appears in a verified source.",
+        ],
     }
 
 
 def _parse_observation_proposal(content: str) -> dict:
     from src.education.student_lens import (
+        SUPPORT_CATEGORY_IDS,
         VALID_CEFR_DIMENSIONS,
         VALID_CEFR_DIRECTIONS,
         VALID_CEFR_LEVELS,
         VALID_SEL_VALENCE,
+        VALID_STRATEGY_OUTCOMES,
         VALID_TEMPLATE_TYPES,
+        normalize_support_entries,
+        support_entry_from_scalar_fields,
     )
 
     proposal = _empty_observation_proposal()
-    match = re.search(r"\{.*?\}", str(content or ""), flags=re.DOTALL)
-    if not match:
-        return proposal
-    try:
-        parsed = json.loads(match.group(0))
-    except (json.JSONDecodeError, TypeError, ValueError):
-        return proposal
-    if not isinstance(parsed, dict):
+    parsed = _first_json_object(content)
+    if parsed is None:
         return proposal
 
     allowed = {
@@ -963,6 +1025,49 @@ def _parse_observation_proposal(content: str) -> dict:
         proposal["sel_domain"] = " ".join(sel_domain.split())[:80]
     if isinstance(parsed.get("urgency_flag"), bool):
         proposal["urgency_flag"] = parsed["urgency_flag"]
+
+    cat_val = parsed.get("support_category")
+    proposal["support_category"] = cat_val if cat_val in SUPPORT_CATEGORY_IDS else None
+
+    strat_out = parsed.get("strategy_outcome")
+    proposal["strategy_outcome"] = strat_out if strat_out in VALID_STRATEGY_OUTCOMES else None
+
+    for statement_field in (
+        "need_statement",
+        "strength_statement",
+        "strategy_statement",
+        "evidence_summary",
+    ):
+        val = parsed.get(statement_field)
+        if isinstance(val, str) and val.strip():
+            proposal[statement_field] = " ".join(val.split())[:2000]
+        else:
+            proposal[statement_field] = None
+
+    support_entries = normalize_support_entries(parsed.get("support_entries"))
+    if not support_entries:
+        support_entries = support_entry_from_scalar_fields(
+            proposal["support_category"],
+            proposal["need_statement"],
+            proposal["strength_statement"],
+            proposal["strategy_statement"],
+            proposal["strategy_outcome"],
+            proposal["evidence_summary"],
+        )
+    for entry in support_entries:
+        entry["model_suggested"] = True
+        entry["teacher_confirmed"] = False
+    proposal["support_entries"] = support_entries
+    proposal["classification_guidance"] = _category_guidance(
+        [entry["support_category"] for entry in support_entries]
+    )
+    proposal["teacher_feedback"] = {
+        "message": None,
+        "review_prompt": "Review suggested categories and statements before saving."
+        if support_entries
+        else None,
+    }
+
     return proposal
 
 
@@ -970,9 +1075,11 @@ def _parse_observation_proposal(content: str) -> dict:
 async def observe_classify(payload: dict):
     """Propose observation tags for teacher review; never writes student data."""
     from src.education.student_lens import (
+        SUPPORT_CATEGORY_IDS,
         VALID_CEFR_DIMENSIONS,
         VALID_CEFR_LEVELS,
         VALID_SEL_VALENCE,
+        VALID_STRATEGY_OUTCOMES,
         VALID_TEMPLATE_TYPES,
     )
     from src.lingua_viva import config as lv_config
@@ -994,16 +1101,21 @@ async def observe_classify(payload: dict):
         "You classify one teacher observation for a form the teacher will review. "
         "Return one strict JSON object and no prose. Never rewrite the transcript. "
         "Leave any uncertain or unsupported field null; do not guess. "
+        "Do not infer disability, diagnosis, trauma, or protected traits. "
         f"template_type must be one of {list(VALID_TEMPLATE_TYPES)} or null. "
         f"cefr_dimension must be one of {list(VALID_CEFR_DIMENSIONS)} or null. "
         f"cefr_level_observed must be one of {list(VALID_CEFR_LEVELS)} or null. "
-        "cefr_direction may be progressing, plateaued, regressing, mixed, or null, "
-        "and must be null unless the utterance itself states a trend. "
+        "cefr_direction may be progressing, plateaued, regressing, mixed, or null. "
         "sel_domain is a short plain-language label or null. "
         f"sel_valence must be one of {list(VALID_SEL_VALENCE)} or null. "
         "urgency_flag must be true, false, or null. "
-        "Use exactly these keys: template_type, cefr_dimension, "
-        "cefr_level_observed, cefr_direction, sel_domain, sel_valence, urgency_flag."
+        f"support_category must be one of {list(SUPPORT_CATEGORY_IDS)} or null. "
+        "Prefer support_entries as an array; include more than one entry only when the transcript explicitly supports multiple categories. "
+        "advanced_enrichment is for challenge/extension needs. "
+        "need_statement, strength_statement, strategy_statement, and evidence_summary are short teacher-readable strings or null. "
+        f"strategy_outcome must be one of {list(VALID_STRATEGY_OUTCOMES)} or null, and is only worked or did_not_work if the note explicitly states strategy success. "
+        "Preserve language and setting context when present as context_tags language and setting. "
+        "Use exactly these top-level keys: template_type, cefr_dimension, cefr_level_observed, cefr_direction, sel_domain, sel_valence, urgency_flag, support_category, need_statement, strength_statement, strategy_statement, strategy_outcome, evidence_summary, support_entries."
     )
     try:
         result = await asyncio.wait_for(
@@ -1033,7 +1145,11 @@ async def observe_classify(payload: dict):
     return {
         "proposal": proposal,
         "model_used": "none" if degraded else result.model_used,
-        "suggestions_available": not degraded and any(value is not None for value in proposal.values()),
+        "suggestions_available": not degraded and any(
+            value not in (None, [], {})
+            for key, value in proposal.items()
+            if key not in ("classification_guidance", "teacher_feedback")
+        ),
         "writes_made": 0,
         "teacher_confirmation_required": True,
     }

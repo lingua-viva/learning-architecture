@@ -105,6 +105,146 @@ VALID_SUPPORT_BUCKETS = (
     "open_questions",
 )
 
+VALID_STRATEGY_OUTCOMES = ("worked", "did_not_work", "unknown")
+
+VALID_SOURCE_TYPES = (
+    "observation",
+    "slack",
+    "google_drive",
+    "local_file",
+    "report",
+    "teacher_note",
+)
+
+VALID_SUPPORT_CONTEXT_LANGUAGES = ("it", "en", "multilingual", "unknown")
+VALID_SUPPORT_CONTEXT_SETTINGS = (
+    "intervention",
+    "classroom",
+    "small_group",
+    "one_to_one",
+    "unknown",
+)
+
+
+def support_category_definition(category_id: str) -> str:
+    definitions = {
+        "learning_and_cognition": "learning pace, memory, comprehension, concept formation, and academic processing evidence",
+        "communication_and_language": "receptive language, expressive language, vocabulary, pragmatic communication, and multilingual access evidence",
+        "executive_functioning": "planning, sequencing, organization, attention, working memory, transition, and task-initiation evidence",
+        "social_skills": "peer interaction, collaboration, turn-taking, conflict repair, and group participation evidence",
+        "emotional_regulation": "self-regulation, frustration tolerance, anxiety signs, recovery, and help-seeking evidence",
+        "physical_sensory_needs": "sensory access, movement, fatigue, fine/gross motor, seating, hearing, vision, and environmental access evidence",
+        "attendance_and_engagement": "attendance, punctuality, participation, stamina, avoidance, withdrawal, and sustained engagement evidence",
+        "advanced_enrichment": "high-readiness, acceleration, extension, challenge, and enrichment evidence",
+    }
+    return definitions.get(category_id, "support-planning evidence")
+
+
+def _normalize_context_tags(value: object) -> dict:
+    tags = value if isinstance(value, dict) else {}
+    language = tags.get("language") if isinstance(tags, dict) else None
+    setting = tags.get("setting") if isinstance(tags, dict) else None
+    return {
+        "language": language if language in VALID_SUPPORT_CONTEXT_LANGUAGES else "unknown",
+        "setting": setting if setting in VALID_SUPPORT_CONTEXT_SETTINGS else "unknown",
+    }
+
+
+def _clean_optional_statement(value: object) -> Optional[str]:
+    if not isinstance(value, str):
+        return None
+    cleaned = " ".join(value.split())
+    return cleaned[:2000] if cleaned else None
+
+
+def normalize_support_entry(raw: object) -> Optional[dict]:
+    if not isinstance(raw, dict):
+        return None
+    category = raw.get("support_category")
+    if category not in SUPPORT_CATEGORY_IDS:
+        return None
+    outcome = raw.get("strategy_outcome")
+    if outcome not in VALID_STRATEGY_OUTCOMES:
+        outcome = None
+    entry = {
+        "support_category": category,
+        "need_statement": _clean_optional_statement(raw.get("need_statement")),
+        "strength_statement": _clean_optional_statement(raw.get("strength_statement")),
+        "strategy_statement": _clean_optional_statement(raw.get("strategy_statement")),
+        "strategy_outcome": outcome,
+        "evidence_summary": _clean_optional_statement(raw.get("evidence_summary")),
+        "context_tags": _normalize_context_tags(raw.get("context_tags")),
+        "teacher_edited": bool(raw.get("teacher_edited", False)),
+        "model_suggested": bool(raw.get("model_suggested", False)),
+        "teacher_confirmed": bool(raw.get("teacher_confirmed", True)),
+    }
+    if not any(
+        entry.get(field)
+        for field in (
+            "need_statement",
+            "strength_statement",
+            "strategy_statement",
+            "evidence_summary",
+        )
+    ):
+        return None
+    return entry
+
+
+def normalize_support_entries(raw: object) -> list[dict]:
+    if not isinstance(raw, list):
+        return []
+    entries = []
+    for item in raw:
+        normalized = normalize_support_entry(item)
+        if normalized is not None:
+            entries.append(normalized)
+    return entries
+
+
+def support_entry_from_scalar_fields(
+    support_category: Optional[str],
+    need_statement: Optional[str],
+    strength_statement: Optional[str],
+    strategy_statement: Optional[str],
+    strategy_outcome: Optional[str],
+    evidence_summary: Optional[str],
+) -> list[dict]:
+    return normalize_support_entries(
+        [
+            {
+                "support_category": support_category,
+                "need_statement": need_statement,
+                "strength_statement": strength_statement,
+                "strategy_statement": strategy_statement,
+                "strategy_outcome": strategy_outcome,
+                "evidence_summary": evidence_summary,
+                "context_tags": {"language": "unknown", "setting": "unknown"},
+                "teacher_confirmed": True,
+                "model_suggested": False,
+            }
+        ]
+    )
+
+
+def _support_feedback_message(categories_updated: list[str], saved_entries: int) -> str:
+    if saved_entries <= 0 or not categories_updated:
+        return "Observation saved. No support-profile category was updated."
+    if len(categories_updated) == 1:
+        label = SUPPORT_CATEGORY_LABELS.get(categories_updated[0], categories_updated[0])
+        definition = support_category_definition(categories_updated[0])
+        return f"Saved under {label}. This category is used for {definition}."
+    labels = [SUPPORT_CATEGORY_LABELS.get(cat, cat) for cat in categories_updated]
+    return f"Saved {saved_entries} support-profile entries across: {', '.join(labels)}."
+
+
+def _support_next_review_prompt(support_entries: list[dict]) -> Optional[str]:
+    if any(entry.get("strategy_statement") for entry in support_entries):
+        return "Check whether the strategy outcome was language-specific or setting-specific."
+    if support_entries:
+        return "Review whether this is a need, a strength, evidence, or a strategy outcome."
+    return None
+
 
 def support_profile_default() -> dict:
     """Return default v2 support profile with all canonical categories initialized."""
@@ -327,6 +467,17 @@ class Observation:
     ontology_node: Optional[str] = None
     sync_status: str = "pending"
 
+    support_category: Optional[str] = None
+    need_statement: Optional[str] = None
+    strength_statement: Optional[str] = None
+    strategy_statement: Optional[str] = None
+    strategy_outcome: Optional[str] = None
+    evidence_summary: Optional[str] = None
+    source_type: Optional[str] = None
+    support_entries: list[dict] = field(default_factory=list)
+    classification_guidance: Optional[dict] = None
+    teacher_feedback: Optional[dict] = None
+
     def validate(self) -> list[str]:
         """Return a list of validation errors. Empty list = valid.
 
@@ -353,6 +504,18 @@ class Observation:
         if self.template_type in ("sel_incident", "sel_positive"):
             if not self.sel_domain:
                 errors.append("sel template requires sel_domain")
+        if self.support_category is not None and self.support_category not in SUPPORT_CATEGORY_IDS:
+            errors.append(f"support_category must be one of {SUPPORT_CATEGORY_IDS}")
+        if self.strategy_outcome is not None and self.strategy_outcome not in VALID_STRATEGY_OUTCOMES:
+            errors.append(f"strategy_outcome must be one of {VALID_STRATEGY_OUTCOMES}")
+        if self.source_type is not None and self.source_type not in VALID_SOURCE_TYPES:
+            errors.append(f"source_type must be one of {VALID_SOURCE_TYPES}")
+        if not isinstance(self.support_entries, list):
+            errors.append("support_entries must be a list")
+        elif self.support_entries:
+            normalized_count = len(normalize_support_entries(self.support_entries))
+            if normalized_count != len(self.support_entries):
+                errors.append("support_entries contains invalid entries")
         return errors
 
     def to_row(self) -> dict:
@@ -433,6 +596,16 @@ class StudentLensStore:
                 ontology_node TEXT,
                 sync_status TEXT NOT NULL DEFAULT 'pending',
                 validation_errors TEXT NOT NULL DEFAULT '[]',
+                support_category TEXT,
+                need_statement TEXT,
+                strength_statement TEXT,
+                strategy_statement TEXT,
+                strategy_outcome TEXT,
+                evidence_summary TEXT,
+                source_type TEXT,
+                support_entries TEXT NOT NULL DEFAULT '[]',
+                classification_guidance TEXT,
+                teacher_feedback TEXT,
                 FOREIGN KEY (student_id) REFERENCES students(student_id)
             );
 
@@ -456,6 +629,28 @@ class StudentLensStore:
             self._conn.execute(
                 "ALTER TABLE students ADD COLUMN support_profile TEXT NOT NULL DEFAULT '{}'"
             )
+        cursor.execute("PRAGMA table_info(observations)")
+        obs_columns = [row[1] for row in cursor.fetchall()]
+        new_obs_cols = (
+            "support_category",
+            "need_statement",
+            "strength_statement",
+            "strategy_statement",
+            "strategy_outcome",
+            "evidence_summary",
+            "source_type",
+            "support_entries",
+            "classification_guidance",
+            "teacher_feedback",
+        )
+        for col in new_obs_cols:
+            if col not in obs_columns:
+                if col == "support_entries":
+                    self._conn.execute(
+                        "ALTER TABLE observations ADD COLUMN support_entries TEXT NOT NULL DEFAULT '[]'"
+                    )
+                else:
+                    self._conn.execute(f"ALTER TABLE observations ADD COLUMN {col} TEXT")
         self._conn.commit()
 
     # ------------------------------------------------------------------
@@ -615,8 +810,11 @@ class StudentLensStore:
                 rti_tier, rti_tier_changed_this_obs, cefr_dimension,
                 cefr_level_observed, cefr_direction, sel_domain,
                 sel_valence, urgency_flag, ontology_node, sync_status,
-                validation_errors
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                validation_errors, support_category, need_statement,
+                strength_statement, strategy_statement, strategy_outcome,
+                evidence_summary, source_type, support_entries,
+                classification_guidance, teacher_feedback
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 observation.observation_id,
@@ -637,9 +835,116 @@ class StudentLensStore:
                 observation.ontology_node,
                 observation.sync_status,
                 json.dumps(errors),
+                observation.support_category,
+                observation.need_statement,
+                observation.strength_statement,
+                observation.strategy_statement,
+                observation.strategy_outcome,
+                observation.evidence_summary,
+                observation.source_type,
+                json.dumps(normalize_support_entries(observation.support_entries)),
+                json.dumps(observation.classification_guidance)
+                if observation.classification_guidance is not None
+                else None,
+                json.dumps(observation.teacher_feedback)
+                if observation.teacher_feedback is not None
+                else None,
             ),
         )
         self._conn.commit()
+
+        support_entries = normalize_support_entries(observation.support_entries)
+        if not support_entries:
+            support_entries = support_entry_from_scalar_fields(
+                observation.support_category,
+                observation.need_statement,
+                observation.strength_statement,
+                observation.strategy_statement,
+                observation.strategy_outcome,
+                observation.evidence_summary,
+            )
+
+        categories_updated = []
+        saved_entries = 0
+        for support_entry in support_entries:
+            if support_entry.get("teacher_confirmed") is False:
+                continue
+            cat_id = support_entry["support_category"]
+            obs_id = observation.observation_id
+            created_by = observation.teacher_id
+            context_tags = support_entry.get("context_tags") or {}
+            source_ref_ids = [
+                f"context:language:{context_tags.get('language', 'unknown')}",
+                f"context:setting:{context_tags.get('setting', 'unknown')}",
+            ]
+            confidence = "teacher_confirmed"
+
+            if support_entry.get("need_statement"):
+                self.add_support_entry(
+                    student_id=observation.student_id,
+                    category_id=cat_id,
+                    bucket="needs",
+                    text=support_entry["need_statement"],
+                    created_by=created_by,
+                    source_observation_id=obs_id,
+                    source_ref_ids=source_ref_ids,
+                    confidence=confidence,
+                )
+                saved_entries += 1
+
+            if support_entry.get("strength_statement"):
+                self.add_support_entry(
+                    student_id=observation.student_id,
+                    category_id=cat_id,
+                    bucket="strengths",
+                    text=support_entry["strength_statement"],
+                    created_by=created_by,
+                    source_observation_id=obs_id,
+                    source_ref_ids=source_ref_ids,
+                    confidence=confidence,
+                )
+                saved_entries += 1
+
+            if support_entry.get("strategy_statement"):
+                outcome = support_entry.get("strategy_outcome")
+                if outcome == "worked":
+                    self.add_support_entry(
+                        student_id=observation.student_id,
+                        category_id=cat_id,
+                        bucket="strategies_worked",
+                        text=support_entry["strategy_statement"],
+                        created_by=created_by,
+                        source_observation_id=obs_id,
+                        source_ref_ids=source_ref_ids,
+                        confidence=confidence,
+                    )
+                    saved_entries += 1
+                elif outcome == "did_not_work":
+                    self.add_support_entry(
+                        student_id=observation.student_id,
+                        category_id=cat_id,
+                        bucket="strategies_not_worked",
+                        text=support_entry["strategy_statement"],
+                        created_by=created_by,
+                        source_observation_id=obs_id,
+                        source_ref_ids=source_ref_ids,
+                        confidence=confidence,
+                    )
+                    saved_entries += 1
+
+            if support_entry.get("evidence_summary"):
+                self.add_support_evidence(
+                    student_id=observation.student_id,
+                    category_id=cat_id,
+                    summary=support_entry["evidence_summary"],
+                    created_by=created_by,
+                    evidence_type=observation.source_type or "observation",
+                    source_observation_id=obs_id,
+                    source_ref_ids=source_ref_ids,
+                )
+                saved_entries += 1
+            if cat_id not in categories_updated:
+                categories_updated.append(cat_id)
 
         self._recalculate_lens(observation.student_id, observation)
         escalations = self._evaluate_rti_rules(observation.student_id)
@@ -648,6 +953,12 @@ class StudentLensStore:
             "observation": observation.to_row(),
             "validation_errors": errors,
             "escalations": escalations,
+            "feedback": {
+                "saved_entries": saved_entries,
+                "categories_updated": categories_updated,
+                "message": _support_feedback_message(categories_updated, saved_entries),
+                "next_review_prompt": _support_next_review_prompt(support_entries),
+            },
         }
 
     # ------------------------------------------------------------------
@@ -671,7 +982,7 @@ class StudentLensStore:
             "SELECT * FROM observations WHERE student_id = ? ORDER BY recorded_at ASC",
             (student_id,),
         ).fetchall()
-        lens["observations"] = [dict(r) for r in obs_rows]
+        lens["observations"] = [self._observation_row_to_dict(r) for r in obs_rows]
         return lens
 
     def delete_lens(self, student_id: str, hard: bool = False) -> None:
@@ -1008,6 +1319,26 @@ class StudentLensStore:
             _normalize_support_profile_with_warnings(raw_sp)
         )
         d["deleted"] = bool(d["deleted"])
+        return d
+
+    def _observation_row_to_dict(self, row: sqlite3.Row) -> dict:
+        d = dict(row)
+        d["urgency_flag"] = bool(d.get("urgency_flag"))
+        d["rti_tier_changed_this_obs"] = bool(d.get("rti_tier_changed_this_obs"))
+        for field_name, default in (
+            ("validation_errors", []),
+            ("support_entries", []),
+            ("classification_guidance", None),
+            ("teacher_feedback", None),
+        ):
+            raw = d.get(field_name)
+            if raw in (None, ""):
+                d[field_name] = default
+                continue
+            try:
+                d[field_name] = json.loads(raw)
+            except (TypeError, ValueError):
+                d[field_name] = default
         return d
 
     def _recalculate_lens(self, student_id: str, latest_obs: Observation) -> None:

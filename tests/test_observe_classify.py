@@ -41,6 +41,7 @@ def test_observe_classify_returns_validated_proposal(monkeypatch):
     assert body["writes_made"] == 0
     assert body["teacher_confirmation_required"] is True
     assert body["suggestions_available"] is True
+    assert body["proposal"]["classification_guidance"]["scaffolding_level"] == "intermediate"
 
 
 def test_observe_classify_rejects_empty_transcript():
@@ -74,7 +75,25 @@ def test_observe_classify_degrades_to_nulls_without_model(monkeypatch):
     assert body["model_used"] == "none"
     assert body["suggestions_available"] is False
     assert body["writes_made"] == 0
-    assert all(value is None for value in body["proposal"].values())
+    assert all(
+        body["proposal"][key] is None
+        for key in (
+            "template_type",
+            "cefr_dimension",
+            "cefr_level_observed",
+            "cefr_direction",
+            "sel_domain",
+            "sel_valence",
+            "urgency_flag",
+            "support_category",
+            "need_statement",
+            "strength_statement",
+            "strategy_statement",
+            "strategy_outcome",
+            "evidence_summary",
+        )
+    )
+    assert body["proposal"]["support_entries"] == []
 
 
 def test_observe_classify_discards_malformed_or_invalid_fields(monkeypatch):
@@ -92,7 +111,10 @@ def test_observe_classify_discards_malformed_or_invalid_fields(monkeypatch):
     )
 
     assert response.status_code == 200
-    assert all(value is None for value in response.json()["proposal"].values())
+    proposal = response.json()["proposal"]
+    assert proposal["support_entries"] == []
+    assert proposal["template_type"] is None
+    assert proposal["urgency_flag"] is None
 
 
 def test_observe_classify_rejects_oversized_transcript():
@@ -154,4 +176,92 @@ def test_observe_classify_exception_degrades_without_blocking(monkeypatch):
     )
     assert response.status_code == 200
     assert response.json()["model_used"] == "none"
-    assert all(value is None for value in response.json()["proposal"].values())
+    assert response.json()["proposal"]["support_entries"] == []
+
+
+def test_observe_classify_parses_support_category_and_statements(monkeypatch):
+    async def fake_reason(self, query, **kwargs):
+        return ReasonResult(
+            content=(
+                '{"template_type":"literacy",'
+                '"support_category":"executive_functioning",'
+                '"need_statement":"Needs checklist for multi-step instructions",'
+                '"strength_statement":"Strong visual memory",'
+                '"strategy_statement":"Step-by-step visual card strip",'
+                '"strategy_outcome":"worked",'
+                '"evidence_summary":"Observed during independent math station"}'
+            ),
+            confidence=0.9,
+            model_used="ollama/test",
+        )
+
+    monkeypatch.setattr(ReasoningEngine, "reason", fake_reason)
+    response = client.post(
+        "/api/observe/classify",
+        json={
+            "student_id": "student-example",
+            "raw_transcript": "Student responded well to the visual card strip.",
+        },
+    )
+
+    assert response.status_code == 200
+    proposal = response.json()["proposal"]
+    assert proposal["support_category"] == "executive_functioning"
+    assert proposal["need_statement"] == "Needs checklist for multi-step instructions"
+    assert proposal["strength_statement"] == "Strong visual memory"
+    assert proposal["strategy_statement"] == "Step-by-step visual card strip"
+    assert proposal["strategy_outcome"] == "worked"
+    assert proposal["evidence_summary"] == "Observed during independent math station"
+    assert proposal["support_entries"][0]["support_category"] == "executive_functioning"
+    assert proposal["support_entries"][0]["teacher_confirmed"] is False
+    assert proposal["classification_guidance"]["category_definitions"][0]["category_id"] == "executive_functioning"
+
+
+def test_observe_classify_discards_invalid_support_category_and_strategy_outcome(monkeypatch):
+    async def invalid_proposal(self, query, **kwargs):
+        return ReasonResult(
+            content='{"support_category":"fake_category","strategy_outcome":"maybe"}',
+            confidence=0.5,
+            model_used="ollama/test",
+        )
+
+    monkeypatch.setattr(ReasoningEngine, "reason", invalid_proposal)
+    response = client.post(
+        "/api/observe/classify",
+        json={"student_id": "student-example", "raw_transcript": "Test transcript"},
+    )
+    assert response.status_code == 200
+    proposal = response.json()["proposal"]
+    assert proposal["support_category"] is None
+    assert proposal["strategy_outcome"] is None
+    assert proposal["support_entries"] == []
+
+
+def test_observe_classify_accepts_multi_category_support_entries(monkeypatch):
+    async def fake_reason(self, query, **kwargs):
+        return ReasonResult(
+            content=(
+                '{"support_entries":['
+                '{"support_category":"executive_functioning","need_statement":"Needs task sequence checklist","context_tags":{"language":"en","setting":"small_group"}},'
+                '{"support_category":"communication_and_language","strength_statement":"Explains ideas clearly in Italian","context_tags":{"language":"it","setting":"classroom"}}'
+                ']}'
+            ),
+            confidence=0.9,
+            model_used="ollama/test",
+        )
+
+    monkeypatch.setattr(ReasoningEngine, "reason", fake_reason)
+    response = client.post(
+        "/api/observe/classify",
+        json={"student_id": "student-example", "raw_transcript": "A mixed observation."},
+    )
+    proposal = response.json()["proposal"]
+    assert [entry["support_category"] for entry in proposal["support_entries"]] == [
+        "executive_functioning",
+        "communication_and_language",
+    ]
+    assert proposal["support_entries"][0]["context_tags"] == {
+        "language": "en",
+        "setting": "small_group",
+    }
+    assert response.json()["writes_made"] == 0

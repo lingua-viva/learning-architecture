@@ -77,12 +77,22 @@ class ObservationCapturePipeline:
         sel_domain: Optional[str] = None,
         sel_valence: Optional[str] = None,
         urgency_flag: bool = False,
+        support_category: Optional[str] = None,
+        need_statement: Optional[str] = None,
+        strength_statement: Optional[str] = None,
+        strategy_statement: Optional[str] = None,
+        strategy_outcome: Optional[str] = None,
+        evidence_summary: Optional[str] = None,
+        source_type: Optional[str] = None,
+        support_entries: Optional[list[dict]] = None,
+        classification_guidance: Optional[dict] = None,
+        teacher_feedback: Optional[dict] = None,
     ) -> dict:
         """
         Classify + govern + sanitize-audit + persist one observation.
 
-        Tags (rti_tier, cefr_*, sel_*, urgency_flag) mirror the teacher
-        app's tap-to-confirm defaults (observation-capture.md Stage 1) —
+        Tags (rti_tier, cefr_*, sel_*, urgency_flag, support_category, ...) mirror
+        the teacher app's tap-to-confirm defaults (observation-capture.md Stage 1) —
         this pipeline accepts them as explicit values rather than
         inferring them with an LLM, per the build rule against guessing
         CEFR/RTI classifications. The ontology classification below is
@@ -131,6 +141,16 @@ class ObservationCapturePipeline:
             sel_domain=sel_domain,
             sel_valence=sel_valence,
             urgency_flag=urgency_flag,
+            support_category=support_category,
+            need_statement=need_statement,
+            strength_statement=strength_statement,
+            strategy_statement=strategy_statement,
+            strategy_outcome=strategy_outcome,
+            evidence_summary=evidence_summary,
+            source_type=source_type,
+            support_entries=support_entries or [],
+            classification_guidance=classification_guidance,
+            teacher_feedback=teacher_feedback,
         )
 
         result = self.store.append_observation(observation)

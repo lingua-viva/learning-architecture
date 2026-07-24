@@ -350,6 +350,26 @@
     }
     .voice-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
     .voice-hint { color: var(--muted); font-size: 12px; }
+    .support-review {
+      margin-top: 12px;
+      border-top: 1px solid var(--line);
+      padding-top: 12px;
+    }
+    .support-entry {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 10px;
+      margin-top: 8px;
+      background: #fbfcfb;
+    }
+    .support-entry-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .support-entry-grid label.full {
+      grid-column: 1 / -1;
+    }
     @keyframes voicePulse {
       50% { transform: scale(1.04); box-shadow: 0 0 0 12px rgba(178, 75, 49, .08); }
     }
@@ -750,6 +770,17 @@
     const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, ch => ({
       "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
     }[ch]));
+    const SUPPORT_CATEGORIES = [
+      ["learning_and_cognition", "Learning and Cognition"],
+      ["communication_and_language", "Communication and Language"],
+      ["executive_functioning", "Executive Functioning"],
+      ["social_skills", "Social Skills"],
+      ["emotional_regulation", "Emotional Regulation"],
+      ["physical_sensory_needs", "Physical/Sensory Needs"],
+      ["attendance_and_engagement", "Attendance and Engagement"],
+      ["advanced_enrichment", "Advanced Students / Enrichment"]
+    ];
+    const SUPPORT_CATEGORY_LABELS = Object.fromEntries(SUPPORT_CATEGORIES);
 
     async function api(path, options = {}) {
       const response = await fetch(path, {
@@ -1007,6 +1038,14 @@
               <label>SEL area<input id="obs-sel-domain" placeholder="Leave blank when not relevant"></label>
               <label>SEL tone<select id="obs-sel-valence"><option value="">Not stated</option><option>positive</option><option>concern</option><option>neutral</option></select></label>
             </div>
+            <div class="support-review">
+              <div class="row" style="justify-content:space-between;align-items:center;">
+                <h3 style="margin:0;">Support Profile Review</h3>
+                <button id="add-support-entry" type="button">Add Category</button>
+              </div>
+              <p id="support-guidance" class="voice-hint">Optional. Add only teacher-confirmed IEP-style evidence.</p>
+              <div id="support-entry-list"></div>
+            </div>
             <label class="row" style="margin:12px 0;"><input id="obs-urgency" type="checkbox" style="width:auto;"><span>Urgent follow-up needed</span><span id="obs-urgency-suggestion" class="badge">teacher must affirm</span></label>
             <button id="save-observation" class="primary" type="button">Save Observation</button>
           </div>
@@ -1017,12 +1056,14 @@
         </div>`;
       $("mic").addEventListener("click", startSpeech);
       $("suggest-observation").addEventListener("click", suggestObservation);
+      $("add-support-entry").addEventListener("click", () => addSupportEntry());
       $("obs-student").addEventListener("change", event => {
         state.selectedStudent = event.target.value;
         loadLens("obs-lens", false);
       });
       $("save-observation").addEventListener("click", saveObservation);
       state.selectedStudent = $("obs-student").value;
+      renderSupportEntries([]);
       await loadLens("obs-lens", false);
     }
 
@@ -1063,6 +1104,12 @@
           ? "suggested — check to affirm"
           : "teacher must affirm";
         $("obs-urgency-suggestion").className = `badge ${proposal.urgency_flag === true ? "warn" : ""}`;
+        renderSupportEntries((proposal.support_entries || []).map(entry => ({
+          ...entry,
+          teacher_confirmed: true,
+          model_suggested: true
+        })));
+        renderSupportGuidance(proposal.classification_guidance || null, proposal.teacher_feedback || null);
         $("obs-suggest-status").textContent = data.model_used === "none"
           ? "Local model unavailable. Continue with manual fields."
           : data.suggestions_available
@@ -1073,6 +1120,89 @@
       } finally {
         $("suggest-observation").disabled = false;
       }
+    }
+
+    function supportCategoryOptions(selected = "") {
+      return `<option value="">Not categorized</option>${SUPPORT_CATEGORIES.map(([id, label]) => `<option value="${id}" ${id === selected ? "selected" : ""}>${label}</option>`).join("")}`;
+    }
+
+    function renderSupportGuidance(guidance, feedback) {
+      const definitions = guidance?.category_definitions || [];
+      const definitionText = definitions.map(item => `${item.label || SUPPORT_CATEGORY_LABELS[item.category_id] || item.category_id}: ${item.definition || ""}`).filter(Boolean).join(" ");
+      const prompt = feedback?.review_prompt || "Review every support entry before saving.";
+      $("support-guidance").textContent = definitionText || prompt;
+    }
+
+    function supportEntryTemplate(entry = {}, index = 0) {
+      const tags = entry.context_tags || {};
+      return `<div class="support-entry" data-support-index="${index}">
+        <div class="support-entry-grid">
+          <label>Category<select data-support-field="support_category">${supportCategoryOptions(entry.support_category || "")}</select></label>
+          <label>Strategy outcome<select data-support-field="strategy_outcome"><option value="">Not a strategy</option><option value="worked" ${entry.strategy_outcome === "worked" ? "selected" : ""}>Worked</option><option value="did_not_work" ${entry.strategy_outcome === "did_not_work" ? "selected" : ""}>Did not work</option><option value="unknown" ${entry.strategy_outcome === "unknown" ? "selected" : ""}>Unknown</option></select></label>
+          <label class="full">Need<textarea data-support-field="need_statement" placeholder="Need observed, if teacher-confirmed">${escapeHtml(entry.need_statement || "")}</textarea></label>
+          <label class="full">Strength<textarea data-support-field="strength_statement" placeholder="Strength observed, if teacher-confirmed">${escapeHtml(entry.strength_statement || "")}</textarea></label>
+          <label class="full">Strategy<textarea data-support-field="strategy_statement" placeholder="Strategy tried, if any">${escapeHtml(entry.strategy_statement || "")}</textarea></label>
+          <label class="full">Evidence<textarea data-support-field="evidence_summary" placeholder="Brief evidence summary">${escapeHtml(entry.evidence_summary || "")}</textarea></label>
+          <label>Language<select data-support-field="language"><option value="unknown">Unknown</option><option value="it" ${tags.language === "it" ? "selected" : ""}>Italian</option><option value="en" ${tags.language === "en" ? "selected" : ""}>English</option><option value="multilingual" ${tags.language === "multilingual" ? "selected" : ""}>Multilingual</option></select></label>
+          <label>Setting<select data-support-field="setting"><option value="unknown">Unknown</option><option value="intervention" ${tags.setting === "intervention" ? "selected" : ""}>Intervention</option><option value="classroom" ${tags.setting === "classroom" ? "selected" : ""}>Classroom</option><option value="small_group" ${tags.setting === "small_group" ? "selected" : ""}>Small group</option><option value="one_to_one" ${tags.setting === "one_to_one" ? "selected" : ""}>One to one</option></select></label>
+        </div>
+        <div class="row" style="margin-top:8px;justify-content:space-between;">
+          <label class="row" style="margin:0;"><input type="checkbox" data-support-field="teacher_confirmed" style="width:auto;" ${entry.teacher_confirmed === false ? "" : "checked"}><span>Teacher confirmed</span></label>
+          <button type="button" data-remove-support>Remove</button>
+        </div>
+      </div>`;
+    }
+
+    function renderSupportEntries(entries = []) {
+      $("support-entry-list").innerHTML = entries.length
+        ? entries.map((entry, index) => supportEntryTemplate(entry, index)).join("")
+        : `<p class="voice-hint">No support-profile update selected.</p>`;
+      document.querySelectorAll("[data-remove-support]").forEach(button => {
+        button.addEventListener("click", event => {
+          event.target.closest("[data-support-index]").remove();
+          if (!$("support-entry-list").querySelector("[data-support-index]")) {
+            renderSupportEntries([]);
+          }
+        });
+      });
+    }
+
+    function addSupportEntry(entry = {}) {
+      const existing = collectSupportEntries(false);
+      existing.push({
+        support_category: "",
+        strategy_outcome: "",
+        context_tags: {language: "unknown", setting: "unknown"},
+        teacher_confirmed: true,
+        model_suggested: false,
+        ...entry
+      });
+      renderSupportEntries(existing);
+    }
+
+    function collectSupportEntries(confirmedOnly = true) {
+      return Array.from(document.querySelectorAll("[data-support-index]")).map(node => {
+        const field = name => node.querySelector(`[data-support-field="${name}"]`);
+        const entry = {
+          support_category: field("support_category")?.value || null,
+          need_statement: field("need_statement")?.value.trim() || null,
+          strength_statement: field("strength_statement")?.value.trim() || null,
+          strategy_statement: field("strategy_statement")?.value.trim() || null,
+          strategy_outcome: field("strategy_outcome")?.value || null,
+          evidence_summary: field("evidence_summary")?.value.trim() || null,
+          context_tags: {
+            language: field("language")?.value || "unknown",
+            setting: field("setting")?.value || "unknown"
+          },
+          teacher_confirmed: Boolean(field("teacher_confirmed")?.checked),
+          teacher_edited: true,
+          model_suggested: false
+        };
+        return entry;
+      }).filter(entry => {
+        const hasText = entry.need_statement || entry.strength_statement || entry.strategy_statement || entry.evidence_summary;
+        return entry.support_category && hasText && (!confirmedOnly || entry.teacher_confirmed);
+      });
     }
 
     async function saveObservation() {
@@ -1104,10 +1234,14 @@
             cefr_direction: $("obs-direction").value || null,
             sel_domain: $("obs-sel-domain").value.trim() || null,
             sel_valence: $("obs-sel-valence").value || null,
-            urgency_flag: $("obs-urgency").checked
+            urgency_flag: $("obs-urgency").checked,
+            source_type: "observation",
+            support_entries: collectSupportEntries(true)
           })
         });
-        $("obs-result").innerHTML = `<h3>Saved</h3><div class="source-line"><span class="badge ok">Saved locally. Not uploaded. Not shared.</span><span class="badge">Domain: observation</span></div><p>Observation ${escapeHtml(result.observation.observation_id)} is attached to the local lens.</p><div class="output">${escapeHtml(result.observation.raw_transcript)}</div>`;
+        const feedback = result.feedback || {};
+        const categories = (feedback.categories_updated || []).map(id => SUPPORT_CATEGORY_LABELS[id] || id).join(", ");
+        $("obs-result").innerHTML = `<h3>Saved</h3><div class="source-line"><span class="badge ok">Saved locally. Not uploaded. Not shared.</span><span class="badge">Domain: observation</span></div><p>Observation ${escapeHtml(result.observation.observation_id)} is attached to the local lens.</p><p>${escapeHtml(feedback.message || "Observation saved.")}</p>${categories ? `<p>Updated: ${escapeHtml(categories)}</p>` : ""}<div class="output">${escapeHtml(result.observation.raw_transcript)}</div>`;
         await loadLens("obs-lens", false);
       } catch (error) {
         $("obs-result").innerHTML = `<h3>Not saved</h3><p>${escapeHtml(error.message || "The local save failed. Your text is still in the form.")}</p>`;
@@ -1161,6 +1295,7 @@
     async function loadLens(targetId = "lens", showDecisionControls = true) {
       const lens = await api(`/api/students/${state.selectedStudent}/lens`);
       const observations = (lens.observations || []).slice(-3).reverse();
+      const supportHtml = renderSupportProfileSummary(lens.support_profile || {});
       const decisionControls = showDecisionControls ? `
         <div class="source-line"><span class="badge warn">System suggests; teacher reviews before any support-tier decision</span></div>
         <div class="row"><button type="button" id="rti-confirm">Confirm</button><button type="button" id="rti-defer">Defer</button><span id="rti-decision-status"></span></div>` : "";
@@ -1170,6 +1305,8 @@
         ${decisionControls}
         <h3 style="margin-top:16px;">Recent observations</h3>
         <div class="list">${observations.length ? observations.map(o => `<div class="item"><p>${escapeHtml(o.raw_transcript)}</p><span class="badge">${escapeHtml(o.cefr_level_observed || "not tagged")}</span></div>`).join("") : "<p>No observations yet.</p>"}</div>
+        <h3 style="margin-top:16px;">Support profile</h3>
+        ${supportHtml}
         <h3 style="margin-top:16px;">Grouping</h3>
         <p>Avoid-pairing notes: ${escapeHtml((lens.avoid_pairing_with || []).join(", ") || "none")}</p>`;
       if (!showDecisionControls) return;
@@ -1184,6 +1321,25 @@
       }
       $("rti-confirm").addEventListener("click", () => handleRtiDecision("confirm"));
       $("rti-defer").addEventListener("click", () => handleRtiDecision("defer"));
+    }
+
+    function renderSupportProfileSummary(profile) {
+      const categories = profile.categories || {};
+      const rows = SUPPORT_CATEGORIES.map(([id, label]) => {
+        const category = categories[id] || {};
+        const count = ["needs", "strengths", "strategies_worked", "strategies_not_worked", "evidence", "open_questions"]
+          .reduce((total, bucket) => total + ((category[bucket] || []).length), 0);
+        if (!count) return "";
+        const latestNeed = (category.needs || []).slice(-1)[0]?.text;
+        const latestStrength = (category.strengths || []).slice(-1)[0]?.text;
+        const latestEvidence = (category.evidence || []).slice(-1)[0]?.summary;
+        return `<div class="item">
+          <strong>${escapeHtml(label)}</strong>
+          <div class="source-line"><span class="badge">${count} item${count === 1 ? "" : "s"}</span></div>
+          <p>${escapeHtml(latestNeed || latestStrength || latestEvidence || "Updated support evidence saved.")}</p>
+        </div>`;
+      }).filter(Boolean);
+      return rows.length ? `<div class="list">${rows.join("")}</div>` : "<p>No support-profile entries yet.</p>";
     }
 
     async function renderAssess() {

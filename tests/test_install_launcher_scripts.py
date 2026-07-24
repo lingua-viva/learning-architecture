@@ -112,12 +112,9 @@ def test_lv_launch_sh_fails_loudly_when_nothing_to_start(tmp_path):
 
     env = dict(os.environ)
     env["HOME"] = str(tmp_path)
-    # Prepend the stub dir so our fake curl/nc shadow any real ones; keep
-    # the rest of the real PATH so coreutils (mkdir, date, echo) still
-    # resolve. This sandbox has no `lv` binary and no cloned source at
-    # tmp_path, so the "couldn't find the install" branch is what's
-    # actually being exercised.
-    env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
+    # Keep only system directories after the stubs. Developer machines may
+    # have a real `lv` on PATH; this test needs the no-binary branch.
+    env["PATH"] = f"{bin_dir}:/usr/bin:/bin"
 
     proc = subprocess.run(["/bin/sh", str(script_path)], capture_output=True, text=True, env=env, timeout=10)
     assert proc.returncode == 1
