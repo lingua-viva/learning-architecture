@@ -250,6 +250,20 @@ def _preflight(args: argparse.Namespace) -> int:
     else:
         checks.append(("no_conflicts", True))
 
+    # 6. Every backend route is either UI-reachable (proven via a live
+    # call-site literal) or explicitly classified backend-only, with a
+    # reason (dev/ROOT_CAUSE_BUILT_NOT_MOUNTED_2026-07-23.md §5). Catches
+    # new routes landing with no UI trigger before they ship silently.
+    result = subprocess.run(
+        [sys.executable, str(root / "scripts" / "check_route_reachability.py")],
+        capture_output=True, text=True, cwd=root,
+    )
+    if result.returncode == 0:
+        checks.append(("route_reachability", True))
+    else:
+        lines = (result.stdout or result.stderr).strip().splitlines()
+        checks.append(("route_reachability", False, lines[0] if lines else "check failed"))
+
     elapsed = time.time() - start
     passed = sum(1 for c in checks if c[1])
     failed = sum(1 for c in checks if not c[1])

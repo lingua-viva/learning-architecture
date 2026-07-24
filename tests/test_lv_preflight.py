@@ -1,12 +1,13 @@
 """Regression tests for `lv preflight` (MC-lessons §2).
 
 Cloned from Mission Canvas's own `mc preflight` (src/mc_cli.py::cmd_preflight).
-Covers the 5 structural checks and, specifically, the anchored conflict-marker
+Covers the 6 structural checks and, specifically, the anchored conflict-marker
 regex — MC's own preflight originally used `git diff --cached -S "<<<<<<<"`
 which false-positives on any file that merely *mentions* a merge-marker
 string in prose or code (this test file, or preflight's own source). The
 anchored form (`-G '^<{7} '`) only matches real merge markers at the start of
-a line.
+a line. Check #6 (route_reachability) was added by
+SPEC_LV_ROUTE_REACHABILITY_GATE_2026-07-23.md.
 """
 
 from __future__ import annotations
@@ -29,17 +30,20 @@ def _run_preflight(*extra_args: str) -> subprocess.CompletedProcess:
 def test_preflight_passes_on_clean_tree():
     result = _run_preflight()
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "Preflight: 5/5" in result.stdout
+    assert "Preflight: 6/6" in result.stdout
 
 
-def test_preflight_json_reports_all_five_checks():
+def test_preflight_json_reports_all_six_checks():
     result = _run_preflight("--json")
     assert result.returncode == 0, result.stdout + result.stderr
     data = json.loads(result.stdout)
     names = {c["name"] for c in data["checks"]}
-    assert names == {"ui_contract", "golden_parses", "imports", "ontology", "no_conflicts"}
+    assert names == {
+        "ui_contract", "golden_parses", "imports", "ontology", "no_conflicts",
+        "route_reachability",
+    }
     assert all(c["passed"] for c in data["checks"])
-    assert data["passed"] == data["total"] == 5
+    assert data["passed"] == data["total"] == 6
 
 
 def test_preflight_runs_under_five_seconds():
