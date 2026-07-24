@@ -178,7 +178,40 @@ reachable_from_ui:
   - route: "POST /api/query"
     call_site: 'api("/api/query"'
 
+  - route: "GET /api/students/support-summary"
+    call_site: 'api("/api/students/support-summary")'
+
+  - route: "GET /api/google-drive/status"
+    call_site: 'api("/api/google-drive/status")'
+
+  - route: "POST /api/google-drive/list"
+    call_site: 'api("/api/google-drive/list"'
+
+  - route: "POST /api/google-drive/import"
+    call_site: 'api("/api/google-drive/import"'
+
+  - route: "GET /api/extraction/sources"
+    call_site: 'api("/api/extraction/sources")'
+
+  - route: "POST /api/extraction/run"
+    call_site: 'api("/api/extraction/run"'
+
+  - route: "POST /api/extraction/review"
+    call_site: 'api("/api/extraction/review"'
+
 intentionally_backend_only:
+  - route: "GET /api/categories"
+    status: deferred_undecided
+    reason: >-
+      Static metadata for the 8 canonical support-profile categories
+      (src/web.py:1328); surfaced by rebasing in the Google Drive/extraction-
+      review lane's work. Only exercised directly by
+      tests/test_lens_ui_api_contract.py — no fetch()/api() call anywhere in
+      static/index.html. Not one of the original 9 ROOT_CAUSE findings; a new
+      gap surfaced by re-running this manifest's check after the merge. No
+      product decision made yet on whether a category browser/legend belongs
+      in the UI or this stays a pure data contract for other endpoints.
+
   - route: "POST /api/slack/events"
     status: permanent
     reason: >-
