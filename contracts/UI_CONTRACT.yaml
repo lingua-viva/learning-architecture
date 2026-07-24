@@ -72,7 +72,9 @@
 #     never-mounted GET /api/students/unobserved route — confirmed dead via
 #     ROUTE_REACHABILITY.yaml and brief.py's independent _unobserved()
 #     implementation, which is what Home's observation reminder actually
-#     calls (LV-BLT-005 reclassify).
+#     calls (LV-BLT-005 reclassify); removed duplicate GET /api/teacher/today
+#     and its orphaned private schedule-resolution helpers (Home retains
+#     /api/brief); docstring added to session_info().
 version: 30
 files:
   - static/index.html

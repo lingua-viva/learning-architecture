@@ -46,7 +46,8 @@ REPO = Path(__file__).resolve().parent.parent
 #   v30 (2026-07-23): LV-BLT-007 System stats mounted in Health; direct RTI
 #     tier control mounted in Students; removed duplicate, never-mounted
 #     GET /api/students/unobserved (brief.py's own _unobserved() is what
-#     Home's reminder actually calls).
+#     Home's reminder actually calls); removed duplicate GET
+#     /api/teacher/today (Home retains /api/brief); session_info() docstring.
 EXPECTED_VERSION = 30
 
 
@@ -116,9 +117,17 @@ def test_sidebar_nav_contract_counts_and_handlers():
 
     view_map = re.search(r"const views = \{(.*?)\n      \};", html, flags=re.S)
     assert view_map, "renderView() view handler map missing"
-    handler_ids = set(re.findall(r"^\s*([a-z]+):\s*render[A-Za-z]+,?", view_map.group(1), flags=re.M))
-    nav_ids = {item[0] for items in arrays.values() for item in items}
-    assert nav_ids <= handler_ids
+    handler_entries = re.findall(r"^\s*([a-z]+):\s*render[A-Za-z]+,?", view_map.group(1), flags=re.M)
+    nav_entries = [item[0] for items in arrays.values() for item in items]
+    handler_ids = set(handler_entries)
+    nav_ids = set(nav_entries)
+
+    assert len(handler_entries) == len(handler_ids), "renderView() contains duplicate handler ids"
+    assert len(nav_entries) == len(nav_ids), "sidebar contains duplicate nav ids"
+    assert nav_ids == handler_ids, (
+        "every live view handler must have exactly one sidebar mount, and every "
+        "sidebar item must have a handler; do not ship dead renderers or dead nav"
+    )
 
 
 def test_sidebar_accessibility_markup_and_tokens_present():

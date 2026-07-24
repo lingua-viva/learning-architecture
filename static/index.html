@@ -1312,7 +1312,18 @@
         : "";
       const decisionControls = showDecisionControls ? `
         <div class="source-line"><span class="badge warn">System suggests; teacher reviews before any support-tier decision</span></div>
-        <div class="row"><button type="button" id="rti-confirm">Confirm</button><button type="button" id="rti-defer">Defer</button><span id="rti-decision-status"></span></div>` : "";
+        <div class="row"><button type="button" id="rti-confirm">Confirm</button><button type="button" id="rti-defer">Defer</button><span id="rti-decision-status"></span></div>
+        <div class="row" style="margin-top:8px;">
+          <label>Set support tier directly
+            <select id="rti-tier-select">
+              <option value="1" ${lens.rti_current_tier === 1 ? "selected" : ""}>Tier 1</option>
+              <option value="2" ${lens.rti_current_tier === 2 ? "selected" : ""}>Tier 2</option>
+              <option value="3" ${lens.rti_current_tier === 3 ? "selected" : ""}>Tier 3</option>
+            </select>
+          </label>
+          <button type="button" id="rti-set-tier">Set Tier</button>
+          <span id="rti-tier-status" aria-live="polite"></span>
+        </div>` : "";
       $(targetId).innerHTML = `
         <h3>${escapeHtml(lens.display_name)}</h3>
         <p>CEFR trajectory: <strong>${escapeHtml(lens.cefr_trajectory_30d)}</strong> · support tier <strong>${lens.rti_current_tier}</strong></p>
@@ -1336,6 +1347,25 @@
       }
       $("rti-confirm").addEventListener("click", () => handleRtiDecision("confirm"));
       $("rti-defer").addEventListener("click", () => handleRtiDecision("defer"));
+      async function handleSetTier() {
+        const newTier = Number($("rti-tier-select").value);
+        try {
+          const res = await fetch(`/api/students/${state.selectedStudent}/rti`, {
+            method: "PUT", headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({new_tier: newTier})
+          });
+          const data = await res.json();
+          if (res.ok) {
+            await loadLens(targetId, showDecisionControls);
+            $("rti-tier-status").textContent = "Tier updated.";
+          } else {
+            $("rti-tier-status").textContent = data.error || "Failed.";
+          }
+        } catch {
+          $("rti-tier-status").textContent = "Network error.";
+        }
+      }
+      $("rti-set-tier").addEventListener("click", handleSetTier);
     }
 
     function renderSupportProfileSummary(profile) {
@@ -1537,10 +1567,25 @@
       setTitle("Health", "doctor");
       $("content").innerHTML = `<div class="panel"><h2>Running Doctor...</h2></div>`;
       const data = await api("/api/health");
+      let stats = null;
+      try { stats = await api("/api/stats"); } catch {}
       const bundleButton = data.status === "OK" ? "" : `<button id="create-bundle" class="primary" type="button">Create Support Bundle</button>`;
+      const statsPanel = stats && !stats.error ? `
+        <div class="panel" style="margin-top:14px;">
+          <h3>System</h3>
+          <div class="grid three" style="margin-top:10px;">
+            <div class="panel"><h3>${stats.ontology_nodes}</h3><p>ontology nodes</p></div>
+            <div class="panel"><h3>${stats.domains}</h3><p>domains</p></div>
+            <div class="panel"><h3>${stats.knowledge_entries}</h3><p>knowledge entries</p></div>
+            <div class="panel"><h3>${stats.citations}</h3><p>citations</p></div>
+            <div class="panel"><h3>${stats.path_records}</h3><p>reasoning paths recorded</p></div>
+            <div class="panel"><h3>${stats.gap_signals}</h3><p>gap signals</p></div>
+          </div>
+        </div>` : "";
       $("content").innerHTML = `
         <div class="view-head"><div><h2>Doctor</h2><p>${escapeHtml(data.summary || "")}</p></div><span class="badge ${healthBadgeClass(data.status)}">${escapeHtml(data.status)}</span></div>
-        <div class="panel">${bundleButton}<div id="bundle-result" style="margin-top:12px;"></div><div class="list" style="margin-top:14px;">${(data.checks || []).map(check => `<div class="item"><h3>${escapeHtml(check.status)} · ${escapeHtml(check.id)}</h3><p>${escapeHtml(check.message)}</p></div>`).join("")}</div></div>`;
+        <div class="panel">${bundleButton}<div id="bundle-result" style="margin-top:12px;"></div><div class="list" style="margin-top:14px;">${(data.checks || []).map(check => `<div class="item"><h3>${escapeHtml(check.status)} · ${escapeHtml(check.id)}</h3><p>${escapeHtml(check.message)}</p></div>`).join("")}</div></div>
+        ${statsPanel}`;
       const button = $("create-bundle");
       if (button) button.addEventListener("click", createSupportBundle);
     }
