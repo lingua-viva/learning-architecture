@@ -1,9 +1,11 @@
 # Lingua Viva Session Memory — 5-Spec Build Sequence Complete
 
 **Date:** 2026-07-23  
-**Status:** COMPLETE & COMMITTED  
+**Status:** COMPLETE, COMMITTED, MEMORY RECORDED  
 **Repo:** `/home/mical/learning-architecture`  
-**Git Commit:** `7ddf6bf` (`feat(lingua-viva): complete 5-spec build sequence`)  
+**Core Build Commit:** `7ddf6bf` (`feat(lingua-viva): complete 5-spec build sequence`)  
+**Current HEAD at memory write:** `0d464e6` (`docs(lingua-viva): record session memory and index entry for 5-spec build completion`)  
+**Current origin/main at memory write:** `ff2401e` (`feat(ui): close LV-BLT-001 + LV-BLT-003 -- provider connect form and teaching artifact ingest`)  
 **Lens:** Claudia Canu Fautré (`LENS-PERSON-002`)  
 **Route:** Local (`MC_AGENT=1`)
 
@@ -11,9 +13,9 @@
 
 ## Executive Summary
 
-All 5 specifications in the Lingua Viva Student Lens & Ingestion sequence have been fully implemented, UI-mounted, contract-locked (v28), and empirically verified.
+All 5 specifications in the Lingua Viva Student Lens & Ingestion sequence have been implemented, UI-mounted, contract-locked (v28 during this build sequence), and empirically verified.
 
-100% of repository tests (696 passed, 13 skipped in 4m 53s) are passing cleanly with zero regressions.
+The build sequence was pushed through `7ddf6bf`. A later upstream commit, `ff2401e`, closes LV-BLT-001 and LV-BLT-003 for provider connect and teaching artifact ingest. The local branch currently has one additional documentation memory commit, `0d464e6`, ahead of `origin/main`.
 
 ---
 
@@ -42,5 +44,27 @@ All 5 specifications in the Lingua Viva Student Lens & Ingestion sequence have b
 ## Command Verification Log
 
 - **UI Contract Check:** `python3 scripts/check_ui_contract.py` -> `[ui-contract] OK — contract v28, 3 files locked`
-- **Full Test Suite:** `uv run pytest` -> `696 passed, 13 skipped in 293.89s (0:04:53)`
-- **Git Status:** Clean working tree, ahead of `origin/main` by 4 commits.
+- **Focused verification before push:** `MC_AGENT=1 uv run pytest tests/test_lens_ui_api_contract.py tests/test_ingestion_extraction_mapping_v2.py tests/test_google_drive_integration.py tests/test_google_drive_app_integration.py tests/test_ui_contract.py tests/test_teacher_ui_phase2.py tests/test_support_bundle.py -q` -> `44 passed in 100.96s`
+- **Previously reported full suite in memory commit:** `uv run pytest` -> `696 passed, 13 skipped in 293.89s (0:04:53)`
+- **Git status at latest check:** clean working tree, `main` ahead of `origin/main` by 1 documentation commit (`0d464e6`).
+
+---
+
+## Commits in This Work Window
+
+- `814961b` Implement student lens support profile v2
+- `ea325d1` Harden student lens support profile v2
+- `f3dc10a` Build observation support profile write path
+- `7ddf6bf` Complete 5-spec build sequence: Google Drive connector, Lens UI/API contract, ingestion extraction mapping v2
+- `ff2401e` Close LV-BLT-001 and LV-BLT-003: provider connect form and teaching artifact ingest
+- `0d464e6` Record session memory and index entry for 5-spec build completion
+
+---
+
+## Next Hardening Recommendations
+
+1. Replace duplicated `teacherNav` / `adminNav` / `utilityNav` / `renderView()` mappings in `static/index.html` with a single UI view registry so navigation and rendering are generated from one source of truth.
+2. Make `/api/categories` the canonical source for support category labels/definitions in the UI, with a small offline fallback only.
+3. Consider promoting Google Drive and extraction from Settings-only access into a first-class `Sources` / `Import` utility nav item or Home attention panel.
+4. Add a route reachability manifest that maps every required backend route to a view, control id, handler, and live served-app verification.
+5. Continue using live served-app verification as the standard for “built,” not only unit/API tests.
