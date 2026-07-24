@@ -65,7 +65,15 @@
 #     found during Google Drive 15-pass hardening.
 #   v28 (2026-07-23): Ingestion and extraction mapping v2 UI: Extraction Sources, Run Extraction, Review Extraction modal, and Write Confirmed to Lens.
 #   v29 (2026-07-23): LV-BLT-001 provider connect form + LV-BLT-003 teaching artifact ingest UI in Settings.
-version: 29
+#   v30 (2026-07-23): mount /api/stats in Health as a fail-open System panel
+#     with six system-scale cards (LV-BLT-007); mount direct RTI tier updates
+#     in the Students lens with constrained choices, refresh, and visible
+#     error states (LV-BLT-006); removed the genuinely duplicate,
+#     never-mounted GET /api/students/unobserved route — confirmed dead via
+#     ROUTE_REACHABILITY.yaml and brief.py's independent _unobserved()
+#     implementation, which is what Home's observation reminder actually
+#     calls (LV-BLT-005 reclassify).
+version: 30
 files:
   - static/index.html
   - static/sw.js

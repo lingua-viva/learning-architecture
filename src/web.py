@@ -1194,41 +1194,6 @@ async def create_student(payload: dict):
     return await asyncio.to_thread(_with_student_store, do_create)
 
 
-@app.get("/api/students/unobserved")
-async def unobserved_students(days: int = 14):
-    cutoff = time.time() - max(days, 0) * 86400
-
-    def list_unobserved(store):
-        students_out = []
-        for lens in store.list_lenses():
-            rows = store._conn.execute(
-                "SELECT recorded_at FROM observations WHERE student_id = ? ORDER BY recorded_at DESC LIMIT 1",
-                (lens["student_id"],),
-            ).fetchall()
-            last_observed = rows[0]["recorded_at"] if rows else None
-            stale = True
-            if last_observed:
-                try:
-                    stale = datetime.fromisoformat(last_observed).timestamp() < cutoff
-                except ValueError:
-                    stale = True
-            if stale:
-                students_out.append({
-                    "student_id": lens["student_id"],
-                    "display_name": lens.get("display_name"),
-                    "grade_level": lens.get("grade_level"),
-                    "rti_current_tier": lens.get("rti_current_tier"),
-                    "last_observed": last_observed,
-                    "days_threshold": days,
-                })
-        return students_out
-
-    return {
-        "days": days,
-        "students": await asyncio.to_thread(_with_student_store, list_unobserved),
-    }
-
-
 @app.get("/api/extraction/sources")
 async def extraction_sources():
     """List confirmed local and Google Drive import files available for extraction."""

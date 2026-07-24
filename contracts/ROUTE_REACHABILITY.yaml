@@ -1,0 +1,261 @@
+# Route Reachability Manifest — Lingua Viva
+# Proposed by dev/ROOT_CAUSE_BUILT_NOT_MOUNTED_2026-07-23.md §5, built
+# SPEC_LV_ROUTE_REACHABILITY_GATE_2026-07-23.md.
+#
+# Every @app.get/post/put/delete/websocket route in src/web.py must appear in
+# EXACTLY ONE of the two lists below. There is no third option and no default —
+# a route not listed in either fails the check outright. That is deliberate:
+# the whole point of this manifest is "prove it's reachable or say why it
+# isn't," not "assume it's fine because the tests pass."
+#
+# reachable_from_ui: the route, plus the exact literal string expected to
+#   exist in `file` (default static/index.html) that actually triggers it —
+#   a fetch()/api() call, an HTML tag, a JS API call, or a manifest.json key.
+#   If that literal string is ever removed without the route also being
+#   removed, the check fails — this is what catches future Pattern-D-style
+#   partial-batch wiring regressions.
+#
+# intentionally_backend_only: the route, a reason, and a `status`:
+#   - permanent: not meant to ever have a teacher-facing UI control (an
+#     external system's webhook target, a CLI-only or eval-harness-only
+#     trigger). Not a gap — a real, examined decision.
+#   - deferred_undecided: backend exists, no UI does, and — as of this
+#     manifest's own writing — nobody has yet decided whether to build the
+#     UI, delete the route, or reclassify it permanent. This status is
+#     supposed to be uncomfortable to leave sitting here; it is a to-do list,
+#     not a resting state. See dev/ROOT_CAUSE_BUILT_NOT_MOUNTED_2026-07-23.md
+#     for the commit-level trace of how each one got here.
+#
+# Run `python3 scripts/check_route_reachability.py` to verify. Run with
+# `--sync-stale` to see (not silently remove) manifest entries whose route no
+# longer exists in src/web.py.
+
+version: 1
+
+reachable_from_ui:
+  - route: "GET /"
+    call_site: "__root_document__"
+    note: >-
+      Always reachable by definition — this route's response body IS
+      static/index.html; there is no separate "call site" to check for.
+
+  - route: "POST /"
+    call_site: '"share_target"'
+    file: static/manifest.json
+    note: "PWA share-target action, invoked by the OS share sheet, not JS."
+
+  - route: "GET /manifest.json"
+    call_site: 'rel="manifest"'
+
+  - route: "GET /sw.js"
+    call_site: 'navigator.serviceWorker.register("/sw.js")'
+
+  - route: "GET /offline.html"
+    call_site: '"/offline.html"'
+    file: static/sw.js
+
+  - route: "GET /api/stats"
+    call_site: 'api("/api/stats")'
+    note: "System-scale cards in the Health view."
+
+  - route: "GET /icons/{name}"
+    call_site: 'href="/icons/icon.svg"'
+
+  - route: "GET /api/health"
+    call_site: 'api("/api/health")'
+
+  - route: "GET /api/slack/status"
+    call_site: 'api("/api/slack/status")'
+
+  - route: "GET /api/curriculum/overview"
+    call_site: 'api("/api/curriculum/overview")'
+
+  - route: "GET /api/curriculum/grade/{grade}"
+    call_site: "/api/curriculum/grade/${"
+
+  - route: "GET /api/brief"
+    call_site: "/api/brief?schedule=${"
+
+  - route: "POST /api/filemap/scan"
+    call_site: 'api("/api/filemap/scan"'
+
+  - route: "GET /api/filemap"
+    call_site: 'api("/api/filemap")'
+
+  - route: "POST /api/filemap/confirm"
+    call_site: 'api("/api/filemap/confirm"'
+
+  - route: "POST /api/filemap/peek"
+    call_site: 'api("/api/filemap/peek"'
+
+  - route: "POST /api/filemap/assign"
+    call_site: 'api("/api/filemap/assign"'
+
+  - route: "GET /api/why"
+    call_site: "/api/why?trace_id="
+
+  - route: "GET /api/privacy"
+    call_site: 'api("/api/privacy")'
+
+  - route: "GET /api/profile"
+    call_site: 'api("/api/profile")'
+
+  - route: "GET /api/profile/export"
+    call_site: 'fetch("/api/profile/export"'
+
+  - route: "POST /api/profile/clear"
+    call_site: 'api("/api/profile/clear"'
+
+  - route: "POST /api/filemap/exclude"
+    call_site: 'api("/api/filemap/exclude"'
+
+  - route: "POST /api/filemap/clear"
+    call_site: 'api("/api/filemap/clear"'
+
+  - route: "POST /api/prepare/activity"
+    call_site: 'api("/api/prepare/activity"'
+
+  - route: "GET /api/prepare/tier-assignments"
+    call_site: 'api("/api/prepare/tier-assignments")'
+
+  - route: "GET /api/teacher/lens"
+    call_site: 'fetch("/api/teacher/lens"'
+
+  - route: "POST /api/observe/capture"
+    call_site: 'api("/api/observe/capture"'
+
+  - route: "POST /api/observe/classify"
+    call_site: 'api("/api/observe/classify"'
+
+  - route: "GET /api/students"
+    call_site: 'api("/api/students")'
+
+  - route: "POST /api/students"
+    call_site: 'api("/api/students")'
+    note: "Same call site as the GET — api() helper distinguishes via options.method."
+
+  - route: "GET /api/students/{student_id}/lens"
+    call_site: "/api/students/${state.selectedStudent}/lens"
+
+  - route: "POST /api/students/{student_id}/rti/decision"
+    call_site: "/api/students/${state.selectedStudent}/rti/decision"
+
+  - route: "PUT /api/students/{student_id}/rti"
+    call_site: "/api/students/${state.selectedStudent}/rti"
+    note: "Direct support-tier control in the Students lens panel."
+
+  - route: "GET /api/assess/rubric/{unit_id}"
+    call_site: "/api/assess/rubric/${"
+
+  - route: "POST /api/parents/recommendation"
+    call_site: 'api("/api/parents/recommendation"'
+
+  - route: "POST /api/reflect/note"
+    call_site: 'api("/api/reflect/note"'
+
+  - route: "GET /api/publication/status"
+    call_site: 'api("/api/publication/status")'
+
+  - route: "POST /api/support-bundle"
+    call_site: 'api("/api/support-bundle"'
+
+  - route: "GET /api/admin/programme"
+    call_site: "/api/admin/${state.view}"
+    note: "Also serves admin/evidence, admin/capacity, admin/trends via the same dynamic call site."
+
+  - route: "GET /api/admin/evidence"
+    call_site: "/api/admin/${state.view}"
+
+  - route: "GET /api/admin/capacity"
+    call_site: "/api/admin/${state.view}"
+
+  - route: "GET /api/admin/trends"
+    call_site: "/api/admin/${state.view}"
+
+  - route: "GET /api/provider"
+    call_site: 'api("/api/provider")'
+
+  - route: "POST /api/query"
+    call_site: 'api("/api/query"'
+
+intentionally_backend_only:
+  - route: "POST /api/slack/events"
+    status: permanent
+    reason: >-
+      Slack Events API webhook target — called by Slack's own servers over
+      the internet, never by the teacher UI. The teacher-facing surface
+      (GET /api/slack/status) is separately listed as reachable.
+
+  - route: "WS /ws"
+    status: deferred_undecided
+    reason: >-
+      Traces to c2a9bf5 (2026-06-16), the original Mission-Canvas-engine
+      port. Its only consumer anywhere in this codebase is FALLBACK_HTML
+      (src/web.py — a break-glass page served only when static/index.html
+      is missing from disk), i.e. it's MC's internal debug console, not a
+      Lingua Viva teacher feature. Nobody has decided whether to build a
+      real teacher-facing use for it, delete it, or formally mark it
+      permanent-internal-only. See ROOT_CAUSE doc Pattern A.
+
+  - route: "POST /api/provider/connect"
+    status: deferred_undecided
+    reason: >-
+      Built for a named "Gap 5a onboarding screen" (see the route's own
+      docstring, SPEC_ONE_CLICK_LOCAL_APP_2026-07-14.md) that never
+      shipped, in any commit since. See ROOT_CAUSE doc Pattern B.
+
+  - route: "POST /api/provider/disconnect"
+    status: deferred_undecided
+    reason: "Same Gap 5a onboarding screen as POST /api/provider/connect — never built."
+
+  - route: "POST /api/ingest"
+    status: deferred_undecided
+    reason: >-
+      PDF document ingestion — built and tested (parse/PII-redact/store),
+      no Settings or Curriculum UI control anywhere calls it. See
+      ROOT_CAUSE doc Pattern B.
+
+  - route: "POST /api/teacher/ingest"
+    status: deferred_undecided
+    reason: >-
+      TeacherLensBuilder — its own originating commit (028d1b1, 2026-07-23)
+      states its goal as "unblock Layer 2/3/4 teacher-lens evals," not ship
+      a teacher-facing feature. Whether this is meant to stay eval-only
+      (in which case it should be reclassified `permanent`) or become a
+      real "build my teaching-style lens" feature has not been decided.
+      See ROOT_CAUSE doc Pattern C.
+
+  - route: "POST /api/teacher/holdout"
+    status: deferred_undecided
+    reason: "Same TeacherLensBuilder origin and same undecided fate as POST /api/teacher/ingest."
+
+  - route: "GET /api/students/{student_id}/lens-as-of"
+    status: deferred_undecided
+    reason: "A remaining 4f5e072 partial-batch-wiring gap; unlike the removed duplicate unobserved route and the mounted direct RTI route, this historical lens view still needs an explicit product decision."
+
+  - route: "GET /api/curriculum/unit/{unit_id}"
+    status: deferred_undecided
+    reason: >-
+      Not one of the 9 findings named in ROOT_CAUSE_BUILT_NOT_MOUNTED — a
+      new gap surfaced by building this manifest. No commit trace performed
+      yet; flagged here rather than silently left off the manifest.
+
+  - route: "GET /api/teacher/today"
+    status: deferred_undecided
+    reason: >-
+      Same as GET /api/curriculum/unit/{unit_id} — newly surfaced by this
+      manifest, not one of the original 9 named findings. No commit trace
+      performed yet.
+
+  - route: "GET /api/session"
+    status: permanent
+    reason: >-
+      Reports .mc_session status — permanently inactive in Lingua Viva.
+      Only src/session.py's start_session() creates that file, and its
+      sole caller is archive/mc-engine/mc_cli.py (the archived MC CLI,
+      excluded from the packaged app via desktop/package.json
+      "!archive/**"). No code path in src/lv_cli.py or any live route
+      ever calls start_session() — this route will report
+      {"active": false} on every real install. A UI control for it would
+      be misleading, not a fix.
+      See dev/specs/SPEC_LV_SESSION_ROUTE_RECLASSIFY_2026-07-23.md.

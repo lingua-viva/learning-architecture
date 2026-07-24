@@ -41,7 +41,13 @@ REPO = Path(__file__).resolve().parent.parent
 #   v26 (2026-07-23): Restored unobserved_students return statement in web.py.
 #   v27 (2026-07-23): support-profile summary JavaScript parse fix.
 #   v28 (2026-07-23): Ingestion and extraction mapping v2 UI implementation.
-EXPECTED_VERSION = 29
+#   v29 (2026-07-23): LV-BLT-001 provider connect form + LV-BLT-003 teaching
+#     artifact ingest UI in Settings.
+#   v30 (2026-07-23): LV-BLT-007 System stats mounted in Health; direct RTI
+#     tier control mounted in Students; removed duplicate, never-mounted
+#     GET /api/students/unobserved (brief.py's own _unobserved() is what
+#     Home's reminder actually calls).
+EXPECTED_VERSION = 30
 
 
 def _html() -> str:
