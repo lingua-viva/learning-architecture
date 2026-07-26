@@ -308,6 +308,44 @@ def _filemap(args: argparse.Namespace) -> int:
     return 1
 
 
+def _candidates(args) -> int:
+    """Read-only listing of candidate ontology nodes (Track A item 3,
+    REPORT_LV_EXTERNAL_FEEDBACK_TRANSFER_2026-07-25.md).
+
+    The system proposes, the human disposes — this command is the "human sees"
+    half. It never evaluates, promotes, or discards; candidate YAML files under
+    ontology/proposals/ remain untouched.
+    """
+    from ontology.proposals.candidate import CandidateStore
+
+    store = CandidateStore()
+    rows = []
+    for path in sorted(store._dir.glob("CAND-*.yaml")):
+        candidate = store.get(path.stem)
+        if candidate is None:
+            continue
+        resolved = candidate.status in ("PROMOTED", "DISCARDED") or (
+            candidate.resolution or ""
+        ).startswith("discarded")
+        if resolved and not args.all:
+            continue
+        rows.append(candidate)
+
+    if not rows:
+        scope = "candidates" if args.all else "active candidates"
+        print(f"No {scope} — the ontology has no open classification gaps on record.")
+        return 0
+
+    print(f"{'ID':<14} {'STATUS':<10} {'HITS':>4} {'DOMAIN':<12} SIGNALS")
+    for c in rows:
+        signals = ", ".join(c.signals[:4]) + ("…" if len(c.signals) > 4 else "")
+        print(f"{c.candidate_id:<14} {c.status:<10} {c.hit_count:>4} {c.domain:<12} {signals}")
+        if c.resolution:
+            print(f"{'':<14} resolution: {c.resolution}")
+    print(f"\n{len(rows)} candidate(s). Files: {store._dir}/CAND-*.yaml (read-only view)")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="lv", description="Lingua Viva local runtime")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -340,6 +378,16 @@ def build_parser() -> argparse.ArgumentParser:
     golden.add_argument("path", nargs="?", default="tests/golden_education_v1.yaml")
     golden.add_argument("--json", action="store_true")
 
+    candidates = sub.add_parser(
+        "candidates",
+        help="List candidate ontology nodes proposed from classification gaps (read-only)",
+    )
+    candidates.add_argument(
+        "--all",
+        action="store_true",
+        help="Include resolved candidates (promoted/discarded), not just active ones",
+    )
+
     fmap = sub.add_parser("filemap", help="Manage the local curriculum file map")
     fmap_sub = fmap.add_subparsers(dest="filemap_command", required=True)
     fmap_sub.add_parser("show", help="Show the current file map")
@@ -370,6 +418,8 @@ def main(argv: list[str] | None = None) -> int:
         return _serve(args)
     if args.command == "eval":
         return _eval(args)
+    if args.command == "candidates":
+        return _candidates(args)
     if args.command == "filemap":
         return _filemap(args)
     return 1

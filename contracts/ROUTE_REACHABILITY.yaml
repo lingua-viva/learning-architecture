@@ -203,6 +203,26 @@ reachable_from_ui:
   - route: "POST /api/extraction/review"
     call_site: 'api("/api/extraction/review"'
 
+  - route: "POST /api/provider/connect"
+    call_site: 'api("/api/provider/connect"'
+    note: >-
+      Settings cloud-provider connect form (commit ff2401e, closed LV-BLT-001).
+      Was misclassified as deferred_undecided until 2026-07-25 — the UI form
+      shipped after this manifest's entry was written and the checker only
+      validates call sites in the reachable direction, so the stale
+      classification passed silently.
+
+  - route: "POST /api/provider/disconnect"
+    call_site: 'api("/api/provider/disconnect"'
+    note: "Same Settings form as POST /api/provider/connect (ff2401e)."
+
+  - route: "POST /api/teacher/ingest"
+    call_site: 'api("/api/teacher/ingest"'
+    note: >-
+      My Teaching Style artifact-ingest form (commit ff2401e, closed
+      LV-BLT-003). Same stale-classification story as
+      POST /api/provider/connect.
+
 intentionally_backend_only:
   - route: "GET /api/categories"
     status: deferred_undecided
@@ -234,17 +254,6 @@ intentionally_backend_only:
       real teacher-facing use for it, delete it, or formally mark it
       permanent-internal-only. See ROOT_CAUSE doc Pattern A.
 
-  - route: "POST /api/provider/connect"
-    status: deferred_undecided
-    reason: >-
-      Built for a named "Gap 5a onboarding screen" (see the route's own
-      docstring, SPEC_ONE_CLICK_LOCAL_APP_2026-07-14.md) that never
-      shipped, in any commit since. See ROOT_CAUSE doc Pattern B.
-
-  - route: "POST /api/provider/disconnect"
-    status: deferred_undecided
-    reason: "Same Gap 5a onboarding screen as POST /api/provider/connect — never built."
-
   - route: "POST /api/ingest"
     status: deferred_undecided
     reason: >-
@@ -252,19 +261,14 @@ intentionally_backend_only:
       no Settings or Curriculum UI control anywhere calls it. See
       ROOT_CAUSE doc Pattern B.
 
-  - route: "POST /api/teacher/ingest"
-    status: deferred_undecided
-    reason: >-
-      TeacherLensBuilder — its own originating commit (028d1b1, 2026-07-23)
-      states its goal as "unblock Layer 2/3/4 teacher-lens evals," not ship
-      a teacher-facing feature. Whether this is meant to stay eval-only
-      (in which case it should be reclassified `permanent`) or become a
-      real "build my teaching-style lens" feature has not been decided.
-      See ROOT_CAUSE doc Pattern C.
-
   - route: "POST /api/teacher/holdout"
     status: deferred_undecided
-    reason: "Same TeacherLensBuilder origin and same undecided fate as POST /api/teacher/ingest."
+    reason: >-
+      Same TeacherLensBuilder origin as POST /api/teacher/ingest (028d1b1) —
+      but unlike ingest (now wired via the My Teaching Style form, ff2401e),
+      holdout evaluation remains eval-harness-only with no UI call site.
+      Whether it stays eval-only (reclassify `permanent`) or gets a
+      "check my style lens accuracy" surface has not been decided.
 
   - route: "GET /api/students/{student_id}/lens-as-of"
     status: permanent

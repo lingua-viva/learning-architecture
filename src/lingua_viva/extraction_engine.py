@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Optional
 
 from src.education.document_parser import DocumentParser
+from src.lingua_viva.injection_guard import redact_injection
 from src.lingua_viva.data_in_contracts import (
     CURRICULUM_UNIT_FIELDS,
     STUDENT_LENS_FIELDS,
@@ -100,7 +101,10 @@ VERIFY_SYSTEM_PROMPT = (
 # ---------------------------------------------------------------------------
 
 def _chunk_plaintext(path: Path, source_file: str) -> list[SourceChunk]:
-    text = path.read_text(encoding="utf-8", errors="ignore")
+    # Injection guard: .txt/.md bypass DocumentParser (which guards PDFs), so
+    # untrusted plaintext gets the same redact-and-audit pass here before its
+    # text reaches _propose_fields / _llm_verify prompts.
+    text, _ = redact_injection(path.read_text(encoding="utf-8", errors="ignore"))
     paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
     chunks: list[SourceChunk] = []
     cursor = 0

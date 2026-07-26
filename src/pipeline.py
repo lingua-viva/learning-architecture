@@ -183,7 +183,15 @@ class GatewayInterface:
 
     async def sanitize_query(self, query: str, classification: ClassificationResult) -> str:
         """Sanitize via unified service. Context-aware based on classification domain."""
-        return "" if classification.blocks_external else query
+        if classification.blocks_external:
+            return ""
+        # Injection guard on the egress seam: text leaving for any external
+        # surface must not carry machine-directed instructions harvested from
+        # untrusted documents. See src/lingua_viva/injection_guard.py.
+        from src.lingua_viva.injection_guard import redact_injection
+
+        sanitized, _ = redact_injection(query)
+        return sanitized
 
     async def query_external(
         self,

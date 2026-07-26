@@ -60,6 +60,7 @@ from typing import Optional
 
 import pdfplumber
 
+from src.lingua_viva.injection_guard import redact_injection
 from src.lingua_viva.privacy import ADDRESS, CLIENT_REFS, NAME_PREFIXES, PATTERNS
 
 # Same word list as Sanitizer's Layer 3 (src/lingua_viva/privacy.py
@@ -103,6 +104,12 @@ def _redact(text: str) -> tuple[str, list[dict]]:
         for match in pattern.findall(sanitized):
             redactions.append({"layer": 2, "type": label, "value": match})
             sanitized = sanitized.replace(match, f"[REDACTED_{label.upper()}]")
+
+    # Injection guard — untrusted document text must not carry machine-directed
+    # instructions into downstream LLM prompts (extraction, student lens, parent
+    # report). Redact-and-audit, never reject. See src/lingua_viva/injection_guard.py.
+    sanitized, injection_redactions = redact_injection(sanitized)
+    redactions.extend(injection_redactions)
 
     return sanitized, redactions
 
@@ -168,7 +175,8 @@ class DocumentParser:
                     section=section["heading"],
                     is_table=section.get("is_table", False),
                     redactions=redactions,
-                    needs_review=_needs_review(section["text"]),
+                    needs_review=_needs_review(section["text"])
+                    or any(r.get("layer") == "injection_guard" for r in redactions),
                 )
             )
         return chunks
