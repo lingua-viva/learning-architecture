@@ -1,0 +1,48 @@
+name: school-ethos
+description: "Activates on school values / character-development signal, tagging teacher feedback to the school's configurable ethos taxonomy as report-ready evidence."
+rationale: >
+  Schools deliberately develop characteristics and traits in students
+  through lessons and projects (core values, learner-profile attributes)
+  and need teacher feedback recorded against those traits as evidence for
+  student reports. The trait taxonomy is school-specific and lives in
+  local data (~/.lingua-viva/ethos.yaml, see src/education/ethos.py) —
+  this lens is the generic mechanism and works with whatever taxonomy is
+  active, falling back to the built-in seed. Keyword-triggered with no
+  domain restriction: ethos signal can surface in an observation, a
+  report draft, or a curriculum question alike.
+activation:
+  on_signal_keywords:
+    - ethos
+    - school values
+    - core values
+    - learner profile
+    - character development
+    - trait
+    - traits
+    - characteristics
+    - report evidence
+    - student report
+system_prompt_modifier: >
+  LENS: SCHOOL-ETHOS
+  You are reasoning about student characteristics and traits that the
+  school deliberately develops. Apply these rules:
+  1. Reasoning frame: the active school ethos taxonomy (provided in
+     context when available) is the ONLY valid set of trait ids. Map
+     teacher feedback to those traits; never invent traits that are not
+     in the taxonomy.
+  2. Evidence discipline: every trait claim must cite the concrete
+     observed behavior it comes from (what the student did or said, when,
+     in what setting). A trait label without an observed behavior is not
+     evidence and must not be recorded.
+  3. Authority: you may only SUGGEST trait matches. Suggestions are
+     recorded as model_suggested and are pending until a teacher confirms
+     them. Never present a suggestion as confirmed, and never write
+     trait evidence without a teacher in the loop.
+  4. Framing: ethos evidence is developmental, not evaluative. Describe
+     what the student demonstrated, not what the student lacks — absence
+     of evidence for a trait is never evidence of a deficit.
+  5. Output contract: when suggesting trait evidence, produce for each
+     suggestion: trait id (from the taxonomy), a one-to-two sentence
+     evidence summary in report-ready language, and the source
+     observation it came from.
+confidence_adjustment: 0.0

@@ -154,6 +154,9 @@ class ObservationCapturePipeline:
         )
 
         result = self.store.append_observation(observation)
+        result["ethos_trait_suggestions"] = self._suggest_ethos_traits(
+            text_for_classification
+        )
         result["classification"] = {
             "riu_id": classification.riu_id,
             "name": classification.name,
@@ -168,6 +171,78 @@ class ObservationCapturePipeline:
         }
         result["governance_note"] = governance_note
         return result
+
+    def _suggest_ethos_traits(self, text: str) -> list[dict]:
+        """Deterministic (keyword-based, no LLM) school-ethos trait
+        suggestions for an observation. Suggestions are NEVER auto-written
+        to the student's ethos_profile — the teacher confirms each one via
+        confirm_ethos_suggestion(). A broken/invalid local ethos.yaml must
+        not break the capture write path, so taxonomy problems degrade to
+        zero suggestions with a note instead of raising."""
+        from src.education import ethos as ethos_mod
+
+        try:
+            taxonomy = ethos_mod.load_ethos()
+        except Exception as exc:  # noqa: BLE001 — capture must never break:
+            # EthosValidationError is the expected case, but an unreadable
+            # file (OSError), bad encoding, etc. must degrade identically.
+            return [
+                {
+                    "error": f"ethos taxonomy unavailable: {exc}",
+                    "status": "taxonomy_error",
+                }
+            ]
+        suggestions = []
+        for trait_id in ethos_mod.match_traits(text, taxonomy):
+            trait = ethos_mod.get_trait(taxonomy, trait_id) or {}
+            suggestions.append(
+                {
+                    "trait_id": trait_id,
+                    "label": trait.get("label", trait_id),
+                    "descriptor": trait.get("descriptor", ""),
+                    "confidence": "model_suggested",
+                    "status": "pending_teacher_confirmation",
+                }
+            )
+        return suggestions
+
+    def confirm_ethos_suggestion(
+        self,
+        student_id: str,
+        teacher_id: str,
+        trait_id: str,
+        summary: str,
+        observation_id: Optional[str] = None,
+    ) -> dict:
+        """Teacher confirms an ethos trait suggestion (or records trait
+        evidence directly). This is the ONLY path from an observation to
+        the student's ethos_profile — written as teacher_confirmed because
+        a teacher explicitly invoked it. Trait membership is validated
+        against the active taxonomy inside add_ethos_evidence.
+
+        If observation_id is given it must exist AND belong to this
+        student — evidence claiming a grounding that does not exist must
+        be rejected at write time, not discovered at report time."""
+        if observation_id is not None:
+            row = self.store._conn.execute(
+                "SELECT student_id FROM observations WHERE observation_id = ?",
+                (observation_id,),
+            ).fetchone()
+            if row is None or row["student_id"] != student_id:
+                raise ValueError(
+                    f"observation_id '{observation_id}' does not exist for "
+                    f"student '{student_id}' — refusing to record evidence "
+                    "with an unverifiable source."
+                )
+        return self.store.add_ethos_evidence(
+            student_id=student_id,
+            trait_id=trait_id,
+            summary=summary,
+            created_by=teacher_id,
+            evidence_type="observation",
+            source_observation_id=observation_id,
+            confidence="teacher_confirmed",
+        )
 
     def assert_never_external(self, classification: ClassificationResult) -> None:
         """

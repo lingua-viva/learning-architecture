@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 import time
 import uuid
@@ -106,6 +107,16 @@ VALID_SUPPORT_BUCKETS = (
 )
 
 VALID_STRATEGY_OUTCOMES = ("worked", "did_not_work", "unknown")
+
+# Profile-level strengths (v2.1): separate from the per-category strengths
+# buckets inside support_profile. These answer the report-facing ask
+# "Academic Strengths / Personal Strengths" as top-level profile sections.
+VALID_STRENGTH_KINDS = ("academic", "personal")
+
+# Only these confidence levels are eligible for student reports — a
+# model_suggested or imported_needs_confirmation item has not been
+# teacher-verified and must never appear in a report as fact.
+REPORT_GRADE_CONFIDENCE = ("teacher_confirmed", "imported_verified")
 
 VALID_SOURCE_TYPES = (
     "observation",
@@ -425,6 +436,199 @@ def _validate_support_profile(profile: dict) -> None:
 
 
 
+_ETHOS_TRAIT_KEY_RE_PATTERN = r"^[a-z][a-z0-9_]{0,63}$"
+
+
+def strengths_profile_default() -> dict:
+    """Default v2.1 profile-level strengths (academic + personal)."""
+    return {
+        "schema_version": 1,
+        "academic_strengths": [],
+        "personal_strengths": [],
+        "last_reviewed_at": None,
+        "last_reviewed_by": None,
+    }
+
+
+def _normalize_strengths_profile_with_warnings(
+    raw: str | dict | None,
+) -> tuple[dict, list[str]]:
+    default = strengths_profile_default()
+    warnings: list[str] = []
+    if not raw:
+        return default, warnings
+    if isinstance(raw, str):
+        try:
+            sp = json.loads(raw)
+        except Exception:
+            return default, [
+                "strengths_profile contained invalid JSON; default profile returned"
+            ]
+    elif isinstance(raw, dict):
+        sp = raw
+    else:
+        return default, [
+            "strengths_profile had an invalid storage type; default profile returned"
+        ]
+    if not isinstance(sp, dict):
+        return default, ["strengths_profile root was not an object; default returned"]
+
+    normalized = {
+        "schema_version": 1,
+        "academic_strengths": [],
+        "personal_strengths": [],
+        "last_reviewed_at": sp.get("last_reviewed_at"),
+        "last_reviewed_by": sp.get("last_reviewed_by"),
+    }
+    for key in ("academic_strengths", "personal_strengths"):
+        raw_items = sp.get(key)
+        if not isinstance(raw_items, list):
+            if key in sp:
+                warnings.append(f"strengths_profile '{key}' was invalid; defaulted to []")
+            continue
+        kept = [item for item in raw_items if isinstance(item, dict)]
+        if len(kept) != len(raw_items):
+            warnings.append(
+                f"strengths_profile '{key}' contained non-object items; dropped"
+            )
+        normalized[key] = kept
+    return normalized, warnings
+
+
+def _validate_strengths_profile(profile: dict) -> None:
+    if not isinstance(profile, dict):
+        raise ValueError("strengths_profile must be a dictionary")
+    for key in ("academic_strengths", "personal_strengths"):
+        items = profile.get(key, [])
+        if not isinstance(items, list):
+            raise ValueError(f"{key} must be a list")
+        for entry in items:
+            _validate_support_entry(entry)
+
+
+def ethos_profile_default() -> dict:
+    """Default v2.1 ethos profile.
+
+    Trait ids are NOT fixed here (unlike SUPPORT_CATEGORY_IDS) — they come
+    from the configurable school-ethos taxonomy (src/education/ethos.py,
+    local data at ~/.lingua-viva/ethos.yaml). Membership is enforced at
+    write time in add_ethos_evidence; normalization only enforces shape.
+    """
+    return {
+        "schema_version": 1,
+        "ethos_name": None,
+        "traits": {},
+        "last_reviewed_at": None,
+        "last_reviewed_by": None,
+    }
+
+
+def _normalize_ethos_profile_with_warnings(
+    raw: str | dict | None,
+) -> tuple[dict, list[str]]:
+    default = ethos_profile_default()
+    warnings: list[str] = []
+    if not raw:
+        return default, warnings
+    if isinstance(raw, str):
+        try:
+            ep = json.loads(raw)
+        except Exception:
+            return default, [
+                "ethos_profile contained invalid JSON; default profile returned"
+            ]
+    elif isinstance(raw, dict):
+        ep = raw
+    else:
+        return default, [
+            "ethos_profile had an invalid storage type; default profile returned"
+        ]
+    if not isinstance(ep, dict):
+        return default, ["ethos_profile root was not an object; default returned"]
+
+    traits = ep.get("traits")
+    if not isinstance(traits, dict):
+        traits = {}
+        if "traits" in ep:
+            warnings.append("ethos_profile traits were invalid; defaulted to {}")
+
+    normalized_traits: dict[str, dict] = {}
+    for trait_id, trait_data in traits.items():
+        if not (
+            isinstance(trait_id, str)
+            and re.match(_ETHOS_TRAIT_KEY_RE_PATTERN, trait_id)
+        ):
+            warnings.append(f"ethos_profile trait key {trait_id!r} invalid; dropped")
+            continue
+        if not isinstance(trait_data, dict):
+            trait_data = {}
+            warnings.append(
+                f"ethos_profile trait '{trait_id}' data was invalid; defaults filled"
+            )
+        evidence = trait_data.get("evidence")
+        if not isinstance(evidence, list):
+            if "evidence" in trait_data:
+                warnings.append(
+                    f"ethos_profile trait '{trait_id}' evidence was invalid; "
+                    "defaulted to []"
+                )
+            evidence = []
+        kept = [item for item in evidence if isinstance(item, dict)]
+        if len(kept) != len(evidence):
+            warnings.append(
+                f"ethos_profile trait '{trait_id}' contained non-object "
+                "evidence items; dropped"
+            )
+        normalized_traits[trait_id] = {"evidence": kept}
+
+    return (
+        {
+            "schema_version": 1,
+            "ethos_name": ep.get("ethos_name"),
+            "traits": normalized_traits,
+            "last_reviewed_at": ep.get("last_reviewed_at"),
+            "last_reviewed_by": ep.get("last_reviewed_by"),
+        },
+        warnings,
+    )
+
+
+def _validate_ethos_evidence(item: dict) -> None:
+    """Ethos evidence = support evidence shape + a confidence field, so a
+    model-suggested trait match is never indistinguishable from a
+    teacher-confirmed one in a report."""
+    _validate_support_evidence(item)
+    confidence = item.get("confidence", "teacher_confirmed")
+    if confidence not in VALID_CONFIDENCE_VALUES:
+        raise ValueError(
+            f"Invalid confidence '{confidence}'. Allowed: {VALID_CONFIDENCE_VALUES}"
+        )
+
+
+def _validate_ethos_profile(profile: dict) -> None:
+    if not isinstance(profile, dict):
+        raise ValueError("ethos_profile must be a dictionary")
+    traits = profile.get("traits", {})
+    if not isinstance(traits, dict):
+        raise ValueError("ethos_profile traits must be a dictionary")
+    for trait_id, trait_data in traits.items():
+        if not (
+            isinstance(trait_id, str)
+            and re.match(_ETHOS_TRAIT_KEY_RE_PATTERN, trait_id)
+        ):
+            raise ValueError(
+                f"Invalid trait id '{trait_id}' "
+                f"(must match {_ETHOS_TRAIT_KEY_RE_PATTERN})"
+            )
+        if not isinstance(trait_data, dict):
+            raise ValueError("ethos_profile trait values must be objects")
+        evidence = trait_data.get("evidence", [])
+        if not isinstance(evidence, list):
+            raise ValueError("ethos_profile trait evidence must be a list")
+        for item in evidence:
+            _validate_ethos_evidence(item)
+
+
 class LensNotFoundError(Exception):
     """Raised when an operation targets a student_id with no lens."""
 
@@ -570,6 +774,8 @@ class StudentLensStore:
                 cefr_trajectory_30d TEXT NOT NULL DEFAULT 'insufficient_data',
                 sel_summary TEXT NOT NULL DEFAULT '{}',
                 support_profile TEXT NOT NULL DEFAULT '{}',
+                strengths_profile TEXT NOT NULL DEFAULT '{}',
+                ethos_profile TEXT NOT NULL DEFAULT '{}',
                 profile_version INTEGER NOT NULL DEFAULT 1,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
@@ -629,6 +835,11 @@ class StudentLensStore:
             self._conn.execute(
                 "ALTER TABLE students ADD COLUMN support_profile TEXT NOT NULL DEFAULT '{}'"
             )
+        for col in ("strengths_profile", "ethos_profile"):
+            if col not in columns:
+                self._conn.execute(
+                    f"ALTER TABLE students ADD COLUMN {col} TEXT NOT NULL DEFAULT '{{}}'"
+                )
         cursor.execute("PRAGMA table_info(observations)")
         obs_columns = [row[1] for row in cursor.fetchall()]
         new_obs_cols = (
@@ -1293,6 +1504,272 @@ class StudentLensStore:
         return sp
 
     # ------------------------------------------------------------------
+    # v2.1: profile-level strengths + ethos trait evidence
+    # ------------------------------------------------------------------
+
+    def add_profile_strength(
+        self,
+        student_id: str,
+        kind: str,
+        text: str,
+        created_by: str,
+        source_observation_id: Optional[str] = None,
+        source_ref_ids: Optional[list[str]] = None,
+        confidence: str = "teacher_confirmed",
+    ) -> dict:
+        """Append an entry to the profile-level Academic/Personal Strengths."""
+        if kind not in VALID_STRENGTH_KINDS:
+            raise ValueError(
+                f"Unknown strength kind '{kind}'. Allowed: {VALID_STRENGTH_KINDS}"
+            )
+        if not (isinstance(text, str) and text.strip() and len(text) <= 2000):
+            raise ValueError("Entry text must be non-empty and <= 2000 characters")
+        if confidence not in VALID_CONFIDENCE_VALUES:
+            raise ValueError(
+                f"Invalid confidence '{confidence}'. Allowed: {VALID_CONFIDENCE_VALUES}"
+            )
+        created_by = _validate_non_empty_string(created_by, "created_by")
+        source_observation_id = _validate_non_empty_string(
+            source_observation_id, "source_observation_id"
+        )
+
+        row = self._get_student_row(student_id, include_deleted=False)
+        if row is None:
+            raise LensNotFoundError(student_id)
+
+        profile = self._row_to_lens_dict(row)["strengths_profile"]
+        text = text.strip()
+        # Idempotency: an identical active entry (same text + source) is a
+        # double-submit, not new information — return unchanged, no
+        # profile_version bump.
+        for existing in profile[f"{kind}_strengths"]:
+            if (
+                existing.get("text") == text
+                and existing.get("source_observation_id") == source_observation_id
+                and existing.get("active", True)
+            ):
+                return profile
+        entry = {
+            "id": str(uuid.uuid4()),
+            "text": text,
+            "created_at": _now_iso(),
+            "created_by": created_by,
+            "source_observation_id": source_observation_id,
+            "source_ref_ids": _validate_source_ref_ids(source_ref_ids),
+            "confidence": confidence,
+            "active": True,
+        }
+        profile[f"{kind}_strengths"].append(entry)
+
+        now = _now_iso()
+        self._conn.execute(
+            """
+            UPDATE students SET
+                strengths_profile = ?,
+                profile_version = profile_version + 1,
+                updated_at = ?
+            WHERE student_id = ?
+            """,
+            (json.dumps(profile), now, student_id),
+        )
+        self._conn.commit()
+        return profile
+
+    def add_ethos_evidence(
+        self,
+        student_id: str,
+        trait_id: str,
+        summary: str,
+        created_by: str,
+        evidence_type: str = "observation",
+        source_observation_id: Optional[str] = None,
+        source_ref_ids: Optional[list[str]] = None,
+        confidence: str = "teacher_confirmed",
+        allowed_trait_ids: Optional[list[str]] = None,
+    ) -> dict:
+        """Append evidence for a school-ethos trait on a student profile.
+
+        trait_id must belong to the active ethos taxonomy
+        (src/education/ethos.py). Pass allowed_trait_ids to inject the
+        taxonomy explicitly (tests, batch imports); otherwise the active
+        taxonomy is loaded from the configured ethos path.
+        """
+        if allowed_trait_ids is None:
+            from src.education import ethos as ethos_mod
+
+            active = ethos_mod.load_ethos()
+            allowed_trait_ids = list(ethos_mod.trait_ids(active))
+            ethos_name = active.get("ethos_name")
+        else:
+            ethos_name = None
+        if trait_id not in allowed_trait_ids:
+            raise ValueError(
+                f"Unknown ethos trait '{trait_id}'. Allowed: {tuple(allowed_trait_ids)}"
+            )
+        if not (isinstance(summary, str) and summary.strip() and len(summary) <= 2000):
+            raise ValueError("Evidence summary must be non-empty and <= 2000 characters")
+        if evidence_type not in VALID_EVIDENCE_TYPES:
+            raise ValueError(
+                f"Invalid evidence_type '{evidence_type}'. Allowed: {VALID_EVIDENCE_TYPES}"
+            )
+        if confidence not in VALID_CONFIDENCE_VALUES:
+            raise ValueError(
+                f"Invalid confidence '{confidence}'. Allowed: {VALID_CONFIDENCE_VALUES}"
+            )
+        created_by = _validate_non_empty_string(created_by, "created_by")
+        source_observation_id = _validate_non_empty_string(
+            source_observation_id, "source_observation_id"
+        )
+
+        row = self._get_student_row(student_id, include_deleted=False)
+        if row is None:
+            raise LensNotFoundError(student_id)
+
+        profile = self._row_to_lens_dict(row)["ethos_profile"]
+        if ethos_name and not profile.get("ethos_name"):
+            profile["ethos_name"] = ethos_name
+        trait_bucket = profile["traits"].setdefault(trait_id, {"evidence": []})
+        summary = summary.strip()
+        # Idempotency: identical summary + source for the same trait is a
+        # double-submit — return unchanged, no profile_version bump.
+        for existing in trait_bucket["evidence"]:
+            if (
+                existing.get("summary") == summary
+                and existing.get("source_observation_id") == source_observation_id
+            ):
+                return profile
+        item = {
+            "id": str(uuid.uuid4()),
+            "summary": summary,
+            "evidence_type": evidence_type,
+            "source_observation_id": source_observation_id,
+            "source_ref_ids": _validate_source_ref_ids(source_ref_ids),
+            "created_at": _now_iso(),
+            "created_by": created_by,
+            "confidence": confidence,
+        }
+        trait_bucket["evidence"].append(item)
+
+        now = _now_iso()
+        self._conn.execute(
+            """
+            UPDATE students SET
+                ethos_profile = ?,
+                profile_version = profile_version + 1,
+                updated_at = ?
+            WHERE student_id = ?
+            """,
+            (json.dumps(profile), now, student_id),
+        )
+        self._conn.commit()
+        return profile
+
+    def export_ethos_report(
+        self,
+        student_id: str,
+        include_unconfirmed: bool = False,
+    ) -> dict:
+        """Report-ready export of ethos trait evidence + profile-level
+        strengths for a student report.
+
+        Only REPORT_GRADE_CONFIDENCE items (teacher_confirmed /
+        imported_verified) appear in the report sections. Unconfirmed
+        items (model_suggested / imported_needs_confirmation) are ALWAYS
+        excluded from the report body; include_unconfirmed=True surfaces
+        them in a separate pending_review section for the teacher's own
+        prep view, never for the report itself.
+
+        Trait labels resolve from the active ethos taxonomy when it loads;
+        a broken taxonomy degrades to raw trait ids (the evidence itself
+        is already on the profile and must remain exportable).
+        """
+        row = self._get_student_row(student_id, include_deleted=False)
+        if row is None:
+            raise LensNotFoundError(student_id)
+        lens = self._row_to_lens_dict(row)
+
+        labels: dict[str, str] = {}
+        ethos_name = lens["ethos_profile"].get("ethos_name")
+        try:
+            from src.education import ethos as ethos_mod
+
+            taxonomy = ethos_mod.load_ethos()
+            labels = {t["id"]: t["label"] for t in taxonomy.get("traits", [])}
+            ethos_name = ethos_name or taxonomy.get("ethos_name")
+        except Exception:
+            pass  # degrade to trait ids; never block an export
+
+        def _report_grade(items: list[dict], text_key: str) -> list[dict]:
+            return [
+                {
+                    text_key: item.get(text_key),
+                    "evidence_type": item.get("evidence_type"),
+                    "created_at": item.get("created_at"),
+                    "created_by": item.get("created_by"),
+                    "source_observation_id": item.get("source_observation_id"),
+                }
+                for item in items
+                # Fail-closed: every legitimate write path sets confidence
+                # explicitly, so a missing field means the item did not come
+                # through a governed path — it never reaches a report body.
+                if item.get("confidence") in REPORT_GRADE_CONFIDENCE
+                and item.get("active", True)
+            ]
+
+        def _pending(items: list[dict], text_key: str) -> list[dict]:
+            return [
+                {
+                    text_key: item.get(text_key),
+                    "confidence": item.get("confidence"),
+                    "created_at": item.get("created_at"),
+                }
+                for item in items
+                if item.get("confidence") not in REPORT_GRADE_CONFIDENCE
+                and item.get("active", True)
+            ]
+
+        sp = lens["strengths_profile"]
+        traits_out = []
+        pending_traits = []
+        for trait_id, trait_data in sorted(lens["ethos_profile"]["traits"].items()):
+            evidence = _report_grade(trait_data.get("evidence", []), "summary")
+            if evidence:
+                traits_out.append(
+                    {
+                        "trait_id": trait_id,
+                        "label": labels.get(trait_id, trait_id),
+                        "evidence": evidence,
+                    }
+                )
+            if include_unconfirmed:
+                pending = _pending(trait_data.get("evidence", []), "summary")
+                if pending:
+                    pending_traits.append(
+                        {
+                            "trait_id": trait_id,
+                            "label": labels.get(trait_id, trait_id),
+                            "items": pending,
+                        }
+                    )
+
+        report = {
+            "student_id": student_id,
+            "display_name": lens.get("display_name"),
+            "generated_at": _now_iso(),
+            "ethos_name": ethos_name,
+            "academic_strengths": _report_grade(sp["academic_strengths"], "text"),
+            "personal_strengths": _report_grade(sp["personal_strengths"], "text"),
+            "traits": traits_out,
+        }
+        if include_unconfirmed:
+            report["pending_review"] = {
+                "academic_strengths": _pending(sp["academic_strengths"], "text"),
+                "personal_strengths": _pending(sp["personal_strengths"], "text"),
+                "traits": pending_traits,
+            }
+        return report
+
+    # ------------------------------------------------------------------
     # Internal: recalculation + RTI escalation (observation-capture.md
     # Stage 3 Local Enrichment + Stage 6 RTI Escalation Logic)
     # ------------------------------------------------------------------
@@ -1317,6 +1794,12 @@ class StudentLensStore:
         raw_sp = d.get("support_profile")
         d["support_profile"], d["support_profile_warnings"] = (
             _normalize_support_profile_with_warnings(raw_sp)
+        )
+        d["strengths_profile"], d["strengths_profile_warnings"] = (
+            _normalize_strengths_profile_with_warnings(d.get("strengths_profile"))
+        )
+        d["ethos_profile"], d["ethos_profile_warnings"] = (
+            _normalize_ethos_profile_with_warnings(d.get("ethos_profile"))
         )
         d["deleted"] = bool(d["deleted"])
         return d
