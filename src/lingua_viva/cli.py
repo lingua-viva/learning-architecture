@@ -308,6 +308,73 @@ def _filemap(args: argparse.Namespace) -> int:
     return 1
 
 
+def _audit(args) -> int:
+    """Lagging-indicator audit over gap_signals.ndjson (read-only).
+
+    SPEC_LV_GAP_SIGNAL_AUDIT_2026-07-26.md — ported from Mission Canvas's
+    `mc improve --audit`: exit 1 only on NEW drift once a baseline exists
+    (write one with --journal-write); --strict restores absolute semantics.
+    """
+    from .gap_audit import run_audit
+
+    return run_audit(
+        last=args.last,
+        journal_write=args.journal_write,
+        strict=args.strict,
+        json_out=args.json,
+    )
+
+
+def _distill(args) -> int:
+    """Distill LV's measurement stores into a ranked, reconciled view
+    (SPEC_LV_MEASUREMENT_DISTILLATION_2026-07-26). Sibling of `lv audit`
+    (drift gate, exit codes) — `lv distill` is the operator-facing ranked
+    report: breadth-ranked gap clusters, candidate retirement + engine
+    replay, revision-log concentration and proxy->live transitions.
+    Read-only by default; `--write-summary` opts into one longitudinal
+    record. Not in preflight (engine replay exceeds the <5s budget).
+    """
+    from src.lingua_viva.improvement_audit import (
+        append_summary_record,
+        build_audit_report,
+        compute_delta,
+        format_report,
+        previous_summary,
+        summary_record,
+    )
+
+    classify_fn = None
+    if not getattr(args, "no_replay", False):
+        from ontology.engine import OntologyEngine
+
+        engine = OntologyEngine()
+
+        def classify_fn(query: str) -> tuple[str, float]:
+            result = engine.classify(query)
+            return result.riu_id, result.confidence
+
+    report = build_audit_report(classify_fn=classify_fn)
+    prev = previous_summary()
+
+    if args.json:
+        payload = dict(report)
+        payload["summary"] = summary_record(report)
+        _print_json(payload)
+    else:
+        print(format_report(report))
+        if prev:
+            print("")
+            print("[6] DELTA vs previous distill run")
+            for line in compute_delta(prev, summary_record(report)) or ["no change"]:
+                print(f"  {line}")
+
+    if getattr(args, "write_summary", False):
+        record = append_summary_record(report)
+        if not args.json:
+            print(f"\nSummary record appended ({record['generated_at']}).")
+    return 0
+
+
 def _candidates(args) -> int:
     """Read-only listing of candidate ontology nodes (Track A item 3,
     REPORT_LV_EXTERNAL_FEEDBACK_TRANSFER_2026-07-25.md).
@@ -378,6 +445,28 @@ def build_parser() -> argparse.ArgumentParser:
     golden.add_argument("path", nargs="?", default="tests/golden_education_v1.yaml")
     golden.add_argument("--json", action="store_true")
 
+    audit = sub.add_parser(
+        "audit",
+        help="Lagging-indicator audit over gap signals (exit 1 on new drift)",
+    )
+    audit.add_argument("--last", type=int, default=None, metavar="N",
+                       help="Audit only the last N journal records")
+    audit.add_argument("--journal-write", action="store_true",
+                       help="Append a summary record (full runs become the delta baseline)")
+    audit.add_argument("--strict", action="store_true",
+                       help="Absolute exit semantics: any WARN exits 1, baseline ignored")
+    audit.add_argument("--json", action="store_true")
+
+    distill = sub.add_parser(
+        "distill",
+        help="Ranked distillation of gap clusters, candidates, and revision log (read-only)",
+    )
+    distill.add_argument("--json", action="store_true")
+    distill.add_argument("--no-replay", action="store_true",
+                         help="Skip replaying candidate queries through the engine (faster)")
+    distill.add_argument("--write-summary", action="store_true",
+                         help="Append one longitudinal summary record for future run-over-run deltas")
+
     candidates = sub.add_parser(
         "candidates",
         help="List candidate ontology nodes proposed from classification gaps (read-only)",
@@ -418,6 +507,10 @@ def main(argv: list[str] | None = None) -> int:
         return _serve(args)
     if args.command == "eval":
         return _eval(args)
+    if args.command == "audit":
+        return _audit(args)
+    if args.command == "distill":
+        return _distill(args)
     if args.command == "candidates":
         return _candidates(args)
     if args.command == "filemap":
