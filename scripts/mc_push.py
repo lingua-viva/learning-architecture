@@ -426,15 +426,31 @@ def step_trigger_release(ctx: Context, dry_run: bool) -> str | None:
 
         info(f"No auto-release — cutting tag: {tag}")
         if dry_run:
-            info(f"[dry-run] Would bump {current} → {new_version}, tag, push")
+            info(f"[dry-run] Would bump {current} → {new_version}, bump site pins, tag, push")
             return tag
 
         # Bump version
         pkg["version"] = new_version
         pkg_file.write_text(json.dumps(pkg, indent=2) + "\n")
 
+        # Bump site download pins in the SAME commit. Root cause of the
+        # 2026-07-25 staleness trap: desktop releases are prerelease-only, so
+        # /releases/latest never serves them — the site pins literal tag
+        # strings, and nothing bumped them (docs/index.html sat at 0.2.7
+        # through two releases while "Shipped ✓" was reported).
+        site_index = ctx.repo_root / "docs" / "index.html"
+        pins_bumped = 0
+        if site_index.exists():
+            html = site_index.read_text(encoding="utf-8")
+            new_html, pins_bumped = _bump_site_pins(html, tag)
+            if pins_bumped:
+                site_index.write_text(new_html, encoding="utf-8")
+                info(f"Bumped {pins_bumped} site download pin(s) → {tag}")
+
         # Commit + tag + push
         run(["git", "add", str(pkg_file)], cwd=ctx.repo_root)
+        if pins_bumped:
+            run(["git", "add", str(site_index)], cwd=ctx.repo_root)
         run(["git", "commit", "-m",
              f"chore(desktop): bump version to {new_version} for release"],
             cwd=ctx.repo_root)
@@ -445,7 +461,8 @@ def step_trigger_release(ctx: Context, dry_run: bool) -> str | None:
         return tag
 
 
-def step_poll_release(ctx: Context, skip: bool, dry_run: bool) -> bool:
+def step_poll_release(ctx: Context, skip: bool, dry_run: bool,
+                      expected_tag: str | None = None) -> bool:
     """Poll until the release is live, or timeout."""
     if skip or dry_run:
         info("Skipping CI poll." if skip else "[dry-run] Would poll CI.")
@@ -481,11 +498,11 @@ def step_poll_release(ctx: Context, skip: bool, dry_run: bool) -> bool:
                     if status == "completed":
                         if conclusion == "success":
                             success(f"Release pipeline succeeded (run {run_id}).")
-                            return _verify_live(ctx)
+                            return _verify_live(ctx, expected_tag)
                         elif conclusion == "failure":
                             # Check if it's the live-verify cosmetic failure
                             # where the actual site IS pinned correctly
-                            if _verify_live(ctx):
+                            if _verify_live(ctx, expected_tag):
                                 success(f"Pipeline reported failure but site is live and correct.")
                                 return True
                             error(f"Release pipeline failed (run {run_id}).")
@@ -504,8 +521,36 @@ def step_poll_release(ctx: Context, skip: bool, dry_run: bool) -> bool:
     return False
 
 
-def _verify_live(ctx: Context) -> bool:
-    """Verify the live site serves the latest release."""
+def _bump_site_pins(html: str, tag: str) -> tuple[str, int]:
+    """Rewrite every desktop-vX.Y.Z pin in site HTML to the given tag.
+
+    Returns (new_html, pin_count). Pure function so it's testable.
+    """
+    return re.subn(r"desktop-v\d+\.\d+\.\d+", tag, html)
+
+
+def _check_site_pins(body: str, expected_tag: str) -> tuple[list[str], list[str]]:
+    """Compare pins found in live-site HTML against the just-cut tag.
+
+    Returns (served, stale): all distinct pins found, and those that differ
+    from expected_tag. Pure function so it's testable.
+    """
+    served = sorted(set(re.findall(r"desktop-v\d+\.\d+\.\d+", body)))
+    stale = [v for v in served if v != expected_tag]
+    return served, stale
+
+
+def _verify_live(ctx: Context, expected_tag: str | None = None) -> bool:
+    """Verify the live site serves the release we just cut.
+
+    Without expected_tag (MC auto-release path): informational only — report
+    what's served, never fail. With expected_tag (LV manual tag-cut): "a
+    version string is present" is NOT the same claim as "the version we just
+    cut is live" — fail on any stale pin, and verify the actual download
+    URLs resolve. This closes the 2026-07-25 gap where this function grepped
+    for any desktop-v string and reported success over a two-release-stale
+    site.
+    """
     if not ctx.site_url:
         return True
 
@@ -514,13 +559,36 @@ def _verify_live(ctx: Context) -> bool:
         info("Could not reach live site for verification.")
         return True  # Don't fail on network issues
 
-    m = re.search(r"desktop-v(\d+\.\d+\.\d+)", body)
-    if m:
-        success(f"Live site serving: desktop-v{m.group(1)}")
+    if expected_tag is None:
+        m = re.search(r"desktop-v(\d+\.\d+\.\d+)", body)
+        if m:
+            success(f"Live site serving: desktop-v{m.group(1)}")
+        else:
+            info("No desktop-v tag found on live site (site may not have download links).")
         return True
-    else:
-        info("No desktop-v tag found on live site (site may not have download links).")
-        return True
+
+    served, stale = _check_site_pins(body, expected_tag)
+    if not served:
+        error(f"Live site has no desktop-v pin at all — expected {expected_tag}.")
+        return False
+    if stale:
+        error(f"Live site pin(s) STALE: {', '.join(stale)} (expected {expected_tag}).")
+        info("The site HTML with the new pin hasn't deployed — do not report shipped.")
+        return False
+    success(f"Live site pinned to {expected_tag}.")
+
+    # A correct pin doesn't prove the assets exist — check the download URLs.
+    urls = [u for u in re.findall(r'href="([^"]*?/releases/download/[^"]*?)"', body)
+            if expected_tag in u]
+    for u in urls:
+        code, status = run_quiet(
+            f"curl -sI -o /dev/null -w %{{http_code}} -L {u}")
+        if code != 0 or status.strip() != "200":
+            error(f"Download URL not live ({status.strip() or 'unreachable'}): {u}")
+            return False
+    if urls:
+        success(f"{len(urls)} download URL(s) verified live.")
+    return True
 
 
 def step_status(ctx: Context):
@@ -614,11 +682,13 @@ def main():
 
     # Trigger release (returns tag or None, not a bool)
     heading("Trigger release")
-    step_trigger_release(ctx, args.dry_run)
+    tag = step_trigger_release(ctx, args.dry_run)
 
-    # Poll
+    # Poll — pass the just-cut tag so live verification compares against it
+    # instead of accepting any version string on the site.
     if not args.skip_poll:
-        ok = step_poll_release(ctx, skip=False, dry_run=args.dry_run)
+        ok = step_poll_release(ctx, skip=False, dry_run=args.dry_run,
+                               expected_tag=tag)
         if not ok:
             sys.exit(1)
 
