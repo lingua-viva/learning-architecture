@@ -20,13 +20,21 @@ Read-only over runtime state. Writes only its own summary journal
 from __future__ import annotations
 
 import json
+import os
 import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-DEFAULT_SIGNALS_FILE = REPO_ROOT / "memory" / "data" / "gap_signals.ndjson"
-DEFAULT_SUMMARIES_FILE = REPO_ROOT / "memory" / "data" / "gap_audit_summaries.ndjson"
-DEFAULT_FIREWALL_FILE = REPO_ROOT / "memory" / "data" / "firewall_log.ndjson"
+# Env overrides mirror lv distill's seam (improvement_audit.py). Needed for
+# the frozen (PyInstaller) binary, where __file__ resolves into the extracted
+# bundle temp dir and the repo-relative defaults see empty stores.
+DEFAULT_SIGNALS_FILE = Path(os.environ.get(
+    "LV_GAP_SIGNALS_PATH", REPO_ROOT / "memory" / "data" / "gap_signals.ndjson"))
+DEFAULT_SUMMARIES_FILE = Path(os.environ.get(
+    "LV_GAP_AUDIT_SUMMARIES_PATH",
+    REPO_ROOT / "memory" / "data" / "gap_audit_summaries.ndjson"))
+DEFAULT_FIREWALL_FILE = Path(os.environ.get(
+    "LV_FIREWALL_LOG_PATH", REPO_ROOT / "memory" / "data" / "firewall_log.ndjson"))
 
 # Exact write-side emitter set: src/pipeline.py + src/context_builder.py.
 # If an emitter is added or renamed, the audit flags it as drift until this
