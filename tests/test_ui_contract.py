@@ -99,7 +99,7 @@ REPO = Path(__file__).resolve().parent.parent
 #   v50 (2026-07-27): LV-5 startup blocker — web.py event handlers moved
 #     to app.router.add_event_handler (app-level method removed in
 #     Starlette 1.0; unpinned installs crashed at import). No UI change.
-EXPECTED_VERSION = 50
+EXPECTED_VERSION = 51
 
 
 def _html() -> str:
