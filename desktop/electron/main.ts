@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Notification, session, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Notification, session, shell } from "electron";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
@@ -455,6 +455,14 @@ function installIpc(root: string): void {
       throw new Error("File not found.");
     }
     return readFile(resolved, "utf8");
+  });
+  ipcMain.handle("lv:pick-folder", async () => {
+    // Directory-only picker for the Sources view; never a file dialog.
+    const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
+    if (result.canceled || result.filePaths.length === 0) {
+      return null;
+    }
+    return result.filePaths[0];
   });
   ipcMain.handle("lv:setup:openExternal", (_event, url: string) => {
     // Only allow known safe URLs

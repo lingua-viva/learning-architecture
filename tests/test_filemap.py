@@ -462,3 +462,114 @@ def test_cli_filemap_show(monkeypatch, tmp_path, capsys):
 
 def test_student_data_zone_detector():
     assert is_student_data_zone("~/Students/reports")
+
+
+# --- Error-code plumbing (SPEC_LV_SOURCES_VIEW_FILE_MAP_UX_2026-07-27 §8) ---
+
+
+def test_error_code_derivation_from_exception_class():
+    from src.web import _filemap_error_code
+
+    assert _filemap_error_code(FileNotFoundError(2, "missing")) == "not_found"
+    assert _filemap_error_code(PermissionError(13, "denied")) == "permission_denied"
+    assert _filemap_error_code(ValueError("bad path")) == "invalid_path"
+
+
+def test_error_code_derivation_from_errno():
+    import errno as errno_mod
+
+    from src.web import _filemap_error_code
+
+    denied = OSError(errno_mod.EACCES, "denied")
+    missing = OSError(errno_mod.ENOENT, "missing")
+    not_dir = OSError(errno_mod.ENOTDIR, "not a directory")
+    other = OSError(errno_mod.EIO, "io error")
+    assert _filemap_error_code(denied) == "permission_denied"
+    assert _filemap_error_code(missing) == "not_found"
+    assert _filemap_error_code(not_dir) == "not_found"
+    assert _filemap_error_code(other) == "invalid_path"
+
+
+def test_api_scan_missing_root_returns_code(monkeypatch, tmp_path):
+    _map_path(monkeypatch, tmp_path)
+    response = client.post("/api/filemap/scan", json={"root_path": str(tmp_path / "missing")})
+    assert response.status_code == 400
+    body = response.json()
+    assert body["code"] == "invalid_path"
+    assert "error" in body
+
+
+def test_api_confirm_unknown_path_returns_code(monkeypatch, tmp_path):
+    _map_path(monkeypatch, tmp_path)
+    client.post("/api/filemap/scan", json={"root_path": str(_tree(tmp_path))})
+    response = client.post(
+        "/api/filemap/confirm",
+        json={"path": str(tmp_path / "nowhere"), "purpose": "curriculum_source"},
+    )
+    assert response.status_code == 400
+    assert response.json()["code"] == "invalid_path"
+
+
+def test_api_peek_permission_denied_returns_code(monkeypatch, tmp_path):
+    _map_path(monkeypatch, tmp_path)
+    root = _tree(tmp_path)
+    mapped = run_scan(root)
+    zone = Path(next(path for path in mapped.student_zones if Path(path).name == "Students"))
+    original_mode = zone.stat().st_mode
+    os.chmod(zone, 0o000)
+    try:
+        response = client.post("/api/filemap/peek", json={"zone_path": str(zone)})
+    finally:
+        os.chmod(zone, original_mode)
+    if os.geteuid() == 0:
+        # Root ignores permission bits; the peek succeeds — skip the assertion.
+        return
+    assert response.status_code == 400
+    assert response.json()["code"] == "permission_denied"
+
+
+def test_api_peek_vanished_zone_returns_invalid_path_code(monkeypatch, tmp_path):
+    _map_path(monkeypatch, tmp_path)
+    root = _tree(tmp_path)
+    mapped = run_scan(root)
+    zone = Path(next(path for path in mapped.student_zones if Path(path).name == "Students"))
+    for child in sorted(zone.rglob("*"), reverse=True):
+        child.unlink() if child.is_file() else child.rmdir()
+    zone.rmdir()
+    response = client.post("/api/filemap/peek", json={"zone_path": str(zone)})
+    assert response.status_code == 400
+    # list_files_in_zone raises ValueError for a vanished directory.
+    assert response.json()["code"] == "invalid_path"
+
+
+def test_api_get_reports_existing_root(monkeypatch, tmp_path):
+    _map_path(monkeypatch, tmp_path)
+    root = _tree(tmp_path)
+    client.post("/api/filemap/scan", json={"root_path": str(root)})
+    body = client.get("/api/filemap").json()
+    assert body["roots"], "scan should record a root"
+    assert all(entry["exists"] is True for entry in body["roots"])
+
+
+def test_api_get_reports_missing_root_after_removal(monkeypatch, tmp_path):
+    import shutil
+
+    _map_path(monkeypatch, tmp_path)
+    root = _tree(tmp_path)
+    client.post("/api/filemap/scan", json={"root_path": str(root)})
+    shutil.rmtree(root)
+    body = client.get("/api/filemap").json()
+    assert body["roots"]
+    assert all(entry["exists"] is False for entry in body["roots"])
+
+
+def test_api_get_root_shape_otherwise_unchanged(monkeypatch, tmp_path):
+    _map_path(monkeypatch, tmp_path)
+    root = _tree(tmp_path)
+    client.post("/api/filemap/scan", json={"root_path": str(root)})
+    body = client.get("/api/filemap").json()
+    entry = body["roots"][0]
+    # Pre-existing keys survive alongside the new stat-only `exists` field.
+    for key in ("path", "entry_count"):
+        assert key in entry
+    assert set(body) >= {"version", "roots", "entries", "exclusions", "confirmations", "student_zones"}
