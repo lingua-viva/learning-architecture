@@ -11,12 +11,47 @@ ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MATRIX = ROOT / "curriculum" / "lingua_viva_matrix.yaml"
 
 
-class CurriculumService:
-    """Read-only access to curriculum data from curriculum/lingua_viva_matrix.yaml."""
+def _resolve_live_matrix() -> tuple[Path, dict[str, Any] | None]:
+    """Resolve the default matrix source (SPEC_LIVE_LAYER_READ_PATH §2b).
 
-    def __init__(self, matrix_path: Path | str = DEFAULT_MATRIX):
-        self.matrix_path = Path(matrix_path)
+    The live teacher copy at ``live_root()/curriculum/lingua_viva_matrix.yaml``
+    wins iff it exists and passes the guarded parse (alias-bomb refusal +
+    size cap — the file is teacher-writable) at resolve time. Any failure —
+    missing file, bad parse, guard trip, broken update subsystem import —
+    falls back to the shipped bundle matrix. Returns ``(path, parsed)``;
+    ``parsed`` is pre-validated data for the live path (avoids re-parsing
+    the teacher file with unguarded YAML), or ``None`` for the bundle path
+    (lazy-loaded as today).
+    """
+    try:
+        from src.lingua_viva.reconcile import _parse_yaml_guarded, live_root
+
+        live = live_root() / "curriculum" / "lingua_viva_matrix.yaml"
+        if live.is_file():
+            data = _parse_yaml_guarded(live.read_bytes())
+            if isinstance(data, dict) and data:
+                return live, data
+    except Exception:
+        pass
+    return DEFAULT_MATRIX, None
+
+
+class CurriculumService:
+    """Read-only access to curriculum data from curriculum/lingua_viva_matrix.yaml.
+
+    Default construction resolves the teacher's live matrix copy when one
+    exists and is readable (see ``_resolve_live_matrix``). Routes construct
+    this service per request, so live curriculum edits apply on the next
+    request — no restart needed. Explicit ``matrix_path`` arguments (tests,
+    tooling) bypass live resolution entirely and keep exact prior behavior.
+    """
+
+    def __init__(self, matrix_path: Path | str | None = None):
         self._data: dict[str, Any] | None = None
+        if matrix_path is None:
+            self.matrix_path, self._data = _resolve_live_matrix()
+        else:
+            self.matrix_path = Path(matrix_path)
 
     def _load(self) -> dict[str, Any]:
         if self._data is None:

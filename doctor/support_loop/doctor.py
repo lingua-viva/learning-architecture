@@ -318,6 +318,82 @@ def check_active_surface_mc_bloat() -> CheckResult:
     return _check("pass", "active_surface_mc_bloat", "No obvious MC platform bloat found in active Lingua Viva surfaces.")
 
 
+def check_updates_pending() -> CheckResult:
+    """Parked template updates must be a visible health item, never a
+    silent state (SPEC_ONE_BUTTON_UPDATE_2026-07-27 Phase 3 — the pacdiff
+    lesson: `.new` files rot unseen until 'the app broke'). Always WARN,
+    never FAIL — preserved customizations are working-as-designed."""
+    try:
+        from src.lingua_viva.reconcile import list_pending
+    except Exception as exc:
+        return _check("pass", "updates_pending", "Update reconcile module unavailable; skipped.", "recommended", str(exc))
+    try:
+        pending = list_pending()
+    except Exception as exc:
+        return _check("warn", "updates_pending", "Could not read pending template updates.", "recommended", str(exc))
+    if pending:
+        count = len(pending)
+        plural = "s" if count != 1 else ""
+        return _check(
+            "warn",
+            "updates_pending",
+            f"{count} template update{plural} waiting — your customized versions were preserved.",
+            "recommended",
+            "\n".join(item["path"] for item in pending[:20]),
+        )
+    return _check("pass", "updates_pending", "No template updates waiting.")
+
+
+def check_update_downgrade() -> CheckResult:
+    """Downgrade guard (Firefox-model, warn-not-block): the manifest was
+    last written by a newer engine than the one running now."""
+    try:
+        from src.lingua_viva.reconcile import downgrade_detected
+    except Exception as exc:
+        return _check("pass", "update_downgrade", "Update reconcile module unavailable; skipped.", "recommended", str(exc))
+    try:
+        downgrade = downgrade_detected()
+    except Exception as exc:
+        return _check("warn", "update_downgrade", "Could not read the update manifest version stamp.", "recommended", str(exc))
+    if downgrade:
+        return _check(
+            "warn",
+            "update_downgrade",
+            "This app is older than the version that last ran — template updates are paused until you're back on the newer version.",
+            "recommended",
+            f"last ran {downgrade['last_run_engine_version']}, running {downgrade['engine_version']}",
+        )
+    return _check("pass", "update_downgrade", "No downgrade detected.")
+
+
+def check_live_templates() -> CheckResult:
+    """Live-layer overlay files that silently didn't apply must be a visible
+    health item (SPEC_LIVE_LAYER_READ_PATH_2026-07-27 §2d — the pacdiff
+    rot-unseen lesson applied to the read path): a teacher edited a file,
+    nothing changed, no one said why. Lists live education lenses that
+    failed the guarded parse and files skipped by the core/professional
+    namespace guard. Always WARN, never FAIL — the bundle copy is serving."""
+    try:
+        from lenses.engine import scan_live_lens_issues
+    except Exception as exc:
+        return _check("pass", "live_templates", "Lens engine unavailable; skipped.", "recommended", str(exc))
+    try:
+        issues = scan_live_lens_issues()
+    except Exception as exc:
+        return _check("warn", "live_templates", "Could not scan live template lenses.", "recommended", str(exc))
+    if issues:
+        count = len(issues)
+        plural = "s" if count != 1 else ""
+        return _check(
+            "warn",
+            "live_templates",
+            f"{count} customized lens file{plural} could not be used — the shipped version is serving instead.",
+            "recommended",
+            "\n".join(f"{item['path']}: {item['reason']}" for item in issues[:20]),
+        )
+    return _check("pass", "live_templates", "All live template lenses loaded cleanly.")
+
+
 def check_privacy_paths() -> CheckResult:
     risks: list[str] = []
     expected_exclusions: list[str] = []
@@ -362,6 +438,9 @@ def run_doctor(write_log: bool = True) -> dict[str, Any]:
         check_publication_safety(),
         check_readme_overclaims(),
         check_active_surface_mc_bloat(),
+        check_updates_pending(),
+        check_update_downgrade(),
+        check_live_templates(),
         check_privacy_paths(),
     ]
     status = worst_status(checks)

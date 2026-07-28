@@ -75,13 +75,34 @@ class Lens:
 
 
 class LensEngine:
-    """Manages and applies lenses."""
+    """Manages and applies lenses.
+
+    Live-layer overlay (SPEC_LIVE_LAYER_READ_PATH_2026-07-27): on default
+    construction (no ``lenses_dir``), after the bundle lenses load, every
+    ``*.yaml`` under ``live_root()/lenses/education/`` is overlaid — live
+    wins by case-folded lens ``name``. This is what makes teacher edits
+    preserved by the one-button update system actually change behavior.
+    Explicit ``lenses_dir`` (tests) keeps exact bundle-only behavior.
+    Every failure path lands on shipped-bundle behavior, never a crash.
+    """
 
     def __init__(self, lenses_dir: Optional[Path] = None):
         self.lenses: dict[str, Lens] = {}
+        # Live-overlay files skipped with a reason (bad parse, guard trip,
+        # namespace collision). Doctor's live_templates check surfaces these
+        # via scan_live_lens_issues() — a skip must never be a silent state.
+        self.skipped_live: list[dict] = []
+        # Case-folded names owned by bundle core/ and professional/ lenses.
+        # The live education overlay may only shadow or add names outside
+        # this set — a teacher file named "protection" must not hijack a
+        # core lens via dict-key overwrite.
+        self._protected_names: set[str] = set()
+        overlay = lenses_dir is None
         if lenses_dir is None:
             lenses_dir = Path(__file__).parent
         self._load_lenses(lenses_dir)
+        if overlay:
+            self._overlay_live_lenses()
 
     def _load_lenses(self, lenses_dir: Path) -> None:
         for subdir in ["core", "professional", "education"]:
@@ -94,6 +115,59 @@ class LensEngine:
                 if data:
                     lens = Lens(data)
                     self.lenses[lens.name] = lens
+                    if subdir in ("core", "professional"):
+                        self._protected_names.add(lens.name.casefold())
+
+    def _overlay_live_lenses(self) -> None:
+        """Overlay teacher-editable live-layer lenses over the bundle set.
+
+        Failure direction is law: a broken update subsystem (ImportError),
+        an unreadable dir, or any bad file must leave the engine exactly as
+        the bundle loaded it — skip + record, never raise.
+        """
+        try:
+            from src.lingua_viva.reconcile import _parse_yaml_guarded, live_root
+        except Exception:
+            # Update subsystem unavailable → bundle-only, today's behavior.
+            return
+        try:
+            live_dir = live_root() / "lenses" / "education"
+            if not live_dir.is_dir():
+                return
+            yaml_files = sorted(live_dir.glob("*.yaml"))
+        except Exception:
+            return
+        for yaml_file in yaml_files:
+            try:
+                data = _parse_yaml_guarded(yaml_file.read_bytes())
+            except Exception as exc:
+                self.skipped_live.append({
+                    "path": str(yaml_file),
+                    "reason": f"could not be read: {exc}",
+                })
+                continue
+            if not isinstance(data, dict) or not data:
+                self.skipped_live.append({
+                    "path": str(yaml_file),
+                    "reason": "not a YAML mapping",
+                })
+                continue
+            lens = Lens(data)
+            folded = lens.name.casefold()
+            if folded in self._protected_names:
+                self.skipped_live.append({
+                    "path": str(yaml_file),
+                    "reason": (
+                        f"name '{lens.name}' is owned by a core/professional "
+                        "lens and cannot be shadowed from the live layer"
+                    ),
+                })
+                continue
+            # Live wins by case-folded name: drop a bundle entry whose name
+            # differs only in case before registering the live copy.
+            for existing in [k for k in self.lenses if k.casefold() == folded]:
+                del self.lenses[existing]
+            self.lenses[lens.name] = lens
 
     def get_active_lenses(
         self,
@@ -130,3 +204,15 @@ class LensEngine:
 
     def get_lens(self, name: str) -> Optional[Lens]:
         return self.lenses.get(name)
+
+
+def scan_live_lens_issues() -> list[dict]:
+    """Recompute the live-overlay skip list for Doctor's live_templates check.
+
+    Constructs a default engine (bundle + overlay, <100ms budget) and returns
+    its ``skipped_live`` records: files that failed the guarded parse and
+    files skipped by the core/professional namespace guard. The pacdiff
+    lesson applied to the read path — a teacher edit silently not applying
+    must be a visible health item.
+    """
+    return LensEngine().skipped_live
