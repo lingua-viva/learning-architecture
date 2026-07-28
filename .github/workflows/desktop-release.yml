@@ -94,7 +94,7 @@ jobs:
         timeout-minutes: 15
         run: ./node_modules/.bin/electron-builder ${{ matrix.dist_args }}
 
-      - name: Notarize macOS app
+      - name: Notarize macOS DMG
         if: matrix.os == 'macos-latest'
         env:
           APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
@@ -104,28 +104,30 @@ jobs:
           # Write the API key
           mkdir -p $RUNNER_TEMP/api-key
           echo "$APPLE_API_KEY_BASE64" | base64 --decode > $RUNNER_TEMP/api-key/AuthKey.p8
-          
-          # Find the .app
-          APP=$(find desktop/release -name "*.app" -type d | head -1)
-          if [ -z "$APP" ]; then
-            echo "::error::No .app found to notarize"
+
+          # Notarize the DMG itself (the artifact that ships), not the loose .app.
+          # Submitting the DMG covers the nested .app, and stapling the DMG means
+          # the ticket travels with the download — first launch works offline.
+          # (Previous version stapled the loose .app AFTER the DMG was packaged,
+          # so the shipped DMG carried no staple — online-only Gatekeeper pass.)
+          DMG=$(find desktop/release -maxdepth 1 -name "*.dmg" -type f | head -1)
+          if [ -z "$DMG" ]; then
+            echo "::error::No .dmg found to notarize"
             exit 1
           fi
-          echo "Notarizing: $APP"
-          
-          # Zip the .app for submission
-          ditto -c -k --keepParent "$APP" "$RUNNER_TEMP/app-to-notarize.zip"
-          
+          echo "Notarizing: $DMG"
+
           # Submit to Apple
-          xcrun notarytool submit "$RUNNER_TEMP/app-to-notarize.zip" \
+          xcrun notarytool submit "$DMG" \
             --key "$RUNNER_TEMP/api-key/AuthKey.p8" \
             --key-id "$APPLE_API_KEY_ID" \
             --issuer "$APPLE_API_ISSUER" \
             --wait --timeout 10m
-          
-          # Staple the ticket
-          xcrun stapler staple "$APP"
-          echo "✓ Notarization complete and stapled"
+
+          # Staple the ticket to the DMG
+          xcrun stapler staple "$DMG"
+          xcrun stapler validate "$DMG"
+          echo "✓ DMG notarized, stapled, and validated"
 
       - name: Verify macOS signature
         if: matrix.os == 'macos-latest'
