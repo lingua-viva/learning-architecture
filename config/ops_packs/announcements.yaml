@@ -1,0 +1,51 @@
+# Ops Workflow Pack — Announcements (launch pack, v1 parity)
+# Spec: dev/specs/SPEC_LV_SLACK_OPS_V2_WORKFLOW_PACKS_2026-07-27.md §5 pack 2
+# Pack schema: see the commented header in absence_coverage.yaml.
+#
+# `announcement` is POSITIONAL, not lexical (spec §3.1): it is the
+# ops-channel high-trust default bucket — any ops-channel post that no
+# keyword-triggered category claims. Expressed as channel_default: true
+# with no vocabulary. `reminder` is the pack's keyword-triggered half.
+# Both broadcast to every teacher's daily file.
+
+id: announcements
+name: Announcements
+description: >
+  Admin announcements in the ops channel (the default bucket for posts no
+  other category claims) plus keyword-triggered reminders. Both broadcast
+  to every teacher's daily file.
+enabled_by_default: true
+
+sections:
+  - name: Announcements
+    rank: 40
+
+categories:
+  - id: reminder
+    priority: 70
+    section: Announcements
+    broadcast: true
+    vocabulary:
+      - '\b(due today|due tomorrow|due by|due on|don''?t forget|reminder|forms? (?:are )?due|deadline)\b'
+
+  - id: announcement
+    priority: 80
+    section: Announcements
+    broadcast: true
+    channel_default: true
+
+samples:
+  - text: "Welcome back everyone — spirit week starts next week!"
+    expect:
+      category: announcement
+      channel: ops
+  - text: "Reminder: field trip forms are due Friday."
+    expect:
+      category: reminder
+      confidence: high
+      channel: ops
+  - text: "Don't forget picture day photos this week."
+    expect:
+      category: reminder
+      confidence: high
+      channel: ops

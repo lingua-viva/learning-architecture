@@ -1,0 +1,43 @@
+# Ops Workflow Pack — Facilities (launch pack, v1 parity; capture-only)
+# Spec: dev/specs/SPEC_LV_SLACK_OPS_V2_WORKFLOW_PACKS_2026-07-27.md §5 pack 5
+# Pack schema: see the commented header in absence_coverage.yaml.
+#
+# enabled_by_default is TRUE because the v1-parity compile must preserve
+# v1 behavior for the live install (v1 captures facilities — spec §3.1).
+# For NEW schools the setup catalog presents this pack unchecked
+# (default_for_new_schools: false, spec §10 open question 3) — that is a
+# setup-panel presentation hint, not a compile default.
+
+id: facilities
+name: Facilities
+description: >
+  Broken projectors, supply requests, things that need fixing — captured
+  to the daily file. No workflow; capture-only in v2, same as v1.
+enabled_by_default: true
+default_for_new_schools: false
+
+sections:
+  - name: Announcements
+    rank: 40
+
+categories:
+  - id: facilities
+    priority: 60
+    section: Announcements
+    broadcast: false
+    vocabulary:
+      - '\b(not working|isn''?t working|broken|out of order|need more (?:paper|supplies|markers|chalk|copies|materials)|projector|photocopier|printer\b.*\b(?:jam|down|issue))\b'
+
+samples:
+  - text: "The projector in room 12 isn't working."
+    expect:
+      category: facilities
+      confidence: high
+  - text: "Photocopier is broken again."
+    expect:
+      category: facilities
+      confidence: high
+  - text: "Need more markers for the art room."
+    expect:
+      category: facilities
+      confidence: high

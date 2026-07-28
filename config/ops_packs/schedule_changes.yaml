@@ -1,0 +1,44 @@
+# Ops Workflow Pack — Schedule Changes (launch pack, v1 parity)
+# Spec: dev/specs/SPEC_LV_SLACK_OPS_V2_WORKFLOW_PACKS_2026-07-27.md §5 pack 3
+# Pack schema: see the commented header in absence_coverage.yaml.
+#
+# Capture-only vocabulary pack: schedule changes broadcast to every
+# teacher's daily file under their own section. No interaction flow.
+
+id: schedule_changes
+name: Schedule Changes
+description: >
+  Assembly moved, events postponed or cancelled, time changes — captured
+  from the ops channel and broadcast to every teacher's daily file.
+enabled_by_default: true
+
+sections:
+  - name: Schedule Changes
+    rank: 10
+
+categories:
+  - id: schedule_change
+    priority: 40
+    section: Schedule Changes
+    broadcast: true
+    vocabulary:
+      - '\b(moved to|moved from|postponed|cancell?ed|rescheduled|delayed|schedule change|time change|now at\b|pushed to)\b'
+
+samples:
+  - text: "Assembly moved to 10:30."
+    expect:
+      category: schedule_change
+      confidence: high
+      time_window: '10:30'
+      channel: ops
+  - text: "Tomorrow's fire drill is postponed."
+    expect:
+      category: schedule_change
+      confidence: high
+      date_for: '+1d'
+      channel: ops
+  - text: "Lunch is now at 12:15 for the whole school."
+    expect:
+      category: schedule_change
+      confidence: high
+      channel: ops

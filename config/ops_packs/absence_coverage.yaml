@@ -1,0 +1,107 @@
+# Ops Workflow Pack — Absence & Coverage (launch pack, v1 parity)
+# Spec: dev/specs/SPEC_LV_SLACK_OPS_V2_WORKFLOW_PACKS_2026-07-27.md §5 pack 1
+#
+# Pack schema (all packs; loader: src/education/ops_packs.py):
+#   id                  stable pack id (bot-spec references this)
+#   name / description  catalog display
+#   enabled_by_default  membership in the v1-parity default compile (§3.3)
+#   sections:           daily-file sections this pack contributes
+#     - name            section heading
+#       rank            render order (ascending; core: Announcements=40, To Review=100)
+#       always_render   render even when empty (with empty_line)
+#       empty_line      line shown when always_render and no items
+#   categories:         registry entries (§3.1) — vocabulary & routing ARE data
+#     - id              category id (records/classifier); 'other' is core, never a pack
+#       priority        classification priority (ascending; earlier wins — load-bearing)
+#       section         daily-file section for this category
+#       broadcast       true = appears in every teacher's daily file
+#       review_required_default  true = To Review even at high confidence
+#       capability      code-backed interaction flow this category enables
+#                       (flows stay code — spec §3(b); a pack only enables and
+#                       parameterizes them). Omit for capture-only categories.
+#       channel_default true = positional ops-channel default bucket, NOT
+#                       keyword-triggered; must carry no vocabulary (§3.1)
+#       vocabulary      list of case-insensitive regexes; category fires when
+#                       any matches. Entity extraction (dates/times/periods/
+#                       names) is CORE (§3(c)) — packs never duplicate it.
+#   samples:            test-corpus sentences (§7). Date expectations are
+#     - text            RELATIVE ("+1d") against an injected reference today,
+#       expect          so corpus runs never rot. expect.channel: ops runs the
+#                       sample as an ops-channel post (default: teacher DM).
+#
+# This pack carries three categories because they share one interaction
+# machine: the absence flow (receipt + lesson-notes window + emergency plan
+# + cancel), the coverage card + claim state machine, and the text-claim
+# heuristic. Lesson notes are a sub-flow of the absence capability — there
+# is deliberately NO substitute-notes pack (spec §3.1 correction).
+#
+# The absence vocabulary keeps the "out of <thing>" lookahead (hardening
+# pass 11, 2026-07-27): "I'm out of paper" is supply talk, not an absence,
+# while "out of town / out of (the) office / out of school / out of the
+# building" still are. Its regression tests live in tests/test_ops_classifier.py.
+
+id: absence_coverage
+name: Absence & Coverage
+description: >
+  Teacher absence reporting with lesson notes and emergency plan, coverage
+  request cards with a Claim button, and text claims. The heart of the
+  daily operations assistant.
+enabled_by_default: true
+
+sections:
+  - name: Coverage
+    rank: 30
+    always_render: true
+    empty_line: '- No coverage assigned to you today.'
+
+categories:
+  - id: absence
+    priority: 10
+    section: Coverage
+    broadcast: false
+    capability: absence_flow
+    vocabulary:
+      - '\b(i''?m out(?! of (?!(?:town|the office|office|school|the building)\b))|i am out(?! of (?!(?:town|the office|office|school|the building)\b))|i''?ll be out(?! of (?!(?:town|the office|office|school|the building)\b))|i will be out(?! of (?!(?:town|the office|office|school|the building)\b))|i''?m absent|i am absent|i''?m sick|i am sick|i''?m not feeling well|i can''?t come in|i cannot come in|i won''?t be in|i will not be in|calling in sick)\b'
+
+  - id: coverage_claim
+    priority: 20
+    section: Coverage
+    broadcast: false
+    capability: text_claim
+    vocabulary:
+      - '\b(i can cover|i''?ll cover|i will cover|i''?ll take it|i can take it|i''?ll claim)\b'
+
+  - id: coverage_request
+    priority: 30
+    section: Coverage
+    broadcast: false
+    capability: coverage_machine
+    vocabulary:
+      - '\b(need (?:a )?substitute|need (?:a )?sub\b|substitute for|need coverage|needs coverage|coverage for|who can cover|can (?:someone|anyone|somebody) cover|cover (?:my|the|her|his)\b)'
+
+samples:
+  - text: "I'm out tomorrow. Fever. Need coverage for 2nd and 4th period."
+    expect:
+      category: absence
+      confidence: high
+      date_for: '+1d'
+      periods: [2, 4]
+      wants_coverage: true
+  - text: "I'm sick today, can't come in."
+    expect:
+      category: absence
+      confidence: high
+      date_for: '+0d'
+  - text: "Need substitute for Claudia, Grade 4, 9:00-11:30."
+    expect:
+      category: coverage_request
+      confidence: high
+      time_window: '9:00-11:30'
+      subject: Claudia
+  - text: "I can cover it."
+    expect:
+      category: coverage_claim
+      confidence: high
+  - text: "I'm out of paper for the copier."
+    expect:
+      category: other

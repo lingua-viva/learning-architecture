@@ -1,0 +1,47 @@
+# Ops Workflow Pack — Student Logistics (launch pack, v1 parity)
+# Spec: dev/specs/SPEC_LV_SLACK_OPS_V2_WORKFLOW_PACKS_2026-07-27.md §5 pack 4
+# Pack schema: see the commented header in absence_coverage.yaml.
+#
+# Capture-only vocabulary pack. The subject-name confidence rule (a
+# logistics message without an identifiable student name asks "Who is
+# this about?") stays CODE (spec §3.1) — it is a confidence policy, not
+# vocabulary. Never touches student lenses: these are operational notes
+# in the teacher's daily file only.
+
+id: student_logistics
+name: Student Logistics
+description: >
+  Early pickups, late arrivals, bus notes — operational logistics for the
+  teacher's day. Captured to the daily file; never touches student lenses.
+enabled_by_default: true
+
+sections:
+  - name: Student Logistics
+    rank: 20
+
+categories:
+  - id: student_logistics
+    priority: 50
+    section: Student Logistics
+    broadcast: false
+    vocabulary:
+      - '\b(early pickup|early pick-up|picked up early|leaving early at|late arrival|arriving late|will be late|absent today|absent tomorrow|out sick today|bus (?:delay|late|change)|nurse''?s? office|front office note)\b'
+
+samples:
+  - text: "Sofia has an early pickup at 1:45."
+    expect:
+      category: student_logistics
+      confidence: high
+      subject: Sofia
+      time_window: '1:45'
+  - text: "Mateo will be late tomorrow morning."
+    expect:
+      category: student_logistics
+      confidence: high
+      subject: Mateo
+      date_for: '+1d'
+  - text: "Early pickup for Lena at 2:00."
+    expect:
+      category: student_logistics
+      confidence: high
+      subject: Lena

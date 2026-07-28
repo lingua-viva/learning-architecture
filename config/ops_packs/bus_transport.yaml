@@ -1,0 +1,51 @@
+# Ops Workflow Pack — Bus / Transport (backlog pack, spec §5 pack 6)
+# Spec: dev/specs/SPEC_LV_SLACK_OPS_V2_WORKFLOW_PACKS_2026-07-27.md §5
+# Pack schema: see the commented header in absence_coverage.yaml.
+#
+# The first PROOF pack: vocabulary + section only, no capability — a new
+# pack ships without touching any flow code (spec §5 backlog promise).
+# NOT part of the v1-parity compile (enabled_by_default: false): the
+# golden suite and the live install never see it until an admin enables
+# it in Bot Setup and the corpus run passes.
+#
+# Vocabulary deliberately avoids the launch packs' triggers so priority
+# never has to arbitrate: no "delayed"/"moved" (schedule_changes, prio
+# 40), no "bus delay|bus late|bus change" contiguous forms or "will be
+# late" (student_logistics, prio 50).
+
+id: bus_transport
+name: Bus / Transport
+description: >
+  Bus running late, route changes, bus duty and loop logistics — captured
+  from the ops channel and broadcast to every teacher's daily file.
+enabled_by_default: false
+default_for_new_schools: false
+
+sections:
+  - name: Bus & Transport
+    rank: 50
+
+categories:
+  - id: bus_transport
+    priority: 70
+    section: Bus & Transport
+    broadcast: true
+    vocabulary:
+      - '\b(bus (?:\d+ )?(?:is )?running (?:\S+ ){0,3}late|buses (?:are )?running (?:\S+ ){0,3}late|late bus\b|bus duty|bus loop|bus route|no bus service|bus riders?)\b'
+
+samples:
+  - text: "Bus 7 is running about 15 minutes late."
+    expect:
+      category: bus_transport
+      confidence: high
+      channel: ops
+  - text: "The late bus is full today, walkers go out first."
+    expect:
+      category: bus_transport
+      confidence: high
+      channel: ops
+  - text: "Bus duty rotation starts this afternoon in the loop."
+    expect:
+      category: bus_transport
+      confidence: high
+      channel: ops

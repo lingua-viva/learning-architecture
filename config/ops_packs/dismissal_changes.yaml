@@ -1,0 +1,51 @@
+# Ops Workflow Pack — Dismissal Changes (backlog pack, spec §5 pack 7)
+# Spec: dev/specs/SPEC_LV_SLACK_OPS_V2_WORKFLOW_PACKS_2026-07-27.md §5
+# Pack schema: see the commented header in absence_coverage.yaml.
+#
+# Vocabulary + section only, no capability (spec §5 backlog promise).
+# NOT part of the v1-parity compile (enabled_by_default: false).
+#
+# Vocabulary avoids launch-pack triggers: no "early pickup|picked up
+# early|leaving early at" (student_logistics, prio 50), no
+# "moved to|rescheduled" (schedule_changes, prio 40) — "dismissal moved
+# to 2:30" is a schedule change and correctly stays one.
+
+id: dismissal_changes
+name: Dismissal Changes
+description: >
+  Early dismissal, who goes home with whom, car line and walker changes —
+  captured from the ops channel and broadcast to every teacher's daily
+  file. Operational notes only; never touches student lenses.
+enabled_by_default: false
+default_for_new_schools: false
+
+sections:
+  - name: Dismissal
+    rank: 60
+
+categories:
+  - id: dismissal_change
+    priority: 75
+    section: Dismissal
+    broadcast: true
+    vocabulary:
+      - '\b(early dismissal|dismissal (?:is )?at\b|goes home with|going home with|car ?line|pickup line|walkers? (?:go|dismiss|today)|half[- ]day dismissal)\b'
+
+samples:
+  - text: "Early dismissal at 1:00 for conferences."
+    expect:
+      category: dismissal_change
+      confidence: high
+      time_window: '1:00'
+      channel: ops
+  - text: "Marco goes home with his grandmother today."
+    expect:
+      category: dismissal_change
+      confidence: high
+      date_for: '+0d'
+      channel: ops
+  - text: "Car line moves to the side entrance while the lot is repaved."
+    expect:
+      category: dismissal_change
+      confidence: high
+      channel: ops
