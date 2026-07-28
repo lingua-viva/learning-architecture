@@ -93,7 +93,10 @@ REPO = Path(__file__).resolve().parent.parent
 #     reclassify route, corpus run/sentences/rules-decide routes with
 #     the go-live + candidate-approve gates, PUT staleness guard, and
 #     the Bot Setup panel's teach/corpus/go-live controls.
-EXPECTED_VERSION = 48
+#   v49 (2026-07-27): Slack ops v2 packs Phase 6 stretch — shadow
+#     suggester route + panel line; backlog packs bus_transport and
+#     dismissal_changes ship as data, out of the parity compile.
+EXPECTED_VERSION = 49
 
 
 def _html() -> str:

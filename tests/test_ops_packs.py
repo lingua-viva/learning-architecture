@@ -83,7 +83,10 @@ def test_parity_priority_order_equals_v1_dispatch_chain():
 
 def test_parity_category_set_equals_v1_categories():
     # v1 ops_records.CATEGORIES, order-insensitive (the priority order is
-    # asserted separately above).
+    # asserted separately above). The record CATALOG additionally carries
+    # the shipped backlog packs' categories (spec §5 packs 6-7) so their
+    # records stay loadable — but neither is in the v1-parity COMPILE
+    # (test_parity_priority_order_equals_v1_dispatch_chain pins that).
     assert set(known_categories()) == {
         "absence",
         "coverage_request",
@@ -94,7 +97,7 @@ def test_parity_category_set_equals_v1_categories():
         "facilities",
         "reminder",
         "other",
-    }
+    } | {"bus_transport", "dismissal_change"}
 
 
 def test_parity_section_mapping_equals_v1_category_sections():

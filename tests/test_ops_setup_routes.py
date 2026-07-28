@@ -85,7 +85,13 @@ def test_catalog_lists_launch_packs_secret_free(ops_env):
         "facilities",
         "schedule_changes",
         "student_logistics",
+        # Backlog packs (spec §5 packs 6-7): shipped but NOT in the
+        # v1-parity compile — presented unchecked, vocabulary-only.
+        "bus_transport",
+        "dismissal_changes",
     }
+    assert packs["bus_transport"]["enabled_by_default"] is False
+    assert packs["dismissal_changes"]["enabled_by_default"] is False
     # Facilities: launch-enabled for v1 parity, unchecked for new schools.
     assert packs["facilities"]["enabled_by_default"] is True
     assert packs["facilities"]["default_for_new_schools"] is False

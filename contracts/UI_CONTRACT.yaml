@@ -218,7 +218,17 @@
 #     teach panel, Run-corpus-test table, add-test-sentence form,
 #     Go live / Pause button, Approve/Reject on candidate rules.
 #     Teacher-visible Daily behavior still unchanged — admin panel only.
-version: 48
+#   v49 (2026-07-27): Slack Ops v2 packs Phase 6 stretch
+#     (SPEC_LV_SLACK_OPS_V2_WORKFLOW_PACKS_2026-07-27 §5 packs 6-7, §8).
+#     src/web.py: GET /api/ops/setup/suggestions — shadow suggester,
+#     weekly would-have-matched counts of unmatched traffic (other +
+#     positional announcement) against disabled packs' vocabularies;
+#     counts and pack names only, never record text. static/index.html:
+#     Bot Setup panel renders the suggestion line above the packs
+#     checklist (suggestion only — enabling stays checklist + Save +
+#     corpus run). Backlog packs bus_transport/dismissal_changes ship as
+#     data (enabled_by_default: false — v1-parity compile untouched).
+version: 49
 files:
   - static/index.html
   - static/sw.js
