@@ -742,6 +742,7 @@
     */
     const teacherNav = [
       ["home", "Home", "🏠"],
+      ["daily", "Daily", "🌅"],
       ["plan", "Plan", "📋"],
       ["prepare", "Prepare", "✏️"],
       ["observe", "Observe", "👁️"],
@@ -759,6 +760,7 @@
     ];
     const utilityNav = [
       ["slack", "Slack", "💬"],
+      ["sources", "Sources", "📁"],
       ["why", "Why", "❓"],
       ["health", "Health", "❤️"],
       ["privacy", "Privacy", "🔒"],
@@ -789,7 +791,11 @@
         ...options
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || `Request failed: ${response.status}`);
+      if (!response.ok) {
+        const error = new Error(data.error || `Request failed: ${response.status}`);
+        if (data.code) error.code = data.code;
+        throw error;
+      }
       return data;
     }
 
@@ -855,6 +861,7 @@
     async function renderView() {
       const views = {
         home: renderHome,
+        daily: renderDaily,
         plan: renderPlan,
         prepare: renderPrepare,
         observe: renderObserve,
@@ -868,6 +875,7 @@
         profile: renderProfile,
         settings: renderSettings,
         slack: renderSlack,
+        sources: renderSources,
         reflect: renderReflect,
         programme: renderAdmin,
         evidence: renderAdmin,
@@ -890,8 +898,18 @@
       const planHtml = today.configured
         ? `<h2>Good morning.</h2><p>Today: <strong>${escapeHtml(today.grade)} — ${escapeHtml(today.unit)}</strong></p><p>CEFR targets: ${escapeHtml((today.cefr_targets || []).join(", "))}</p><p>Source: ${escapeHtml(today.source || "")}</p>`
         : `<h2>Good morning.</h2><p>Set up your schedule in Settings → My Schedule to see today's plan.</p>`;
+      const showSourcesNudge = !data.filemap && localStorage.getItem(SOURCES_SKIP_KEY) !== "1";
       $("content").innerHTML = `
         <div class="view-head"><div>${planHtml}</div><span class="badge ${data.health?.status === "OK" ? "ok" : "warn"}">System: ${escapeHtml(data.health?.status || "WARN")}</span></div>
+        ${showSourcesNudge ? `
+        <div class="panel" id="sources-nudge" style="margin-bottom:14px;">
+          <h3>Connect your teaching folders</h3>
+          <p>Tell Lingua Viva where your teaching materials live. It looks at folder names and file names only — it never opens your files.</p>
+          <div class="row">
+            <button id="nudge-open-sources" class="primary" type="button">Open Sources</button>
+            <button id="nudge-dismiss" type="button">Not now</button>
+          </div>
+        </div>` : ""}
         <div class="grid two">
           <div class="panel">
             <h3>⚠️ ${data.attention.unobserved_count} observation to renew</h3>
@@ -906,6 +924,14 @@
           <div class="panel"><h3>This week</h3><p>${data.recent.observations_this_week} observations captured</p><p>Last reflection: ${escapeHtml(data.recent.last_reflection || "not recorded")}</p></div>
           <div class="panel"><h3>Health</h3><p>${escapeHtml(data.health?.summary || "")}</p></div>
         </div>`;
+      if (showSourcesNudge) {
+        $("nudge-open-sources").addEventListener("click", () => { state.view = "sources"; renderShell(); renderView(); });
+        $("nudge-dismiss").addEventListener("click", () => {
+          localStorage.setItem(SOURCES_SKIP_KEY, "1");
+          const nudge = $("sources-nudge");
+          if (nudge) nudge.remove();
+        });
+      }
       $("home-observe").addEventListener("click", () => { state.view = "observe"; renderShell(); renderView(); });
       $("home-students").addEventListener("click", () => { state.view = "students"; renderShell(); renderView(); });
     }
@@ -1773,8 +1799,6 @@
       setTitle("Settings", "local configuration");
       let status = {ollama_reachable: false, model: null};
       try { status = await api("/api/provider"); } catch {}
-      let driveStatus = {configured: false, setup_message: "Google Drive import is not configured on this machine."};
-      try { driveStatus = await api("/api/google-drive/status"); } catch {}
       const overview = await ensureOverview();
       const students = await ensureStudents();
       $("content").innerHTML = `
@@ -1809,48 +1833,13 @@
           <span id="schedule-status" class="badge" style="margin-left:8px;">stored on this machine</span>
         </div>
         <div class="panel" style="margin-top:14px;">
-          <h3>Curriculum folders</h3>
-          <div class="form-grid">
-            <label>Folder path<input id="filemap-path" placeholder="~/Documents/Teaching"></label>
-            <label>Depth<select id="filemap-depth"><option>2</option><option selected>3</option><option>4</option></select></label>
-          </div>
-          <div class="row" style="margin-top:12px;">
-            <button id="scan-filemap" class="primary" type="button">Scan Folder</button>
-            <button id="clear-filemap" type="button">Clear Map</button>
-          </div>
-          <div id="filemap-status" class="source-line" style="margin-top:12px;"></div>
-          <div id="filemap-summary" style="margin-top:12px;"></div>
-        </div>
-        <div class="panel" style="margin-top:14px;">
           <div class="view-head">
-            <div><h3>Google Drive</h3><p>Explicitly import selected Drive files into this local runtime cache. Nothing syncs back to Drive.</p></div>
-            <span id="drive-status-badge" class="badge ${driveStatus.configured ? "ok" : "warn"}">${driveStatus.configured ? "configured" : "setup required"}</span>
+            <div><h3>Template Updates</h3><p>When an app update ships a new version of a template you customized, your version is kept and the new one waits here.</p></div>
+            <span id="updates-pending-badge" class="badge">checking...</span>
           </div>
-          <p id="drive-status-message">${escapeHtml(driveStatus.setup_message || "")}</p>
-          <div class="form-grid">
-            <label>Query<input id="drive-query" placeholder="filename or topic"></label>
-            <label>Folder/root filter<input id="drive-folder" placeholder="${driveStatus.root_id_set ? "configured root, or override" : "optional folder ID"}"></label>
-          </div>
-          <div class="row" style="margin-top:12px;">
-            <button id="list-drive-files" class="primary" type="button">List Drive Files</button>
-            <span class="badge">local import only</span>
-            <span class="badge">no Drive upload</span>
-          </div>
-          <div id="drive-list-result" style="margin-top:12px;"></div>
-          <div class="form-grid" style="margin-top:12px;">
-            <label>Purpose<select id="drive-purpose">
-              <option value="unassigned">Unassigned</option>
-              <option value="student_lens_source">Student lens source</option>
-              <option value="curriculum_unit_source">Curriculum unit source</option>
-              <option value="teacher_artifact_source">Teacher artifact source</option>
-            </select></label>
-            <label id="drive-student-label">Student<select id="drive-student">
-              <option value="">Choose student</option>
-              ${students.map(student => `<option value="${escapeHtml(student.student_id)}">${escapeHtml(student.display_name || student.student_id)}</option>`).join("")}
-            </select></label>
-          </div>
-          <button id="import-drive-selected" type="button" style="margin-top:12px;">Import Selected</button>
-          <div id="drive-import-result" style="margin-top:12px;"></div>
+          <div id="updates-pending-list" style="margin-top:12px;"></div>
+          <div id="updates-diff-area" style="margin-top:12px;display:none;"><pre id="updates-diff-content" style="overflow:auto;max-height:320px;"></pre></div>
+          <div id="updates-status" class="voice-hint" style="margin-top:8px;"></div>
         </div>
         <div class="panel" style="margin-top:14px;">
           <div class="view-head">
@@ -1873,10 +1862,74 @@
           <div id="extraction-result-area" style="margin-top:12px;"></div>
         </div>`;
       await renderScheduleControls(overview);
-      await renderFileMapControls();
-      renderGoogleDriveControls();
       renderProviderControls();
       await renderExtractionControls();
+      await renderUpdateControls();
+    }
+
+    async function renderUpdateControls() {
+      const badge = $("updates-pending-badge");
+      const list = $("updates-pending-list");
+      const statusEl = $("updates-status");
+      const diffArea = $("updates-diff-area");
+      const diffContent = $("updates-diff-content");
+      if (!badge || !list) return;
+      let info = {pending: [], downgrade: false, message: ""};
+      try { info = await api("/api/updates/pending"); } catch (e) {
+        badge.textContent = "unavailable";
+        list.innerHTML = "<p class=\"voice-hint\">Could not check for template updates.</p>";
+        return;
+      }
+      const pending = info.pending || [];
+      if (info.downgrade) {
+        badge.textContent = "older version";
+        badge.className = "badge warn";
+      } else if (pending.length === 0) {
+        badge.textContent = "up to date";
+        badge.className = "badge ok";
+        list.innerHTML = "<p class=\"voice-hint\">All templates are current. Your customizations are safe.</p>";
+        return;
+      } else {
+        badge.textContent = `${pending.length} waiting`;
+        badge.className = "badge warn";
+      }
+      list.innerHTML = pending.map(p => `
+        <div class="row" style="margin-top:8px;align-items:center;gap:8px;">
+          <span style="flex:1;">${escapeHtml(p.path || p)}</span>
+          <button type="button" class="update-keep" data-path="${escapeHtml(p.path || p)}">Keep mine</button>
+          <button type="button" class="update-take" data-path="${escapeHtml(p.path || p)}">Take new</button>
+          <button type="button" class="update-diff" data-path="${escapeHtml(p.path || p)}">View diff</button>
+        </div>`).join("");
+      const refresh = async () => { diffArea.style.display = "none"; await renderUpdateControls(); };
+      list.querySelectorAll(".update-keep").forEach(btn => btn.onclick = async () => {
+        try {
+          await api("/api/updates/resolve", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ path: btn.dataset.path, action: "keep_mine" })
+          });
+          statusEl.textContent = "Kept your version. This update will not ask again.";
+          await refresh();
+        } catch (e) { statusEl.textContent = e.message || "Could not resolve."; }
+      });
+      list.querySelectorAll(".update-take").forEach(btn => btn.onclick = async () => {
+        try {
+          await api("/api/updates/resolve", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ path: btn.dataset.path, action: "take_new" })
+          });
+          statusEl.textContent = "Saved — restart Lingua Viva to use the new version. Your old copy was archived, not deleted.";
+          await refresh();
+        } catch (e) { statusEl.textContent = e.message || "Could not resolve."; }
+      });
+      list.querySelectorAll(".update-diff").forEach(btn => btn.onclick = async () => {
+        try {
+          const res = await api(`/api/updates/diff?path=${encodeURIComponent(btn.dataset.path)}`);
+          diffContent.textContent = res.diff || "(no differences)";
+          diffArea.style.display = "block";
+        } catch (e) { statusEl.textContent = e.message || "Could not load diff."; }
+      });
     }
 
     function renderProviderControls() {
@@ -1929,38 +1982,329 @@
       };
     }
 
-    function renderGoogleDriveControls() {
+    const DRIVE_PURPOSE_LABELS = {
+      curriculum_unit_source: "Classroom materials",
+      student_lens_source: "Student evidence for review",
+      teacher_artifact_source: "Teacher artifacts",
+      unassigned: "General / unassigned"
+    };
+
+    const DRIVE_MIME_LABELS = {
+      "application/vnd.google-apps.document": "Google Doc",
+      "application/vnd.google-apps.folder": "Folder",
+      "application/pdf": "PDF",
+      "text/plain": "Text file",
+      "text/markdown": "Markdown note",
+      "application/json": "JSON data",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "Word document"
+    };
+
+    function driveReadinessBadge(file) {
+      if (!file.supported_for_import) return `<span class="badge warn">Can't use this file yet</span>`;
+      return file.supported_for_extraction
+        ? `<span class="badge ok">Ready to read</span>`
+        : `<span class="badge">Stored for reference</span>`;
+    }
+
+    function driveFolderOptions(folders, status, selectedId) {
+      const options = folders.map(f => `<option value="${escapeHtml(f.id)}" ${f.id === selectedId ? "selected" : ""}>${escapeHtml(f.name)} — ${escapeHtml(DRIVE_PURPOSE_LABELS[f.purpose] || "General / unassigned")}</option>`);
+      if (status.root_id_set) options.push(`<option value="" ${selectedId ? "" : "selected"}>School shared folder (default)</option>`);
+      return options.join("");
+    }
+
+    const SOURCES_SKIP_KEY = "lv_sources_skip";
+    const FILEMAP_REASSURANCE = "Lingua Viva will look at folder names and file names only. It will not open or read your files during this scan.";
+
+    async function renderSources() {
+      setTitle("Sources", "where materials come from");
+      $("content").innerHTML = `
+        <div class="view-head">
+          <div>
+            <h2>Sources</h2>
+            <p>Where Lingua Viva's materials come from: your school Slack, shared Google Drive folders, and folders on this computer.</p>
+          </div>
+        </div>
+        <div id="sources-slack"></div>
+        <div id="sources-drive"></div>
+        <div id="sources-local"></div>`;
+      await renderSlackSourceCard();
+      await renderDriveSection();
+      await renderLocalFoldersSection();
+    }
+
+    async function renderSlackSourceCard() {
+      const section = $("sources-slack");
+      if (!section) return;
+      let status = null;
+      try { status = await api("/api/slack/status"); } catch {}
+      const connected = !!(status && status.configured);
+      section.innerHTML = `
+        <div class="panel">
+          <div class="view-head">
+            <div>
+              <h3>Slack</h3>
+              <p>Daily updates and observations from your school workspace.</p>
+            </div>
+            <span class="badge ${connected ? "ok" : "warn"}">${connected ? "connected" : "not configured"}</span>
+          </div>
+          <button id="sources-open-slack" type="button">Open the Slack view</button>
+        </div>`;
+      $("sources-open-slack").addEventListener("click", () => { state.view = "slack"; renderShell(); renderView(); });
+    }
+
+    async function renderDriveSection() {
+      const section = $("sources-drive");
+      if (!section) return;
+      let status;
+      try {
+        status = await api("/api/google-drive/status");
+      } catch (error) {
+        section.innerHTML = `<div class="panel" style="margin-top:14px;"><h2>Google Drive</h2><p>${escapeHtml(error.message)}</p></div>`;
+        return;
+      }
+      let folders = [];
+      try { folders = (await api("/api/google-drive/folders")).folders || []; } catch {}
+      const students = await ensureStudents();
+      const ready = status.configured;
+      const canShare = ready && (status.can_upload || folders.length > 0);
+      const purposeOptions = Object.entries(DRIVE_PURPOSE_LABELS).map(([value, label]) => `<option value="${value}">${label}</option>`).join("");
+      const studentOptions = students.map(s => `<option value="${escapeHtml(s.student_id)}">${escapeHtml(s.name || s.student_id)}</option>`).join("");
+      section.innerHTML = `
+        <div class="view-head" style="margin-top:14px;">
+          <div>
+            <h2>Google Drive</h2>
+            <p>Shared documents to bring in. Drive is the shared shelf. Lingua Viva makes a local working copy on this machine — nothing moves in either direction unless you choose it.</p>
+          </div>
+          <span class="badge ${ready ? "ok" : "warn"}">${ready ? "Connected" : "Setup required"}</span>
+        </div>
+        ${driveAuthPanelHtml(status)}
+        <div class="grid two" style="margin-top:14px;">
+          <div class="panel">
+            <h3>Connect a folder</h3>
+            <p>Open the folder in Google Drive, copy the address from your browser, and paste it here. Lingua Viva checks it can see the folder before saving.</p>
+            <div class="form-grid">
+              <label>Folder link<input id="drive-connect-link" placeholder="https://drive.google.com/drive/folders/..."></label>
+              <label>Name it<input id="drive-connect-name" placeholder="e.g. Grade 7 materials"></label>
+              <label>What is it for?<select id="drive-connect-purpose">${purposeOptions}</select></label>
+            </div>
+            <div class="row" style="margin-top:12px;">
+              <button id="drive-connect-btn" class="primary" type="button" ${ready ? "" : "disabled"}>Connect folder</button>
+            </div>
+            <div id="drive-connect-result" style="margin-top:12px;"></div>
+          </div>
+          <div class="panel">
+            <h3>Connected folders</h3>
+            ${folders.length ? `<div class="list">${folders.map(f => `
+              <div class="item">
+                <strong>${escapeHtml(f.name)}</strong>
+                <p><span class="badge">${escapeHtml(DRIVE_PURPOSE_LABELS[f.purpose] || "General / unassigned")}</span>
+                <span class="badge">${f.last_checked ? "last checked " + escapeHtml(String(f.last_checked).slice(0, 10)) : "not checked yet"}</span></p>
+                <div class="row">
+                  <button type="button" data-drive-browse="${escapeHtml(f.id)}">Browse files</button>
+                  <button type="button" data-drive-disconnect="${escapeHtml(f.id)}">Disconnect</button>
+                </div>
+              </div>`).join("")}</div>` : `<p>No folders connected yet. Paste a folder link on the left to get started.</p>`}
+          </div>
+        </div>
+        <div class="panel" style="margin-top:14px;">
+          <h3>Bring files into Lingua Viva</h3>
+          <div class="form-grid">
+            <label>Look in<select id="drive-folder-select">${driveFolderOptions(folders, status, "")}</select></label>
+            <label>Search (optional)<input id="drive-query" placeholder="e.g. reading assessment"></label>
+            <label>Use these files as<select id="drive-purpose">${purposeOptions}</select></label>
+            <label id="drive-student-label" style="display:none;">For which student?<select id="drive-student"><option value="">Choose a student...</option>${studentOptions}</select></label>
+          </div>
+          <div class="row" style="margin-top:12px;">
+            <button id="list-drive-files" class="primary" type="button" ${ready ? "" : "disabled"}>Show files</button>
+            <button id="import-drive-selected" type="button" ${ready ? "" : "disabled"}>Bring selected files in</button>
+          </div>
+          <p class="voice-hint" id="drive-student-guardrail" style="display:none;margin-top:8px;">Nothing is added to the student lens until you approve it. Files come in first; you review before anything is saved.</p>
+          <div id="drive-list-result" style="margin-top:12px;"></div>
+          <div id="drive-import-result" style="margin-top:12px;"></div>
+        </div>
+        <div class="panel" style="margin-top:14px;">
+          <h3>Share back to Drive</h3>
+          <p>Put a student lens snapshot into a shared folder so a colleague can see it. It is a copy from this moment — it does not update itself.</p>
+          <div class="form-grid">
+            <label>Student<select id="drive-share-student"><option value="">Choose a student...</option>${studentOptions}</select></label>
+            <label>Into folder<select id="drive-share-folder">${driveFolderOptions(folders, status, "")}</select></label>
+          </div>
+          <div class="row" style="margin-top:12px;">
+            <button id="share-lens-drive" class="primary" type="button" ${canShare ? "" : "disabled"}>Share snapshot</button>
+            ${canShare ? "" : `<span class="voice-hint">Sharing needs a connected folder or the school shared folder configured.</span>`}
+          </div>
+          <div id="drive-share-result" style="margin-top:12px;"></div>
+        </div>`;
+      renderGoogleDriveControls(folders);
+    }
+
+    function driveAuthPanelHtml(status) {
+      // In-app Google sign-in (SPEC_LV_DRIVE_SELF_SERVICE_AUTH_2026-07-27 §A).
+      if (status.configured) {
+        if (status.auth_source === "stored") {
+          return `
+        <div class="panel">
+          <div class="row" style="justify-content:space-between;align-items:center;">
+            <p style="margin:0;">Signed in as <strong>${escapeHtml(status.account_email || "your Google account")}</strong>.</p>
+            <button id="drive-signout-btn" type="button">Sign out</button>
+          </div>
+          <div id="drive-signin-result"></div>
+        </div>`;
+        }
+        // Env credentials shadow any in-app sign-in — no sign-in/out controls.
+        return `
+        <div class="panel">
+          <p style="margin:0;">Using Google Drive credentials set up by whoever installed Lingua Viva on this machine.</p>
+        </div>`;
+      }
+      if (status.can_signin) {
+        const again = !!status.needs_signin;
+        return `
+        <div class="panel">
+          <h3>${again ? "Sign in to Google again" : "Sign in with Google"}</h3>
+          <p>${escapeHtml(status.setup_message || "Sign in with Google to connect Drive on this machine.")}</p>
+          <p class="voice-hint">Google may show a broad Drive permission. Lingua Viva only checks folders you connect, and it does not download file contents until you choose to import.</p>
+          <p class="voice-hint">The first time you sign in, Google will show a warning that it hasn't verified this app. That's expected — Lingua Viva is a small app that runs on this computer, not a published web service. Tap <strong>Advanced</strong>, then <strong>Go to Lingua Viva (unsafe)</strong> to continue. Nothing leaves this machine until you choose to share it.</p>
+          <button id="drive-signin-btn" class="primary" type="button">${again ? "Sign in with Google again" : "Sign in with Google"}</button>
+          <div id="drive-signin-result" style="margin-top:12px;"></div>
+        </div>`;
+      }
+      return `
+        <div class="panel">
+          <h3>Not connected yet</h3>
+          <p>${escapeHtml(status.setup_message || "Google Drive is not configured on this machine.")}</p>
+          <p>Whoever set up Lingua Viva on this machine needs to add the Google Drive connection details once (<code>LV_GOOGLE_DRIVE_ENABLED</code>, client ID and secret, refresh token, and the school's shared folder ID), then restart the app. After that, this page comes alive.</p>
+        </div>`;
+    }
+
+    let driveSigninAttempt = 0;
+
+    async function startDriveSignin() {
+      const attempt = ++driveSigninAttempt;  // a second click replaces the flow
+      const result = $("drive-signin-result");
+      result.innerHTML = `<p>Opening Google sign-in in your browser...</p>`;
+      let data;
+      try {
+        data = await api("/api/google-drive/auth/start", {method: "POST"});
+      } catch (error) {
+        result.innerHTML = `<p>${escapeHtml(error.message)}</p>`;
+        return;
+      }
+      result.innerHTML = `<p>Finish signing in with Google in the browser tab that just opened. If nothing opened, <a href="${escapeHtml(data.auth_url)}" target="_blank" rel="noopener">use this link</a>.</p>`;
+      const deadline = Date.now() + 120000;
+      while (Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        if (attempt !== driveSigninAttempt) return;  // superseded by a newer click
+        let status = null;
+        try { status = await api("/api/google-drive/status"); } catch { continue; }
+        if (status.configured) { await renderDriveSection(); return; }
+        if (!status.flow_pending) {
+          result.innerHTML = `<p>Sign-in didn't finish. You can try again.</p>`;
+          return;
+        }
+      }
+      result.innerHTML = `<p>Sign-in timed out. You can try again.</p>`;
+    }
+
+    async function signOutDrive() {
+      if (!confirm("Sign out of Google? Folders you connected and files you already brought in stay on this machine.")) return;
+      try {
+        await api("/api/google-drive/auth/disconnect", {method: "POST"});
+        await renderDriveSection();
+      } catch (error) {
+        const result = $("drive-signin-result");
+        if (result) result.innerHTML = `<p>${escapeHtml(error.message)}</p>`;
+      }
+    }
+
+    function renderGoogleDriveControls(folders) {
       const purpose = $("drive-purpose");
       const studentLabel = $("drive-student-label");
+      const guardrail = $("drive-student-guardrail");
+      const folderSelect = $("drive-folder-select");
+      const foldersById = {};
+      folders.forEach(f => { foldersById[f.id] = f; });
       const updateStudentVisibility = () => {
-        studentLabel.style.display = purpose.value === "student_lens_source" ? "block" : "none";
+        const isStudent = purpose.value === "student_lens_source";
+        studentLabel.style.display = isStudent ? "block" : "none";
+        guardrail.style.display = isStudent ? "block" : "none";
+      };
+      const inheritPurpose = () => {
+        const folder = foldersById[folderSelect.value];
+        if (folder && DRIVE_PURPOSE_LABELS[folder.purpose]) purpose.value = folder.purpose;
+        updateStudentVisibility();
       };
       purpose.addEventListener("change", updateStudentVisibility);
-      updateStudentVisibility();
+      folderSelect.addEventListener("change", inheritPurpose);
+      inheritPurpose();
       $("list-drive-files").addEventListener("click", listGoogleDriveFiles);
       $("import-drive-selected").addEventListener("click", importSelectedGoogleDriveFiles);
+      $("share-lens-drive").addEventListener("click", shareStudentLensToDrive);
+      $("drive-connect-btn").addEventListener("click", connectDriveFolder);
+      const signinBtn = $("drive-signin-btn");
+      if (signinBtn) signinBtn.addEventListener("click", startDriveSignin);
+      const signoutBtn = $("drive-signout-btn");
+      if (signoutBtn) signoutBtn.addEventListener("click", signOutDrive);
+      document.querySelectorAll("[data-drive-browse]").forEach(btn => btn.addEventListener("click", () => {
+        folderSelect.value = btn.dataset.driveBrowse;
+        inheritPurpose();
+        listGoogleDriveFiles();
+      }));
+      document.querySelectorAll("[data-drive-disconnect]").forEach(btn => btn.addEventListener("click", async () => {
+        if (!confirm("Disconnect this folder? Files you already brought in stay on this machine.")) return;
+        try {
+          await api(`/api/google-drive/folders/${encodeURIComponent(btn.dataset.driveDisconnect)}`, {method: "DELETE"});
+          await renderDriveSection();
+        } catch (error) {
+          $("drive-connect-result").innerHTML = `<p>${escapeHtml(error.message)}</p>`;
+        }
+      }));
+    }
+
+    async function connectDriveFolder() {
+      const result = $("drive-connect-result");
+      const link = $("drive-connect-link").value.trim();
+      if (!link) {
+        result.innerHTML = `<span class="badge warn">Paste a Drive folder link first.</span>`;
+        return;
+      }
+      result.innerHTML = `<p>Checking Lingua Viva can see that folder...</p>`;
+      try {
+        const data = await api("/api/google-drive/folders", {
+          method: "POST",
+          body: JSON.stringify({
+            link,
+            name: $("drive-connect-name").value.trim(),
+            purpose: $("drive-connect-purpose").value
+          })
+        });
+        await renderDriveSection();
+        $("drive-connect-result").innerHTML = `<span class="badge ok">Connected. "${escapeHtml(data.connected.name)}" is ready below.</span>`;
+      } catch (error) {
+        result.innerHTML = `<p>${escapeHtml(error.message)}</p>`;
+      }
     }
 
     async function listGoogleDriveFiles() {
       const target = $("drive-list-result");
-      target.innerHTML = `<p>Checking Drive files...</p>`;
+      target.innerHTML = `<p>Looking in Drive...</p>`;
       try {
         const data = await api("/api/google-drive/list", {
           method: "POST",
           body: JSON.stringify({
             query: $("drive-query").value.trim(),
-            folder_id: $("drive-folder").value.trim()
+            folder_id: $("drive-folder-select").value
           })
         });
         const files = data.files || [];
-        target.innerHTML = `<div class="list">${files.length ? files.map(file => `
+        target.innerHTML = files.length ? `<div class="list">${files.map(file => `
           <label class="item row" style="align-items:flex-start;">
             <input type="checkbox" data-drive-file-id="${escapeHtml(file.id)}" style="width:auto;margin-top:4px;" ${file.supported_for_import ? "" : "disabled"}>
             <span><strong>${escapeHtml(file.name)}</strong><br>
-            <span class="badge">${escapeHtml(file.mime_type || "unknown")}</span>
-            <span class="badge ${file.supported_for_import ? "ok" : "warn"}">${file.supported_for_import ? "importable" : "unsupported"}</span>
-            <span class="badge ${file.supported_for_extraction ? "ok" : ""}">${file.supported_for_extraction ? "extraction-ready" : "not extraction-ready"}</span></span>
-          </label>`).join("") : "<p>No Drive files returned.</p>"}</div>`;
+            <span class="badge">${escapeHtml(DRIVE_MIME_LABELS[file.mime_type] || "File")}</span>
+            ${driveReadinessBadge(file)}
+            <details style="margin-top:4px;"><summary class="voice-hint">details</summary><span class="voice-hint">${escapeHtml(file.mime_type || "unknown type")}</span></details></span>
+          </label>`).join("")}</div>` : `<p>No files found there. Try another folder or a different search.</p>`;
       } catch (error) {
         target.innerHTML = `<p>${escapeHtml(error.message)}</p>`;
       }
@@ -1972,14 +2316,14 @@
       const purpose = $("drive-purpose").value;
       const assignedStudentId = purpose === "student_lens_source" ? $("drive-student").value : null;
       if (!fileIds.length) {
-        result.innerHTML = `<span class="badge warn">Select at least one Drive file.</span>`;
+        result.innerHTML = `<span class="badge warn">Tick at least one file above first.</span>`;
         return;
       }
       if (purpose === "student_lens_source" && !assignedStudentId) {
-        result.innerHTML = `<span class="badge warn">Choose a student before importing student lens sources.</span>`;
+        result.innerHTML = `<span class="badge warn">Choose which student this evidence is about before bringing it in.</span>`;
         return;
       }
-      result.innerHTML = `<p>Importing selected files locally...</p>`;
+      result.innerHTML = `<p>Making local copies on this machine...</p>`;
       try {
         const data = await api("/api/google-drive/import", {
           method: "POST",
@@ -1992,12 +2336,48 @@
         const imported = data.imported || [];
         const failed = data.failed || [];
         result.innerHTML = `
-          <div class="source-line"><span class="badge ok">local only after import</span><span class="badge">imported ${imported.length}</span><span class="badge ${failed.length ? "warn" : "ok"}">failed ${failed.length}</span></div>
+          <div class="source-line"><span class="badge ok">local only after import</span><span class="badge">brought in ${imported.length}</span><span class="badge ${failed.length ? "warn" : "ok"}">failed ${failed.length}</span></div>
           <div class="list">
-            ${imported.map(item => `<div class="item"><strong>${escapeHtml(item.name)}</strong><p>${escapeHtml(item.local_path)}</p><span class="badge">${escapeHtml(item.purpose)}</span><span class="badge ${item.supported_for_extraction ? "ok" : "warn"}">${item.supported_for_extraction ? "extraction-ready" : "not extraction-ready"}</span></div>`).join("")}
+            ${imported.map(item => `<div class="item"><strong>${escapeHtml(item.name)}</strong>
+              ${item.supported_for_extraction
+                ? `<p>Ready to read. Review what Lingua Viva finds before anything is saved.</p><button type="button" class="primary" data-review-file="${escapeHtml(item.local_path)}">Review now</button>`
+                : `<p>Available in your library on this machine.</p>`}
+              <details style="margin-top:4px;"><summary class="voice-hint">details</summary><span class="voice-hint">${escapeHtml(item.local_path)} · ${escapeHtml(item.purpose)}</span></details></div>`).join("")}
             ${failed.map(item => `<div class="item"><strong>${escapeHtml(item.drive_id)}</strong><p>${escapeHtml(item.message)}</p><span class="badge warn">${escapeHtml(item.status)}</span></div>`).join("")}
           </div>`;
-        await loadFileMap();
+        result.querySelectorAll("[data-review-file]").forEach(btn => btn.addEventListener("click", () => {
+          state.pendingExtractionFile = btn.dataset.reviewFile;
+          state.view = "settings";
+          renderShell();
+          renderView();
+        }));
+      } catch (error) {
+        result.innerHTML = `<p>${escapeHtml(error.message)}</p>`;
+      }
+    }
+
+    async function shareStudentLensToDrive() {
+      const result = $("drive-share-result");
+      const studentId = $("drive-share-student").value;
+      if (!studentId) {
+        result.innerHTML = `<span class="badge warn">Choose a student to share.</span>`;
+        return;
+      }
+      if (!confirm("Share a snapshot of this student's lens to the shared Drive folder? Colleagues with access to that folder will be able to see it.")) return;
+      result.innerHTML = `<p>Sharing the lens snapshot to Drive...</p>`;
+      try {
+        const data = await api("/api/google-drive/upload", {
+          method: "POST",
+          body: JSON.stringify({student_id: studentId, folder_id: $("drive-share-folder").value})
+        });
+        const uploaded = data.uploaded || [];
+        const failed = data.failed || [];
+        result.innerHTML = `
+          <div class="source-line"><span class="badge ${uploaded.length ? "ok" : "warn"}">shared ${uploaded.length}</span><span class="badge ${failed.length ? "warn" : "ok"}">failed ${failed.length}</span></div>
+          <div class="list">
+            ${uploaded.map(item => `<div class="item"><strong>${escapeHtml(item.name)}</strong><p>Now in the shared Drive folder.</p><span class="badge ok">uploaded</span></div>`).join("")}
+            ${failed.map(item => `<div class="item"><strong>${escapeHtml(item.local_path || "")}</strong><p>${escapeHtml(item.message)}</p><span class="badge warn">${escapeHtml(item.status)}</span></div>`).join("")}
+          </div>`;
       } catch (error) {
         result.innerHTML = `<p>${escapeHtml(error.message)}</p>`;
       }
@@ -2014,9 +2394,13 @@
           listEl.innerHTML = `<p>No extraction candidate files available.</p>`;
           return;
         }
-        listEl.innerHTML = `<div class="list">${sources.map((s, idx) => `
+        const preselect = state.pendingExtractionFile && sources.some(s => s.file_path === state.pendingExtractionFile)
+          ? state.pendingExtractionFile
+          : sources[0].file_path;
+        state.pendingExtractionFile = null;
+        listEl.innerHTML = `<div class="list">${sources.map(s => `
           <label class="item row" style="align-items:center;">
-            <input type="radio" name="extraction_source_file" value="${escapeHtml(s.file_path)}" data-student-id="${escapeHtml(s.student_id || "")}" ${idx === 0 ? "checked" : ""} style="width:auto;">
+            <input type="radio" name="extraction_source_file" value="${escapeHtml(s.file_path)}" data-student-id="${escapeHtml(s.student_id || "")}" ${s.file_path === preselect ? "checked" : ""} style="width:auto;">
             <span><strong>${escapeHtml(s.display_name)}</strong> <span class="badge ok">${escapeHtml(s.source_type)}</span></span>
           </label>
         `).join("")}</div>`;
@@ -2145,6 +2529,408 @@
       }
     }
 
+    function dailyMarkdownToHtml(markdown) {
+      // Tiny renderer for the daily file's fixed shape: headings + bullets.
+      // Everything is escaped first; source-anchor HTML comments are dropped.
+      const lines = String(markdown || "").split("\n");
+      const html = [];
+      let inList = false;
+      const closeList = () => { if (inList) { html.push("</ul>"); inList = false; } };
+      for (const raw of lines) {
+        const line = raw.replace(/<!--.*?-->/g, "").trimEnd();
+        if (!line.trim()) { closeList(); continue; }
+        if (line.startsWith("## ")) {
+          closeList();
+          html.push(`<h3>${escapeHtml(line.slice(3))}</h3>`);
+        } else if (line.startsWith("# ")) {
+          closeList();
+          html.push(`<h2>${escapeHtml(line.slice(2))}</h2>`);
+        } else if (line.startsWith("- ")) {
+          if (!inList) { html.push('<ul class="list">'); inList = true; }
+          html.push(`<li>${escapeHtml(line.slice(2))}</li>`);
+        } else {
+          closeList();
+          html.push(`<p>${escapeHtml(line)}</p>`);
+        }
+      }
+      closeList();
+      return html.join("");
+    }
+
+    async function renderDaily() {
+      setTitle("Daily", "operations assistant");
+      let status = null;
+      let daily = null;
+      let loadError = null;
+      try {
+        [status, daily] = await Promise.all([
+          api("/api/slack/ops/status"),
+          api("/api/ops/daily")
+        ]);
+      } catch (error) {
+        loadError = error.message;
+      }
+      if (loadError) {
+        $("content").innerHTML = `<div class="panel"><h2>Daily</h2><p>${escapeHtml(loadError)}</p></div>`;
+        return;
+      }
+      const connected = status.connected;
+      const configured = status.configured;
+      const badge = configured
+        ? (connected
+          ? `<span class="badge ok">Connected</span>`
+          : `<span class="badge warn">Configured — connecting…</span>`)
+        : `<span class="badge warn">Setup required</span>`;
+      const teacherPanels = (daily.teachers || []).map(teacher => `
+        <div class="panel">
+          ${dailyMarkdownToHtml(teacher.markdown)}
+          <div class="source-line">
+            <span class="badge ok">local file</span>
+            <span class="badge">${escapeHtml(teacher.file_path)}</span>
+          </div>
+        </div>`).join("");
+      const emptyPanel = `
+        <div class="panel">
+          <h3>No daily files yet</h3>
+          <p>${configured
+            ? "Messages sent to the ops channel or DMed to the bot will appear here and in each teacher's Desktop file."
+            : "Once the Slack ops assistant is configured, each teacher's daily file renders here and on their Desktop."}</p>
+        </div>`;
+      $("content").innerHTML = `
+        <div class="view-head">
+          <div>
+            <h2>Daily operations</h2>
+            <p>${escapeHtml(daily.date)} — the same daily file the assistant writes to the Desktop, rendered from local records.</p>
+          </div>
+          ${badge}
+        </div>
+        <div class="grid two">
+          <div class="panel">
+            <h3>Slack connection</h3>
+            <div class="list">
+              <div class="item"><strong>Bot token</strong><span class="badge ${status.bot_token_set ? "ok" : "warn"}">${status.bot_token_set ? "ready" : "needed"}</span></div>
+              <div class="item"><strong>App token (Socket Mode)</strong><span class="badge ${status.app_token_set ? "ok" : "warn"}">${status.app_token_set ? "ready" : "needed"}</span></div>
+              <div class="item"><strong>Ops channel</strong><span class="badge ${status.ops_channel_set ? "ok" : "warn"}">${status.ops_channel_set ? "ready" : "needed"}</span></div>
+              <div class="item"><strong>Teacher map</strong><span class="badge ${status.teacher_map_set ? "ok" : "warn"}">${status.teacher_map_set ? "ready" : "needed"}</span></div>
+            </div>
+            <p>${status.teacher_count} teacher${status.teacher_count === 1 ? "" : "s"} mapped · ${status.events_received} event${status.events_received === 1 ? "" : "s"} received.</p>
+            ${status.config_error ? `<p class="badge warn">${escapeHtml(status.config_error)}</p>` : ""}
+            ${daily.needs_review ? `<p class="badge warn">${daily.needs_review} item${daily.needs_review === 1 ? "" : "s"} waiting in To Review</p>` : ""}
+          </div>
+          <div class="panel">
+            <h3>Privacy boundary</h3>
+            <p>The assistant reads only the configured ops channel and direct messages sent to it. It never reads other channels, never backfills history, and never writes to student records.</p>
+            <div class="source-line">
+              <span class="badge ok">local records only</span>
+              <span class="badge ok">no external model</span>
+              <span class="badge">Socket Mode — no public URL</span>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:14px;">
+          ${teacherPanels || emptyPanel}
+        </div>
+        <div class="row" style="margin-top:14px;">
+          <button id="refresh-daily" type="button">Refresh</button>
+          <button id="open-bot-setup" type="button">Bot Setup</button>
+        </div>`;
+      $("refresh-daily").addEventListener("click", renderDaily);
+      // Bot Setup is a Daily sub-view (spec §6: reachable from the Daily
+      // view) — not a sidebar destination, so it stays out of the nav
+      // contract's view map and state.view remains "daily".
+      $("open-bot-setup").addEventListener("click", renderOpsSetup);
+    }
+
+    async function renderOpsSetup() {
+      setTitle("Bot Setup", "daily operations assistant");
+      let catalog = null;
+      let spec = null;
+      let roster = null;
+      let records = null;
+      let suggest = null;
+      try {
+        [catalog, spec, roster, records, suggest] = await Promise.all([
+          api("/api/ops/setup/catalog"),
+          api("/api/ops/setup/bot-spec"),
+          api("/api/ops/setup/roster"),
+          api("/api/ops/records"),
+          api("/api/ops/setup/suggestions")
+        ]);
+      } catch (error) {
+        $("content").innerHTML = `<div class="panel"><h2>Bot Setup</h2><p>${escapeHtml(error.message)}</p></div>`;
+        return;
+      }
+      const enabled = new Set(spec.exists
+        ? spec.packs.enabled
+        : catalog.packs.filter(p => p.enabled_by_default).map(p => p.id));
+      const reviewRequired = new Set(spec.settings.review_required || []);
+      const packRows = catalog.packs.map(pack => {
+        const cats = pack.categories.map(c =>
+          `${c.id}${c.broadcast ? " (all teachers)" : ""}${c.capability ? " — " + c.capability.replace(/_/g, " ") : ""}`
+        ).join(", ");
+        return `
+          <div class="item">
+            <label>
+              <input type="checkbox" data-pack-id="${escapeHtml(pack.id)}" ${enabled.has(pack.id) ? "checked" : ""}>
+              <strong>${escapeHtml(pack.name)}</strong>
+            </label>
+            <p>${escapeHtml(pack.description)}</p>
+            <p class="muted">Handles: ${escapeHtml(cats)}</p>
+          </div>`;
+      }).join("");
+      const allCategories = catalog.packs.flatMap(pack => pack.categories.map(c => c.id));
+      const reviewRows = allCategories.map(id => `
+        <label class="badge" style="cursor:pointer;">
+          <input type="checkbox" data-review-cat="${escapeHtml(id)}" ${reviewRequired.has(id) ? "checked" : ""}>
+          ${escapeHtml(id)}
+        </label>`).join(" ");
+      const rosterRows = (roster.teachers || []).map(t => `
+        <div class="item">
+          <strong>${escapeHtml(t.display_name)}</strong>
+          <span class="badge">${escapeHtml(t.teacher_id)}</span>
+          <span class="badge">${escapeHtml(t.slack_user_id)}</span>
+        </div>`).join("");
+      // Teach loop (spec §4): To Review items get a category fix + an
+      // optional "treat future messages like this" candidate rule.
+      const teachTargets = spec.compiled.categories
+        .filter(id => id !== "coverage_claim")
+        .concat(["other"]);
+      const reviewItems = (records.records || []).filter(r => r.needs_review);
+      const reviewItemRows = reviewItems.map(r => `
+        <div class="item" data-review-item="${escapeHtml(r.id)}">
+          <p>${escapeHtml(r.text_clean)}</p>
+          <div class="source-line">
+            <span class="badge warn">${escapeHtml(r.category)}</span>
+            <span class="badge">${escapeHtml(r.review_reason || "needs review")}</span>
+          </div>
+          <div class="row">
+            <select data-teach-category="${escapeHtml(r.id)}">
+              ${teachTargets.map(id => `<option value="${escapeHtml(id)}" ${id === r.category ? "selected" : ""}>${escapeHtml(id)}</option>`).join("")}
+            </select>
+            <input data-teach-keyphrase="${escapeHtml(r.id)}" type="text" placeholder="Optional: phrase to teach (e.g. 'door duty')">
+            <button type="button" data-teach-apply="${escapeHtml(r.id)}">Teach</button>
+          </div>
+        </div>`).join("");
+      const ruleRows = (spec.learned_rules || []).map(rule => `
+        <div class="item">
+          <strong>"${escapeHtml(rule.keyphrase)}"</strong>
+          <span class="badge">&rarr; ${escapeHtml(rule.category)}</span>
+          <span class="badge ${rule.status === "approved" ? "ok" : "warn"}">${escapeHtml(rule.status)}</span>
+          ${rule.status === "candidate" ? `
+          <div class="row">
+            <button type="button" data-rule-decide="approve" data-rule-id="${escapeHtml(rule.id)}">Approve</button>
+            <button type="button" data-rule-decide="reject" data-rule-id="${escapeHtml(rule.id)}">Reject</button>
+          </div>` : ""}
+        </div>`).join("");
+      // Corpus expectations may target any live category, including the
+      // machine-owned ones (a claim sample is a legitimate test).
+      const corpusCategories = spec.compiled.categories.concat(["other"]);
+      const liveBadge = spec.live
+        ? `<span class="badge ok">Live</span>`
+        : `<span class="badge warn">Not live</span>`;
+      const lastRun = spec.corpus && spec.corpus.last_run;
+      const gateLine = spec.live
+        ? "The assistant is live with these approved school rules."
+        : (lastRun && lastRun.passed
+          ? "Corpus test passed — ready to go live."
+          : "Go-live requires a passing test-corpus run first. The live bot does not guess with AI. It follows approved school rules.");
+      $("content").innerHTML = `
+        <div class="view-head">
+          <div>
+            <h2>Bot Setup</h2>
+            <p>Choose what the assistant handles for this school. Rules are data — the bot never guesses with AI.</p>
+          </div>
+          ${liveBadge}
+        </div>
+        ${spec.fallback ? `<div class="panel"><p class="badge warn">Saved setup could not be loaded (${escapeHtml(spec.fallback)}) — running with standard rules until re-saved.</p></div>` : ""}
+        ${reviewItems.length ? `
+        <div class="panel" style="margin-bottom:14px;">
+          <h3>To Review — teach the assistant</h3>
+          <p class="muted">Fix where each message should have been filed. Add a phrase to teach the rule for future messages — it becomes a candidate and never applies until it passes the test corpus and you approve it.</p>
+          <div class="list">${reviewItemRows}</div>
+          <span id="teach-status" class="muted"></span>
+        </div>` : ""}
+        <div class="grid two">
+          <div class="panel">
+            <h3>Workflow packs</h3>
+            ${(suggest.suggestions || []).map(s => `<p><span class="badge warn">${escapeHtml(s.message)}</span></p>`).join("")}
+            <div class="list">${packRows}</div>
+            <p class="muted">Messages outside enabled packs are never dropped — they land in To Review.</p>
+          </div>
+          <div class="panel">
+            <h3>Daily rhythm</h3>
+            <div class="item"><strong>Morning briefing</strong><input id="setup-briefing" type="time" value="${escapeHtml(spec.settings.briefing_hhmm)}"></div>
+            <div class="item"><strong>End-of-day summary</strong><input id="setup-eod" type="time" value="${escapeHtml(spec.settings.eod_hhmm)}"></div>
+            <h3 style="margin-top:12px;">Always review first</h3>
+            <p class="muted">Categories checked here always wait in To Review before filing, even when the match is confident.</p>
+            <div>${reviewRows}</div>
+          </div>
+        </div>
+        <div class="grid two" style="margin-top:14px;">
+          <div class="panel">
+            <h3>Roster (read-only)</h3>
+            <p class="muted">Teacher mapping comes from the app configuration (LV_SLACK_TEACHER_MAP) and is confirmed here, not edited.</p>
+            <div class="list">${rosterRows || "<p>No teachers mapped yet.</p>"}</div>
+          </div>
+          <div class="panel">
+            <h3>Go live</h3>
+            <p>${escapeHtml(gateLine)}</p>
+            <div class="source-line">
+              <span class="badge">${lastRun ? "last corpus run: " + escapeHtml(lastRun.at || "") + (lastRun.passed ? " — passed" : " — failed") : "no corpus run yet"}</span>
+            </div>
+            <div class="row" style="margin-top:8px;">
+              <button id="corpus-run" type="button" ${spec.exists && !spec.fallback ? "" : "disabled"}>Run corpus test</button>
+              ${spec.live
+                ? `<button id="go-live" type="button" data-live="false">Pause the assistant</button>`
+                : `<button id="go-live" type="button" data-live="true" ${lastRun && lastRun.passed ? "" : "disabled"}>Go live</button>`}
+              <span id="corpus-status" class="muted">${spec.exists ? "" : "Save the setup first — test results are recorded with it."}</span>
+            </div>
+            <div id="corpus-results" class="list"></div>
+            <div class="row" style="margin-top:8px;">
+              <input id="corpus-new-text" type="text" placeholder="Add a test sentence the bot must route correctly">
+              <select id="corpus-new-category">${corpusCategories.map(id => `<option value="${escapeHtml(id)}">${escapeHtml(id)}</option>`).join("")}</select>
+              <button id="corpus-add" type="button" ${spec.exists && !spec.fallback ? "" : "disabled"}>Add sentence</button>
+            </div>
+            <h3 style="margin-top:12px;">School rules learned so far</h3>
+            <div class="list">${ruleRows || "<p class=\"muted\">No learned rules yet. Teach one from a To Review item.</p>"}</div>
+          </div>
+        </div>
+        <div class="row" style="margin-top:14px;">
+          <button id="setup-save" type="button">Save setup</button>
+          <button id="setup-back" type="button">Back to Daily</button>
+          <span id="setup-status" class="muted"></span>
+        </div>`;
+      $("setup-back").addEventListener("click", renderDaily);
+      document.querySelectorAll("[data-teach-apply]").forEach(button => {
+        button.addEventListener("click", async () => {
+          const recordId = button.dataset.teachApply;
+          const category = document.querySelector(`[data-teach-category="${recordId}"]`).value;
+          const keyphrase = document.querySelector(`[data-teach-keyphrase="${recordId}"]`).value.trim();
+          button.disabled = true;
+          $("teach-status").textContent = "Teaching…";
+          try {
+            await api("/api/ops/review/reclassify", {
+              method: "POST",
+              body: JSON.stringify({record_id: recordId, category, keyphrase})
+            });
+            $("teach-status").textContent = keyphrase
+              ? "Done — record fixed and candidate rule filed."
+              : "Done — record fixed.";
+            renderOpsSetup();
+          } catch (err) {
+            $("teach-status").textContent = "Teach failed: " + (err.message || "error");
+            button.disabled = false;
+          }
+        });
+      });
+      // Corpus gate (spec §7): run records the result into the bot-spec;
+      // pass unlocks Go live. Table renders inline so results stay visible.
+      const corpusRowHtml = row => `
+        <div class="item">
+          <p>${escapeHtml(row.text)}</p>
+          <div class="source-line">
+            <span class="badge">${escapeHtml(row.source)}</span>
+            <span class="badge">expected ${escapeHtml(row.expect.category || "?")}</span>
+            <span class="badge">got ${escapeHtml(row.actual.category)}</span>
+            ${row.ok
+              ? '<span class="badge ok">pass</span>'
+              : `<span class="badge warn">fail: ${escapeHtml((row.mismatches || []).join(", "))}</span>`}
+          </div>
+        </div>`;
+      $("corpus-run").addEventListener("click", async () => {
+        $("corpus-run").disabled = true;
+        $("corpus-status").textContent = "Running…";
+        try {
+          const result = await api("/api/ops/setup/corpus/run", {
+            method: "POST", body: "{}"
+          });
+          $("corpus-results").innerHTML = result.rows.map(corpusRowHtml).join("");
+          $("corpus-status").textContent = result.run.passed
+            ? `Passed — ${result.run.total} sentences routed correctly.`
+            : `${result.run.failed} of ${result.run.total} sentences failed.`;
+          if (!spec.live) $("go-live").disabled = !result.run.passed;
+        } catch (err) {
+          $("corpus-status").textContent = "Corpus run failed: " + (err.message || "error");
+        }
+        $("corpus-run").disabled = false;
+      });
+      $("corpus-add").addEventListener("click", async () => {
+        const text = $("corpus-new-text").value.trim();
+        if (!text) { $("corpus-status").textContent = "Type a test sentence first."; return; }
+        $("corpus-add").disabled = true;
+        $("corpus-status").textContent = "Adding…";
+        try {
+          await api("/api/ops/setup/corpus/sentences", {
+            method: "POST",
+            body: JSON.stringify({text, expect: {category: $("corpus-new-category").value}})
+          });
+          renderOpsSetup();
+        } catch (err) {
+          $("corpus-status").textContent = "Add failed: " + (err.message || "error");
+          $("corpus-add").disabled = false;
+        }
+      });
+      $("go-live").addEventListener("click", async () => {
+        const goLive = $("go-live").dataset.live === "true";
+        $("go-live").disabled = true;
+        $("corpus-status").textContent = goLive ? "Going live…" : "Pausing…";
+        try {
+          await api("/api/ops/setup/bot-spec", {
+            method: "PUT",
+            body: JSON.stringify({live: goLive})
+          });
+          renderOpsSetup();
+        } catch (err) {
+          $("corpus-status").textContent = (goLive ? "Go-live" : "Pause") + " failed: " + (err.message || "error");
+          $("go-live").disabled = false;
+        }
+      });
+      document.querySelectorAll("[data-rule-decide]").forEach(button => {
+        button.addEventListener("click", async () => {
+          button.disabled = true;
+          $("corpus-status").textContent = button.dataset.ruleDecide === "approve"
+            ? "Testing rule against the corpus…" : "Rejecting…";
+          try {
+            await api("/api/ops/setup/rules/decide", {
+              method: "POST",
+              body: JSON.stringify({
+                rule_id: button.dataset.ruleId,
+                action: button.dataset.ruleDecide
+              })
+            });
+            renderOpsSetup();
+          } catch (err) {
+            $("corpus-status").textContent = "Rule decision blocked: " + (err.message || "error");
+            button.disabled = false;
+          }
+        });
+      });
+      $("setup-save").addEventListener("click", async () => {
+        const packIds = Array.from(document.querySelectorAll("[data-pack-id]:checked")).map(cb => cb.dataset.packId);
+        const review = Array.from(document.querySelectorAll("[data-review-cat]:checked")).map(cb => cb.dataset.reviewCat);
+        $("setup-save").disabled = true;
+        $("setup-status").textContent = "Saving…";
+        try {
+          await api("/api/ops/setup/bot-spec", {
+            method: "PUT",
+            body: JSON.stringify({
+              packs: {enabled: packIds},
+              settings: {
+                briefing_hhmm: $("setup-briefing").value,
+                eod_hhmm: $("setup-eod").value,
+                review_required: review
+              }
+            })
+          });
+          $("setup-status").textContent = "Saved — new rules are active.";
+          renderOpsSetup();
+        } catch (err) {
+          $("setup-status").textContent = "Save failed: " + (err.message || "error");
+          $("setup-save").disabled = false;
+        }
+      });
+    }
+
     async function renderSlack() {
       setTitle("Slack", "local observation bridge");
       let status;
@@ -2252,60 +3038,261 @@
       unitSelect.innerHTML = data.units.map(unit => `<option value="${unit.unit_id}" ${unit.unit_id === selectedUnit ? "selected" : ""}>${escapeHtml(unit.title)}</option>`).join("");
     }
 
-    async function renderFileMapControls() {
-      $("scan-filemap").addEventListener("click", scanFileMap);
-      $("clear-filemap").addEventListener("click", clearFileMap);
-      await loadFileMap();
+    function fileExtChip(name) {
+      const dot = String(name || "").lastIndexOf(".");
+      if (dot <= 0 || dot === String(name || "").length - 1) return "File";
+      const ext = String(name).slice(dot + 1).toUpperCase();
+      return ext.length <= 5 ? ext : "File";
     }
 
-    async function loadFileMap() {
-      const target = $("filemap-summary");
-      const status = $("filemap-status");
+    function humanFileSize(bytes) {
+      let size = Number(bytes || 0);
+      if (size < 1024) return `${size} B`;
+      for (const unit of ["KB", "MB", "GB", "TB"]) {
+        size = size / 1024;
+        if (size < 1024) return `${size >= 100 ? Math.round(size) : size.toFixed(1)} ${unit}`;
+      }
+      return `${Math.round(size)} TB`;
+    }
+
+    function humanModified(iso) {
+      const stamp = new Date(iso);
+      if (Number.isNaN(stamp.getTime())) return "";
+      const days = Math.floor((Date.now() - stamp.getTime()) / 86400000);
+      if (days <= 0) return "Updated today";
+      if (days === 1) return "Updated yesterday";
+      if (days <= 7) return `Updated ${days} days ago`;
+      return `Updated ${stamp.toLocaleDateString()}`;
+    }
+
+    function renderFilemapError(target, error, options = {}) {
+      if (!target) return;
+      const code = error && error.code;
+      const folderIssue = code === "permission_denied" || code === "not_found"
+        || (options.treatInvalidPathAsFolderIssue && code === "invalid_path");
+      const message = folderIssue
+        ? "Lingua Viva could not open this folder location. You may not have permission, or the folder may have moved."
+        : "Something didn't work reading that folder.";
+      target.innerHTML = `
+        <div class="item">
+          <p>${escapeHtml(message)}</p>
+          <div class="row">
+            ${folderIssue && options.onChoose ? `<button type="button" data-error-choose>Choose another folder</button>` : ""}
+            ${options.onRetry ? `<button type="button" data-error-retry>Try again</button>` : ""}
+          </div>
+          <details style="margin-top:8px;"><summary class="voice-hint">Details for support</summary><span class="voice-hint">${escapeHtml((error && error.message) || "Unknown error")}</span></details>
+        </div>`;
+      const choose = target.querySelector("[data-error-choose]");
+      if (choose && options.onChoose) choose.addEventListener("click", options.onChoose);
+      const retry = target.querySelector("[data-error-retry]");
+      if (retry && options.onRetry) retry.addEventListener("click", options.onRetry);
+    }
+
+    async function chooseLocalFolder() {
+      const pathInput = $("filemap-path");
+      if (window.lvDesktop && typeof window.lvDesktop.pickFolder === "function") {
+        const picked = await window.lvDesktop.pickFolder();
+        if (picked && pathInput) pathInput.value = picked;
+      } else if (pathInput) {
+        pathInput.focus();
+      }
+    }
+
+    function localFolderScanForm(configured) {
+      const depth = state.filemapDepth || 3;
+      return `
+        <p>${escapeHtml(FILEMAP_REASSURANCE)}</p>
+        <div class="form-grid">
+          <label>Folder path<input id="filemap-path" placeholder="~/Documents/Teaching"></label>
+        </div>
+        <div class="row" style="margin-top:12px;">
+          <button id="choose-folder" type="button">Choose a folder</button>
+          ${configured ? "" : `<button id="use-default-folder" type="button">Use Documents/Teaching</button>`}
+          <button id="scan-filemap" class="primary" type="button">Scan folder names</button>
+          ${configured ? "" : `<button id="skip-sources" type="button">Skip for now</button>`}
+        </div>
+        <details style="margin-top:8px;"><summary class="voice-hint">Advanced</summary>
+          <div class="row" style="margin-top:8px;" aria-label="Scan depth">
+            <button type="button" data-depth-option="2" class="${depth === 2 ? "primary" : ""}" aria-pressed="${depth === 2}">Scan nearby folders only</button>
+            <button type="button" data-depth-option="4" class="${depth === 4 ? "primary" : ""}" aria-pressed="${depth === 4}">Scan more deeply</button>
+          </div>
+        </details>
+        <div id="filemap-status" class="source-line" style="margin-top:12px;"></div>
+        <div id="filemap-error" style="margin-top:12px;"></div>`;
+    }
+
+    function wireLocalFolderScanForm(section) {
+      $("choose-folder").addEventListener("click", chooseLocalFolder);
+      const useDefault = $("use-default-folder");
+      if (useDefault) useDefault.addEventListener("click", () => {
+        $("filemap-path").value = "~/Documents/Teaching";
+      });
+      const skip = $("skip-sources");
+      if (skip) skip.addEventListener("click", () => {
+        localStorage.setItem(SOURCES_SKIP_KEY, "1");
+        renderLocalFoldersSection();
+      });
+      section.querySelectorAll("[data-depth-option]").forEach(button => {
+        button.addEventListener("click", () => {
+          const value = Number(button.dataset.depthOption);
+          state.filemapDepth = (state.filemapDepth || 3) === value ? 3 : value;
+          section.querySelectorAll("[data-depth-option]").forEach(other => {
+            const pressed = Number(other.dataset.depthOption) === state.filemapDepth;
+            other.classList.toggle("primary", pressed);
+            other.setAttribute("aria-pressed", String(pressed));
+          });
+        });
+      });
+      $("scan-filemap").addEventListener("click", scanLocalFolder);
+    }
+
+    async function renderLocalFoldersSection() {
+      const section = $("sources-local");
+      if (!section) return;
       let data;
       try {
         data = await api("/api/filemap");
       } catch (error) {
-        target.innerHTML = `<p>${escapeHtml(error.message)}</p>`;
+        section.innerHTML = `<div class="panel" style="margin-top:14px;"><h3>Local folders</h3><div id="local-folders-error"></div></div>`;
+        renderFilemapError($("local-folders-error"), error, {onRetry: renderLocalFoldersSection});
         return;
       }
       const summary = data.summary || {};
-      const domains = Object.entries(summary.domains_detected || {});
+      const configured = !!summary.configured;
+      const skipped = localStorage.getItem(SOURCES_SKIP_KEY) === "1";
       const roots = data.roots || [];
       const domainEntries = (data.entries || []).filter(entry => entry.inferred_domain);
       const confirmations = data.confirmations || {};
       const studentZones = data.student_zones || [];
-      status.innerHTML = `<span class="badge ${summary.configured ? "ok" : ""}">${summary.configured ? "configured" : "empty"}</span><span class="badge warn">${data.student_zones_detected || 0} student data zones excluded</span>`;
-      target.innerHTML = `
-        <div class="grid two">
-          <div class="item"><h3>Scanned roots</h3><div class="list">${roots.length ? roots.map(root => `<div class="item"><strong>${escapeHtml(root.path)}</strong><p>${root.entry_count} folders</p></div>`).join("") : "<p>No folders scanned yet.</p>"}</div></div>
-          <div class="item"><h3>Detected domains</h3><div class="source-line">${domains.length ? domains.map(([name, count]) => `<span class="badge">${escapeHtml(name)} ${count}</span>`).join("") : `<span class="badge">none</span>`}</div><p>Confirm each curriculum source before it is used downstream.</p></div>
+      const pendingReview = domainEntries.filter(entry => !confirmations[entry.path]).length;
+      const lastScanned = roots.map(root => root.scanned_at).filter(Boolean).sort().pop();
+      const header = `
+        <div class="view-head" style="margin-top:14px;">
+          <div>
+            <h2>Local folders</h2>
+            <p>Where your local teaching materials live — folder names and file names only, never contents.</p>
+            ${configured && lastScanned ? `<p class="voice-hint">Last scanned ${escapeHtml(String(lastScanned).slice(0, 10))}</p>` : ""}
+          </div>
+          <div class="source-line">
+            <span class="badge ${configured ? "ok" : ""}">${configured ? "connected" : "not connected"}</span>
+            ${configured && pendingReview ? `<span class="badge warn">${pendingReview} folder${pendingReview === 1 ? "" : "s"} to review</span>` : ""}
+          </div>
+        </div>`;
+
+      if (!configured && skipped) {
+        section.innerHTML = `${header}
+          <div class="panel">
+            <h3>No folders connected</h3>
+            <p>Lingua Viva is not looking at any local folders.</p>
+            <button id="local-folders-connect" class="primary" type="button">Connect a folder</button>
+          </div>`;
+        $("local-folders-connect").addEventListener("click", () => {
+          localStorage.removeItem(SOURCES_SKIP_KEY);
+          renderLocalFoldersSection();
+        });
+        return;
+      }
+
+      if (!configured) {
+        section.innerHTML = `${header}
+          <div class="panel">
+            <h3>Where do you keep your teaching materials?</h3>
+            ${localFolderScanForm(false)}
+          </div>`;
+        wireLocalFolderScanForm(section);
+        return;
+      }
+
+      section.innerHTML = `${header}
+        <div class="panel">
+          <p>Lingua Viva found <strong>${domainEntries.length} teaching folders</strong> and <strong>${studentZones.length} folders that may contain student information</strong>.</p>
+          ${state.filemapJustScanned ? `
+          <div class="row" id="filemap-next-actions">
+            <button id="next-use-planning" class="primary" type="button">Use for planning</button>
+            <button id="next-review-private" type="button">Review private folders</button>
+            <button id="next-done" type="button">Done</button>
+          </div>` : ""}
         </div>
-        <div class="item" style="margin-top:12px;">
-          <h3>Domain folders</h3>
+        <div class="panel" id="teaching-materials" style="margin-top:14px;">
+          <h3>Teaching materials</h3>
+          <p>Confirm each folder before it is used for planning.</p>
           <div class="list">${domainEntries.length ? domainEntries.map(entry => {
             const selected = confirmations[entry.path] || "";
             return `<div class="item">
               <strong>${escapeHtml(entry.path)}</strong>
               <p><span class="badge">${escapeHtml(entry.inferred_domain)}</span> ${entry.file_count} files</p>
               <div class="row">
-                <button type="button" class="${selected === "curriculum_source" ? "primary" : ""}" data-confirm-path="${escapeHtml(entry.path)}" data-confirm-purpose="curriculum_source" aria-pressed="${selected === "curriculum_source"}">Use for curriculum</button>
+                <button type="button" class="${selected === "curriculum_source" ? "primary" : ""}" data-confirm-path="${escapeHtml(entry.path)}" data-confirm-purpose="curriculum_source" aria-pressed="${selected === "curriculum_source"}">Use for planning</button>
                 <button type="button" class="${selected === "ignore" ? "primary" : ""}" data-confirm-path="${escapeHtml(entry.path)}" data-confirm-purpose="ignore" aria-pressed="${selected === "ignore"}">Ignore</button>
-                ${selected ? `<span class="badge ok">${escapeHtml(selected.replace("_", " "))}</span>` : `<span class="badge">not confirmed</span>`}
+                ${selected ? `<span class="badge ok">${selected === "curriculum_source" ? "used for planning" : "ignored"}</span>` : `<span class="badge">not confirmed</span>`}
               </div>
             </div>`;
-          }).join("") : "<p>No domain-tagged folders found.</p>"}</div>
+          }).join("") : "<p>No teaching folders found yet.</p>"}</div>
         </div>
-        <div class="item" style="margin-top:12px;">
-          <h3>Detected student-data zones</h3>
-          <p>Lingua Viva stayed out during scanning. Nothing below is listed until you explicitly choose a zone.</p>
+        <div class="panel" id="private-student-folders" style="margin-top:14px;">
+          <h3>Private student folders</h3>
+          <p>Lingua Viva did not open these.</p>
           <div class="list">${studentZones.length ? studentZones.map(zone => `<div class="item">
             <strong>${escapeHtml(zone)}</strong>
-            <button type="button" data-peek-zone="${escapeHtml(zone)}" aria-expanded="false">Show what's inside</button>
+            <div class="row">
+              <button type="button" class="primary" data-zone-closed="${escapeHtml(zone)}" aria-pressed="true">Leave closed</button>
+              <button type="button" data-peek-zone="${escapeHtml(zone)}" aria-expanded="false">Show names only</button>
+            </div>
             <div data-zone-results="${escapeHtml(zone)}" aria-live="polite"></div>
           </div>`).join("") : "<p>No student-data zones detected.</p>"}</div>
         </div>
-        <div class="item" style="margin-top:12px;"><h3>Exclusions</h3><div class="list">${(data.exclusions || []).length ? data.exclusions.map(path => `<div class="item"><span>${escapeHtml(path)}</span><button type="button" data-remove-exclusion="${escapeHtml(path)}">Remove</button></div>`).join("") : "<p>No exclusions set.</p>"}</div></div>`;
-      document.querySelectorAll("[data-confirm-path]").forEach(button => {
+        <div class="grid two" style="margin-top:14px;">
+          <div class="panel"><h3>Scanned roots</h3><div class="list">${roots.length ? roots.map(root => `<div class="item"><strong>${escapeHtml(root.path)}</strong><p>${root.entry_count} folders</p>${root.exists === false ? `<p class="voice-hint">This folder no longer exists at this location.</p><div class="row"><button type="button" data-missing-root-choose>Choose another folder</button><button type="button" data-missing-root-rescan="${escapeHtml(root.path)}">Scan folder names</button></div>` : ""}</div>`).join("") : "<p>No folders scanned yet.</p>"}</div></div>
+          <div class="panel"><h3>Exclusions</h3><div class="list">${(data.exclusions || []).length ? data.exclusions.map(path => `<div class="item"><span>${escapeHtml(path)}</span><button type="button" data-remove-exclusion="${escapeHtml(path)}">Remove</button></div>`).join("") : "<p>No exclusions set.</p>"}</div></div>
+        </div>
+        <div class="panel" style="margin-top:14px;">
+          <h3>Connect another folder</h3>
+          ${localFolderScanForm(true)}
+          <div class="row" style="margin-top:12px;">
+            <button id="reset-filemap" type="button">Reset local folder map</button>
+          </div>
+          <div id="filemap-reset-confirm" style="display:none;margin-top:8px;">
+            <p>This removes Lingua Viva's memory of your folder choices. It does not delete any files from your computer.</p>
+            <div class="row">
+              <button id="reset-filemap-cancel" type="button">Cancel</button>
+              <button id="reset-filemap-go" class="primary" type="button">Reset folder map</button>
+            </div>
+          </div>
+        </div>`;
+      wireLocalFolderScanForm(section);
+      section.querySelectorAll("[data-missing-root-choose]").forEach(button => {
+        button.addEventListener("click", chooseLocalFolder);
+      });
+      section.querySelectorAll("[data-missing-root-rescan]").forEach(button => {
+        button.addEventListener("click", () => {
+          const input = $("filemap-path");
+          if (input) {
+            input.value = button.getAttribute("data-missing-root-rescan") || "";
+            input.scrollIntoView({behavior: "smooth", block: "center"});
+            input.focus();
+          }
+        });
+      });
+      if (state.filemapJustScanned) {
+        $("next-use-planning").addEventListener("click", () => $("teaching-materials").scrollIntoView({behavior: "smooth"}));
+        $("next-review-private").addEventListener("click", () => $("private-student-folders").scrollIntoView({behavior: "smooth"}));
+        $("next-done").addEventListener("click", () => {
+          state.filemapJustScanned = false;
+          renderLocalFoldersSection();
+        });
+      }
+      $("reset-filemap").addEventListener("click", () => {
+        $("filemap-reset-confirm").style.display = "block";
+      });
+      $("reset-filemap-cancel").addEventListener("click", () => {
+        $("filemap-reset-confirm").style.display = "none";
+      });
+      $("reset-filemap-go").addEventListener("click", async () => {
+        await api("/api/filemap/clear", {method: "POST", body: JSON.stringify({})});
+        state.filemapJustScanned = false;
+        await renderLocalFoldersSection();
+      });
+      section.querySelectorAll("[data-confirm-path]").forEach(button => {
         button.addEventListener("click", async () => {
           button.disabled = true;
           try {
@@ -2316,14 +3303,14 @@
                 purpose: button.dataset.confirmPurpose
               })
             });
-            await loadFileMap();
+            await renderLocalFoldersSection();
           } catch (error) {
-            status.innerHTML = `<span class="badge warn">${escapeHtml(error.message)}</span>`;
+            $("filemap-status").innerHTML = `<span class="badge warn">${escapeHtml(error.message)}</span>`;
             button.disabled = false;
           }
         });
       });
-      document.querySelectorAll("[data-peek-zone]").forEach(button => {
+      section.querySelectorAll("[data-peek-zone]").forEach(button => {
         button.addEventListener("click", async () => {
           button.disabled = true;
           try {
@@ -2337,10 +3324,24 @@
           }
         });
       });
-      document.querySelectorAll("[data-remove-exclusion]").forEach(button => {
+      section.querySelectorAll("[data-zone-closed]").forEach(button => {
+        button.addEventListener("click", () => {
+          const zone = button.dataset.zoneClosed;
+          const results = Array.from(section.querySelectorAll("[data-zone-results]"))
+            .find(node => node.dataset.zoneResults === zone);
+          if (results) results.innerHTML = "";
+          const peekButton = Array.from(section.querySelectorAll("[data-peek-zone]"))
+            .find(node => node.dataset.peekZone === zone);
+          if (peekButton) {
+            peekButton.setAttribute("aria-expanded", "false");
+            peekButton.textContent = "Show names only";
+          }
+        });
+      });
+      section.querySelectorAll("[data-remove-exclusion]").forEach(button => {
         button.addEventListener("click", async () => {
           await api("/api/filemap/exclude", {method: "POST", body: JSON.stringify({path: button.dataset.removeExclusion, action: "remove"})});
-          await loadFileMap();
+          await renderLocalFoldersSection();
         });
       });
     }
@@ -2363,15 +3364,17 @@
         const assignedByPath = Object.fromEntries(
           assignments.map(item => [item.file_path, item.assigned_student_id || ""])
         );
-        resultTarget.innerHTML = `<div class="list">${peek.items.length ? peek.items.map(item => {
+        resultTarget.innerHTML = `
+        <p class="voice-hint">File names and basic details only. Lingua Viva will not open these files.</p>
+        <div class="list">${peek.items.length ? peek.items.map(item => {
           if (item.type === "directory") {
             return `<div class="item"><strong>${escapeHtml(item.name)}/</strong><span class="badge">folder — not opened</span></div>`;
           }
           const current = assignedByPath[item.path] || "";
           return `<div class="item">
             <strong>${escapeHtml(item.name)}</strong>
-            <p>${Number(item.size_bytes || 0).toLocaleString()} bytes · ${escapeHtml(item.modified_at)}</p>
-            <label>Assign to student
+            <p><span class="badge">${escapeHtml(fileExtChip(item.name))}</span> ${escapeHtml(humanFileSize(item.size_bytes))} · ${escapeHtml(humanModified(item.modified_at))}</p>
+            <label>Link file name to student
               <select data-assign-file="${escapeHtml(item.path)}">
                 <option value="">Not assigned</option>
                 ${students.map(student => `<option value="${escapeHtml(student.student_id)}" ${current === student.student_id ? "selected" : ""}>${escapeHtml(student.display_name || student.student_id)}</option>`).join("")}
@@ -2408,7 +3411,7 @@
                     })
                   });
                   state.students = null;
-                  statusNode.textContent = `Created and assigned to ${created.display_name}.`;
+                  statusNode.textContent = `Linked to ${created.display_name}. File contents were not read.`;
                 } catch (error) {
                   statusNode.textContent = error.message;
                 }
@@ -2423,7 +3426,10 @@
                   assigned_student_id: select.value || null
                 })
               });
-              statusNode.textContent = select.value ? "Saved" : "Assignment removed";
+              const linked = students.find(student => student.student_id === select.value);
+              statusNode.textContent = select.value
+                ? `Linked to ${linked ? (linked.display_name || linked.student_id) : select.value}. File contents were not read.`
+                : "Link removed.";
             } catch (error) {
               statusNode.textContent = error.message;
             }
@@ -2431,29 +3437,42 @@
         });
         return true;
       } catch (error) {
-        resultTarget.innerHTML = `<p>${escapeHtml(error.message)}</p>`;
+        renderFilemapError(resultTarget, error, {onRetry: () => peekStudentZone(zonePath)});
         return false;
       }
     }
 
-    async function scanFileMap() {
-      const path = $("filemap-path").value.trim();
+    async function scanLocalFolder() {
+      const pathInput = $("filemap-path");
+      const status = $("filemap-status");
+      const errorTarget = $("filemap-error");
+      const path = pathInput ? pathInput.value.trim() : "";
       if (!path) {
-        $("filemap-status").innerHTML = `<span class="badge warn">choose a folder path</span>`;
+        status.innerHTML = `<span class="badge warn">choose a folder first</span>`;
         return;
       }
-      $("filemap-status").innerHTML = `<span class="badge">scanning...</span>`;
-      const data = await api("/api/filemap/scan", {
-        method: "POST",
-        body: JSON.stringify({root_path: path, max_depth: Number($("filemap-depth").value || 3)})
-      });
-      $("filemap-status").innerHTML = `<span class="badge ok">scanned ${data.total_entries} folders</span><span class="badge warn">${data.student_zones_detected} student data zones excluded</span>`;
-      await loadFileMap();
-    }
-
-    async function clearFileMap() {
-      await api("/api/filemap/clear", {method: "POST", body: JSON.stringify({})});
-      await loadFileMap();
+      if (errorTarget) errorTarget.innerHTML = "";
+      const scanButton = $("scan-filemap");
+      if (scanButton) scanButton.disabled = true;
+      status.innerHTML = `<span class="badge">scanning folder names...</span>`;
+      try {
+        await api("/api/filemap/scan", {
+          method: "POST",
+          body: JSON.stringify({root_path: path, max_depth: Number(state.filemapDepth || 3)})
+        });
+      } catch (error) {
+        status.innerHTML = "";
+        renderFilemapError(errorTarget, error, {
+          onRetry: scanLocalFolder,
+          onChoose: chooseLocalFolder,
+          treatInvalidPathAsFolderIssue: true
+        });
+        return;
+      } finally {
+        if (scanButton) scanButton.disabled = false;
+      }
+      state.filemapJustScanned = true;
+      await renderLocalFoldersSection();
     }
 
     function renderReflect() {

@@ -71,6 +71,56 @@ reachable_from_ui:
   - route: "GET /api/slack/status"
     call_site: 'api("/api/slack/status")'
 
+  - route: "GET /api/slack/ops/status"
+    call_site: 'api("/api/slack/ops/status")'
+
+  - route: "GET /api/ops/daily"
+    call_site: 'api("/api/ops/daily")'
+
+  - route: "GET /api/ops/setup/catalog"
+    call_site: 'api("/api/ops/setup/catalog")'
+    note: "Bot Setup panel (Daily view → Bot Setup): shipped workflow-pack catalog."
+
+  - route: "GET /api/ops/setup/bot-spec"
+    call_site: 'api("/api/ops/setup/bot-spec")'
+    note: "Bot Setup panel: current per-school bot-spec state."
+
+  - route: "PUT /api/ops/setup/bot-spec"
+    call_site: 'api("/api/ops/setup/bot-spec", {'
+    note: "Bot Setup panel Save: writes selections + settings, swaps the live compile."
+
+  - route: "GET /api/ops/setup/roster"
+    call_site: 'api("/api/ops/setup/roster")'
+    note: "Bot Setup panel: read-only roster confirmation (env stays source of truth)."
+
+  - route: "GET /api/ops/records"
+    call_site: 'api("/api/ops/records")'
+    note: >-
+      Was backend-only (operator audit) in v1; the v2 Bot Setup panel's
+      To Review teach loop now reads it for needs_review items
+      (SPEC_LV_SLACK_OPS_V2_WORKFLOW_PACKS_2026-07-27 §4). Still also an
+      operator curl audit surface.
+
+  - route: "POST /api/ops/review/reclassify"
+    call_site: 'api("/api/ops/review/reclassify", {'
+    note: "Bot Setup panel To Review teach loop: record fix + optional candidate rule."
+
+  - route: "POST /api/ops/setup/corpus/run"
+    call_site: 'api("/api/ops/setup/corpus/run", {'
+    note: "Bot Setup panel: run the test corpus; records last_run for the go-live gate (spec §7)."
+
+  - route: "POST /api/ops/setup/corpus/sentences"
+    call_site: 'api("/api/ops/setup/corpus/sentences", {'
+    note: "Bot Setup panel: add an admin test sentence; clears the recorded run (stale)."
+
+  - route: "POST /api/ops/setup/rules/decide"
+    call_site: 'api("/api/ops/setup/rules/decide", {'
+    note: "Bot Setup panel: corpus-gated candidate approve / reject ceremony (spec §4)."
+
+  - route: "GET /api/ops/setup/suggestions"
+    call_site: 'api("/api/ops/setup/suggestions")'
+    note: "Bot Setup panel: shadow suggester — weekly would-have-matched counts for disabled packs (spec §8)."
+
   - route: "GET /api/curriculum/overview"
     call_site: 'api("/api/curriculum/overview")'
 
@@ -194,6 +244,24 @@ reachable_from_ui:
   - route: "POST /api/google-drive/import"
     call_site: 'api("/api/google-drive/import"'
 
+  - route: "POST /api/google-drive/upload"
+    call_site: 'api("/api/google-drive/upload"'
+
+  - route: "GET /api/google-drive/folders"
+    call_site: 'api("/api/google-drive/folders")'
+
+  - route: "POST /api/google-drive/folders"
+    call_site: 'api("/api/google-drive/folders", {'
+
+  - route: "DELETE /api/google-drive/folders/{folder_id}"
+    call_site: 'api(`/api/google-drive/folders/${'
+
+  - route: "POST /api/google-drive/auth/start"
+    call_site: 'api("/api/google-drive/auth/start"'
+
+  - route: "POST /api/google-drive/auth/disconnect"
+    call_site: 'api("/api/google-drive/auth/disconnect"'
+
   - route: "GET /api/extraction/sources"
     call_site: 'api("/api/extraction/sources")'
 
@@ -222,6 +290,23 @@ reachable_from_ui:
       My Teaching Style artifact-ingest form (commit ff2401e, closed
       LV-BLT-003). Same stale-classification story as
       POST /api/provider/connect.
+
+  - route: "GET /api/updates/pending"
+    call_site: 'api("/api/updates/pending")'
+    note: >-
+      Settings "Template Updates" panel (SPEC_ONE_BUTTON_UPDATE_2026-07-27
+      Phase 3) — lists shipped template updates held back because the
+      teacher customized their copy.
+
+  - route: "GET /api/updates/diff"
+    call_site: "/api/updates/diff?path=${"
+    note: "Template Updates panel [View diff] button."
+
+  - route: "POST /api/updates/resolve"
+    call_site: 'api("/api/updates/resolve"'
+    note: >-
+      Template Updates panel [Keep mine]/[Take new] buttons. take_new
+      archives the teacher's copy before replacing — never destroys work.
 
 intentionally_backend_only:
   - route: "GET /api/categories"

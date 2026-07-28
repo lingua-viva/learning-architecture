@@ -51,7 +51,49 @@ REPO = Path(__file__).resolve().parent.parent
 #   v31–33 (2026-07-23): re-seal lock after pull merged remote v30 with local
 #     v29; BLT-009 Knowledge browser; BLT-006 route reclassification; fix
 #     OntologyNode.name field.
-EXPECTED_VERSION = 33
+#   v34 (2026-07-27): Drive round-trip: extraction-sources dual-scan
+#     (path-mismatch fix) + explicit POST /api/google-drive/upload with
+#     Share-back-to-Drive panel in Settings.
+#   v35 (2026-07-27): One-button update: reflection-log relocation + updates
+#     pending/diff/resolve routes + Settings Template Updates panel.
+#   v36 (2026-07-27): Drive workspace Phase 1: Drive utility-nav view with
+#     URL-paste folder connect (GET/POST/DELETE /api/google-drive/folders),
+#     teacher-language import + Review-now next action, share-back panel.
+#   v37 (2026-07-27): Slack Daily Operations Assistant Lane E: Socket Mode
+#     wiring + ops status/daily/records routes, "Daily" teacher-nav view.
+#   v38 (2026-07-27): re-seal after both concurrent lanes (Drive workspace +
+#     Slack ops) finished editing the shared tree; no new features.
+#   v39 (2026-07-27): Sources view + File Map UX redesign
+#     (SPEC_LV_SOURCES_VIEW_FILE_MAP_UX_2026-07-27): Sources utility-nav
+#     view (Slack card + Drive relocation + Local folders invitation/scan
+#     UX), filemap error `code` field, Home nudge.
+#   v40 (2026-07-27): Drive-surface hardening loop re-seal
+#     (dev/HARDENING_LOOP_DRIVE_2026-07-27.md): web.py-only hardening —
+#     Drive route validation, privacy events, hermeticity seam. No UI changes.
+#   v41 (2026-07-27): one-button-update hardening iteration 7
+#     (REPORT_ONE_BUTTON_UPDATE §8): web.py legacy-migration intra-file
+#     dedupe + UnicodeDecodeError guard. No UI changes.
+#   v42 (2026-07-27): Slack Ops Assistant 15-pass hardening loop
+#     (dev/reports/REPORT_SLACK_OPS_HARDENING_2026-07-27.md): web.py
+#     shutdown now awaits the cancelled briefing scheduler. No UI changes.
+#   v43 (2026-07-27): review finding 2 — uuid4 reflection revision_ids +
+#     content-aware migration dedupe. No UI changes.
+#   v44 (2026-07-27): in-app Google sign-in for Drive (spec §A): auth
+#     start/disconnect routes + Sources/Drive sign-in panel with trust
+#     copy, status polling, sign-in-again, and env-credential shadowing.
+#   v45 (2026-07-27): live-layer read path §3 — restart hint appended to the
+#     Template Updates take-new success message. No web.py changes.
+#   v46 (2026-07-27): Drive final hardening H1-H5: interstitial walkthrough
+#     copy in the sign-in panel; web.py 0600 lens snapshots + prune exports
+#     to 3/student after upload. Zero new routes.
+#   v47 (2026-07-27): Slack ops v2 packs Phase 2+3 — bot-spec startup
+#     compile + go-live gate + schedule times; Bot Setup routes
+#     (catalog/bot-spec get+put/roster) and Daily sub-view panel.
+#   v48 (2026-07-27): Slack ops v2 packs Phase 4+5 — teach-loop
+#     reclassify route, corpus run/sentences/rules-decide routes with
+#     the go-live + candidate-approve gates, PUT staleness guard, and
+#     the Bot Setup panel's teach/corpus/go-live controls.
+EXPECTED_VERSION = 48
 
 
 def _html() -> str:
@@ -114,9 +156,9 @@ def test_sidebar_nav_contract_counts_and_handlers():
         assert match, f"{name} array missing"
         arrays[name] = re.findall(r'\["([^"]+)",\s*"([^"]+)",\s*"([^"]+)"\]', match.group(1))
 
-    assert len(arrays["teacherNav"]) == 8
+    assert len(arrays["teacherNav"]) == 9
     assert len(arrays["adminNav"]) == 5
-    assert len(arrays["utilityNav"]) == 7
+    assert len(arrays["utilityNav"]) == 8
 
     view_map = re.search(r"const views = \{(.*?)\n      \};", html, flags=re.S)
     assert view_map, "renderView() view handler map missing"

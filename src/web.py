@@ -16,12 +16,15 @@ Start: automatically launched as a local teacher app server.
 from __future__ import annotations
 
 import asyncio
+import errno
+import hashlib
 import json
 import os
 import re
 import sys
 import tempfile
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -275,6 +278,708 @@ async def slack_events(request: Request):
     return result
 
 
+# ---------------------------------------------------------------------------
+# Slack Daily Operations Assistant (spec SPEC_LV_SLACK_OPS_ASSISTANT
+# 2026-07-27, Lane E). Separate from the dormant observation path above:
+# Socket Mode transport, ops records only, never student lenses.
+# ---------------------------------------------------------------------------
+
+_ops_runtime: dict = {}
+
+
+def _ops_teacher_map() -> dict:
+    """Teacher map from env if valid, else empty (read routes stay usable)."""
+    from src.lingua_viva.slack_socket import (
+        SlackOpsConfigurationError,
+        require_ops_config,
+    )
+
+    try:
+        return require_ops_config().teacher_map
+    except SlackOpsConfigurationError:
+        return {}
+
+
+def _ops_local_today() -> str:
+    return datetime.now().astimezone().date().isoformat()
+
+
+@app.get("/api/slack/ops/status")
+async def slack_ops_status():
+    """Secret-free readiness/liveness for the Daily Operations Assistant."""
+    from src.lingua_viva.slack_socket import ops_status
+
+    return ops_status()
+
+
+@app.get("/api/ops/daily")
+async def ops_daily(teacher_id: str | None = None, date: str | None = None):
+    """Render each teacher's daily file (same markdown as the Desktop file)."""
+
+    def build() -> dict:
+        from src.education.daily_file import DailyFileEngine
+        from src.education.ops_records import OpsRecordStore
+
+        date_iso = (date or "").strip() or _ops_local_today()
+        teacher_map = _ops_teacher_map()
+        with OpsRecordStore() as store:
+            engine = DailyFileEngine(store, teacher_map=teacher_map)
+            teachers: list[tuple[str, str]] = [
+                (str(info.get("teacher_id") or ""), str(info.get("display_name") or ""))
+                for info in teacher_map.values()
+            ]
+            if not teachers:
+                # Unconfigured transport: derive teachers from the day itself.
+                seen: dict[str, str] = {}
+                for record in store.records_for_day(date_iso):
+                    if record.teacher_id and record.teacher_id not in seen:
+                        seen[record.teacher_id] = (
+                            record.actor_name or record.teacher_id
+                        )
+                teachers = sorted(seen.items())
+            if teacher_id:
+                teachers = [t for t in teachers if t[0] == teacher_id]
+            payload = []
+            for tid, display in teachers:
+                payload.append(
+                    {
+                        "teacher_id": tid,
+                        "display_name": display,
+                        "markdown": engine.render_markdown(tid, display, date_iso),
+                        "file_path": str(engine.daily_file_path(display)),
+                    }
+                )
+            return {
+                "date": date_iso,
+                "configured": bool(teacher_map),
+                "teachers": payload,
+                "needs_review": store.needs_review_count(date_iso),
+            }
+
+    return await asyncio.to_thread(build)
+
+
+@app.get("/api/ops/records")
+async def ops_records_for_day(teacher_id: str | None = None, date: str | None = None):
+    """Raw operational records for a day (local audit surface)."""
+
+    def build() -> dict:
+        from dataclasses import asdict
+
+        from src.education.ops_records import OpsRecordStore
+
+        date_iso = (date or "").strip() or _ops_local_today()
+        with OpsRecordStore() as store:
+            records = store.records_for_day(date_iso, teacher_id=teacher_id or None)
+            return {
+                "date": date_iso,
+                "count": len(records),
+                "records": [asdict(record) for record in records],
+            }
+
+    return await asyncio.to_thread(build)
+
+
+# --- v2 Bot Setup routes (spec SPEC_LV_SLACK_OPS_V2_WORKFLOW_PACKS §6) -----
+# Secret-free by construction: tokens/channel live only in LV_SLACK_* env,
+# the bot-spec refuses token shapes at write time, and none of these
+# payloads touch config values beyond the roster map (which is the panel's
+# read-only confirmation surface — source of truth stays the env var).
+
+
+def _ops_bot_spec_payload(spec) -> dict:
+    """Shared shape for GET and PUT responses: the bot-spec state plus a
+    compiled summary the panel renders (categories/sections/broadcast)."""
+    from src.education.ops_bot_spec import bot_spec_path
+
+    rules = spec.rule_set
+    return {
+        "exists": spec.exists,
+        "live": spec.live,
+        "fallback": spec.fallback,
+        "schema_version": spec.schema_version,
+        "spec_path": str(bot_spec_path()),
+        "packs": {"enabled": list(spec.enabled_pack_ids)},
+        "settings": {
+            "briefing_hhmm": spec.briefing_hhmm,
+            "eod_hhmm": spec.eod_hhmm,
+            "period_aliases": list(spec.period_aliases),
+            "claim_rights": spec.claim_rights,
+            "review_required": list(spec.review_required),
+        },
+        "learned_rules": [dict(rule) for rule in spec.learned_rules],
+        "corpus": {
+            "admin_sentences": [dict(s) for s in spec.corpus_sentences],
+            "last_run": dict(spec.corpus_last_run) if spec.corpus_last_run else None,
+        },
+        "compiled": {
+            "categories": list(rules.category_ids()),
+            "section_order": list(rules.section_order),
+            "broadcast_categories": sorted(rules.broadcast_categories),
+        },
+    }
+
+
+@app.get("/api/ops/setup/catalog")
+async def ops_setup_catalog():
+    """The shipped pack catalog (read-only data from config/ops_packs/)."""
+
+    def build() -> dict:
+        from src.education import ops_packs
+
+        packs = ops_packs.load_packs()
+        return {
+            "packs": [
+                {
+                    "id": pack.id,
+                    "name": pack.name,
+                    "description": pack.description,
+                    "enabled_by_default": pack.enabled_by_default,
+                    "default_for_new_schools": pack.default_for_new_schools,
+                    "categories": [
+                        {
+                            "id": entry.id,
+                            "priority": entry.priority,
+                            "section": entry.section,
+                            "broadcast": entry.broadcast,
+                            "capability": entry.capability,
+                            "channel_default": entry.channel_default,
+                            "vocabulary_count": len(entry.patterns),
+                        }
+                        for entry in pack.categories
+                    ],
+                    "sections": [section.name for section in pack.sections],
+                    "samples": [
+                        {"text": sample.text, "expect": dict(sample.expect)}
+                        for sample in pack.samples
+                    ],
+                }
+                for pack in sorted(packs.values(), key=lambda p: p.id)
+            ],
+            "core": {
+                "category": "other",
+                "note": "Fallback + clarification + To Review — core, cannot be disabled.",
+            },
+        }
+
+    return await asyncio.to_thread(build)
+
+
+@app.get("/api/ops/setup/bot-spec")
+async def ops_setup_bot_spec_get():
+    """Current bot-spec state (disk truth; pure read, no swap)."""
+
+    def build() -> dict:
+        from src.education.ops_bot_spec import load_compiled_spec
+
+        return _ops_bot_spec_payload(load_compiled_spec())
+
+    return await asyncio.to_thread(build)
+
+
+@app.put("/api/ops/setup/bot-spec")
+async def ops_setup_bot_spec_put(request: Request):
+    """Write pack selections + interview settings, then atomically swap the
+    live compile. NEVER touches the transport (spec §3.3: creating a
+    bot-spec must not stop a running env-configured bot). Learned rules and
+    corpus results are owned by the teach loop/corpus runner — this route
+    preserves them from disk, so the panel can never clobber them."""
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Body must be JSON."}, status_code=400)
+    if not isinstance(body, dict):
+        return JSONResponse({"error": "Body must be a JSON object."}, status_code=400)
+
+    def build():
+        from src.education import ops_bot_spec
+
+        current = ops_bot_spec.load_compiled_spec()
+        data = dict(current.raw) if current.exists and not current.fallback else (
+            ops_bot_spec.default_bot_spec_data()
+        )
+        # Panel-owned fields only; teach-loop fields carry over from disk.
+        packs_block = body.get("packs")
+        if isinstance(packs_block, dict) and isinstance(
+            packs_block.get("enabled"), list
+        ):
+            data["packs"] = {"enabled": [str(p) for p in packs_block["enabled"]]}
+        settings_in = body.get("settings")
+        if isinstance(settings_in, dict):
+            settings = dict(data.get("settings") or {})
+            for key in (
+                "briefing_hhmm",
+                "eod_hhmm",
+                "period_aliases",
+                "claim_rights",
+                "review_required",
+            ):
+                if key in settings_in:
+                    settings[key] = settings_in[key]
+            data["settings"] = settings
+        if "live" in body:
+            data["live"] = bool(body["live"])
+
+        # Staleness guard (spec §7): if this save changes what the
+        # compiled rule set routes (pack membership, period aliases),
+        # the recorded corpus run no longer describes the live rules —
+        # drop it so go-live requires a fresh passing run.
+        def _routing_signature(doc: dict) -> tuple:
+            settings_block = doc.get("settings") or {}
+            return (
+                tuple(sorted((doc.get("packs") or {}).get("enabled") or [])),
+                tuple(settings_block.get("period_aliases") or []),
+            )
+
+        before_data = (
+            dict(current.raw)
+            if current.exists and not current.fallback
+            else ops_bot_spec.default_bot_spec_data()
+        )
+        if _routing_signature(data) != _routing_signature(before_data):
+            corpus_block = dict(data.get("corpus") or {})
+            corpus_block["last_run"] = None
+            data["corpus"] = corpus_block
+
+        # Go-live gate (spec §7): a school never goes live on untested
+        # rules — the toggle requires a recorded passing corpus run.
+        if data.get("live"):
+            last_run = (data.get("corpus") or {}).get("last_run") or {}
+            if not last_run.get("passed"):
+                return JSONResponse(
+                    {
+                        "error": "Go-live requires a passing corpus test run. "
+                        "Run the test corpus first."
+                    },
+                    status_code=409,
+                )
+
+        # Validate by compiling BEFORE writing — a spec that does not
+        # compile is never written to disk.
+        try:
+            ops_bot_spec._compile_from_data(dict(data))
+        except ops_bot_spec.PackLoadError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+        try:
+            ops_bot_spec.write_bot_spec(data)
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+        spec = ops_bot_spec.refresh_from_disk()
+        return _ops_bot_spec_payload(spec)
+
+    return await asyncio.to_thread(build)
+
+
+@app.post("/api/ops/review/reclassify")
+async def ops_review_reclassify(request: Request):
+    """Teach-loop record fix (spec §4): reclassify a To Review record, then
+    optionally file a CANDIDATE learned rule ("treat future messages like
+    this as X") in the bot-spec. Candidates never affect live
+    classification — they wait for the corpus-gated approve ceremony."""
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Body must be JSON."}, status_code=400)
+    if not isinstance(body, dict):
+        return JSONResponse({"error": "Body must be a JSON object."}, status_code=400)
+    record_id = str(body.get("record_id") or "").strip()
+    category = str(body.get("category") or "").strip()
+    keyphrase = str(body.get("keyphrase") or "").strip()
+    if not record_id or not category:
+        return JSONResponse(
+            {"error": "record_id and category are required."}, status_code=400
+        )
+
+    def build():
+        from dataclasses import asdict
+
+        from src.education import ops_bot_spec
+        from src.education.daily_file import DailyFileEngine
+        from src.education.ops_records import OpsRecordStore
+
+        if keyphrase and category in ("other", "coverage_claim", "announcement"):
+            return JSONResponse(
+                {
+                    "error": "Learned rules cannot target core 'other', "
+                    "coverage_claim (claims belong to the machine), or "
+                    "announcement (positional — it has no vocabulary by "
+                    "design)."
+                },
+                status_code=400,
+            )
+        with OpsRecordStore() as store:
+            before = store.get_record(record_id)
+            if before is None:
+                return JSONResponse({"error": "Unknown record."}, status_code=404)
+            try:
+                if category == "coverage_request":
+                    # The claim machine owns coverage records — the past
+                    # record just leaves To Review; the CANDIDATE rule is
+                    # how future messages get real coverage treatment.
+                    updated = store.mark_reviewed(record_id)
+                else:
+                    updated = store.reclassify_record(record_id, category)
+            except ValueError as exc:
+                return JSONResponse({"error": str(exc)}, status_code=400)
+            # Re-render BOTH placements: the files the old category reached
+            # (a broadcast wrongly filed touches every teacher) and the
+            # files the corrected category reaches now.
+            engine = DailyFileEngine(store, teacher_map=_ops_teacher_map())
+            engine.refresh_for_record(before)
+            engine.refresh_for_record(updated)
+
+            rule = None
+            if keyphrase:
+                current = ops_bot_spec.load_compiled_spec()
+                data = (
+                    dict(current.raw)
+                    if current.exists and not current.fallback
+                    else ops_bot_spec.default_bot_spec_data()
+                )
+                rule = ops_bot_spec.new_candidate_rule(
+                    category=category,
+                    keyphrase=keyphrase,
+                    source_record_id=record_id,
+                )
+                data["learned_rules"] = list(data.get("learned_rules") or []) + [rule]
+                try:
+                    ops_bot_spec.write_bot_spec(data)
+                except ValueError as exc:
+                    return JSONResponse({"error": str(exc)}, status_code=400)
+                ops_bot_spec.refresh_from_disk()
+            return {"record": asdict(updated), "candidate_rule": rule}
+
+    return await asyncio.to_thread(build)
+
+
+@app.get("/api/ops/setup/roster")
+async def ops_setup_roster():
+    """Read-only roster view. Source of truth stays LV_SLACK_TEACHER_MAP
+    env (v1 boundary) — no member pull, no CSV, not editable here."""
+    teacher_map = _ops_teacher_map()
+    return {
+        "source": "LV_SLACK_TEACHER_MAP",
+        "editable": False,
+        "count": len(teacher_map),
+        "teachers": [
+            {
+                "slack_user_id": user_id,
+                "teacher_id": str(info.get("teacher_id") or ""),
+                "display_name": str(info.get("display_name") or ""),
+            }
+            for user_id, info in sorted(teacher_map.items())
+        ],
+    }
+
+
+@app.get("/api/ops/setup/suggestions")
+async def ops_setup_suggestions():
+    """Shadow suggester (spec §8): weekly would-have-matched counts of
+    unmatched traffic against DISABLED packs. Suggestion only — enabling
+    stays the admin's checklist + Save + corpus run. Payload carries pack
+    names and counts, never record text."""
+
+    def build() -> dict:
+        from src.education import ops_suggest
+        from src.education.ops_records import OpsRecordStore
+
+        with OpsRecordStore() as store:
+            records = store.recent_records_in_categories(
+                ops_suggest.UNMATCHED_CATEGORIES,
+                since_iso=ops_suggest.window_start_iso(),
+            )
+            suggestions = ops_suggest.shadow_suggestions(records)
+        return {
+            "window_days": ops_suggest.WINDOW_DAYS,
+            "threshold": ops_suggest.SUGGESTION_THRESHOLD,
+            "suggestions": suggestions,
+        }
+
+    return await asyncio.to_thread(build)
+
+
+def _load_writable_bot_spec_data():
+    """Disk bot-spec data for routes that RECORD into it (corpus runs,
+    rule decisions). Returns (data, error_response): no file → the admin
+    has not saved a setup yet; fallback → never write over a spec we
+    could not compile (fail closed, spec §3.2)."""
+    from src.education import ops_bot_spec
+
+    current = ops_bot_spec.load_compiled_spec()
+    if not current.exists:
+        return None, JSONResponse(
+            {
+                "error": "No bot-spec yet — save your Bot Setup first; "
+                "corpus results are recorded in the bot-spec."
+            },
+            status_code=409,
+        )
+    if current.fallback:
+        return None, JSONResponse(
+            {
+                "error": "The bot-spec on disk failed to compile "
+                f"({current.fallback}) — fix it via Save before recording "
+                "corpus results."
+            },
+            status_code=409,
+        )
+    return dict(current.raw), None
+
+
+@app.post("/api/ops/setup/corpus/run")
+async def ops_setup_corpus_run():
+    """Run the test corpus (pack samples + admin sentences) through the
+    bot-spec's compiled rule set and RECORD the result (timestamp +
+    result hash) — the recorded passing run is what the go-live toggle
+    requires (spec §7). Deterministic: expectations are relative dates,
+    so today's real date never changes pass/fail."""
+
+    def build():
+        from src.education import ops_bot_spec, ops_corpus
+
+        data, error = _load_writable_bot_spec_data()
+        if error is not None:
+            return error
+        spec = ops_bot_spec._compile_from_data(dict(data))
+        result = ops_corpus.run_corpus(spec)
+        corpus_block = dict(data.get("corpus") or {})
+        corpus_block.setdefault("admin_sentences", [])
+        corpus_block["last_run"] = result.last_run()
+        data["corpus"] = corpus_block
+        try:
+            ops_bot_spec.write_bot_spec(data)
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+        refreshed = ops_bot_spec.refresh_from_disk()
+        payload = result.as_payload()
+        payload["bot_spec"] = _ops_bot_spec_payload(refreshed)
+        return payload
+
+    return await asyncio.to_thread(build)
+
+
+@app.post("/api/ops/setup/corpus/sentences")
+async def ops_setup_corpus_add_sentence(request: Request):
+    """Add an admin test sentence to the bot-spec corpus (spec §7).
+    Clears the recorded run — new expectations mean the old result no
+    longer describes this corpus, so go-live needs a fresh pass."""
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Body must be JSON."}, status_code=400)
+    if not isinstance(body, dict):
+        return JSONResponse({"error": "Body must be a JSON object."}, status_code=400)
+    text = str(body.get("text") or "").strip()
+    expect = body.get("expect")
+    if not text or not isinstance(expect, dict) or not str(expect.get("category") or "").strip():
+        return JSONResponse(
+            {"error": "text and expect.category are required."}, status_code=400
+        )
+
+    def build():
+        from src.education import ops_bot_spec, ops_corpus
+
+        data, error = _load_writable_bot_spec_data()
+        if error is not None:
+            return error
+        spec = ops_bot_spec._compile_from_data(dict(data))
+        unknown_keys = set(expect) - ops_corpus._KNOWN_EXPECT_KEYS
+        if unknown_keys:
+            return JSONResponse(
+                {"error": f"Unknown expectation keys: {sorted(unknown_keys)}"},
+                status_code=400,
+            )
+        category = str(expect["category"])
+        known = set(spec.rule_set.category_ids()) | {"other"}
+        if category not in known:
+            return JSONResponse(
+                {"error": f"Unknown expected category {category!r}."},
+                status_code=400,
+            )
+        corpus_block = dict(data.get("corpus") or {})
+        sentences = list(corpus_block.get("admin_sentences") or [])
+        sentences.append({"text": text, "expect": dict(expect)})
+        corpus_block["admin_sentences"] = sentences
+        corpus_block["last_run"] = None
+        data["corpus"] = corpus_block
+        try:
+            ops_bot_spec.write_bot_spec(data)
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+        refreshed = ops_bot_spec.refresh_from_disk()
+        return _ops_bot_spec_payload(refreshed)
+
+    return await asyncio.to_thread(build)
+
+
+@app.post("/api/ops/setup/rules/decide")
+async def ops_setup_rule_decide(request: Request):
+    """Candidate learned-rule promote ceremony (spec §4): approve is
+    CORPUS-GATED — the corpus runs against a hypothetical compile with
+    the candidate approved, and zero previously-passing samples may
+    change routing (any failure → 409, nothing written). Reject just
+    records the decision; rejected rules never compile."""
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Body must be JSON."}, status_code=400)
+    if not isinstance(body, dict):
+        return JSONResponse({"error": "Body must be a JSON object."}, status_code=400)
+    rule_id = str(body.get("rule_id") or "").strip()
+    action = str(body.get("action") or "").strip()
+    if not rule_id or action not in ("approve", "reject"):
+        return JSONResponse(
+            {"error": "rule_id and action ('approve' or 'reject') are required."},
+            status_code=400,
+        )
+
+    def build():
+        from src.education import ops_bot_spec, ops_corpus
+
+        data, error = _load_writable_bot_spec_data()
+        if error is not None:
+            return error
+        rules = [dict(r) for r in data.get("learned_rules") or []]
+        target = next((r for r in rules if r.get("id") == rule_id), None)
+        if target is None:
+            return JSONResponse({"error": "Unknown rule."}, status_code=404)
+        if target.get("status") != "candidate":
+            return JSONResponse(
+                {"error": "Only candidate rules can be approved or rejected."},
+                status_code=409,
+            )
+        target["status"] = "approved" if action == "approve" else "rejected"
+        target["decided_at"] = ops_bot_spec.utc_now_iso()
+        data["learned_rules"] = rules
+
+        run_payload = None
+        if action == "approve":
+            try:
+                hypothetical = ops_bot_spec._compile_from_data(dict(data))
+            except ops_bot_spec.PackLoadError as exc:
+                return JSONResponse({"error": str(exc)}, status_code=400)
+            result = ops_corpus.run_corpus(hypothetical)
+            if not result.passed:
+                failing = [
+                    row.as_payload() for row in result.rows if not row.ok
+                ]
+                return JSONResponse(
+                    {
+                        "error": "Approving this rule breaks the test corpus "
+                        f"({result.failed} of {result.total} sentences) — "
+                        "nothing was changed.",
+                        "rows": failing,
+                        "run": result.last_run(),
+                    },
+                    status_code=409,
+                )
+            # The passing run INCLUDED the newly approved rule — record
+            # it, keeping the go-live gate honest about the live rules.
+            corpus_block = dict(data.get("corpus") or {})
+            corpus_block.setdefault("admin_sentences", [])
+            corpus_block["last_run"] = result.last_run()
+            data["corpus"] = corpus_block
+            run_payload = result.as_payload()
+
+        try:
+            ops_bot_spec.write_bot_spec(data)
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+        refreshed = ops_bot_spec.refresh_from_disk()
+        payload = _ops_bot_spec_payload(refreshed)
+        payload["decided_rule"] = dict(target)
+        if run_payload is not None:
+            payload["corpus_run"] = run_payload
+        return payload
+
+    return await asyncio.to_thread(build)
+
+
+async def _startup_slack_ops():
+    """Start the Socket Mode ops assistant when configured; stay off cleanly
+    when not. Guarded top to bottom — the ops assistant must never take the
+    teacher's app down with it."""
+    try:
+        from src.education import ops_bot_spec
+
+        # Install the bot-spec compile (v2). No file ⇒ exact v1 parity; a
+        # malformed file fails closed to parity with a fallback reason.
+        spec = ops_bot_spec.refresh_from_disk()
+
+        from src.lingua_viva.slack_socket import (
+            SlackOpsConfigurationError,
+            SlackSocketClient,
+            register_ops_client,
+            require_ops_config,
+        )
+
+        try:
+            config = require_ops_config()
+        except SlackOpsConfigurationError:
+            return  # unconfigured — the status route explains what is missing
+
+        if spec.exists and not spec.live:
+            # Go-live gate (spec §3.3): a bot-spec exists but has not passed
+            # the corpus gate yet — the transport stays off. Applies ONLY
+            # when a bot-spec exists; env-only setups keep v1 behavior.
+            return
+
+        from src.education.daily_file import DailyFileEngine
+        from src.education.ops_records import OpsRecordStore
+        from src.education.slack_ops_bot import SlackOpsBot
+
+        store = OpsRecordStore()
+        daily = DailyFileEngine(store, teacher_map=config.teacher_map)
+        bot = SlackOpsBot(
+            store=store,
+            daily=daily,
+            client=None,  # transport attached just below
+            ops_channel=config.ops_channel,
+            teacher_map=config.teacher_map,
+        )
+        client = SlackSocketClient(config, bot.on_envelope)
+        bot.client = client
+        register_ops_client(client)
+        client.start()
+        schedules = asyncio.create_task(
+            bot.run_schedules(
+                briefing_hhmm=spec.briefing_hhmm, eod_hhmm=spec.eod_hhmm
+            )
+        )
+        _ops_runtime.update(
+            {"store": store, "bot": bot, "client": client, "schedules": schedules}
+        )
+    except Exception:
+        pass
+
+
+async def _shutdown_slack_ops():
+    try:
+        from src.lingua_viva.slack_socket import register_ops_client
+
+        schedules = _ops_runtime.pop("schedules", None)
+        if schedules is not None:
+            schedules.cancel()
+            try:
+                await schedules
+            except (asyncio.CancelledError, Exception):
+                pass
+        client = _ops_runtime.pop("client", None)
+        if client is not None:
+            await client.stop()
+        register_ops_client(None)
+        store = _ops_runtime.pop("store", None)
+        if store is not None:
+            store.close()
+        _ops_runtime.clear()
+    except Exception:
+        pass
+
+
+app.add_event_handler("startup", _startup_slack_ops)
+app.add_event_handler("shutdown", _shutdown_slack_ops)
+
+
 def _student_db_path() -> Path:
     override = os.environ.get("LV_STUDENT_DB_PATH")
     if override:
@@ -329,7 +1034,138 @@ def _student_store_for_brief():
 
 
 def _revision_log_path() -> Path:
-    return Path(os.environ.get("LV_REVISION_LOG_PATH", LV_ROOT / "dev" / "lv_revision_log.ndjson"))
+    # Default moved from LV_ROOT (the updater-owned bundle — erased on every
+    # app update, mutates the signed macOS bundle) to lv_home()
+    # (SPEC_ONE_BUTTON_UPDATE_2026-07-27 P0). Env override unchanged.
+    from src.lingua_viva.config import lv_home
+
+    return Path(os.environ.get("LV_REVISION_LOG_PATH", str(lv_home() / "dev" / "lv_revision_log.ndjson")))
+
+
+def _legacy_revision_log_path() -> Path:
+    """Pre-P0 reflection-log location inside the app bundle (read-only now)."""
+    return LV_ROOT / "dev" / "lv_revision_log.ndjson"
+
+
+def _migrate_legacy_revision_log() -> int:
+    """One-time rescue of teacher reflections written inside the app bundle.
+
+    Desktop builds 0.2.9/0.2.10 appended private teacher reflections to
+    ``LV_ROOT/dev/lv_revision_log.ndjson`` — updater-owned territory, erased
+    on every app update (SPEC_ONE_BUTTON_UPDATE_2026-07-27 §1/P0). Append
+    those entries once to the new lv_home() location. Idempotent two ways:
+    a sentinel file short-circuits repeat runs, and entries are deduped by
+    ``revision_id``, so a crash between append and sentinel-write cannot
+    duplicate entries on retry. Only private teacher reflections migrate —
+    in a source checkout the legacy path is the *committed* dev audit
+    trail, which is repo history, not teacher state. The legacy path is
+    never written. Returns the number of migrated entries.
+    """
+    new_path = _revision_log_path()
+    sentinel = new_path.with_name(new_path.name + ".migrated")
+    if sentinel.exists():
+        return 0
+    legacy = _legacy_revision_log_path()
+
+    def _finish(count: int) -> int:
+        sentinel.parent.mkdir(parents=True, exist_ok=True)
+        sentinel.write_text(
+            json.dumps({
+                "migrated_entries": count,
+                "migrated_at": datetime.now(timezone.utc).isoformat(),
+                "legacy_path": str(legacy),
+            }) + "\n",
+            encoding="utf-8",
+        )
+        return count
+
+    try:
+        same_file = legacy.exists() and new_path.exists() and legacy.resolve() == new_path.resolve()
+    except OSError:
+        same_file = False
+    if same_file or not legacy.exists():
+        return _finish(0)
+
+    try:
+        legacy_lines = [line for line in legacy.read_text(encoding="utf-8").splitlines() if line.strip()]
+    except (OSError, UnicodeDecodeError):
+        # Unreadable this launch — leave the sentinel unwritten so the next
+        # launch retries; this is the only rescue window for those entries.
+        return 0
+
+    def _dedupe_key(entry: dict) -> tuple[str, str]:
+        # revision_id ALONE is not enough: pre-uuid builds stamped
+        # int(time.time()) — two distinct reflections in the same second
+        # shared an ID, and the second was silently dropped (review
+        # finding 2). Key on (revision_id, content-hash) so distinct notes
+        # both survive while true double-submits still dedupe.
+        canonical = json.dumps(entry, sort_keys=True, ensure_ascii=True)
+        return (
+            str(entry.get("revision_id")),
+            hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
+        )
+
+    existing_keys: set[tuple[str, str]] = set()
+    try:
+        for line in new_path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            try:
+                parsed = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(parsed, dict):
+                existing_keys.add(_dedupe_key(parsed))
+    except OSError:
+        pass
+
+    migrated = 0
+    new_path.parent.mkdir(parents=True, exist_ok=True)
+    with new_path.open("a", encoding="utf-8") as handle:
+        for line in legacy_lines:
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(entry, dict):
+                continue
+            is_teacher_reflection = entry.get("private") is True or (
+                entry.get("artifact_id") == "lv-private-teacher-reflection"
+            )
+            if not is_teacher_reflection:
+                continue
+            key = _dedupe_key(entry)
+            if key in existing_keys:
+                continue
+            existing_keys.add(key)  # dedupe within the legacy file too
+            handle.write(json.dumps(entry, ensure_ascii=True) + "\n")
+            migrated += 1
+    return _finish(migrated)
+
+
+async def _startup_state_migrations():
+    """P0 reflection-log rescue + first-launch template reconcile.
+
+    Runs identically for desktop (bootstrap spawns this server), `lv serve`,
+    and source installs (SPEC_ONE_BUTTON_UPDATE_2026-07-27 Phase 2). Each
+    step is independently guarded — a failed migration or reconcile must
+    never take the teacher's app down with it.
+    """
+    try:
+        await asyncio.to_thread(_migrate_legacy_revision_log)
+    except Exception:
+        pass
+    try:
+        from src.lingua_viva.reconcile import reconcile_on_startup
+
+        await asyncio.to_thread(reconcile_on_startup)
+    except Exception:
+        pass
+
+
+# Registered via add_event_handler (Starlette API) rather than the
+# deprecated @app.on_event decorator.
+app.add_event_handler("startup", _startup_state_migrations)
 
 
 def _safe_unit(unit_id: str | None = None, grade: str | None = None) -> dict:
@@ -426,6 +1262,24 @@ async def teacher_brief(request: Request, schedule: str | None = None, day: str 
     )
 
 
+def _filemap_error_code(exc: Exception) -> str:
+    """Stable machine-readable code for filemap error responses.
+
+    Derived from the exception class/errno only — the UI maps codes to
+    teacher language instead of string-matching English error text.
+    """
+    if isinstance(exc, PermissionError):
+        return "permission_denied"
+    if isinstance(exc, FileNotFoundError):
+        return "not_found"
+    if isinstance(exc, OSError):
+        if exc.errno in (errno.EACCES, errno.EPERM):
+            return "permission_denied"
+        if exc.errno in (errno.ENOENT, errno.ENOTDIR):
+            return "not_found"
+    return "invalid_path"
+
+
 @app.post("/api/filemap/scan")
 async def filemap_scan(payload: dict):
     from src.lingua_viva.filemap import run_scan, summarize
@@ -437,7 +1291,10 @@ async def filemap_scan(payload: dict):
         max_depth = int(payload.get("max_depth", 3))
         mapped = await asyncio.to_thread(run_scan, root_path, max_depth)
     except (ValueError, OSError) as exc:
-        return JSONResponse({"error": str(exc)}, status_code=400)
+        return JSONResponse(
+            {"error": str(exc), "code": _filemap_error_code(exc)},
+            status_code=400,
+        )
     summary = summarize(mapped)
     return {
         "status": "ok",
@@ -452,7 +1309,15 @@ async def filemap_scan(payload: dict):
 async def filemap_get():
     from src.lingua_viva.filemap import load_map, to_api
 
-    return await asyncio.to_thread(lambda: to_api(load_map()))
+    def _load() -> dict:
+        payload = to_api(load_map())
+        # Stat-only death-path signal: a scanned root renamed/removed after
+        # scanning should not keep rendering as connected (SPEC_LV_FILE_MAP_FINAL §B).
+        for root in payload.get("roots", []):
+            root["exists"] = os.path.isdir(os.path.expanduser(root["path"]))
+        return payload
+
+    return await asyncio.to_thread(_load)
 
 
 @app.post("/api/filemap/confirm")
@@ -466,7 +1331,10 @@ async def filemap_confirm(payload: dict):
     try:
         mapped = await asyncio.to_thread(confirm_entry, path, purpose)
     except (ValueError, OSError) as exc:
-        return JSONResponse({"error": str(exc)}, status_code=400)
+        return JSONResponse(
+            {"error": str(exc), "code": _filemap_error_code(exc)},
+            status_code=400,
+        )
     return {"status": "ok", **to_api(mapped)}
 
 
@@ -503,7 +1371,10 @@ async def filemap_peek(payload: dict):
     try:
         files = await asyncio.to_thread(list_files_in_zone, requested)
     except (ValueError, OSError) as exc:
-        return JSONResponse({"error": str(exc)}, status_code=400)
+        return JSONResponse(
+            {"error": str(exc), "code": _filemap_error_code(exc)},
+            status_code=400,
+        )
     return {
         "status": "ok",
         "zone_path": display_path(requested),
@@ -541,7 +1412,10 @@ async def filemap_assign(payload: dict):
     try:
         mapped = await asyncio.to_thread(assign_student_file, file_path, student_id)
     except (ValueError, OSError) as exc:
-        return JSONResponse({"error": str(exc)}, status_code=400)
+        return JSONResponse(
+            {"error": str(exc), "code": _filemap_error_code(exc)},
+            status_code=400,
+        )
     return {"status": "ok", **to_api(mapped)}
 
 
@@ -689,7 +1563,10 @@ async def filemap_exclude(payload: dict):
     try:
         mapped = await asyncio.to_thread(add_exclusion if action == "add" else remove_exclusion, path)
     except OSError as exc:
-        return JSONResponse({"error": str(exc)}, status_code=400)
+        return JSONResponse(
+            {"error": str(exc), "code": _filemap_error_code(exc)},
+            status_code=400,
+        )
     return {"status": "ok", **to_api(mapped)}
 
 
@@ -1181,19 +2058,40 @@ async def extraction_sources():
             pass
 
         from src.lingua_viva.config import lv_home
-        import_dir = lv_home() / "imports"
-        if import_dir.exists():
-            for p in import_dir.glob("*"):
+        from src.lingua_viva.google_drive_integration import import_dir as drive_import_dir
+
+        # Hermeticity seam (same pattern as LV_SANITIZER_DATA_DIR / LV_OPS_*):
+        # without this override, the demo-file fallback below writes into the
+        # operator's REAL ~/.lingua-viva/imports/ when the suite runs, because
+        # conftest deliberately doesn't force LV_CONFIG_HOME.
+        local_imports = (
+            Path(os.environ["LV_LOCAL_IMPORTS_DIR"]).expanduser()
+            if os.environ.get("LV_LOCAL_IMPORTS_DIR")
+            else lv_home() / "imports"
+        )
+        seen_paths = {s["file_path"] for s in sources}
+        scan_dirs = [
+            (local_imports, "local_import"),
+            (drive_import_dir(), "google_drive"),
+        ]
+        for directory, source_type in scan_dirs:
+            if not directory.exists():
+                continue
+            for p in sorted(directory.glob("*")):
                 if p.is_file() and p.suffix.lower() in (".txt", ".md", ".pdf"):
+                    path_str = str(p)
+                    if path_str in seen_paths:
+                        continue
+                    seen_paths.add(path_str)
                     sources.append({
-                        "file_path": str(p),
+                        "file_path": path_str,
                         "display_name": p.name,
-                        "source_type": "google_drive",
+                        "source_type": source_type,
                         "student_id": None,
                     })
 
         if not sources:
-            demo_path = lv_home() / "imports" / "demo_observation.txt"
+            demo_path = local_imports / "demo_observation.txt"
             demo_path.parent.mkdir(parents=True, exist_ok=True)
             if not demo_path.exists():
                 demo_path.write_text(
@@ -1573,7 +2471,10 @@ async def reflect_note(payload: dict):
     log_path.parent.mkdir(parents=True, exist_ok=True)
     entry = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "revision_id": f"teacher-reflection-{int(time.time())}",
+        # uuid4, not int(time.time()): two reflections saved within the same
+        # second shared a revision_id, and the P0 migration dedupes on it —
+        # the second note would be silently dropped (review finding 2).
+        "revision_id": f"teacher-reflection-{uuid.uuid4().hex}",
         "artifact_id": "lv-private-teacher-reflection",
         "artifact_path": "dev/lv_revision_log.ndjson",
         "defect_class": "teacher_reflection",
@@ -1623,6 +2524,50 @@ async def admin_programme():
     from src.lingua_viva.curriculum import CurriculumService
 
     return await asyncio.to_thread(CurriculumService().get_overview)
+
+
+@app.get("/api/updates/pending")
+async def updates_pending():
+    """Parked template updates (SPEC_ONE_BUTTON_UPDATE_2026-07-27 Phase 3).
+
+    Each entry is a shipped template the teacher customized whose new
+    version is staged, waiting for a Keep-mine / Take-new decision."""
+    from src.lingua_viva.reconcile import downgrade_detected, list_pending
+
+    def build():
+        return {
+            "pending": list_pending(),
+            "downgrade": downgrade_detected(),
+            "message": "Your customized versions were preserved.",
+        }
+
+    return await asyncio.to_thread(build)
+
+
+@app.get("/api/updates/diff")
+async def updates_diff(path: str):
+    from src.lingua_viva.reconcile import pending_diff
+
+    diff = await asyncio.to_thread(pending_diff, path)
+    if diff is None:
+        return JSONResponse({"error": "No pending update for this path."}, status_code=404)
+    return {"path": path, "diff": diff}
+
+
+@app.post("/api/updates/resolve")
+async def updates_resolve(payload: dict):
+    """Resolve one parked update: keep_mine or take_new. Take-new archives
+    the teacher's version first — nothing is ever destroyed."""
+    from src.lingua_viva.reconcile import resolve_pending
+
+    rel = str(payload.get("path") or "").strip()
+    action = str(payload.get("action") or "").strip()
+    if not rel:
+        return JSONResponse({"error": "path is required"}, status_code=400)
+    result = await asyncio.to_thread(resolve_pending, rel, action)
+    if result.get("status") != "resolved":
+        return JSONResponse({"error": result.get("error", "could not resolve")}, status_code=400)
+    return result
 
 
 def _admin_deferred(title: str, reason: str, requires: list[str]) -> dict:
@@ -1738,25 +2683,119 @@ async def google_drive_status():
     return await asyncio.to_thread(status)
 
 
+@app.post("/api/google-drive/auth/start")
+async def google_drive_auth_start():
+    """Begin the in-app Google sign-in loopback flow
+    (SPEC_LV_DRIVE_SELF_SERVICE_AUTH_2026-07-27 §A1). Opens the system
+    browser backend-side; the UI polls /api/google-drive/status until
+    `configured` flips. `auth_url` is returned for a fallback link when
+    the browser did not open."""
+    from src.lingua_viva.google_drive_integration import DriveConfigError
+    from src.lingua_viva.google_drive_oauth import start_signin
+
+    try:
+        return await asyncio.to_thread(start_signin)
+    except DriveConfigError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
+
+
+@app.post("/api/google-drive/auth/disconnect")
+async def google_drive_auth_disconnect():
+    """Sign the Google account out: best-effort revoke at Google, then
+    delete the locally stored token (spec §A6)."""
+    from src.lingua_viva.google_drive_oauth import disconnect
+
+    removed = await asyncio.to_thread(disconnect)
+    if removed:
+        try:
+            from src.lingua_viva.privacy_log import log_event
+
+            log_event("drive_account_disconnected")
+        except Exception:
+            pass
+    return {"disconnected": bool(removed)}
+
+
 @app.post("/api/google-drive/list")
 async def google_drive_list(payload: dict):
     from src.lingua_viva.google_drive_integration import (
         DriveAuthError,
         DriveConfigError,
+        list_connected_folders,
         list_files,
+        mark_folder_checked,
     )
 
+    folder_id = str(payload.get("folder_id") or "")
     try:
-        return await asyncio.to_thread(
+        result = await asyncio.to_thread(
             list_files,
             str(payload.get("query") or ""),
-            str(payload.get("folder_id") or ""),
+            folder_id,
             str(payload.get("page_token") or ""),
         )
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
     except DriveConfigError as exc:
         return JSONResponse({"error": str(exc)}, status_code=503)
     except DriveAuthError:
         return JSONResponse({"error": "Google Drive could not be reached safely."}, status_code=503)
+    if folder_id and any(f.get("id") == folder_id for f in list_connected_folders()):
+        await asyncio.to_thread(mark_folder_checked, folder_id)
+    return result
+
+
+@app.get("/api/google-drive/folders")
+async def google_drive_folders():
+    from src.lingua_viva.google_drive_integration import list_connected_folders
+
+    return {"folders": await asyncio.to_thread(list_connected_folders)}
+
+
+@app.post("/api/google-drive/folders")
+async def google_drive_connect_folder(payload: dict):
+    from src.lingua_viva.google_drive_integration import (
+        DriveAuthError,
+        DriveConfigError,
+        connect_folder,
+    )
+
+    try:
+        entry = await asyncio.to_thread(
+            connect_folder,
+            str(payload.get("link") or ""),
+            str(payload.get("name") or ""),
+            str(payload.get("purpose") or "unassigned"),
+        )
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    except DriveConfigError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
+    except DriveAuthError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
+    try:
+        from src.lingua_viva.privacy_log import log_event
+
+        log_event("drive_folder_connected", query_text=entry.get("name", ""))
+    except Exception:
+        pass
+    return {"connected": entry}
+
+
+@app.delete("/api/google-drive/folders/{folder_id}")
+async def google_drive_disconnect_folder(folder_id: str):
+    from src.lingua_viva.google_drive_integration import disconnect_folder
+
+    removed = await asyncio.to_thread(disconnect_folder, folder_id)
+    if not removed:
+        return JSONResponse({"error": "That folder is not connected."}, status_code=404)
+    try:
+        from src.lingua_viva.privacy_log import log_event
+
+        log_event("drive_folder_disconnected", query_text=folder_id)
+    except Exception:
+        pass
+    return {"disconnected": folder_id}
 
 
 @app.post("/api/google-drive/import")
@@ -1768,7 +2807,11 @@ async def google_drive_import(payload: dict):
     )
 
     file_ids = payload.get("file_ids")
-    if not isinstance(file_ids, list):
+    if (
+        not isinstance(file_ids, list)
+        or not file_ids
+        or not all(isinstance(item, str) and item.strip() for item in file_ids)
+    ):
         return JSONResponse({"error": "file_ids must be a non-empty list of opaque IDs."}, status_code=400)
     purpose = str(payload.get("purpose") or "unassigned")
     assigned_student_id = payload.get("assigned_student_id")
@@ -1785,7 +2828,7 @@ async def google_drive_import(payload: dict):
         )
 
     try:
-        return await asyncio.to_thread(
+        result = await asyncio.to_thread(
             import_files,
             file_ids,
             purpose,
@@ -1798,6 +2841,86 @@ async def google_drive_import(payload: dict):
         return JSONResponse({"error": str(exc)}, status_code=503)
     except DriveAuthError:
         return JSONResponse({"error": "Google Drive could not be reached safely."}, status_code=503)
+    for item in result.get("imported", []):
+        try:
+            from src.lingua_viva.privacy_log import log_event
+
+            log_event("drive_files_imported", query_text=item.get("name", ""))
+        except Exception:
+            pass
+    return result
+
+
+@app.post("/api/google-drive/upload")
+async def google_drive_upload(payload: dict):
+    """Explicitly share deliverables back into the connected Drive folder.
+
+    Accepts either {"student_id": "..."} — materializes that student lens as
+    JSON into the export dir and shares it — or {"file_paths": [...]} for
+    existing deliverable files (must live inside the Lingua Viva home).
+    """
+    from src.lingua_viva.google_drive_integration import (
+        DriveAuthError,
+        DriveConfigError,
+        _atomic_write_private_json,
+        export_dir,
+        prune_student_exports,
+        upload_paths,
+    )
+    from src.lingua_viva.privacy_log import log_event
+
+    folder_id = str(payload.get("folder_id") or "")
+    student_id = payload.get("student_id")
+    file_paths = payload.get("file_paths")
+
+    if student_id is not None:
+        if not isinstance(student_id, str) or not student_id.strip():
+            return JSONResponse({"error": "student_id must be a non-empty string"}, status_code=400)
+        student_id = student_id.strip()
+
+        def materialize(store):
+            lens = store.export_lens(student_id)
+            target = export_dir()
+            target.mkdir(parents=True, exist_ok=True)
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+            path = target / f"student-lens-{student_id}-{stamp}.json"
+            # 0600 from birth — the snapshot is student data (H3 review found
+            # the old write_text left it at the default umask).
+            _atomic_write_private_json(path, lens)
+            return str(path)
+
+        try:
+            lens_path = await asyncio.to_thread(_with_student_store, materialize)
+        except Exception:
+            return JSONResponse({"error": "Student lens could not be exported."}, status_code=400)
+        file_paths = [lens_path]
+    elif not isinstance(file_paths, list) or not file_paths:
+        return JSONResponse(
+            {"error": "Provide student_id or a non-empty file_paths list."}, status_code=400
+        )
+
+    try:
+        result = await asyncio.to_thread(upload_paths, file_paths, folder_id)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    except DriveConfigError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
+    except DriveAuthError:
+        return JSONResponse({"error": "Google Drive could not be reached safely."}, status_code=503)
+
+    for item in result.get("uploaded", []):
+        try:
+            log_event("drive_upload_shared", query_text=item.get("name", ""))
+        except Exception:
+            pass
+    if student_id is not None and result.get("uploaded"):
+        # H3: successful share-back prunes older snapshots for this student
+        # (3 newest stay). Imports are never pruned — teacher-owned.
+        try:
+            await asyncio.to_thread(prune_student_exports, student_id)
+        except Exception:
+            pass
+    return result
 
 
 @app.post("/api/provider/connect")

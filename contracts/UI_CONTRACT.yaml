@@ -82,7 +82,143 @@
 #     BLT-006 final: reclassified curriculum/unit and lens-as-of as permanent
 #     backend-only (7 deferred_undecided remain). v33: fix OntologyNode field
 #     name (name, not label) — caught by live endpoint simulation.
-version: 33
+#   v34 (2026-07-27): Drive round-trip for teacher testing: extraction
+#     sources now dual-scan imports/ + runtime/drive_imports/ (path-mismatch
+#     fix — Drive imports never surfaced for extraction); new explicit
+#     POST /api/google-drive/upload (student lens JSON or lv-home deliverable
+#     into the configured folder only, privacy-logged) + Share-back-to-Drive
+#     panel in Settings.
+#   v35 (2026-07-27): One-button update (SPEC_ONE_BUTTON_UPDATE_2026-07-27):
+#     src/web.py — P0 reflection-log relocation to lv_home() + legacy
+#     migration, startup reconcile hook, GET /api/updates/pending,
+#     GET /api/updates/diff, POST /api/updates/resolve; static/index.html —
+#     Settings "Template Updates" panel (Keep mine / Take new / View diff).
+#     Lock also seals the concurrent Drive-workspace lane's in-flight
+#     index.html edits (same working tree, single lock).
+#   v36 (2026-07-27): Drive workspace (SPEC_LV_DRIVE_WORKSPACE_2026-07-27
+#     Phase 1): Drive is now a first-class utility-nav view (was a Settings
+#     panel) — connect folders by pasted Drive URL (live-verified, purpose-
+#     first), teacher-language file labels (Google Doc / Ready to read),
+#     imports end with a "Review now" next action that pre-selects the file
+#     in extraction, share-back panel with connected-folder destinations;
+#     src/web.py — GET/POST /api/google-drive/folders +
+#     DELETE /api/google-drive/folders/{folder_id}, list route stamps
+#     last_checked on connected folders.
+#   v37 (2026-07-27): Slack Daily Operations Assistant Lane E
+#     (SPEC_LV_SLACK_OPS_ASSISTANT_2026-07-27): src/web.py — Socket Mode
+#     startup/shutdown wiring (SlackSocketClient + SlackOpsBot + briefing
+#     scheduler, cleanly off when unconfigured), GET /api/slack/ops/status
+#     (secret-free), GET /api/ops/daily (per-teacher daily-file render),
+#     GET /api/ops/records (local audit); static/index.html — new "Daily"
+#     teacher-nav view rendering the same markdown the assistant writes to
+#     the Desktop, with connection checklist + privacy boundary.
+#   v38 (2026-07-27): re-seal after both concurrent lanes finished — the v37
+#     lock was taken while the Slack-ops lane's index.html/web.py edits and
+#     the Drive-workspace lane's final extraction-preselect edit were still
+#     landing in the shared working tree. No new features in this bump;
+#     lock now matches the settled tree (Drive workspace v36 + Slack ops
+#     Daily view v37 together).
+#   v39 (2026-07-27): Sources view + File Map UX redesign
+#     (SPEC_LV_SOURCES_VIEW_FILE_MAP_UX_2026-07-27): static/index.html —
+#     new top-level "Sources" view (Slack status card + relocated Drive
+#     panel + redesigned Local folders), "drive" nav id retired, Settings
+#     drops Curriculum-folders + Drive panels; file-map invitation state
+#     (Choose a folder / Use Documents-Teaching / Skip for now), pre-scan
+#     reassurance copy, depth moved to Advanced disclosure, post-scan
+#     headline + Teaching materials / Private student folders split,
+#     "Show names only" peek with humanized metadata, link-file language,
+#     inline reset confirm, friendly filemap errors, Home nudge card;
+#     src/web.py — stable `code` field on filemap error responses
+#     (not_found / permission_denied / invalid_path). NOTE: this bump
+#     landed over the v38 concurrent-lane seal — v38's lock was taken
+#     while this lane's edits were still in flight.
+#   v40 (2026-07-27): Drive-surface hardening loop re-seal
+#     (dev/HARDENING_LOOP_DRIVE_2026-07-27.md, 15 iterations, 8 fixed /
+#     7 verified-OK). src/web.py only: ValueError→400 on Drive list,
+#     privacy events on folder connect/disconnect + file import, import
+#     payload validation (empty/non-string file_ids → 400 instead of 500),
+#     LV_LOCAL_IMPORTS_DIR hermeticity seam for the extraction-sources
+#     demo-file fallback. No UI changes; index.html/sw.js unchanged.
+#   v41 (2026-07-27): One-button-update hardening loop iteration 7
+#     (REPORT_ONE_BUTTON_UPDATE_2026-07-27.md §8): src/web.py —
+#     _migrate_legacy_revision_log now dedupes revision_ids WITHIN the
+#     legacy file (same-file duplicate migrated twice pre-fix) and
+#     catches UnicodeDecodeError alongside OSError on a non-UTF8 legacy
+#     log (retry-next-launch, sentinel unwritten). No UI changes.
+#     NOTE: v40's lock (Drive lane) was taken after these edits landed
+#     in the shared tree and silently sealed them; this bump makes the
+#     change deliberate per the ceremony rule.
+#   v42 (2026-07-27): Slack Ops Assistant 15-pass hardening loop
+#     (dev/reports/REPORT_SLACK_OPS_HARDENING_2026-07-27.md): src/web.py —
+#     _shutdown_slack_ops now awaits the cancelled briefing-scheduler task
+#     (no destroyed-pending-task warnings at shutdown). No UI changes.
+#     NOTE: v41's lock (one-button-update lane) was taken after this edit
+#     landed in the shared tree and silently sealed it; this bump makes
+#     the change deliberate per the ceremony rule.
+#   v43 (2026-07-27): One-button-update review finding 2 fix: src/web.py —
+#     reflection revision_id now uuid4 (int(time.time()) collided for two
+#     saves in the same second) and the P0 migration dedupes on
+#     (revision_id, content-hash) so distinct same-second reflections
+#     both survive while byte-identical double-submits still collapse.
+#     No UI changes.
+#   v44 (2026-07-27): In-app Google sign-in for Drive
+#     (SPEC_LV_DRIVE_SELF_SERVICE_AUTH_2026-07-27 §A). src/web.py: POST
+#     /api/google-drive/auth/start (PKCE loopback flow, backend-side
+#     browser open) + POST /api/google-drive/auth/disconnect (revoke +
+#     delete stored token, drive_account_disconnected privacy event).
+#     static/index.html: Sources/Drive auth panel — Sign in with Google
+#     (+ verbatim restricted-scope trust copy), 2s status polling,
+#     "Sign in again" on needs_signin, Signed-in-as/Sign-out, env
+#     credentials shadow and hide the sign-in controls.
+#   v45 (2026-07-27): Live-layer read path (SPEC_LIVE_LAYER_READ_PATH
+#     _2026-07-27 §3): static/index.html — Template Updates panel take-new
+#     success message now carries the restart hint ("Saved — restart Lingua
+#     Viva to use the new version.") since live-layer files now actually
+#     feed lens behavior; keep-mine message unchanged (kept copy is already
+#     the one serving — a restart hint there would be false). No web.py
+#     changes (reader-only build, zero new routes).
+#   v46 (2026-07-27): Drive final hardening H1-H5
+#     (SPEC_LV_DRIVE_FINAL_HARDENING_2026-07-27). static/index.html: H1
+#     unverified-app interstitial walkthrough copy in the sign-in panel
+#     ("Advanced" -> "Go to Lingua Viva (unsafe)"; OAuth client must be
+#     named "Lingua Viva" in the console for the copy to match).
+#     src/web.py: H3 — materialize now writes student lens snapshots via
+#     _atomic_write_private_json (0600-from-birth, was default umask) and
+#     the upload route prunes drive_exports to the 3 newest per student
+#     after a successful upload (imports are never pruned). Zero new
+#     routes. Backend-only (no contract files): H2 100MB import cap with
+#     code "file_too_large", H4 query length bound, H5 malformed-response
+#     guards + loopback listener cleanup pin.
+#   v47 (2026-07-27): Slack Ops v2 Workflow Packs Phase 2+3
+#     (SPEC_LV_SLACK_OPS_V2_WORKFLOW_PACKS_2026-07-27 §3.2, §6).
+#     src/web.py: startup installs the bot-spec compile (v1 parity when no
+#     file, fail-closed on malformed), go-live gate (bot-spec exists +
+#     live:false keeps the transport off; env-only setups unchanged),
+#     run_schedules now takes briefing/EOD times from the bot-spec (closes
+#     v1 known-limit #2); new Bot Setup routes GET /api/ops/setup/catalog,
+#     GET+PUT /api/ops/setup/bot-spec (PUT validates-by-compiling before
+#     writing, preserves teach-loop fields, 409s go-live without a passing
+#     corpus run, atomic in-process swap, never touches the transport),
+#     GET /api/ops/setup/roster (read-only, env stays source of truth).
+#     static/index.html: Bot Setup panel as a Daily sub-view (packs
+#     checklist, briefing/EOD times, review-required categories, read-only
+#     roster, go-live gate status). Teacher-visible Daily behavior
+#     unchanged by design — new "Bot Setup" button only.
+#   v48 (2026-07-27): Slack Ops v2 Workflow Packs Phase 4+5
+#     (SPEC_LV_SLACK_OPS_V2_WORKFLOW_PACKS_2026-07-27 §4, §7).
+#     src/web.py: teach loop POST /api/ops/review/reclassify (record fix
+#     + optional candidate rule; coverage-machine records guarded); corpus
+#     gate POST /api/ops/setup/corpus/run (records last_run — the go-live
+#     evidence), POST /api/ops/setup/corpus/sentences (admin sentence,
+#     clears the stale run), POST /api/ops/setup/rules/decide (corpus-gated
+#     candidate approve/reject — approve runs the corpus against a
+#     hypothetical compile and refuses atomically on any failure); PUT
+#     bot-spec staleness guard drops last_run when pack membership or
+#     period aliases change. static/index.html Bot Setup panel: To Review
+#     teach panel, Run-corpus-test table, add-test-sentence form,
+#     Go live / Pause button, Approve/Reject on candidate rules.
+#     Teacher-visible Daily behavior still unchanged — admin panel only.
+version: 48
 files:
   - static/index.html
   - static/sw.js
