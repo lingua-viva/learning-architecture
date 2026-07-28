@@ -885,6 +885,16 @@ class StudentLensStore:
             raise ObservationValidationError(
                 f"rti_current_tier must be one of {VALID_RTI_TIERS}"
             )
+        if student_id:
+            # Creation-time namespace gate (SPEC_ONE_BUTTON_UPDATE_2026-07-27
+            # Phase 4): caller-supplied IDs must not use the reserved shipped
+            # `lv-` prefix — collisions are prevented by construction, never
+            # discovered at update time (the Anki numeric-ID lesson).
+            from src.lingua_viva.reconcile import validate_user_artifact_id
+
+            ok, message = validate_user_artifact_id(student_id)
+            if not ok:
+                raise ObservationValidationError(message)
         student_id = student_id or str(uuid.uuid4())
         now = _now_iso()
         self._conn.execute(

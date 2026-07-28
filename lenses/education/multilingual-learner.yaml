@@ -36,3 +36,4 @@ system_prompt_modifier: >
      assessment, and — where relevant — an oral-before-written sequencing
      note.
 confidence_adjustment: 0.0
+schema_version: 1

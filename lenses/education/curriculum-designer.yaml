@@ -23,3 +23,4 @@ system_prompt_modifier: >
      standards or CEFR alignment, then the design itself, then a one-line
      differentiation note.
 confidence_adjustment: 0.0
+schema_version: 1

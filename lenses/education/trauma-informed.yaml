@@ -33,3 +33,4 @@ system_prompt_modifier: >
      substantive answer, then a note on pacing (progressive disclosure) if
      the topic is sensitive.
 confidence_adjustment: 0.0
+schema_version: 1

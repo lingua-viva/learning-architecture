@@ -28,3 +28,4 @@ system_prompt_modifier: >
   4. Output contract: evidence summary, criteria comparison, then a clearly
      labeled "requires human decision" line naming who should make it.
 confidence_adjustment: 0.0
+schema_version: 1

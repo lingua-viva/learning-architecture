@@ -28,3 +28,4 @@ system_prompt_modifier: >
      (support / core / extension, or as many levels as requested) with what
      changes (scaffold, format, language) and what stays constant (the idea).
 confidence_adjustment: 0.0
+schema_version: 1

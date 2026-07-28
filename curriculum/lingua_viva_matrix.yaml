@@ -25,3 +25,4 @@ grade_bands:
 assessment:
   design_intent: "shared CEFR-informed rubrics, authentic assessment, writing samples, self-assessment, narrative observations, and portfolio evidence"
   outcome_boundary: "assessment coherence is a design claim; student learning gains require independent evidence"
+schema_version: 1

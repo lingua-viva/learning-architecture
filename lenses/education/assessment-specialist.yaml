@@ -24,3 +24,4 @@ system_prompt_modifier: >
      step, and — if the student is SIFE — an explicit note that the
      comparison baseline is the student's own trajectory, not grade level.
 confidence_adjustment: 0.0
+schema_version: 1

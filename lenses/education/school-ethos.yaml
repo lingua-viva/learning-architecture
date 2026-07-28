@@ -46,3 +46,4 @@ system_prompt_modifier: >
      evidence summary in report-ready language, and the source
      observation it came from.
 confidence_adjustment: 0.0
+schema_version: 1
