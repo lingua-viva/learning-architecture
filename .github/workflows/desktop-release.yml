@@ -20,7 +20,55 @@ on:
 #   APPLE_API_ISSUER    — Issuer ID from App Store Connect
 
 jobs:
+  # LV-5 (v0.2.12): boot the backend under a clean Python with the EXACT
+  # dependency set the desktop installer pins (desktop/electron/bootstrap.ts)
+  # and require /api/health to answer. Catches import-time crashes — e.g.
+  # Starlette 1.0 removing app.add_event_handler, which shipped in v0.2.11
+  # and broke every fresh install — that source-only checks and the unit
+  # suite (run against the dev env) never see. Gates all platform builds.
+  backend-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install pinned installer deps (MUST match desktop/electron/bootstrap.ts)
+        run: |
+          python -m pip install --quiet \
+            "pyyaml==6.0.3" "fastapi==0.124.4" "starlette==0.50.0" \
+            "uvicorn==0.33.0" "httpx==0.28.1" "websockets==15.0.1" \
+            "pdfplumber==0.11.9" "sqlite-vec==0.1.9"
+
+      - name: Boot backend exactly as Electron does, probe /api/health
+        env:
+          LV_DESKTOP: "1"
+          PYTHONUNBUFFERED: "1"
+        run: |
+          python src/web.py 8787 &
+          SERVER_PID=$!
+          for i in $(seq 1 30); do
+            sleep 2
+            if ! kill -0 $SERVER_PID 2>/dev/null; then
+              echo "::error::backend process died before serving /api/health (import-time crash?)"
+              exit 1
+            fi
+            CODE=$(curl -s -o /tmp/health.json -w "%{http_code}" http://127.0.0.1:8787/api/health || true)
+            if [ "$CODE" = "200" ]; then
+              echo "backend booted, /api/health=200"
+              head -c 300 /tmp/health.json; echo
+              kill $SERVER_PID
+              exit 0
+            fi
+          done
+          echo "::error::backend did not answer /api/health within 60s"
+          kill $SERVER_PID || true
+          exit 1
+
   build:
+    needs: backend-smoke
     strategy:
       fail-fast: false
       matrix:

@@ -976,8 +976,11 @@ async def _shutdown_slack_ops():
         pass
 
 
-app.add_event_handler("startup", _startup_slack_ops)
-app.add_event_handler("shutdown", _shutdown_slack_ops)
+# NOTE: must target app.router, not app — Starlette 1.0 removed
+# add_event_handler from the application object (LV-5, v0.2.12).
+# app.router.add_event_handler exists on both pre- and post-1.0 Starlette.
+app.router.add_event_handler("startup", _startup_slack_ops)
+app.router.add_event_handler("shutdown", _shutdown_slack_ops)
 
 
 def _student_db_path() -> Path:
@@ -1163,9 +1166,10 @@ async def _startup_state_migrations():
         pass
 
 
-# Registered via add_event_handler (Starlette API) rather than the
-# deprecated @app.on_event decorator.
-app.add_event_handler("startup", _startup_state_migrations)
+# Registered via app.router.add_event_handler rather than the deprecated
+# @app.on_event decorator or app.add_event_handler (removed in Starlette 1.0
+# — calling it on the app object crashes the backend at import; LV-5).
+app.router.add_event_handler("startup", _startup_state_migrations)
 
 
 def _safe_unit(unit_id: str | None = None, grade: str | None = None) -> dict:

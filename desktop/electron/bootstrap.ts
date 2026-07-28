@@ -240,7 +240,25 @@ export async function installOllamaWindows(): Promise<void> {
 // --- Python dependency installer ---
 
 export async function installPythonDeps(pythonCmd: string, repoRoot: string): Promise<void> {
-  const deps = ["pyyaml", "fastapi", "uvicorn", "httpx", "websockets", "pdfplumber", "sqlite-vec"];
+  // LV-5 (v0.2.12): deps are PINNED to the exact versions the test suite is
+  // validated against. Unpinned installs pulled starlette 1.3.1 (via latest
+  // fastapi), which removed app.add_event_handler and crashed the backend at
+  // import on every fresh install. Exact pins also make "Retry setup"
+  // deterministic: pip converges to this known-good set instead of silently
+  // upgrading (and re-breaking) an already-working machine. starlette is
+  // pinned explicitly because fastapi's own range allows it to drift.
+  // When bumping any pin: update the smoke test in
+  // .github/workflows/desktop-release.yml and re-run the full suite.
+  const deps = [
+    "pyyaml==6.0.3",
+    "fastapi==0.124.4",
+    "starlette==0.50.0",
+    "uvicorn==0.33.0",
+    "httpx==0.28.1",
+    "websockets==15.0.1",
+    "pdfplumber==0.11.9",
+    "sqlite-vec==0.1.9",
+  ];
   // Strategy: try multiple pip invocations in order of preference.
   // macOS python.org installs ship WITHOUT SSL certs configured (need "Install Certificates.command").
   // We work around this by adding --trusted-host flags as a fallback.

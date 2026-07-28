@@ -96,7 +96,10 @@ REPO = Path(__file__).resolve().parent.parent
 #   v49 (2026-07-27): Slack ops v2 packs Phase 6 stretch — shadow
 #     suggester route + panel line; backlog packs bus_transport and
 #     dismissal_changes ship as data, out of the parity compile.
-EXPECTED_VERSION = 49
+#   v50 (2026-07-27): LV-5 startup blocker — web.py event handlers moved
+#     to app.router.add_event_handler (app-level method removed in
+#     Starlette 1.0; unpinned installs crashed at import). No UI change.
+EXPECTED_VERSION = 50
 
 
 def _html() -> str:

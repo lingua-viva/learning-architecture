@@ -228,7 +228,15 @@
 #     checklist (suggestion only — enabling stays checklist + Save +
 #     corpus run). Backlog packs bus_transport/dismissal_changes ship as
 #     data (enabled_by_default: false — v1-parity compile untouched).
-version: 49
+#   v50 (2026-07-27): LV-5 startup blocker fix (desktop-v0.2.12).
+#     src/web.py: the three app.add_event_handler calls now target
+#     app.router — Starlette 1.0 removed the method from the application
+#     object, which crashed the backend at import on every fresh install
+#     (unpinned installer pulled starlette 1.3.1 via latest fastapi). No
+#     route, UI, or behavior change; verified booting on starlette 0.50.0
+#     AND 1.3.1. Paired with pinned installer deps in bootstrap.ts + a
+#     backend-boot smoke gate in desktop-release.yml.
+version: 50
 files:
   - static/index.html
   - static/sw.js
