@@ -418,7 +418,20 @@
 #     /api/students/growth, plus a tier_recommendations widget in the Daily
 #     briefing. static/index.html: growth badge per student in the roster,
 #     with the suggestion and its reasoning in a tooltip.
-version: 64
+#   v65 (2026-07-29): 15-pass hardening loop. Fixes found by the new
+#     scripts/check_app_reality.py (ported from MC's app_reality_eval
+#     pattern; MC's own is hardcoded to its root and expects React).
+#     static/index.html: the Programme view announced itself "coming soon"
+#     while rendering the real curriculum matrix directly below, and the
+#     admin subtitle still read "planned after pilot evidence" for the three
+#     views Gap 4 built — both labels denied the data under them, the same
+#     family as the "No external calls" count. src/web.py: POST
+#     /api/voice/tts 500'd on a non-object JSON body ('"notjson"' parses as
+#     a valid JSON string, so the except never fired and .get() raised);
+#     GET /api/students now also returns the ARON reference so surfaces that
+#     must not show names can join to a roster row without receiving the
+#     name-bearing student_id.
+version: 65
 files:
   - static/index.html
   - static/sw.js

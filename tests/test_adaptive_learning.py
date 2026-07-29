@@ -18,6 +18,8 @@ neutral recommendation the teacher learns to ignore.
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -188,6 +190,28 @@ def test_the_briefing_widget_says_the_teacher_decides():
 
 def test_students_view_renders_the_badge():
     body = client.get("/").text
-    assert "growthBadge(s.student_id)" in body, "no badge in the roster"
+    assert "growthBadge(s.reference)" in body, "no badge in the roster"
     assert 'api("/api/students/growth")' in body
     assert "suggests tier" in body, "recommendation not surfaced in the roster"
+
+
+def test_growth_rows_never_carry_the_name_bearing_student_id():
+    """LV student ids are derived from names ("student-marco"), so returning
+    one beside the ARON code would defeat the code sitting next to it."""
+    client.get("/api/students")
+    body = client.get("/api/students/growth").json()
+    for row in body["students"]:
+        assert "student_id" not in row
+
+    roster = client.get("/api/students").json()["students"]
+    blob = json.dumps(body).lower()
+    for student in roster:
+        name = (student.get("display_name") or "").lower()
+        if len(name) >= 3:
+            assert name not in blob, f"{name!r} reached the growth payload"
+
+
+def test_the_roster_carries_the_reference_so_others_can_join_without_the_id():
+    client.get("/api/students")
+    for student in client.get("/api/students").json()["students"]:
+        assert student["reference"].startswith("S-")

@@ -171,8 +171,12 @@ def student_growth(store, lens: dict[str, Any]) -> dict[str, Any]:
     student_id = lens["student_id"]
     deltas = deltas_for_student(store, student_id)
     current_tier = int(lens.get("rti_current_tier") or 1)
+    # The raw student_id is deliberately NOT returned. LV's ids are derived
+    # from names ("student-marco"), so shipping one alongside the ARON code
+    # would defeat the code sitting next to it — anything that rendered this
+    # payload on a projector would show the name in the id. Callers join on
+    # `reference`, which /api/students also returns.
     return {
-        "student_id": student_id,
         "reference": aron_ref(student_id),
         "growth": growth_signal(deltas),
         "recommendation": tier_recommendation(deltas, current_tier),

@@ -1367,8 +1367,8 @@
     };
     let growthByStudent = {};
 
-    function growthBadge(studentId) {
-      const row = growthByStudent[studentId];
+    function growthBadge(reference) {
+      const row = growthByStudent[reference];
       if (!row) return "";
       const [cls, label] = GROWTH_BADGE[row.growth.signal] || ["", row.growth.signal];
       const rec = row.recommendation
@@ -1381,7 +1381,7 @@
       try {
         const data = await api("/api/students/growth");
         growthByStudent = {};
-        (data.students || []).forEach(row => { growthByStudent[row.student_id] = row; });
+        (data.students || []).forEach(row => { growthByStudent[row.reference] = row; });
         return data;
       } catch (error) {
         growthByStudent = {};
@@ -1406,7 +1406,7 @@
           <p id="add-student-status" style="margin-top:6px;"></p>
         </div>
         <div class="grid two">
-          <div class="panel"><h3>Roster</h3><div class="list">${state.students.map(s => `<button type="button" data-student="${s.student_id}"><strong>${escapeHtml(s.display_name)}</strong> ${growthBadge(s.student_id)}<br>${escapeHtml(s.cefr_trajectory_30d || "trajectory pending")} · support tier ${s.rti_current_tier} · ${escapeHtml(s.grade_level)}</button>`).join("")}</div>
+          <div class="panel"><h3>Roster</h3><div class="list">${state.students.map(s => `<button type="button" data-student="${s.student_id}"><strong>${escapeHtml(s.display_name)}</strong> ${growthBadge(s.reference)}<br>${escapeHtml(s.cefr_trajectory_30d || "trajectory pending")} · support tier ${s.rti_current_tier} · ${escapeHtml(s.grade_level)}</button>`).join("")}</div>
             <p class="voice-hint" id="growth-note" style="margin-top:10px;"></p></div>
           <div id="lens" class="panel"></div>
         </div>`;
@@ -4325,10 +4325,15 @@
 
     async function renderAdmin() {
       const title = state.view[0].toUpperCase() + state.view.slice(1);
-      setTitle(title, state.view === "programme" ? "curriculum overview" : "planned after pilot evidence");
+      // Both strings below used to deny the data underneath them. The
+      // subtitle said "planned after pilot evidence" for Evidence, Capacity
+      // and Trends, which Gap 4 built; and Programme announced itself as
+      // "coming soon" while rendering the real curriculum matrix directly
+      // below. Same family as the "No external calls" label over a live count.
+      setTitle(title, state.view === "programme" ? "curriculum overview" : "local records");
       if (state.view === "programme") {
         const data = await api("/api/admin/programme");
-        $("content").innerHTML = `<div class="panel"><h2>Programme of Inquiry overview coming soon</h2><p>Current curriculum matrix structure is available from the local curriculum service.</p><div class="list">${data.grade_bands.map(g => `<div class="item"><h3>${escapeHtml(g.grade)}</h3><p>${escapeHtml(g.curriculum_focus)}</p></div>`).join("")}</div></div>`;
+        $("content").innerHTML = `<div class="panel"><h2>Programme overview</h2><p>The curriculum matrix currently loaded on this computer.</p><div class="list">${data.grade_bands.map(g => `<div class="item"><h3>${escapeHtml(g.grade)}</h3><p>${escapeHtml(g.curriculum_focus)}</p></div>`).join("")}</div></div>`;
         return;
       }
       // Gap 4: these three now show real counts instead of a "deferred" stub.

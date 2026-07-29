@@ -141,7 +141,9 @@ REPO = Path(__file__).resolve().parent.parent
 #     gate ahead of the key check; UI falls back to the local Italian voice.
 #   v64 (2026-07-29): Gap 6 — assessment deltas, growth badges, tier
 #     recommendations (never applied automatically).
-EXPECTED_VERSION = 64
+#   v65 (2026-07-29): 15-pass hardening — contradicted labels removed,
+#     /api/voice/tts non-object body fixed, ARON reference on the roster.
+EXPECTED_VERSION = 65
 
 
 def _html() -> str:

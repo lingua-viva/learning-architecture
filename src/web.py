@@ -1717,7 +1717,12 @@ async def voice_tts(request: Request):
         payload = await request.json()
     except Exception:
         payload = {}
-    text = str((payload or {}).get("text") or "").strip()
+    # A body of `"notjson"` parses as a valid JSON *string*, so the except
+    # above never fires and .get() then raises AttributeError -> 500. The
+    # sibling credential routes already guard this; this one did not.
+    if not isinstance(payload, dict):
+        return JSONResponse({"error": "Expected a JSON object."}, status_code=400)
+    text = str(payload.get("text") or "").strip()
     if not text:
         return JSONResponse({"error": "text required"}, status_code=400)
     if len(text) > RIME_MAX_CHARS:
@@ -1764,7 +1769,7 @@ async def voice_tts(request: Request):
             status_code=503,
         )
 
-    speaker = str((payload or {}).get("speaker") or os.environ.get("RIME_SPEAKER", "astra"))
+    speaker = str(payload.get("speaker") or os.environ.get("RIME_SPEAKER", "astra"))
     model_id = str(os.environ.get("RIME_MODEL_ID", "mistv3"))
     try:
         audio = await asyncio.to_thread(_request_rime_audio, text, speaker, model_id, key)
@@ -2672,10 +2677,17 @@ async def observe_classify(payload: dict):
 @app.get("/api/students")
 async def students():
     def list_roster(store):
+        from src.lingua_viva.governance import aron_ref
+
         roster = []
         for lens in store.list_lenses():
             roster.append({
                 "student_id": lens["student_id"],
+                # The teacher's own roster legitimately shows names, so the id
+                # is fine here. The ARON code rides along so surfaces that
+                # must NOT show names can join to this row without ever
+                # receiving the id.
+                "reference": aron_ref(lens["student_id"]),
                 "display_name": lens.get("display_name"),
                 "grade_level": lens.get("grade_level"),
                 "rti_current_tier": lens.get("rti_current_tier"),
