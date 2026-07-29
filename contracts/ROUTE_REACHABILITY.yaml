@@ -74,6 +74,20 @@ reachable_from_ui:
   - route: "GET /api/slack/ops/status"
     call_site: 'api("/api/slack/ops/status")'
 
+  # Slice 5 — Settings -> Integrations Slack setup panel
+  # (renderIntegrationsControls / renderSlackPanel in static/index.html).
+  - route: "GET /api/slack/credentials"
+    call_site: 'api("/api/slack/credentials")'
+
+  - route: "PUT /api/slack/credentials"
+    call_site: 'api("/api/slack/credentials", {'
+
+  - route: "DELETE /api/slack/credentials"
+    call_site: 'api("/api/slack/credentials", {method: "DELETE"})'
+
+  - route: "POST /api/slack/credentials/test"
+    call_site: 'api("/api/slack/credentials/test", {'
+
   - route: "GET /api/ops/daily"
     call_site: 'api("/api/ops/daily")'
 

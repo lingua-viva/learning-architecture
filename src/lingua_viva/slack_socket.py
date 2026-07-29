@@ -54,6 +54,7 @@ from typing import Any, Awaitable, Callable, Mapping, Optional
 from urllib import error, request
 
 APPS_CONNECTIONS_OPEN_URL = "https://slack.com/api/apps.connections.open"
+AUTH_TEST_URL = "https://slack.com/api/auth.test"
 CHAT_POST_MESSAGE_URL = "https://slack.com/api/chat.postMessage"
 CHAT_UPDATE_URL = "https://slack.com/api/chat.update"
 CONVERSATIONS_OPEN_URL = "https://slack.com/api/conversations.open"
@@ -137,6 +138,27 @@ def _parse_teacher_map(raw: str) -> dict[str, dict[str, str]]:
     return teachers
 
 
+def _resolved_env(environ: Mapping[str, str] | None) -> Mapping[str, str]:
+    """Effective configuration source.
+
+    When a caller passes an explicit mapping (tests, callers that already
+    resolved) it is used verbatim. Otherwise the in-app credential store is
+    layered under the real environment (env > stored, per variable) so
+    credentials a teacher saved in Settings configure the assistant exactly
+    as exported environment variables would.
+    """
+    if environ is not None:
+        return environ
+    try:
+        # lazy: slack_credentials pulls in the Drive module — avoids a cycle
+        from src.lingua_viva.slack_credentials import effective_env
+
+        return effective_env()
+    except Exception:  # pragma: no cover - store must never break startup
+        logger.warning("Slack credential store unreadable; using environment only")
+        return os.environ
+
+
 def require_ops_config(environ: Mapping[str, str] | None = None) -> SlackOpsConfig:
     """Return validated ops configuration without logging any values.
 
@@ -144,7 +166,7 @@ def require_ops_config(environ: Mapping[str, str] | None = None) -> SlackOpsConf
     values (wrong token prefix, bad teacher-map JSON) raise with the
     variable name only, never its content.
     """
-    env = os.environ if environ is None else environ
+    env = _resolved_env(environ)
     bot_token = str(env.get("LV_SLACK_BOT_TOKEN", "")).strip()
     app_token = str(env.get("LV_SLACK_APP_TOKEN", "")).strip()
     ops_channel = str(env.get("LV_SLACK_OPS_CHANNEL", "")).strip()
@@ -185,6 +207,75 @@ def require_ops_config(environ: Mapping[str, str] | None = None) -> SlackOpsConf
     )
 
 
+# Slack error codes worth translating for a teacher. Anything else falls
+# through to the raw code so support can still act on it.
+_AUTH_TEST_MESSAGES = {
+    "invalid_auth": "Slack rejected this bot token. Copy it again from your "
+                    "Slack app's OAuth & Permissions page.",
+    "account_inactive": "This token belongs to a Slack app that has been "
+                        "disabled or uninstalled from the workspace.",
+    "token_revoked": "This token was revoked. Reinstall the app in Slack and "
+                     "copy the new bot token.",
+    "not_authed": "No token was sent to Slack.",
+    "URLError": "Could not reach Slack. Check the computer's internet connection.",
+    "TimeoutError": "Slack did not answer in time. Try again in a moment.",
+}
+
+
+def auth_test(token: str, urlopen: Optional[Callable[..., Any]] = None) -> dict:
+    """Verify a bot token against Slack's ``auth.test``.
+
+    Returns a secret-free dict: ``{"ok": bool, "team": str, "bot_user": str}``
+    on success, or ``{"ok": False, "error": code, "message": text}``. The token
+    is never echoed back, never logged, and never stored by this call — saving
+    is a separate, explicit step.
+    """
+    opener = urlopen if urlopen is not None else request.urlopen
+    token = (token or "").strip()
+    if not token:
+        return {"ok": False, "error": "not_authed", "message": _AUTH_TEST_MESSAGES["not_authed"]}
+
+    outgoing = request.Request(
+        AUTH_TEST_URL,
+        data=b"",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+        method="POST",
+    )
+    try:
+        with opener(outgoing, timeout=WEB_API_TIMEOUT_SECONDS) as response:
+            result = json.loads(
+                response.read(WEB_API_MAX_RESPONSE_BYTES).decode("utf-8")
+            )
+    except (error.URLError, TimeoutError, OSError, json.JSONDecodeError, ValueError) as exc:
+        code = type(exc).__name__
+        logger.warning("Slack auth.test failed (%s)", code)
+        return {
+            "ok": False,
+            "error": code,
+            "message": _AUTH_TEST_MESSAGES.get(code, "Could not reach Slack."),
+        }
+
+    if not isinstance(result, dict):
+        return {"ok": False, "error": "invalid_response_shape",
+                "message": "Slack returned an unexpected response."}
+    if not result.get("ok"):
+        code = str(result.get("error") or "unknown_error")
+        logger.warning("Slack auth.test not ok (%s)", code)
+        return {
+            "ok": False,
+            "error": code,
+            "message": _AUTH_TEST_MESSAGES.get(code, f"Slack rejected the token ({code})."),
+        }
+    return {
+        "ok": True,
+        "team": str(result.get("team") or ""),
+        "bot_user": str(result.get("user") or ""),
+    }
+
+
 _registered_client: Optional["SlackSocketClient"] = None
 
 
@@ -199,7 +290,7 @@ def ops_status(
     client: Optional["SlackSocketClient"] = None,
 ) -> dict:
     """Return a secret-free readiness/liveness summary for the local app UI."""
-    env = os.environ if environ is None else environ
+    env = _resolved_env(environ)
     bot_token_set = bool(str(env.get("LV_SLACK_BOT_TOKEN", "")).strip())
     app_token_set = bool(str(env.get("LV_SLACK_APP_TOKEN", "")).strip())
     ops_channel_set = bool(str(env.get("LV_SLACK_OPS_CHANNEL", "")).strip())

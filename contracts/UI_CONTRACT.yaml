@@ -255,7 +255,25 @@
 #     rather than an English one), then prefers a named Italian voice
 #     (alice|federica|google italiano), else any it-* voice, else null.
 #     No route, layout, or handler-flow change.
-version: 52
+#   v53 (2026-07-28): Slice 5 Credentials — in-app Slack setup
+#     (SPEC_CONNECTION_CREDENTIAL_SETUP_2026-07-28 §Lingua Viva Application).
+#     The Daily Operations Assistant could previously only be configured by
+#     exporting four LV_SLACK_* environment variables in a terminal, which
+#     made it unreachable for the teachers starting Monday. src/web.py:
+#     GET /api/slack/credentials (secret-free per-field status + source),
+#     PUT (validate, store 0600, reconnect immediately), DELETE (forget +
+#     disconnect), POST /api/slack/credentials/test (Slack auth.test, saves
+#     nothing). All four are loopback-guarded and return {"error": ...}
+#     bodies, the shape static/index.html's api() helper actually reads.
+#     src/lingua_viva/slack_credentials.py (new) resolves env > stored >
+#     unset per variable, matching the Drive precedent; slack_socket.py
+#     gains _resolved_env() so require_ops_config()/ops_status() read the
+#     store, plus a module-level auth_test(). static/index.html: Settings ->
+#     Integrations panel — Slack form (env-managed fields render disabled and
+#     labelled, saved secrets show as empty "leave blank to keep" boxes
+#     because the page never receives them) and a Google Drive status card
+#     pointing at the existing Sources -> Drive sign-in.
+version: 53
 files:
   - static/index.html
   - static/sw.js

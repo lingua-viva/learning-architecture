@@ -106,7 +106,11 @@ REPO = Path(__file__).resolve().parent.parent
 #     utterance.lang = "it-IT" before reading the voice list and prefers an
 #     Italian voice, replacing the English name/lang preference. Completes
 #     the v51 fix (was: listens Italian, answers English).
-EXPECTED_VERSION = 52
+#   v53 (2026-07-28): Slice 5 Credentials — in-app Slack setup. src/web.py:
+#     GET/PUT/DELETE /api/slack/credentials + POST
+#     /api/slack/credentials/test. static/index.html: Settings ->
+#     Integrations panel (Slack form + Drive status).
+EXPECTED_VERSION = 53
 
 
 def _html() -> str:

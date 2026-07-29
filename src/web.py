@@ -312,6 +312,156 @@ async def slack_ops_status():
     return ops_status()
 
 
+# --- Slack credential setup (Slice 5 — SPEC_CONNECTION_CREDENTIAL_SETUP ----
+# Until now the ops assistant could only be configured by exporting four
+# environment variables in a terminal. These routes let a teacher do it from
+# Settings. No route ever returns a secret: reads report only whether a field
+# is set and where it came from (env > stored), and the test route verifies a
+# token against Slack without persisting it.
+# ---------------------------------------------------------------------------
+
+
+def _require_local(request: Request) -> JSONResponse | None:
+    """Refuse credential operations that did not come from this machine.
+
+    The server already binds 127.0.0.1 only, so this is defence in depth for
+    the reverse-proxy case the Slack hardening pass (contract v12) called out.
+    LV handles student data; a credential route is the last place to rely on
+    a single layer.
+
+    Returns an error response to hand straight back, or None when allowed —
+    the routes below return `{"error": ...}` bodies (this repo's convention,
+    which static/index.html's api() helper reads) rather than raising
+    HTTPException, whose `detail` key that helper would silently drop.
+    """
+    host = (request.client.host if request.client else "") or ""
+    if host not in {"127.0.0.1", "::1", "localhost", "testclient"}:
+        return JSONResponse(
+            {"error": "Credential setup is only available on this computer."},
+            status_code=403,
+        )
+    return None
+
+
+def _slack_credentials_payload() -> dict:
+    """Secret-free view of Slack setup: per-field source + readiness."""
+    from src.lingua_viva.slack_credentials import credential_status
+    from src.lingua_viva.slack_socket import ops_status
+
+    payload = credential_status()
+    status = ops_status()
+    payload["configured"] = bool(status.get("configured"))
+    payload["config_error"] = status.get("config_error")
+    payload["connected"] = bool(status.get("connected"))
+    payload["teacher_count"] = status.get("teacher_count", 0)
+    return payload
+
+
+async def _restart_slack_ops() -> None:
+    """Apply newly saved credentials without making the teacher restart.
+
+    Saving is pointless if the assistant only picks it up on next launch —
+    that is the difference between a setup form and a setup form that works.
+    """
+    await _shutdown_slack_ops()
+    await _startup_slack_ops()
+
+
+@app.get("/api/slack/credentials")
+async def slack_credentials_get(request: Request):
+    """Secret-free Slack credential status for the Settings panel."""
+    denied = _require_local(request)
+    if denied is not None:
+        return denied
+    return await asyncio.to_thread(_slack_credentials_payload)
+
+
+@app.put("/api/slack/credentials")
+async def slack_credentials_put(request: Request):
+    """Save Slack credentials, then reconnect so they take effect now."""
+    denied = _require_local(request)
+    if denied is not None:
+        return denied
+    from src.lingua_viva.slack_credentials import (
+        SLACK_ENV_VARS,
+        SlackCredentialError,
+        save_stored,
+    )
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Expected a JSON object."}, status_code=400)
+    if not isinstance(body, dict):
+        return JSONResponse({"error": "Expected a JSON object."}, status_code=400)
+
+    submitted = {k: v for k, v in body.items() if k in SLACK_ENV_VARS}
+    if not submitted:
+        return JSONResponse(
+            {
+                "error": "No Slack settings were sent. Expected any of: "
+                + ", ".join(SLACK_ENV_VARS)
+            },
+            status_code=400,
+        )
+
+    try:
+        await asyncio.to_thread(save_stored, submitted)
+    except SlackCredentialError as exc:
+        # Teacher-readable, field-named, never echoes the value.
+        return JSONResponse({"error": str(exc)}, status_code=400)
+
+    await _restart_slack_ops()
+    return await asyncio.to_thread(_slack_credentials_payload)
+
+
+@app.delete("/api/slack/credentials")
+async def slack_credentials_delete(request: Request):
+    """Forget every in-app Slack credential and disconnect."""
+    denied = _require_local(request)
+    if denied is not None:
+        return denied
+    from src.lingua_viva.slack_credentials import clear_stored
+
+    await asyncio.to_thread(clear_stored)
+    await _restart_slack_ops()
+    return await asyncio.to_thread(_slack_credentials_payload)
+
+
+@app.post("/api/slack/credentials/test")
+async def slack_credentials_test(request: Request):
+    """Check a bot token against Slack's auth.test before saving it.
+
+    Accepts a token in the body so a teacher can verify what they pasted
+    before committing it; falls back to the effective stored/env token so the
+    panel can also re-test an existing setup. Nothing is written either way.
+    """
+    denied = _require_local(request)
+    if denied is not None:
+        return denied
+    from src.lingua_viva.slack_credentials import effective_env
+    from src.lingua_viva.slack_socket import auth_test
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    token = ""
+    if isinstance(body, dict):
+        token = str(body.get("LV_SLACK_BOT_TOKEN") or "").strip()
+    if not token:
+        token = str(
+            (await asyncio.to_thread(effective_env)).get("LV_SLACK_BOT_TOKEN", "")
+        ).strip()
+    if not token:
+        return {
+            "ok": False,
+            "error": "not_authed",
+            "message": "Add a bot token first, then test the connection.",
+        }
+    return await asyncio.to_thread(auth_test, token)
+
+
 @app.get("/api/ops/daily")
 async def ops_daily(teacher_id: str | None = None, date: str | None = None):
     """Render each teacher's daily file (same markdown as the Desktop file)."""

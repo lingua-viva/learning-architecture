@@ -1833,6 +1833,13 @@
           </div>
         </div>
         <div class="panel" style="margin-top:14px;">
+          <div class="view-head">
+            <div><h3>Integrations</h3><p>Connect Lingua Viva to the tools your school already uses. Everything below is set up and stored on this computer.</p></div>
+          </div>
+          <div id="integrations-slack" style="margin-top:12px;"><p class="voice-hint">Loading Slack setup...</p></div>
+          <div id="integrations-drive" style="margin-top:18px;"><p class="voice-hint">Loading Google Drive status...</p></div>
+        </div>
+        <div class="panel" style="margin-top:14px;">
           <h3>My week</h3>
           <div id="schedule-grid" class="grid"></div>
           <button id="save-schedule" class="primary" type="button" style="margin-top:12px;">Save Schedule</button>
@@ -1869,8 +1876,244 @@
         </div>`;
       await renderScheduleControls(overview);
       renderProviderControls();
+      await renderIntegrationsControls();
       await renderExtractionControls();
       await renderUpdateControls();
+    }
+
+    // --- Integrations: Slack ops assistant + Google Drive ------------------
+    // Slice 5 (SPEC_CONNECTION_CREDENTIAL_SETUP_2026-07-28 §Lingua Viva).
+    // The four LV_SLACK_* values used to be terminal-only environment
+    // variables. Every state rendered here comes from
+    // GET /api/slack/credentials, which reports whether each field is set and
+    // whether it came from the environment or from this form — it never
+    // returns a token, so secrets are never in the page.
+
+    const SLACK_FIELDS = [
+      {
+        key: "LV_SLACK_BOT_TOKEN",
+        label: "Bot token",
+        placeholder: "xoxb-...",
+        secret: true,
+        help: "Slack app -> OAuth &amp; Permissions -> Bot User OAuth Token."
+      },
+      {
+        key: "LV_SLACK_APP_TOKEN",
+        label: "App-level token",
+        placeholder: "xapp-...",
+        secret: true,
+        help: "Slack app -> Basic Information -> App-Level Tokens, with the connections:write scope."
+      },
+      {
+        key: "LV_SLACK_OPS_CHANNEL",
+        label: "Operations channel",
+        placeholder: "C0123456789",
+        secret: false,
+        help: "The channel ID the assistant posts the daily briefing to."
+      },
+      {
+        key: "LV_SLACK_TEACHER_MAP",
+        label: "Teacher map",
+        placeholder: '{"U0123": {"teacher_id": "claudia", "display_name": "Claudia"}}',
+        secret: false,
+        help: "Which Slack user is which teacher, as JSON."
+      }
+    ];
+
+    function slackStatusBadge(status) {
+      if (status.connected) return '<span class="badge ok">Connected to Slack</span>';
+      if (status.configured) return '<span class="badge warn">Saved &mdash; not connected yet</span>';
+      return '<span class="badge">Setup needed</span>';
+    }
+
+    function slackFieldRow(field, entry) {
+      const managedByAdmin = entry.source === "env";
+      const stateNote = managedByAdmin
+        ? '<span class="badge">Set by your administrator</span>'
+        : (entry.set ? '<span class="badge ok">Saved</span>' : "");
+      // A secret is never sent back to the page, so an already-saved secret
+      // renders as an empty box with a "leave blank to keep" note rather than
+      // a fake row of dots that would imply the page is holding the value.
+      const keepNote = (field.secret && entry.set && !managedByAdmin)
+        ? " Leave blank to keep the saved one."
+        : "";
+      const inputAttrs = [
+        `id="slack-field-${field.key}"`,
+        `data-slack-field="${field.key}"`,
+        field.secret ? 'type="password"' : 'type="text"',
+        `placeholder="${escapeHtml(field.placeholder)}"`,
+        managedByAdmin ? "disabled" : "",
+        (!field.secret && !managedByAdmin && entry.value) ? `value="${escapeHtml(entry.value)}"` : ""
+      ].filter(Boolean).join(" ");
+      const shownValue = managedByAdmin
+        ? '<input type="text" value="Managed outside the app" disabled>'
+        : `<input ${inputAttrs}>`;
+      return `
+        <label style="display:flex;flex-direction:column;gap:4px;">
+          <span>${escapeHtml(field.label)} ${stateNote}</span>
+          ${shownValue}
+          <span class="voice-hint">${field.help}${keepNote}</span>
+        </label>`;
+    }
+
+    function renderSlackPanel(status) {
+      const host = $("integrations-slack");
+      if (!host) return;
+      const anyEnvManaged = SLACK_FIELDS.some(
+        field => (status.fields[field.key] || {}).source === "env"
+      );
+      const allEnvManaged = SLACK_FIELDS.every(
+        field => (status.fields[field.key] || {}).source === "env"
+      );
+      const rows = SLACK_FIELDS
+        .map(field => slackFieldRow(field, status.fields[field.key] || {}))
+        .join("");
+      const problem = (!status.configured && status.config_error)
+        ? `<p class="voice-hint">${escapeHtml(status.config_error)}</p>`
+        : "";
+      const teachers = status.configured
+        ? `<p class="voice-hint">${status.teacher_count} teacher${status.teacher_count === 1 ? "" : "s"} in the roster.</p>`
+        : "";
+      const envNote = anyEnvManaged
+        ? `<p class="voice-hint">Some values are set as environment variables on this machine. Those are managed outside Lingua Viva and cannot be changed here.</p>`
+        : "";
+      const actions = allEnvManaged
+        ? `<div class="row" style="margin-top:12px;">
+             <button id="slack-test" type="button">Test connection</button>
+             <span id="slack-status-msg" class="voice-hint"></span>
+           </div>`
+        : `<div class="row" style="margin-top:12px;">
+             <button id="slack-save" class="primary" type="button">Save and connect</button>
+             <button id="slack-test" type="button">Test connection</button>
+             <button id="slack-forget" type="button">Forget these</button>
+             <span id="slack-status-msg" class="voice-hint" aria-live="polite"></span>
+           </div>`;
+      host.innerHTML = `
+        <div class="view-head">
+          <div><h3 style="margin:0;">Slack &mdash; Daily Operations Assistant</h3>
+          <p>Posts each teacher's daily briefing and collects replies.</p></div>
+          ${slackStatusBadge(status)}
+        </div>
+        ${problem}
+        ${teachers}
+        ${envNote}
+        <div class="form-grid" style="margin-top:12px;">${rows}</div>
+        ${actions}
+        <p class="voice-hint" style="margin-top:10px;">${escapeHtml(status.storage.explanation)}</p>`;
+
+      const msg = $("slack-status-msg");
+      const say = text => { if (msg) msg.textContent = text; };
+      const collect = () => {
+        const payload = {};
+        SLACK_FIELDS.forEach(field => {
+          const input = $(`slack-field-${field.key}`);
+          if (!input || input.disabled) return;
+          const value = (input.value || "").trim();
+          // Blank secret means "keep what is saved" — sending "" would clear
+          // it, so only non-empty secrets are submitted.
+          if (!value && field.secret) return;
+          payload[field.key] = value;
+        });
+        return payload;
+      };
+
+      const saveBtn = $("slack-save");
+      if (saveBtn) saveBtn.addEventListener("click", async () => {
+        const payload = collect();
+        if (!Object.keys(payload).length) { say("Nothing to save yet."); return; }
+        saveBtn.disabled = true;
+        say("Saving and reconnecting...");
+        try {
+          const updated = await api("/api/slack/credentials", {
+            method: "PUT",
+            body: JSON.stringify(payload)
+          });
+          renderSlackPanel(updated);
+          const after = $("slack-status-msg");
+          if (after) {
+            after.textContent = updated.configured
+              ? (updated.connected ? "Connected to Slack." : "Saved. Connecting in the background.")
+              : "Saved. Some settings are still missing.";
+          }
+        } catch (error) {
+          saveBtn.disabled = false;
+          say(error.message || "Could not save.");
+        }
+      });
+
+      const testBtn = $("slack-test");
+      if (testBtn) testBtn.addEventListener("click", async () => {
+        testBtn.disabled = true;
+        say("Asking Slack...");
+        try {
+          const typed = ($("slack-field-LV_SLACK_BOT_TOKEN") || {}).value || "";
+          const result = await api("/api/slack/credentials/test", {
+            method: "POST",
+            body: JSON.stringify(typed.trim() ? {LV_SLACK_BOT_TOKEN: typed.trim()} : {})
+          });
+          say(result.ok
+            ? `Slack answered: connected to ${result.team || "your workspace"} as ${result.bot_user || "the bot"}.`
+            : (result.message || "Slack rejected the token."));
+        } catch (error) {
+          say(error.message || "Could not reach Slack.");
+        }
+        testBtn.disabled = false;
+      });
+
+      const forgetBtn = $("slack-forget");
+      if (forgetBtn) forgetBtn.addEventListener("click", async () => {
+        forgetBtn.disabled = true;
+        say("Removing...");
+        try {
+          const updated = await api("/api/slack/credentials", {method: "DELETE"});
+          renderSlackPanel(updated);
+          const after = $("slack-status-msg");
+          if (after) after.textContent = "Removed from this computer.";
+        } catch (error) {
+          forgetBtn.disabled = false;
+          say(error.message || "Could not remove.");
+        }
+      });
+    }
+
+    function renderDriveIntegration(status) {
+      const host = $("integrations-drive");
+      if (!host) return;
+      const badge = status.configured
+        ? '<span class="badge ok">Connected</span>'
+        : '<span class="badge">Not connected</span>';
+      const account = status.account_email
+        ? `<p class="voice-hint">Signed in as ${escapeHtml(status.account_email)}.</p>`
+        : "";
+      const detail = status.configured
+        ? `<p class="voice-hint">Files you import stay on this computer after import.</p>`
+        : `<p class="voice-hint">${escapeHtml(status.setup_message || "Google Drive is not set up on this machine.")}</p>`;
+      const action = status.needs_signin
+        ? `<p class="voice-hint">Your Google sign-in expired. Open Sources &rarr; Drive to sign in again.</p>`
+        : `<p class="voice-hint">Set up and sign-in live in Sources &rarr; Drive.</p>`;
+      host.innerHTML = `
+        <div class="view-head">
+          <div><h3 style="margin:0;">Google Drive</h3><p>Import curriculum files you already keep in Drive.</p></div>
+          ${badge}
+        </div>
+        ${account}
+        ${detail}
+        ${action}`;
+    }
+
+    async function renderIntegrationsControls() {
+      try {
+        renderSlackPanel(await api("/api/slack/credentials"));
+      } catch (error) {
+        const host = $("integrations-slack");
+        if (host) host.innerHTML = `<h3 style="margin:0;">Slack</h3><p class="voice-hint">Could not read Slack setup: ${escapeHtml(error.message || "unknown error")}</p>`;
+      }
+      try {
+        renderDriveIntegration(await api("/api/google-drive/status"));
+      } catch (error) {
+        const host = $("integrations-drive");
+        if (host) host.innerHTML = `<h3 style="margin:0;">Google Drive</h3><p class="voice-hint">Could not read Drive status: ${escapeHtml(error.message || "unknown error")}</p>`;
+      }
     }
 
     async function renderUpdateControls() {
