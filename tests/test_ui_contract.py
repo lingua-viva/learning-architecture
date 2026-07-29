@@ -137,7 +137,9 @@ REPO = Path(__file__).resolve().parent.parent
 #     tooltips wherever S-XXXX codes appear.
 #   v62 (2026-07-29): Gap 4 — Evidence/Capacity/Trends return real counts;
 #     deferred stubs and _admin_deferred() removed.
-EXPECTED_VERSION = 62
+#   v63 (2026-07-29): Gap 5 — POST /api/voice/tts with the publication-safety
+#     gate ahead of the key check; UI falls back to the local Italian voice.
+EXPECTED_VERSION = 63
 
 
 def _html() -> str:

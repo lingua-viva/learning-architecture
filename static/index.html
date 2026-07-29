@@ -539,10 +539,47 @@
         this.listening = false;
         this.recognition = null;
       },
+      remoteAudio: null,
       stopSpeaking() {
         if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+        if (this.remoteAudio) {
+          try { this.remoteAudio.pause(); } catch (error) { /* already stopped */ }
+          this.remoteAudio = null;
+        }
       },
-      speak(text) {
+      // Gap 5: try the Rime speech service, fall back to this computer's own
+      // voice. The backend refuses (403) when the text names a student, and
+      // that fallback is the private path, not a degraded one — the local
+      // voice speaks Italian (contract v52).
+      async speak(text) {
+        if (!text) return;
+        this.stopSpeaking();
+        try {
+          const response = await fetch("/api/voice/tts", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({text: String(text)})
+          });
+          if (response.ok) {
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const audio = new Audio(url);
+            this.remoteAudio = audio;
+            audio.onended = () => {
+              URL.revokeObjectURL(url);
+              const status = this.get("ask-voice-status");
+              if (status) status.textContent = "Tap once to talk. Pause when finished, or tap again to stop.";
+            };
+            audio.onerror = () => { URL.revokeObjectURL(url); this.speakLocally(text); };
+            await audio.play();
+            return;
+          }
+        } catch (error) {
+          // network or CORS failure — fall through to the local voice
+        }
+        this.speakLocally(text);
+      },
+      speakLocally(text) {
         if (!("speechSynthesis" in window) || !text) return;
         this.stopSpeaking();
         const clean = String(text)

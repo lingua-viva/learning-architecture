@@ -30,7 +30,13 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+    Response,
+)
 import uvicorn
 from urllib.parse import urlencode
 
@@ -1629,6 +1635,125 @@ async def privacy_events():
     # able to say so rather than leaving S-XXXX codes unexplained.
     aron = await asyncio.to_thread(aron_status)
     return {**summary, "events": [asdict(event) for event in events], "aron": aron}
+
+
+RIME_TTS_URL = "https://users.rime.ai/v1/rime-tts"
+RIME_MAX_CHARS = 12_000
+
+
+def _rime_api_key() -> str:
+    return os.environ.get("RIME_API_KEY", "").strip()
+
+
+def _active_student_names() -> list[str]:
+    """Names to check TTS text against. Empty on failure is NOT safe here, so
+    the caller treats an unreadable roster as a reason to stay local."""
+    def collect(store):
+        return [str(lens.get("display_name") or "") for lens in store.list_lenses()]
+
+    return _with_student_store(collect)
+
+
+def _request_rime_audio(text: str, speaker: str, model_id: str, key: str) -> bytes:
+    import json as _json
+    import re as _re
+    import urllib.request as _urlreq
+
+    body = _json.dumps({
+        "text": _re.sub(r"[#*_`>\[\]]", "", text),
+        "speaker": speaker,
+        "modelId": model_id,
+    }).encode("utf-8")
+    outgoing = _urlreq.Request(
+        RIME_TTS_URL,
+        data=body,
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+            "Accept": "audio/wav",
+        },
+        method="POST",
+    )
+    with _urlreq.urlopen(outgoing, timeout=20) as response:
+        return response.read()
+
+
+@app.post("/api/voice/tts")
+async def voice_tts(request: Request):
+    """Read text aloud via Rime, but only after proving it names no child.
+
+    Gap 5 (SPEC_LV_REMAINING_GAPS_2026-07-29). Rime is an external service, so
+    this is an egress path and gets the same treatment as any other:
+    check_publication_safety() runs BEFORE the key is even read, and a
+    student name means the request never leaves this machine.
+
+    Every non-200 here is a signal to the caller to use the browser's own
+    voice, which speaks Italian (contract v52). Falling back is not a
+    degraded experience — it is the private one.
+    """
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    text = str((payload or {}).get("text") or "").strip()
+    if not text:
+        return JSONResponse({"error": "text required"}, status_code=400)
+    if len(text) > RIME_MAX_CHARS:
+        return JSONResponse(
+            {"error": f"Text must be under {RIME_MAX_CHARS:,} characters."},
+            status_code=400,
+        )
+
+    from src.lingua_viva.governance import check_publication_safety
+    from src.lingua_viva.privacy_log import log_event
+
+    def gate() -> dict:
+        names = _active_student_names()
+        return check_publication_safety({"text": text}, student_names=names)
+
+    try:
+        safety = await asyncio.to_thread(gate)
+    except Exception:
+        # The roster could not be read, so we cannot prove the text is free of
+        # student names. Fail closed: stay local.
+        return JSONResponse(
+            {
+                "error": "Could not check this text for student information — reading it aloud on this computer instead.",
+                "fallback": "local",
+            },
+            status_code=403,
+        )
+
+    if safety["blocked"]:
+        await asyncio.to_thread(log_event, "voice_kept_local_student_data")
+        return JSONResponse(
+            {
+                "error": "This text mentions a student, so it is read aloud on this computer instead of being sent to the speech service.",
+                "fallback": "local",
+                "violations": safety["violations"],
+            },
+            status_code=403,
+        )
+
+    key = _rime_api_key()
+    if not key:
+        return JSONResponse(
+            {"error": "Rime is not set up on this computer.", "fallback": "local"},
+            status_code=503,
+        )
+
+    speaker = str((payload or {}).get("speaker") or os.environ.get("RIME_SPEAKER", "astra"))
+    model_id = str(os.environ.get("RIME_MODEL_ID", "mistv3"))
+    try:
+        audio = await asyncio.to_thread(_request_rime_audio, text, speaker, model_id, key)
+    except Exception as exc:  # noqa: BLE001
+        return JSONResponse(
+            {"error": f"The speech service could not be reached ({type(exc).__name__}).", "fallback": "local"},
+            status_code=502,
+        )
+
+    await asyncio.to_thread(log_event, "voice_sent_to_external_tts")
+    return Response(content=audio, media_type="audio/wav")
 
 
 @app.get("/api/daily/briefing")

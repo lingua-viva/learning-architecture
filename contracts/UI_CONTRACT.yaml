@@ -394,7 +394,20 @@
 #     a reason, unreadable records report unknown rather than zero, Capacity
 #     says in the payload that it is not a staffing model, and Trends notes
 #     that Tier 1 is a default rather than a finding.
-version: 62
+#   v63 (2026-07-29): Gap 5 Rime TTS with student-data privacy gate
+#     (SPEC_LV_REMAINING_GAPS_2026-07-29 Gap 5). src/web.py: POST
+#     /api/voice/tts. Rime is an external service, so this is an egress path:
+#     check_publication_safety() runs BEFORE the API key is even read, and a
+#     student name means the request never leaves this machine (403,
+#     fallback=local, privacy event voice_kept_local_student_data). An
+#     unreadable roster also fails closed — without it we cannot prove the
+#     text names no child. Successful sends log
+#     voice_sent_to_external_tts so the governance view can count them.
+#     static/index.html: voiceRuntime.speak() now tries the endpoint and
+#     falls back to speakLocally(), which keeps the v52 Italian voice — the
+#     fallback is the private path, not a degraded one. stopSpeaking() also
+#     halts Rime playback so the two voices cannot talk over each other.
+version: 63
 files:
   - static/index.html
   - static/sw.js
