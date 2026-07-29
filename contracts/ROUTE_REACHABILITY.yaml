@@ -74,6 +74,10 @@ reachable_from_ui:
   - route: "GET /api/slack/ops/status"
     call_site: 'api("/api/slack/ops/status")'
 
+  # Slice 6 — Daily briefing widgets (renderDailyBriefing).
+  - route: "GET /api/daily/briefing"
+    call_site: 'api("/api/daily/briefing")'
+
   # Slice 2 — Action registry + governance preview (renderActionRegistry / renderPrivacyPreview).
   - route: "GET /api/actions/registry"
     call_site: 'api("/api/actions/registry")'

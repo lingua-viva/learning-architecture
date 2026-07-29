@@ -332,7 +332,18 @@
 #     reassurance, per the build order's no-fake-affordance law. src/web.py:
 #     GET /api/actions/registry. static/index.html: "What you can do" panel
 #     in Activity, and an inline preview in Prepare before Generate.
-version: 57
+#   v58 (2026-07-28): Slice 6 Daily augmentation
+#     (SPEC_NATIVE_WORKSTATION_SURFACES_2026-07-28 §Lingua Viva item 2).
+#     src/web.py: GET /api/daily/briefing — three morning-briefing widgets
+#     (not observed in N days, support decisions waiting, suggestions
+#     awaiting confirmation) built on BriefService._unobserved and
+#     ._rti_pending, which already existed. Students are referenced
+#     anonymously: Daily is read in staff rooms and projected in meetings,
+#     so the same constraint applies as to the Activity view. An unreadable
+#     student record returns readable=false with an explicit note, because
+#     an empty widget set would read as "nothing waiting".
+#     static/index.html: "Your day" panel above the Slack schedule.
+version: 58
 files:
   - static/index.html
   - static/sw.js

@@ -1597,6 +1597,101 @@ async def privacy_events():
     return {**summary, "events": [asdict(event) for event in events]}
 
 
+@app.get("/api/daily/briefing")
+async def daily_briefing(days: int = 7):
+    """Morning-briefing widgets for the Daily view.
+
+    Slice 6 (SPEC_NATIVE_WORKSTATION_SURFACES_2026-07-28 §Lingua Viva item 2):
+    Daily shows the Slack ops schedule; it should also answer "who have I not
+    observed, what support decisions are waiting, what have I not confirmed?"
+
+    Every student is referenced anonymously. Daily is read in staff rooms and
+    projected in meetings, and the same spec's LV constraint applies here as
+    to the Action Queue.
+    """
+
+    def build() -> dict:
+        from src.lingua_viva.activity import pending_items
+        from src.lingua_viva.brief import BriefService
+        from src.lingua_viva.governance import anonymous_student_ref
+
+        window = max(1, min(int(days or 7), 90))
+        service = BriefService(
+            student_store_factory=_student_store_for_brief,
+            revision_log_path=_revision_log_path(),
+        )
+        try:
+            with service.student_store_factory() as store:
+                unobserved = service._unobserved(store, window)
+                rti_pending = service._rti_pending(store)
+            readable = True
+        except Exception as exc:  # noqa: BLE001
+            return {
+                "readable": False,
+                "reason": type(exc).__name__,
+                "window_days": window,
+                "widgets": [],
+                "note": (
+                    "The student record could not be opened. This is not the same "
+                    "as having nothing waiting."
+                ),
+            }
+
+        confirmations = [item for item in pending_items() if not item.get("unknown")]
+
+        widgets = [
+            {
+                "id": "unobserved",
+                "label": f"Not observed in {window} days",
+                "count": len(unobserved),
+                "students": [anonymous_student_ref(s["student_id"]) for s in unobserved],
+                "detail": (
+                    "Worth a note next time you see them."
+                    if unobserved
+                    else "Everyone has a recent observation."
+                ),
+                "status": "attention" if unobserved else "ok",
+            },
+            {
+                "id": "rti_pending",
+                "label": "Support decisions to look at",
+                "count": len(rti_pending),
+                "students": [anonymous_student_ref(s["student_id"]) for s in rti_pending],
+                "detail": (
+                    "The system flags; you decide."
+                    if rti_pending
+                    else "No support tiers are flagged."
+                ),
+                "status": "attention" if rti_pending else "ok",
+            },
+            {
+                "id": "confirmations",
+                "label": "Suggestions awaiting your confirmation",
+                "count": sum(item.get("count") or 0 for item in confirmations),
+                "students": [item["reference"] for item in confirmations if item.get("reference")],
+                "detail": (
+                    "Kept out of parent reports until you confirm them."
+                    if confirmations
+                    else "Nothing is waiting for confirmation."
+                ),
+                "status": "attention" if confirmations else "ok",
+            },
+        ]
+
+        return {
+            "readable": readable,
+            "window_days": window,
+            "widgets": widgets,
+            "needs_attention": sum(1 for w in widgets if w["status"] == "attention"),
+            "note": (
+                "Students are shown by an anonymous reference so this view is safe "
+                "to read in a staff room."
+            ),
+        }
+
+    return await asyncio.to_thread(build)
+
+
 @app.get("/api/actions/registry")
 async def actions_registry():
     """The teacher actions LV can run, each with its governance preview.

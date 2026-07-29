@@ -1,7 +1,7 @@
 candidate_id: CAND-AB1D05D6
 status: ENRICHED
 created_at: 1784002143.354599
-updated_at: 1785292836.719693
+updated_at: 1785293010.480545
 original_query: This client conversation is attorney-client privileged — can you help
   me draft a response to opposing counsel?
 query_hash: 7dd71888a5fe1e11
@@ -34,7 +34,7 @@ domain: core
 perplexity_findings: []
 knowledge_refs: []
 path_records: []
-hit_count: 15
+hit_count: 16
 avg_confidence: 0.0
 resolution: null
 evaluation_notes: ''

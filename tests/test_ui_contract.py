@@ -127,7 +127,9 @@ REPO = Path(__file__).resolve().parent.parent
 #   v57 (2026-07-28): Slice 2 Dispatcher — action registry + governance
 #     preview. GET /api/actions/registry; Activity "What you can do" panel;
 #     inline preview in Prepare.
-EXPECTED_VERSION = 57
+#   v58 (2026-07-28): Slice 6 Daily augmentation — GET /api/daily/briefing +
+#     "Your day" widgets, anonymous student references.
+EXPECTED_VERSION = 58
 
 
 def _html() -> str:

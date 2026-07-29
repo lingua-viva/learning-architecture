@@ -3281,6 +3281,7 @@
           </div>
           ${badge}
         </div>
+        <div id="daily-briefing"></div>
         <div class="grid two">
           <div class="panel">
             <h3>Slack connection</h3>
@@ -3316,6 +3317,57 @@
       // view) — not a sidebar destination, so it stays out of the nav
       // contract's view map and state.view remains "daily".
       $("open-bot-setup").addEventListener("click", renderOpsSetup);
+      await renderDailyBriefing();
+    }
+
+    // --- Daily briefing widgets (Slice 6) ----------------------------------
+    // SPEC_NATIVE_WORKSTATION_SURFACES_2026-07-28 §Lingua Viva item 2: Daily
+    // showed only the Slack ops schedule. These three widgets make it the
+    // morning briefing — who has not been observed, which support decisions
+    // are waiting, what is unconfirmed.
+    //
+    // Students appear as anonymous references. Daily gets read in staff rooms
+    // and projected in meetings, so the same constraint applies here as to
+    // the Activity view.
+
+    async function renderDailyBriefing() {
+      const host = $("daily-briefing");
+      if (!host) return;
+      let data;
+      try { data = await api("/api/daily/briefing"); } catch (error) {
+        host.innerHTML = `<div class="panel" style="margin-bottom:14px;"><h3>Your day</h3><p class="voice-hint">Could not read what is waiting: ${escapeHtml(error.message || "unknown error")}</p></div>`;
+        return;
+      }
+
+      if (!data.readable) {
+        host.innerHTML = `
+          <div class="panel" style="margin-bottom:14px;">
+            <div class="view-head"><div><h3 style="margin:0;">Your day</h3></div><span class="badge risk">unknown</span></div>
+            <p>${escapeHtml(data.note)}</p>
+          </div>`;
+        return;
+      }
+
+      const widgets = (data.widgets || []).map(widget => `
+        <div class="item">
+          <h3>${escapeHtml(widget.label)}</h3>
+          <div class="source-line">
+            <span class="badge ${widget.status === "attention" ? "warn" : "ok"}">${widget.count}</span>
+            ${(widget.students || []).slice(0, 6).map(ref => `<span class="badge">${escapeHtml(ref)}</span>`).join("")}
+            ${(widget.students || []).length > 6 ? `<span class="badge">+${widget.students.length - 6} more</span>` : ""}
+          </div>
+          <p>${escapeHtml(widget.detail)}</p>
+        </div>`).join("");
+
+      host.innerHTML = `
+        <div class="panel" style="margin-bottom:14px;">
+          <div class="view-head">
+            <div><h3 style="margin:0;">Your day</h3><p>What is waiting for you, before the schedule.</p></div>
+            <span class="badge ${data.needs_attention ? "warn" : "ok"}">${data.needs_attention ? `${data.needs_attention} need${data.needs_attention === 1 ? "s" : ""} attention` : "nothing waiting"}</span>
+          </div>
+          <div class="list" style="margin-top:12px;">${widgets}</div>
+          <p class="voice-hint" style="margin-top:10px;">${escapeHtml(data.note)}</p>
+        </div>`;
     }
 
     async function renderOpsSetup() {
