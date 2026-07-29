@@ -1660,6 +1660,15 @@
       source: "📁", privacy: "🔒"
     };
 
+    // ARON (Gap 3) — every S-XXXX code the teacher sees carries this
+    // explanation, so the codes are never unexplained.
+    const ARON_TITLE = "ARON — Anonymized Reference for Observation Notes. A stable code standing in for this child's name, so this view is safe to project or screen-share. It cannot be turned back into a name.";
+    const ARON_HINT = "Students appear as ARON codes (S-XXXX) — anonymized references, safe to show on a screen.";
+
+    function aronBadge(reference) {
+      return `<span class="badge" title="${escapeHtml(ARON_TITLE)}">${escapeHtml(reference)}</span>`;
+    }
+
     async function renderActions() {
       setTitle("Activity", "what happened here");
       $("content").innerHTML = `<div class="panel"><h2>Reading what was recorded...</h2></div>`;
@@ -1674,7 +1683,7 @@
 
       const pendingRows = (data.pending || []).map(item => `
         <div class="item">
-          <h3>${escapeHtml(item.label)}${item.reference ? ` &middot; ${escapeHtml(item.reference)}` : ""}</h3>
+          <h3>${escapeHtml(item.label)}${item.reference ? ` &middot; <span title="${escapeHtml(ARON_TITLE)}">${escapeHtml(item.reference)}</span>` : ""}</h3>
           <div class="source-line">
             <span class="badge ${item.unknown ? "risk" : "warn"}">${item.count === null || item.count === undefined ? "unknown" : `${item.count} item${item.count === 1 ? "" : "s"}`}</span>
           </div>
@@ -1731,6 +1740,7 @@
             entryRows || `<p class="voice-hint">${escapeHtml(data.empty_reason || "Nothing recorded yet.")}</p>`
           }</div>
           <p class="voice-hint" style="margin-top:10px;">${escapeHtml(data.privacy_note)}</p>
+          <p class="voice-hint" title="${escapeHtml(ARON_TITLE)}">${escapeHtml(ARON_HINT)}</p>
         </div>`;
 
       await renderActionRegistry();
@@ -1893,7 +1903,7 @@
           status.textContent = "Sealed.";
           result.innerHTML = `
             <div class="item">
-              <h3>Pack for ${escapeHtml(pack.student.reference)}</h3>
+              <h3>Pack for <span title="${escapeHtml(ARON_TITLE)}">${escapeHtml(pack.student.reference)}</span></h3>
               <div class="source-line">
                 <span class="badge ok">${pack.confirmed_by_teacher.count} confirmed by you</span>
                 <span class="badge">${pack.model_suggested_not_confirmed.count} suggested, not confirmed</span>
@@ -2043,6 +2053,15 @@
           <div class="list" style="margin-top:12px;">${(privacy.events || []).length ? privacy.events.map(event => `<div class="item"><h3>${escapeHtml(event.event_type)}</h3><p>${escapeHtml(event.detail)}</p></div>`).join("") : "<p>No privacy events recorded yet.</p>"}</div>
           <p>No student names appear in this log &mdash; entries are event types and hashes only. For what did or did not leave this computer, see Governance.</p>
         </div>
+        ${privacy.aron ? `
+        <div class="panel" style="margin-top:14px;">
+          <div class="view-head">
+            <div><h3 style="margin:0;">${escapeHtml(privacy.aron.name)} &mdash; ${escapeHtml(privacy.aron.expanded)}</h3></div>
+            <span class="badge ${privacy.aron.active ? "ok" : "warn"}">${privacy.aron.active ? "active" : "off"}</span>
+          </div>
+          <p>${escapeHtml(privacy.aron.explanation)}</p>
+          <div class="source-line">${(privacy.aron.applies_to || []).map(place => `<span class="badge">${escapeHtml(place)}</span>`).join("")}</div>
+        </div>` : ""}
         <div class="panel" style="margin-top:14px;">
           <h3>Publication Readiness</h3>
           <div class="source-line"><span class="badge ${publication.not_publication_ready ? "warn" : "ok"}">${publication.not_publication_ready ? "not publication-ready" : "publication-ready"}</span><span class="badge">${publication.claim_count || 0} claims reviewed</span></div>
@@ -3364,7 +3383,7 @@
           <h3>${escapeHtml(widget.label)}</h3>
           <div class="source-line">
             <span class="badge ${widget.status === "attention" ? "warn" : "ok"}">${widget.count}</span>
-            ${(widget.students || []).slice(0, 6).map(ref => `<span class="badge">${escapeHtml(ref)}</span>`).join("")}
+            ${(widget.students || []).slice(0, 6).map(ref => aronBadge(ref)).join("")}
             ${(widget.students || []).length > 6 ? `<span class="badge">+${widget.students.length - 6} more</span>` : ""}
           </div>
           <p>${escapeHtml(widget.detail)}</p>
@@ -3377,7 +3396,7 @@
             <span class="badge ${data.needs_attention ? "warn" : "ok"}">${data.needs_attention ? `${data.needs_attention} need${data.needs_attention === 1 ? "s" : ""} attention` : "nothing waiting"}</span>
           </div>
           <div class="list" style="margin-top:12px;">${widgets}</div>
-          <p class="voice-hint" style="margin-top:10px;">${escapeHtml(data.note)}</p>
+          <p class="voice-hint" style="margin-top:10px;" title="${escapeHtml(ARON_TITLE)}">${escapeHtml(data.note)} ${escapeHtml(ARON_HINT)}</p>
         </div>`;
     }
 

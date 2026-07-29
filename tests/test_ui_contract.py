@@ -133,7 +133,9 @@ REPO = Path(__file__).resolve().parent.parent
 #     /api/parents/recommendation; warnings rendered above the draft.
 #   v60 (2026-07-29): Gap 2 — filemap auto-scan on startup (daemon thread,
 #     LV_AGENT + pytest guarded). src/web.py startup handler only.
-EXPECTED_VERSION = 60
+#   v61 (2026-07-29): Gap 3 — ARON named (aron_ref), explained in Privacy,
+#     tooltips wherever S-XXXX codes appear.
+EXPECTED_VERSION = 61
 
 
 def _html() -> str:

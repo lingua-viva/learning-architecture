@@ -125,7 +125,7 @@ def pending_items() -> list[dict[str, Any]]:
 
     try:
         from src.education.student_lens import StudentLensStore
-        from src.lingua_viva.governance import anonymous_student_ref
+        from src.lingua_viva.governance import aron_ref
 
         override = os.environ.get("LV_STUDENT_DB_PATH")
         path = Path(override) if override else lv_home() / "runtime" / "student_lenses.db"
@@ -146,7 +146,7 @@ def pending_items() -> list[dict[str, Any]]:
                 if count:
                     pending.append({
                         # Anonymous: this list is designed to be projectable.
-                        "reference": anonymous_student_ref(lens["student_id"]),
+                        "reference": aron_ref(lens["student_id"]),
                         "label": "Suggestions awaiting your confirmation",
                         "count": count,
                         "detail": (

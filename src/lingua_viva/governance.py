@@ -127,18 +127,59 @@ def verify_pack(pack: dict) -> bool:
 # --- anonymisation ---------------------------------------------------------
 
 
-def anonymous_student_ref(student_id: str) -> str:
-    """Stable, non-reversible reference for a student in an export.
+ARON_NAME = "ARON"
+ARON_EXPANDED = "Anonymized Reference for Observation Notes"
+ARON_EXPLANATION = (
+    "Anonymized Reference for Observation Notes. A stable, non-reversible code "
+    "that stands in for a child's name in any view or export that could be "
+    "screen-shared, projected in a classroom, or handed to an administrator. "
+    "The same child always gets the same code on this computer, so a pupil can "
+    "be followed across records — but the code is meaningless on any other "
+    "machine and cannot be turned back into a name."
+)
 
-    Keyed with the machine signing key so the same child gets the same
-    reference across packs from this computer (an administrator can follow one
-    pupil through a series) while the reference is meaningless anywhere else
-    and cannot be reversed into a name or id by whoever receives it.
+
+def aron_ref(student_id: str) -> str:
+    """ARON — Anonymized Reference for Observation Notes.
+
+    A stable, non-reversible identifier standing in for a child's name in any
+    surface that could be screen-shared, projected, or shared outside the
+    classroom. Produces codes of the form ``S-ABCDEF123456``.
+
+    Keyed with this machine's signing key, which gives it two properties that
+    matter together: the same child gets the same code across every record on
+    this computer (so an administrator can follow one pupil through a series),
+    while the code is meaningless anywhere else and cannot be reversed into a
+    name or student id by whoever receives it.
+
+    Deleting the signing key invalidates every previously issued reference —
+    that is deliberate, and the same property the export seals rely on.
     """
     digest = hmac.new(
         _load_or_create_signing_key(), f"student:{student_id}".encode("utf-8"), hashlib.sha256
     )
     return f"S-{digest.hexdigest()[:12].upper()}"
+
+
+# Original name, kept so existing call sites and any external caller keep
+# working. aron_ref() is the name to use.
+anonymous_student_ref = aron_ref
+
+
+def aron_status() -> dict:
+    """Whether ARON is active, for the Privacy view to state plainly."""
+    return {
+        "name": ARON_NAME,
+        "expanded": ARON_EXPANDED,
+        "active": True,
+        "explanation": ARON_EXPLANATION,
+        "key_fingerprint": key_fingerprint(),
+        "applies_to": [
+            "Activity view",
+            "Daily briefing",
+            "Observation exports",
+        ],
+    }
 
 
 # --- Trust Status ----------------------------------------------------------
@@ -409,7 +450,7 @@ def build_observation_pack(student_id: str, *, store) -> dict:
         "format_version": PACK_FORMAT_VERSION,
         "pack_type": "observation_export",
         "student": {
-            "reference": anonymous_student_ref(student_id),
+            "reference": aron_ref(student_id),
             "note": "Anonymous reference. The child's name is not in this pack.",
         },
         "generated_at": datetime.now(timezone.utc).isoformat(),

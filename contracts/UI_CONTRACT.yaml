@@ -371,7 +371,16 @@
 #     No route added. The spec's instruction to port MC's
 #     auto_scan_on_startup() could not be followed — MC has no such symbol —
 #     so this is written for LV's shape.
-version: 60
+#   v61 (2026-07-29): Gap 3 ARON naming
+#     (SPEC_LV_REMAINING_GAPS_2026-07-29 Gap 3). governance.py:
+#     anonymous_student_ref() renamed aron_ref() with an ARON docstring, the
+#     old name kept as an alias, plus ARON_EXPLANATION and aron_status().
+#     src/web.py: GET /api/privacy now includes an "aron" block (no new
+#     route). static/index.html: Privacy view states ARON is active and what
+#     it means; every place an S-XXXX code appears — Activity pending items,
+#     Daily briefing badges, observation-export pack heading — carries a
+#     tooltip explaining it and that it cannot be reversed into a name.
+version: 61
 files:
   - static/index.html
   - static/sw.js

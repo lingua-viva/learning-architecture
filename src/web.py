@@ -1621,9 +1621,14 @@ async def privacy_events():
     from dataclasses import asdict
     from src.lingua_viva.privacy_log import privacy_summary, read_privacy_events
 
+    from src.lingua_viva.governance import aron_status
+
     summary = await asyncio.to_thread(privacy_summary)
     events = await asyncio.to_thread(read_privacy_events, 25)
-    return {**summary, "events": [asdict(event) for event in events]}
+    # Gap 3: ARON is a real, always-on mechanism; the Privacy view should be
+    # able to say so rather than leaving S-XXXX codes unexplained.
+    aron = await asyncio.to_thread(aron_status)
+    return {**summary, "events": [asdict(event) for event in events], "aron": aron}
 
 
 @app.get("/api/daily/briefing")
@@ -1642,7 +1647,7 @@ async def daily_briefing(days: int = 7):
     def build() -> dict:
         from src.lingua_viva.activity import pending_items
         from src.lingua_viva.brief import BriefService
-        from src.lingua_viva.governance import anonymous_student_ref
+        from src.lingua_viva.governance import aron_ref
 
         window = max(1, min(int(days or 7), 90))
         service = BriefService(
@@ -1673,7 +1678,7 @@ async def daily_briefing(days: int = 7):
                 "id": "unobserved",
                 "label": f"Not observed in {window} days",
                 "count": len(unobserved),
-                "students": [anonymous_student_ref(s["student_id"]) for s in unobserved],
+                "students": [aron_ref(s["student_id"]) for s in unobserved],
                 "detail": (
                     "Worth a note next time you see them."
                     if unobserved
@@ -1685,7 +1690,7 @@ async def daily_briefing(days: int = 7):
                 "id": "rti_pending",
                 "label": "Support decisions to look at",
                 "count": len(rti_pending),
-                "students": [anonymous_student_ref(s["student_id"]) for s in rti_pending],
+                "students": [aron_ref(s["student_id"]) for s in rti_pending],
                 "detail": (
                     "The system flags; you decide."
                     if rti_pending
