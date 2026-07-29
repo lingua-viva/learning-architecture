@@ -87,6 +87,32 @@ def ingest_document(path: Path, doc_type: str) -> dict:
     total_redactions = sum(len(chunk.redactions) for chunk in chunks)
     needs_review = sum(1 for chunk in chunks if chunk.needs_review)
     tables = sum(1 for chunk in chunks if chunk.is_table)
+    try:
+        from src.lingua_viva.sources.ledger import compute_source_record_id, now_iso, upsert
+        from src.lingua_viva.sources.schema import SourceRecord
+
+        observed_at = now_iso()
+        resolved = path.expanduser().resolve()
+        source_record_id = compute_source_record_id("local", str(resolved.parent), str(resolved.parent), resolved.name)
+        upsert(SourceRecord(
+            source_record_id=source_record_id,
+            source_type="local",
+            source_id=str(resolved.parent),
+            container=str(resolved.parent),
+            record_id=resolved.name,
+            title=resolved.name,
+            uri=str(resolved),
+            retrieval_scope="content",
+            created_at=observed_at,
+            observed_at=observed_at,
+            provenance="import",
+            student_data=False,
+            sensitivity_hint="medium" if needs_review else "low",
+            content_hash=str(getattr(chunks[0], "content_hash", "")) if chunks else "",
+            summary=f"{doc_type}; {added} chunk(s), {total_redactions} redaction(s)",
+        ), detail={"doc_type": doc_type, "chunks_added": added})
+    except Exception:
+        pass
 
     return {
         "ok": True,

@@ -258,6 +258,7 @@ export async function installPythonDeps(pythonCmd: string, repoRoot: string): Pr
     "websockets==15.0.1",
     "pdfplumber==0.11.9",
     "sqlite-vec==0.1.9",
+    "faster-whisper==1.1.1",
   ];
   // Strategy: try multiple pip invocations in order of preference.
   // macOS python.org installs ship WITHOUT SSL certs configured (need "Install Certificates.command").

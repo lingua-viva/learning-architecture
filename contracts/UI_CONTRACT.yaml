@@ -431,7 +431,32 @@
 #     GET /api/students now also returns the ARON reference so surfaces that
 #     must not show names can join to a roster row without receiving the
 #     name-bearing student_id.
-version: 65
+#   v66 (2026-07-29): Integration loop + voice-first contracts
+#     (SPEC_LV_INTEGRATION_PORT_FROM_MC_2026-07-29). src/web.py: source
+#     ledger routes, action-plan lifecycle, deliverable list, audit receipt
+#     export, grounding on /api/query, and local STT/probe routes.
+#     static/index.html: Source ledger disclosure, action-plan history with
+#     approve/reject, governance deliverable receipt export, Ask grounding
+#     badges, and MediaRecorder -> /api/voice/stt capture replacing Electron-
+#     broken Web Speech API. static/sw.js unchanged; lock re-sealed because
+#     protected UI/server files changed deliberately.
+#   v67 (2026-07-29): source registry truth fix after v66 — src/web.py keeps
+#     an unavailable source's count as null even when old ledger records exist,
+#     so stale durable records do not make a current connector outage look
+#     available.
+#   v68 (2026-07-29): Voice companion panel. static/index.html: fixed
+#     right-side avatar mic becomes the only voice input surface, routes
+#     Observe captures in-place and Ask captures through submit/speakback.
+#     src/web.py: serves /assets/{name} for the copied MC avatar. Electron
+#     CSP now allows blob media playback for Rime audio.
+#   v69 (2026-07-29): pre-push audit fix — src/web.py POST
+#     /api/google-drive/upload now writes a DeliverableRecord (type
+#     drive_export) and AuditReceipt on every successful share. Previously
+#     the highest-risk action in the app (data leaving the machine) left no
+#     durable record at all, while the lower-risk observation export did.
+#     No UI markup changed; the new record surfaces through the existing
+#     Governance -> Deliverables and receipts panel.
+version: 69
 files:
   - static/index.html
   - static/sw.js

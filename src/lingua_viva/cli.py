@@ -56,11 +56,29 @@ def _health(args: argparse.Namespace) -> int:
         return _full_health(args)
     status = provider_status()
     if args.json:
+        import shutil
+
+        status["voice"] = {
+            "ffmpeg": bool(shutil.which("ffmpeg")),
+            "faster_whisper_installed": _faster_whisper_installed(),
+            "local_stt": bool(shutil.which("ffmpeg") and _faster_whisper_installed()),
+        }
         _print_json(status)
     else:
         local = "reachable" if status["ollama_reachable"] else "not reachable"
         print(f"Lingua Viva health: local model service {local}; provider={status['provider']}")
+        voice = "available" if _faster_whisper_installed() else "not installed"
+        print(f"Voice STT: {voice}")
     return 0
+
+
+def _faster_whisper_installed() -> bool:
+    try:
+        import faster_whisper  # noqa: F401
+
+        return True
+    except Exception:
+        return False
 
 
 def _doctor(args: argparse.Namespace) -> int:
@@ -413,6 +431,19 @@ def _candidates(args) -> int:
     return 0
 
 
+def _golden_workflows(args: argparse.Namespace) -> int:
+    from src.lingua_viva.golden_workflows.runner import print_matrix, run_workflows
+
+    mode = "live" if args.live else "hermetic"
+    results = run_workflows(mode=mode, only=args.only)
+    payload = {"results": [r.as_dict() for r in results], "passed": sum(1 for r in results if r.status == "PASS"), "total": len(results)}
+    if args.json:
+        _print_json(payload)
+    else:
+        print(print_matrix(results))
+    return 0 if all(r.status in {"PASS", "SKIPPED_MISSING_CREDENTIALS"} for r in results) else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="lv", description="Lingua Viva local runtime")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -477,6 +508,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Include resolved candidates (promoted/discarded), not just active ones",
     )
 
+    golden_workflows = sub.add_parser("golden-workflows", help="Run integration-loop golden workflows")
+    mode = golden_workflows.add_mutually_exclusive_group()
+    mode.add_argument("--hermetic", action="store_true", default=True)
+    mode.add_argument("--live", action="store_true")
+    golden_workflows.add_argument("--only", default=None)
+    golden_workflows.add_argument("--json", action="store_true")
+
     fmap = sub.add_parser("filemap", help="Manage the local curriculum file map")
     fmap_sub = fmap.add_subparsers(dest="filemap_command", required=True)
     fmap_sub.add_parser("show", help="Show the current file map")
@@ -513,6 +551,8 @@ def main(argv: list[str] | None = None) -> int:
         return _distill(args)
     if args.command == "candidates":
         return _candidates(args)
+    if args.command == "golden-workflows":
+        return _golden_workflows(args)
     if args.command == "filemap":
         return _filemap(args)
     return 1

@@ -177,6 +177,45 @@ def test_upload_route_shares_student_lens(monkeypatch, tmp_path):
     assert json.loads(exported[0].read_text(encoding="utf-8"))
 
 
+def test_upload_route_creates_deliverable_and_audit_receipt(monkeypatch, tmp_path):
+    """Sharing to Drive is the highest-risk action in the app (data leaves the
+    machine). A successful share must leave a durable DeliverableRecord and
+    an exportable AuditReceipt, just like the observation export does."""
+    monkeypatch.setenv("LV_STATE_HOME", str(tmp_path / "lv_home"))
+    _configure(monkeypatch, tmp_path)
+    monkeypatch.setenv("LV_GOOGLE_DRIVE_EXPORT_DIR", str(tmp_path / "drive_exports"))
+    FakeDriveTransport.uploads = []
+    created = client.post("/api/students", json={"display_name": "Marco", "grade_level": "G3"})
+    student_id = created.json()["student_id"]
+
+    response = client.post("/api/google-drive/upload", json={"student_id": student_id})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload["uploaded"]) == 1
+    assert payload["deliverable"]["type"] == "drive_export"
+    assert payload["deliverable"]["status"] == "exported"
+    deliverable_id = payload["deliverable"]["deliverable_id"]
+    assert deliverable_id in payload["audit_receipt"]["deliverable_ids"]
+    # Marco's name must not leak into the receipt payload.
+    assert "Marco" not in str(payload["audit_receipt"])
+
+    # The new deliverable must actually surface through the Governance panel's
+    # read path, not just be constructed and thrown away.
+    listed = client.get("/api/deliverables").json()["deliverables"]
+    match = [d for d in listed if d["deliverable_id"] == deliverable_id]
+    assert match, "drive_export deliverable missing from /api/deliverables"
+    assert match[0]["type"] == "drive_export"
+
+    # And it must be independently exportable via the audit-receipts route.
+    exported = client.post(
+        "/api/audit-receipts/export",
+        json={"scope": "deliverable", "deliverable_id": deliverable_id},
+    )
+    assert exported.status_code == 200
+    assert deliverable_id in exported.json()["receipt"]["deliverable_ids"]
+
+
 def test_upload_route_refuses_files_outside_lv_home(monkeypatch, tmp_path):
     _configure(monkeypatch, tmp_path)
     monkeypatch.setenv("LV_GOOGLE_DRIVE_EXPORT_DIR", str(tmp_path / "drive_exports"))

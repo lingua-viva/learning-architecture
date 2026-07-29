@@ -143,7 +143,16 @@ REPO = Path(__file__).resolve().parent.parent
 #     recommendations (never applied automatically).
 #   v65 (2026-07-29): 15-pass hardening — contradicted labels removed,
 #     /api/voice/tts non-object body fixed, ARON reference on the roster.
-EXPECTED_VERSION = 65
+#   v66 (2026-07-29): Integration loop + voice-first contracts — source
+#     ledger, grounding, action plans, deliverables, audit receipts, golden
+#     workflows, and MediaRecorder -> /api/voice/stt local capture.
+#   v67 (2026-07-29): source registry keeps unavailable connector counts null
+#     even when the durable ledger has stale records.
+#   v68 (2026-07-29): fixed right-side voice companion panel, avatar asset
+#     route, and Electron blob-media CSP.
+#   v69 (2026-07-29): pre-push audit fix — Drive share-back now writes a
+#     DeliverableRecord + AuditReceipt (src/web.py only, no markup change).
+EXPECTED_VERSION = 69
 
 
 def _html() -> str:

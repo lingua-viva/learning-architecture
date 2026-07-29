@@ -390,6 +390,33 @@ class SlackObservationBot:
                 channel, ACK_SAVED
             )
 
+        try:
+            from src.lingua_viva.sources.ledger import compute_source_record_id, now_iso, upsert
+            from src.lingua_viva.sources.schema import SourceRecord
+
+            event_id = str(event.get("client_msg_id") or event.get("ts") or hashlib.sha256(observation_text.encode()).hexdigest()[:16])
+            observed_at = now_iso()
+            source_record_id = compute_source_record_id("slack", channel, teacher_id, event_id)
+            upsert(SourceRecord(
+                source_record_id=source_record_id,
+                source_type="slack",
+                source_id=channel,
+                container=teacher_id,
+                record_id=event_id,
+                title="Slack observation",
+                uri=f"slack://{channel}/{event_id}",
+                retrieval_scope="metadata",
+                created_at=observed_at,
+                observed_at=observed_at,
+                provenance="capture",
+                student_data=True,
+                sensitivity_hint="protect",
+                content_hash=hashlib.sha256(observation_text.encode()).hexdigest(),
+                summary="Student observation captured from Slack; raw text remains local-only.",
+            ), detail={"teacher_id_hash": hashlib.sha256(teacher_id.encode()).hexdigest()[:16]})
+        except Exception:
+            pass
+
         return {
             "ok": True,
             "capture_result": result,

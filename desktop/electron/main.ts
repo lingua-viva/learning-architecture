@@ -30,6 +30,7 @@ const CSP = [
   "script-src 'self' 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
+  "media-src 'self' blob:",
   "font-src 'self' data:",
   "connect-src 'self' http://127.0.0.1:8787 ws://127.0.0.1:8787",
   "object-src 'none'",
@@ -523,6 +524,9 @@ app.on("before-quit", () => {
 app.whenReady().then(async () => {
   const root = repoRoot();
   installCsp();
+  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    callback(permission === "media");
+  });
   installIpc(root);
   mainWindow = createWindow();
   await runSetupFlow(root, mainWindow);

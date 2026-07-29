@@ -28,6 +28,8 @@
       --risk: #a3222c;
       --shadow: 0 8px 24px rgba(23, 33, 31, .08);
       --lv-sidebar-width: 200px;
+      --lv-voice-width: 200px;
+      --lv-voice-collapsed-width: 60px;
       --lv-nav-gap: 4px;
       --lv-nav-row-min-height: 38px;
     }
@@ -77,6 +79,11 @@
       display: grid;
       grid-template-columns: var(--lv-sidebar-width) minmax(0, 1fr);
       min-height: 100vh;
+      padding-right: var(--lv-voice-width);
+      transition: padding-right .2s ease;
+    }
+    body.voice-collapsed .app {
+      padding-right: var(--lv-voice-collapsed-width);
     }
     .sidebar {
       background: #fdfdfb;
@@ -350,6 +357,133 @@
     }
     .voice-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
     .voice-hint { color: var(--muted); font-size: 12px; }
+    .voice-companion {
+      position: fixed;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 8;
+      width: var(--lv-voice-width);
+      border-left: 1px solid #203a34;
+      background: #10241f;
+      color: #eef6f2;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      padding: 16px 12px;
+      box-shadow: -10px 0 24px rgba(23, 33, 31, .18);
+      transition: width .2s ease, padding .2s ease;
+    }
+    .voice-companion.collapsed {
+      width: var(--lv-voice-collapsed-width);
+      padding: 16px 6px;
+    }
+    .vc-collapse {
+      align-self: flex-start;
+      width: 30px;
+      min-height: 30px;
+      padding: 0;
+      border-color: rgba(255, 255, 255, .18);
+      background: rgba(255, 255, 255, .06);
+      color: #c7ddd5;
+    }
+    .vc-collapse:focus-visible,
+    .vc-mic:focus-visible {
+      outline: 3px solid #76d3ff;
+      outline-offset: 2px;
+    }
+    .vc-avatar-container {
+      position: relative;
+      width: 82px;
+      height: 82px;
+      margin-top: 8px;
+      flex: 0 0 auto;
+    }
+    .voice-companion.collapsed .vc-avatar-container {
+      width: 44px;
+      height: 44px;
+    }
+    .vc-avatar {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 2px solid rgba(255, 255, 255, .22);
+      background: #fff;
+    }
+    .vc-visor {
+      position: absolute;
+      inset: -3px;
+      border-radius: 50%;
+      pointer-events: none;
+      box-shadow: 0 0 10px rgba(118, 211, 255, .22);
+      animation: vcPulse 3s ease-in-out infinite;
+    }
+    .voice-companion.is-listening .vc-visor {
+      box-shadow: 0 0 20px rgba(118, 211, 255, .7);
+      animation: vcWave .6s ease-in-out infinite alternate;
+    }
+    .voice-companion.is-processing .vc-visor {
+      border: 2px solid rgba(238, 190, 92, .8);
+      border-top-color: transparent;
+      animation: vcSpin 1s linear infinite;
+    }
+    .voice-companion.has-error .vc-visor {
+      box-shadow: 0 0 16px rgba(214, 92, 103, .65);
+      animation: none;
+    }
+    .vc-mic {
+      width: 48px;
+      height: 48px;
+      min-height: 48px;
+      border-radius: 50%;
+      padding: 0;
+      display: grid;
+      place-items: center;
+      background: #76d3ff;
+      border-color: #76d3ff;
+      color: #10241f;
+      font-weight: 800;
+    }
+    .voice-companion.is-listening .vc-mic {
+      box-shadow: 0 0 0 8px rgba(118, 211, 255, .18);
+    }
+    .voice-companion.is-processing .vc-mic {
+      background: #eebe5c;
+      border-color: #eebe5c;
+    }
+    .vc-state {
+      min-height: 22px;
+      text-align: center;
+      font-size: 13px;
+      color: #d7e8e1;
+    }
+    .vc-badge {
+      border: 1px solid rgba(141, 216, 184, .45);
+      border-radius: 999px;
+      padding: 5px 8px;
+      font-size: 12px;
+      line-height: 1.2;
+      text-align: center;
+      color: #aee3ca;
+      background: rgba(31, 111, 74, .14);
+    }
+    .voice-companion.collapsed .vc-state,
+    .voice-companion.collapsed .vc-badge {
+      display: none;
+    }
+    @keyframes vcPulse {
+      0%, 100% { opacity: .35; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.03); }
+    }
+    @keyframes vcWave {
+      from { transform: scale(1); }
+      to { transform: scale(1.07); }
+    }
+    @keyframes vcSpin {
+      to { transform: rotate(360deg); }
+    }
     .support-review {
       margin-top: 12px;
       border-top: 1px solid var(--line);
@@ -454,6 +588,17 @@
       .content {
         padding: 18px 14px 28px;
       }
+      .app {
+        padding-right: var(--lv-voice-collapsed-width);
+      }
+      .voice-companion {
+        width: var(--lv-voice-collapsed-width);
+        padding: 12px 6px;
+      }
+      .voice-companion .vc-state,
+      .voice-companion .vc-badge {
+        display: none;
+      }
     }
   </style>
 </head>
@@ -482,6 +627,17 @@
       <div id="queue-actions" class="hidden" aria-live="polite"></div>
     </main>
   </div>
+
+  <aside id="voice-companion" class="voice-companion" aria-label="Voice companion">
+    <button id="vc-collapse" class="vc-collapse" type="button" aria-label="Collapse voice panel" title="Collapse">▶</button>
+    <div class="vc-avatar-container">
+      <img src="/assets/mc-avatar.png" alt="Lingua Viva Voice" class="vc-avatar">
+      <div id="vc-visor" class="vc-visor"></div>
+    </div>
+    <button id="vc-mic" class="vc-mic" type="button" aria-label="Start voice input" aria-pressed="false" title="Start voice input">Mic</button>
+    <div id="vc-state" class="vc-state" role="status" aria-live="polite">Ready</div>
+    <div id="vc-badge" class="vc-badge">Student data protected</div>
+  </aside>
 
   <div id="role-choice" class="role-choice">
       <div class="role-dialog">
@@ -539,6 +695,125 @@
         this.listening = false;
         this.recognition = null;
       },
+      mediaRecorder: null,
+      mediaStream: null,
+      audioContext: null,
+      analyser: null,
+      silenceCheck: null,
+      audioChunks: [],
+      stateTargetId: "",
+      stopCapture() {
+        clearInterval(this.silenceCheck);
+        this.silenceCheck = null;
+        if (this.mediaRecorder && this.mediaRecorder.state !== "inactive") {
+          try { this.mediaRecorder.stop(); } catch (error) { /* already stopped */ }
+        }
+      },
+      cleanupCapture() {
+        clearInterval(this.silenceCheck);
+        this.silenceCheck = null;
+        if (this.audioContext) {
+          try { this.audioContext.close(); } catch (error) { /* already closed */ }
+        }
+        if (this.mediaStream) {
+          this.mediaStream.getTracks().forEach(track => track.stop());
+        }
+        this.audioContext = null;
+        this.analyser = null;
+        this.mediaRecorder = null;
+        this.mediaStream = null;
+        this.audioChunks = [];
+        this.listening = false;
+      },
+      async captureLocalStt({statusId, micId, inputId, onTranscript}) {
+        if (this.busy) return;
+        if (this.listening && this.mediaRecorder) {
+          this.stopCapture();
+          return;
+        }
+        this.stateTargetId = statusId;
+        const status = this.get(statusId);
+        const mic = this.get(micId);
+        if (!navigator.mediaDevices || !window.MediaRecorder) {
+          if (status) status.textContent = "Voice input is unavailable. You can still type.";
+          return;
+        }
+        this.stopSpeaking();
+        try {
+          this.mediaStream = await navigator.mediaDevices.getUserMedia({audio: true});
+        } catch {
+          if (status) status.textContent = "Microphone access is off. You can still type.";
+          return;
+        }
+        this.audioChunks = [];
+        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const source = this.audioContext.createMediaStreamSource(this.mediaStream);
+        this.analyser = this.audioContext.createAnalyser();
+        this.analyser.fftSize = 2048;
+        source.connect(this.analyser);
+        let lastSound = Date.now();
+        let started = false;
+        const samples = new Uint8Array(this.analyser.fftSize);
+        this.silenceCheck = setInterval(() => {
+          if (!this.analyser) return;
+          this.analyser.getByteTimeDomainData(samples);
+          let peak = 0;
+          for (let i = 0; i < samples.length; i += 1) peak = Math.max(peak, Math.abs(samples[i] - 128));
+          if (peak > 8) { lastSound = Date.now(); started = true; }
+          if (started && Date.now() - lastSound > 2000) this.stopCapture();
+        }, 150);
+        const options = MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+          ? {mimeType: "audio/webm;codecs=opus"}
+          : undefined;
+        this.mediaRecorder = new MediaRecorder(this.mediaStream, options);
+        this.mediaRecorder.ondataavailable = event => {
+          if (event.data && event.data.size) this.audioChunks.push(event.data);
+        };
+        this.mediaRecorder.onstart = () => {
+          this.listening = true;
+          updateVoiceCompanion("listening");
+          if (mic) {
+            mic.classList.add("is-listening");
+            mic.setAttribute("aria-pressed", "true");
+          }
+          if (status) status.textContent = "Listening... pause when you are finished.";
+        };
+        this.mediaRecorder.onstop = async () => {
+          if (mic) {
+            mic.classList.remove("is-listening");
+            mic.setAttribute("aria-pressed", "false");
+          }
+          const blob = new Blob(this.audioChunks, {type: "audio/webm"});
+          this.cleanupCapture();
+          if (!blob.size) {
+            if (status) status.textContent = "I did not hear anything. Tap to try again.";
+            updateVoiceCompanion("error", "No audio captured");
+            return;
+          }
+          if (status) status.textContent = "Transcribing on this computer...";
+          updateVoiceCompanion("processing");
+          try {
+            const response = await fetch("/api/voice/stt", {method: "POST", body: blob});
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || "transcription failed");
+            const transcript = String(data.transcript || "").trim();
+            const input = this.get(inputId);
+            if (input) input.value = transcript;
+            if (transcript) {
+              if (status) status.textContent = "Captured.";
+              updateVoiceCompanion("processing", "Thinking...");
+              onTranscript(transcript);
+            } else if (status) {
+              status.textContent = "I did not hear words. Tap to try again.";
+              updateVoiceCompanion("error", "No words heard");
+            }
+          } catch (error) {
+            if (status) status.textContent = error.message || "Voice could not be transcribed.";
+            updateVoiceCompanion("error", "Try again");
+          }
+        };
+        this.mediaRecorder.start();
+      },
       remoteAudio: null,
       stopSpeaking() {
         if ("speechSynthesis" in window) window.speechSynthesis.cancel();
@@ -569,6 +844,7 @@
               URL.revokeObjectURL(url);
               const status = this.get("ask-voice-status");
               if (status) status.textContent = "Tap once to talk. Pause when finished, or tap again to stop.";
+              updateVoiceCompanion("idle", "Ready");
             };
             audio.onerror = () => { URL.revokeObjectURL(url); this.speakLocally(text); };
             await audio.play();
@@ -604,168 +880,100 @@
         utterance.onend = () => {
           const status = this.get("ask-voice-status");
           if (status) status.textContent = "Tap once to talk. Pause when finished, or tap again to stop.";
+          updateVoiceCompanion("idle", "Ready");
         };
         utterance.onerror = () => {
           const status = this.get("ask-voice-status");
           if (status) status.textContent = "The answer is ready above. Spoken playback was unavailable.";
+          updateVoiceCompanion("error", "Playback unavailable");
         };
         window.speechSynthesis.speak(utterance);
       },
       toggleAsk() {
-        if (this.busy) return;
-        if (this.listening && this.recognition) {
-          this.recognition.stop();
-          return;
-        }
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRecognition) {
-          const status = this.get("ask-voice-status");
-          if (status) status.textContent = "Voice input is unavailable in this browser. You can still type.";
-          return;
-        }
-        this.stopSpeaking();
-        this.finalText = "";
-        this.gotSpeech = false;
-        this.recognitionError = "";
-        const recognition = new SpeechRecognition();
-        this.recognition = recognition;
-        recognition.lang = "it-IT";
-        recognition.continuous = false;
-        recognition.interimResults = true;
-        recognition.onstart = () => {
-          this.listening = true;
-          const mic = this.get("ask-mic");
-          if (mic) {
-            mic.classList.add("is-listening");
-            mic.setAttribute("aria-pressed", "true");
-          }
-          const status = this.get("ask-voice-status");
-          if (status) status.textContent = "Listening… pause when you are finished.";
-        };
-        recognition.onresult = event => {
-          let interim = "";
-          for (let i = event.resultIndex; i < event.results.length; i += 1) {
-            const words = event.results[i][0].transcript;
-            if (event.results[i].isFinal) {
-              this.finalText += `${words} `;
-              this.gotSpeech = true;
-            }
-            else interim += words;
-          }
-          if (interim) this.gotSpeech = true;
-          const input = this.get("ask-input");
-          if (input) input.value = `${this.finalText}${interim}`.trim();
-          clearTimeout(this.silenceTimer);
-          this.silenceTimer = setTimeout(() => {
-            if (this.listening && this.recognition) this.recognition.stop();
-          }, 2500);
-        };
-        recognition.onerror = event => {
-          this.recognitionError = event.error || "unknown";
-          const status = this.get("ask-voice-status");
-          if (status) status.textContent = event.error === "not-allowed"
-              ? "Microphone access is off. You can still type."
-              : "I missed that. Tap and try again.";
-        };
-        recognition.onend = () => {
-          const mic = this.get("ask-mic");
-          if (mic) {
-            mic.classList.remove("is-listening");
-            mic.setAttribute("aria-pressed", "false");
-          }
-          const input = this.get("ask-input");
-          const text = this.gotSpeech ? this.finalText.trim() || input?.value.trim() : "";
-          const hadError = Boolean(this.recognitionError);
-          this.finalText = "";
-          this.resetRecognition();
-          if (text && !hadError) {
-            const status = this.get("ask-voice-status");
-            if (status) status.textContent = "Thinking…";
-            submitAskText(text, true);
-          } else if (!hadError) {
-            const status = this.get("ask-voice-status");
-            if (status) status.textContent = "I did not hear anything. Tap to try again.";
-          }
-        };
-        try {
-          recognition.start();
-        } catch {
-          this.resetRecognition();
-          const status = this.get("ask-voice-status");
-          if (status) status.textContent = "Voice could not start. You can still type.";
-        }
+        this.captureLocalStt({
+          statusId: "ask-voice-status",
+          micId: "vc-mic",
+          inputId: "ask-input",
+          onTranscript: text => submitAskText(text, true)
+        });
       },
       toggleObserve() {
-        if (this.listening && this.recognition) {
-          this.recognition.stop();
-          return;
-        }
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        const status = this.get("mic-status");
-        if (!SpeechRecognition) {
-          if (status) status.textContent = "speech unavailable";
-          return;
-        }
-        this.stopSpeaking();
-        this.finalText = "";
-        this.gotSpeech = false;
-        this.recognitionError = "";
-        const recognition = new SpeechRecognition();
-        this.recognition = recognition;
-        recognition.lang = "it-IT";
-        recognition.continuous = false;
-        recognition.interimResults = true;
-        recognition.onstart = () => {
-          this.listening = true;
-          const mic = this.get("mic");
-          if (mic) {
-            mic.classList.add("is-listening");
-            mic.setAttribute("aria-pressed", "true");
-          }
-          if (status) status.textContent = "listening";
-        };
-        recognition.onresult = event => {
-          let interim = "";
-          for (let i = event.resultIndex; i < event.results.length; i += 1) {
-            const words = event.results[i][0].transcript;
-            if (event.results[i].isFinal) {
-              this.finalText += `${words} `;
-              this.gotSpeech = true;
-            } else {
-              interim += words;
-              this.gotSpeech = true;
-            }
-          }
-          const input = this.get("obs-text");
-          if (input) input.value = `${this.finalText}${interim}`.trim();
-          clearTimeout(this.silenceTimer);
-          this.silenceTimer = setTimeout(() => {
-            if (this.listening && this.recognition) this.recognition.stop();
-          }, 2500);
-        };
-        recognition.onerror = event => {
-          this.recognitionError = event.error || "unknown";
-          if (status) status.textContent = event.error === "not-allowed" ? "microphone access off" : "try again";
-        };
-        recognition.onend = () => {
-          const mic = this.get("mic");
-          if (mic) {
-            mic.classList.remove("is-listening");
-            mic.setAttribute("aria-pressed", "false");
-          }
-          const captured = this.gotSpeech && !this.recognitionError;
-          const hadError = Boolean(this.recognitionError);
-          this.resetRecognition();
-          if (status && !hadError) status.textContent = captured ? "captured" : "ready";
-        };
-        try {
-          recognition.start();
-        } catch {
-          this.resetRecognition();
-          if (status) status.textContent = "try again";
-        }
+        this.captureLocalStt({
+          statusId: "mic-status",
+          micId: "vc-mic",
+          inputId: "obs-text",
+          onTranscript: () => {}
+        });
       }
     };
+
+    function updateVoiceCompanion(mode = "idle", label = "") {
+      const panel = $("voice-companion");
+      const stateLabel = $("vc-state");
+      const mic = $("vc-mic");
+      if (!panel) return;
+      panel.classList.toggle("is-listening", mode === "listening");
+      panel.classList.toggle("is-processing", mode === "processing" || mode === "speaking");
+      panel.classList.toggle("has-error", mode === "error");
+      if (stateLabel) {
+        stateLabel.textContent = label || (
+          mode === "listening" ? "Listening" :
+          mode === "processing" ? "Processing" :
+          mode === "speaking" ? "Speaking" :
+          mode === "error" ? "Try again" :
+          "Ready"
+        );
+      }
+      if (mic) {
+        mic.setAttribute("aria-pressed", mode === "listening" ? "true" : "false");
+        mic.textContent = mode === "listening" ? "Stop" : "Mic";
+      }
+    }
+
+    async function toggleVoiceCompanion() {
+      voiceRuntime.stopSpeaking();
+      if (state.view === "observe") {
+        if (!$("obs-text")) await switchView("observe");
+        voiceRuntime.captureLocalStt({
+          statusId: "vc-state",
+          micId: "vc-mic",
+          inputId: "obs-text",
+          onTranscript: () => updateVoiceCompanion("idle", "Captured")
+        });
+        return;
+      }
+      if (state.view !== "ask" || !$("ask-input")) {
+        await switchView("ask");
+      }
+      voiceRuntime.captureLocalStt({
+        statusId: "vc-state",
+        micId: "vc-mic",
+        inputId: "ask-input",
+        onTranscript: text => submitAskText(text, true)
+      });
+    }
+
+    function initVoiceCompanion() {
+      const panel = $("voice-companion");
+      const collapse = $("vc-collapse");
+      const mic = $("vc-mic");
+      if (!panel || !collapse || !mic) return;
+      const collapsed = localStorage.getItem("lvVoiceCompanionCollapsed") === "true";
+      panel.classList.toggle("collapsed", collapsed);
+      document.body.classList.toggle("voice-collapsed", collapsed);
+      collapse.textContent = collapsed ? "◀" : "▶";
+      collapse.setAttribute("aria-label", collapsed ? "Expand voice panel" : "Collapse voice panel");
+      collapse.addEventListener("click", () => {
+        const next = !panel.classList.contains("collapsed");
+        panel.classList.toggle("collapsed", next);
+        document.body.classList.toggle("voice-collapsed", next);
+        localStorage.setItem("lvVoiceCompanionCollapsed", String(next));
+        collapse.textContent = next ? "◀" : "▶";
+        collapse.setAttribute("aria-label", next ? "Expand voice panel" : "Collapse voice panel");
+      });
+      mic.addEventListener("click", toggleVoiceCompanion);
+      updateVoiceCompanion("idle", "Ready");
+    }
 
     /*
       NavItem tuple contract:
@@ -853,6 +1061,12 @@
       renderView();
     }
 
+    function switchView(view) {
+      state.view = view;
+      renderShell();
+      return renderView();
+    }
+
     function renderShell() {
       $("role-label").textContent = state.role === "coordinator" ? "Coordinator" : "Teacher";
       const primary = state.role === "coordinator" ? adminNav : teacherNav;
@@ -865,9 +1079,7 @@
       };
       document.querySelectorAll("[data-view]").forEach(button => {
         button.addEventListener("click", () => {
-          state.view = button.dataset.view;
-          renderShell();
-          renderView();
+          switchView(button.dataset.view);
         });
       });
     }
@@ -1133,7 +1345,7 @@
         <div class="grid two">
           <div class="panel">
             <label>Student<select id="obs-student">${studentOptions()}</select></label>
-            <div class="row" style="margin:14px 0;"><button id="mic" class="mic" type="button" aria-label="Start observation speech capture" aria-pressed="false" title="Start speech capture">🎙</button><span id="mic-status" class="badge" aria-live="polite">ready</span></div>
+            <div class="row" style="margin:14px 0;"><span id="mic-status" class="badge" aria-live="polite">Use the voice companion mic or type below.</span></div>
             <textarea id="obs-text" placeholder="A learner self-corrected passato prossimo, used essere correctly in context"></textarea>
             <div class="row" style="margin-top:10px;"><button id="suggest-observation" type="button">Suggest fields</button><span id="obs-suggest-status" class="voice-hint" aria-live="polite">Nothing is saved until you review and press Save.</span></div>
             <div class="form-grid" style="margin-top:12px;">
@@ -1160,7 +1372,6 @@
             <div id="obs-result" class="panel" style="margin-top:14px;" aria-live="polite"><h3>Saved notes appear here</h3><p>Student data stays on this machine.</p></div>
           </div>
         </div>`;
-      $("mic").addEventListener("click", startSpeech);
       $("suggest-observation").addEventListener("click", suggestObservation);
       $("add-support-entry").addEventListener("click", () => addSupportEntry());
       $("obs-student").addEventListener("change", event => {
@@ -1171,10 +1382,6 @@
       state.selectedStudent = $("obs-student").value;
       renderSupportEntries([]);
       await loadLens("obs-lens", false);
-    }
-
-    function startSpeech() {
-      voiceRuntime.toggleObserve();
     }
 
     async function suggestObservation() {
@@ -1586,14 +1793,10 @@
         <div class="view-head"><div><h2>Ask Lingua Viva</h2><p>Free-form teacher questions route through the governed local app runtime.</p></div><span class="badge ok">governance route</span></div>
         <div class="panel">
           <div id="chat-log" class="chat-log">${state.chat.map(renderMessage).join("")}</div>
-          <div class="voice-controls" style="margin-top:14px;">
-            <button id="ask-mic" class="mic ${voiceRuntime.busy ? "is-thinking" : ""}" type="button" aria-label="Talk to Lingua Viva" aria-pressed="false" ${voiceRuntime.busy ? "disabled" : ""} title="Tap to talk">🎙</button>
-            <div><strong>Talk to Lingua Viva</strong><div id="ask-voice-status" class="voice-hint" aria-live="polite">Tap once to talk. Pause when finished, or tap again to stop.</div></div>
-          </div>
+          <div id="ask-voice-status" class="voice-hint" aria-live="polite" style="margin-top:12px;">Use the voice companion mic, or type below.</div>
           <form id="ask-form" class="row" style="margin-top:12px;"><input id="ask-input" placeholder="How do I scaffold articles for mixed-level Grade 3?"><button class="primary" type="submit">Send</button></form>
         </div>`;
       $("ask-form").addEventListener("submit", askQuestion);
-      $("ask-mic").addEventListener("click", () => voiceRuntime.toggleAsk());
       attachWhyLinks();
     }
 
@@ -1616,7 +1819,10 @@
       const sourceBadges = sources.length
         ? sources.map(source => `<span class="badge">${escapeHtml(source)}</span>`).join("")
         : '<span class="badge">no sources recorded</span>';
-      const meta = message.meta ? `<div class="source-line">${routeBadge}<span class="badge">${escapeHtml(message.meta.model_used || "model unavailable")}</span><span class="badge">${((message.meta.duration_ms || 0) / 1000).toFixed(1)}s</span>${sourceBadges}<button type="button" data-why="${escapeHtml(message.meta.trace_id || "")}">Why?</button></div>` : "";
+      const grounding = message.meta && message.meta.grounding
+        ? `<span class="badge">tier ${escapeHtml(message.meta.grounding.tier_used || "none")}</span><span class="badge">GIR ${Number(message.meta.grounding.gir?.score ?? 1).toFixed(2)}</span>`
+        : "";
+      const meta = message.meta ? `<div class="source-line">${routeBadge}<span class="badge">${escapeHtml(message.meta.model_used || "model unavailable")}</span><span class="badge">${((message.meta.duration_ms || 0) / 1000).toFixed(1)}s</span>${grounding}${sourceBadges}<button type="button" data-why="${escapeHtml(message.meta.trace_id || "")}">Why?</button></div>` : "";
       return `<div class="message ${message.role === "teacher" ? "user" : ""}"><strong>${message.role}</strong><p>${escapeHtml(message.text)}</p>${meta}</div>`;
     }
 
@@ -1632,9 +1838,8 @@
       state.chat.push({role: "teacher", text});
       if ($("ask-input")) $("ask-input").value = "";
       renderAsk();
-      const mic = $("ask-mic");
-      if (mic) mic.classList.add("is-thinking");
       if ($("ask-voice-status")) $("ask-voice-status").textContent = "Thinking…";
+      if (fromVoice) updateVoiceCompanion("processing", "Thinking...");
       let data;
       try {
         const response = await fetch("/api/query", {
@@ -1662,7 +1867,8 @@
             model_used: data.model_used,
             duration_ms: data.duration_ms,
             source_citation: data.source_citation,
-            sources: data.sources
+            sources: data.sources,
+            grounding: data.grounding
           }
         });
       }
@@ -1670,10 +1876,14 @@
       renderAsk();
       if (fromVoice && !data.error) {
         const reply = state.chat[state.chat.length - 1];
+        updateVoiceCompanion("speaking", "Speaking");
         voiceRuntime.speak(reply.text);
       } else if (fromVoice && data.error) {
         const status = voiceRuntime.get("ask-voice-status");
         if (status) status.textContent = "I could not answer aloud. The error is shown above.";
+        updateVoiceCompanion("error", "Could not answer");
+      } else {
+        updateVoiceCompanion("idle", "Ready");
       }
     }
 
@@ -1822,6 +2032,7 @@
         </div>`;
 
       await renderActionRegistry();
+      await renderActionPlans();
     }
 
     // --- Action registry + governance preview (Slice 2) --------------------
@@ -1866,6 +2077,49 @@
           <div class="list" style="margin-top:12px;">${rows}</div>
           <p class="voice-hint" style="margin-top:10px;">${escapeHtml(data.note)}</p>
         </div>`;
+    }
+
+    async function renderActionPlans() {
+      const host = $("actions-registry");
+      if (!host) return;
+      let data;
+      try { data = await api("/api/action-plans/history?limit=12"); } catch { return; }
+      const rows = (data.plans || []).map(plan => {
+        const sources = (plan.source_record_ids || []).map(id => `<span class="badge">${escapeHtml(id)}</span>`).join("");
+        const buttons = plan.approval && plan.approval.status === "pending"
+          ? `<div class="row" style="margin-top:8px;">
+               <button type="button" data-plan-approve="${escapeHtml(plan.action_plan_id)}">Approve</button>
+               <button type="button" data-plan-reject="${escapeHtml(plan.action_plan_id)}">Reject</button>
+             </div>`
+          : "";
+        return `
+          <div class="item">
+            <h3>${escapeHtml(plan.user_goal || plan.action_plan_id)}</h3>
+            <div class="source-line">
+              <span class="badge ${plan.approval?.status === "approved" ? "ok" : plan.approval?.status === "rejected" ? "risk" : "warn"}">${escapeHtml(plan.approval?.status || "pending")}</span>
+              <span class="badge">tier ${escapeHtml(plan.grounding_summary?.tier_used || "none")}</span>
+              <span class="badge">GIR ${Number(plan.grounding_summary?.gir_score ?? 1).toFixed(2)}</span>
+              ${sources}
+            </div>
+            ${buttons}
+          </div>`;
+      }).join("");
+      host.insertAdjacentHTML("afterend", `
+        <div class="panel" style="margin-top:14px;">
+          <div class="view-head">
+            <div><h3 style="margin:0;">Action plans</h3><p>Durable approval records linked to source evidence.</p></div>
+            <span class="badge">${data.count || 0}</span>
+          </div>
+          <div class="list" style="margin-top:12px;">${rows || `<p class="voice-hint">No durable action plans yet.</p>`}</div>
+        </div>`);
+      document.querySelectorAll("[data-plan-approve]").forEach(button => button.addEventListener("click", async () => {
+        await api("/api/action-plans/approve", {method: "POST", body: JSON.stringify({action_plan_id: button.dataset.planApprove})});
+        await renderActions();
+      }));
+      document.querySelectorAll("[data-plan-reject]").forEach(button => button.addEventListener("click", async () => {
+        await api("/api/action-plans/reject", {method: "POST", body: JSON.stringify({action_plan_id: button.dataset.planReject})});
+        await renderActions();
+      }));
     }
 
     // --- Governance control plane (Slice 4) --------------------------------
@@ -1927,12 +2181,21 @@
               <span>Student</span>
               <select id="gov-export-student"><option value="">Loading students...</option></select>
             </label>
+            <label style="display:flex;flex-direction:column;gap:4px;">
+              <span>Scope</span>
+              <select id="gov-export-scope">
+                <option value="observation_export">Observation export</option>
+                <option value="query">Latest query</option>
+                <option value="workflow">Workflow</option>
+              </select>
+            </label>
           </div>
           <div class="row" style="margin-top:12px;">
             <button id="gov-export-run" class="primary" type="button">Create sealed pack</button>
             <span id="gov-export-status" class="voice-hint" aria-live="polite"></span>
           </div>
           <div id="gov-export-result" style="margin-top:12px;"></div>
+          <div id="gov-audit-result" style="margin-top:12px;"></div>
         </div>
         <div class="panel" style="margin-top:14px;">
           <h3>Evidence</h3>
@@ -1946,7 +2209,42 @@
         </div>`;
 
       await renderGovernanceExportControls();
+      await renderDeliverableReceipts();
       wireGovernanceEvidenceTabs();
+    }
+
+    async function renderDeliverableReceipts() {
+      const host = $("gov-audit-result");
+      if (!host) return;
+      try {
+        const data = await api("/api/deliverables?limit=5");
+        const rows = (data.deliverables || []).map(item => `
+          <div class="item">
+            <h3>${escapeHtml(item.title || item.deliverable_id)}</h3>
+            <div class="source-line">
+              <span class="badge">${escapeHtml(item.type || "none")}</span>
+              <span class="badge ${item.status === "failed" ? "risk" : "ok"}">${escapeHtml(item.status || "created")}</span>
+              <button type="button" data-audit-deliverable="${escapeHtml(item.deliverable_id)}">Receipt</button>
+            </div>
+          </div>`).join("");
+        host.innerHTML = `
+          <details>
+            <summary><strong>Deliverables and receipts</strong> <span class="badge">${data.count || 0}</span></summary>
+            <div class="list" style="margin-top:10px;">${rows || `<p class="voice-hint">No deliverables recorded yet.</p>`}</div>
+            <div id="gov-receipt-output" style="margin-top:10px;"></div>
+          </details>`;
+        document.querySelectorAll("[data-audit-deliverable]").forEach(button => button.addEventListener("click", async () => {
+          const output = $("gov-receipt-output");
+          if (output) output.innerHTML = `<p class="voice-hint">Building receipt...</p>`;
+          const receipt = await api("/api/audit-receipts/export", {
+            method: "POST",
+            body: JSON.stringify({scope: "deliverable", deliverable_id: button.dataset.auditDeliverable})
+          });
+          if (output) output.innerHTML = `<pre class="output">${escapeHtml(JSON.stringify(receipt.receipt, null, 2))}</pre>`;
+        }));
+      } catch {
+        host.innerHTML = `<p class="voice-hint">Could not read deliverables.</p>`;
+      }
     }
 
     async function renderGovernanceExportControls() {
@@ -1975,9 +2273,10 @@
         try {
           const data = await api("/api/governance/observation-export", {
             method: "POST",
-            body: JSON.stringify({student_id: studentId})
+            body: JSON.stringify({student_id: studentId, scope: $("gov-export-scope")?.value || "observation_export"})
           });
           const pack = data.pack;
+          const receipt = data.audit_receipt;
           status.textContent = "Sealed.";
           result.innerHTML = `
             <div class="item">
@@ -1986,6 +2285,7 @@
                 <span class="badge ok">${pack.confirmed_by_teacher.count} confirmed by you</span>
                 <span class="badge">${pack.model_suggested_not_confirmed.count} suggested, not confirmed</span>
                 <span class="badge">${escapeHtml(pack.seal.algorithm)}</span>
+                ${receipt ? `<span class="badge ${receipt.is_complete ? "ok" : "warn"}">${receipt.is_complete ? "receipt complete" : "receipt incomplete"}</span>` : ""}
               </div>
               <p>${escapeHtml(pack.student.note)}</p>
               <p class="voice-hint">${escapeHtml(pack.seal.means)}</p>
@@ -2813,8 +3113,37 @@
             <span class="badge ${data.connected_count ? "ok" : ""}">${data.connected_count} of ${data.total_count} set up</span>
           </div>
           <div class="list" style="margin-top:12px;">${rows}</div>
+          <div id="source-ledger" style="margin-top:12px;"></div>
           ${zoneNote}
         </div>`;
+      await renderSourceLedger();
+    }
+
+    async function renderSourceLedger() {
+      const host = $("source-ledger");
+      if (!host) return;
+      try {
+        const data = await api("/api/sources/records?limit=12");
+        const observations = await api("/api/sources/observations?limit=5").catch(() => ({observations: []}));
+        const rows = (data.records || []).map(record => `
+          <details class="item">
+            <summary><strong>${escapeHtml(record.title || record.record_id)}</strong></summary>
+            <div class="source-line" style="margin-top:8px;">
+              <span class="badge">${escapeHtml(record.source_type)}</span>
+              <span class="badge">${escapeHtml(record.retrieval_scope)}</span>
+              <span class="badge ${record.student_data ? "risk" : "ok"}">${record.student_data ? "student data local-only" : "model context allowed"}</span>
+            </div>
+            <p>${escapeHtml(record.summary || record.uri || "")}</p>
+          </details>`).join("");
+        host.innerHTML = `
+          <details>
+            <summary><strong>Source ledger</strong> <span class="badge">${data.count || 0} records</span></summary>
+            <div class="list" style="margin-top:10px;">${rows || `<p class="voice-hint">No durable source records yet.</p>`}</div>
+            ${(observations.observations || []).length ? `<p class="voice-hint">${observations.observations.length} recent ledger observation(s).</p>` : ""}
+          </details>`;
+      } catch (error) {
+        host.innerHTML = `<p class="voice-hint">Could not read source ledger.</p>`;
+      }
     }
 
     async function renderSlackSourceCard() {
@@ -4531,6 +4860,7 @@
       state.role = "teacher";
     }
     renderShell();
+    initVoiceCompanion();
     renderView();
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
   </script>

@@ -7,23 +7,25 @@ HTML = (Path(__file__).resolve().parents[1] / "static" / "index.html").read_text
 
 
 def test_both_voice_surfaces_use_shared_oka_runtime():
-    assert "voiceRuntime.toggleObserve();" in HTML
-    assert 'voiceRuntime.toggleAsk()' in HTML
-    assert "recognition.interimResults = true;" in HTML
-    assert "}, 2500);" in HTML
+    assert 'id="voice-companion"' in HTML
+    assert 'id="vc-mic"' in HTML
+    assert "toggleVoiceCompanion" in HTML
+    assert "captureLocalStt({" in HTML
+    assert 'fetch("/api/voice/stt"' in HTML
+    assert "Date.now() - lastSound > 2000" in HTML
 
 
 def test_voice_errors_cannot_submit_a_preexisting_typed_draft():
-    assert "this.gotSpeech ? this.finalText.trim()" in HTML
-    assert "if (text && !hadError)" in HTML
-    assert 'this.recognitionError = event.error || "unknown";' in HTML
+    assert "if (!blob.size)" in HTML
+    assert "onTranscript(transcript);" in HTML
+    assert 'throw new Error(data.error || "transcription failed")' in HTML
 
 
 def test_voice_callbacks_tolerate_navigation_away():
     assert 'get(id) {' in HTML
-    assert 'const input = this.get("ask-input");' in HTML
+    assert "const input = this.get(inputId);" in HTML
     assert "if (input) input.value" in HTML
-    assert 'const mic = this.get("ask-mic");' in HTML
+    assert "const mic = this.get(micId);" in HTML
 
 
 def test_ask_prevents_overlapping_voice_queries_and_does_not_speak_errors():
@@ -49,7 +51,7 @@ def test_observe_keeps_manual_fallback_and_save_errors_visible():
 
 
 def test_voice_controls_and_statuses_are_accessible():
-    assert 'aria-label="Start observation speech capture"' in HTML
+    assert 'aria-label="Voice companion"' in HTML
+    assert 'aria-label="Start voice input"' in HTML
     assert 'id="mic-status" class="badge" aria-live="polite"' in HTML
-    assert 'aria-label="Talk to Lingua Viva" aria-pressed="false"' in HTML
     assert 'id="ask-voice-status" class="voice-hint" aria-live="polite"' in HTML

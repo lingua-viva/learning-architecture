@@ -586,6 +586,32 @@ def list_files(
     if not isinstance(raw_files, list):
         raw_files = []
     files = [_file_metadata(item) for item in raw_files if isinstance(item, dict)]
+    try:
+        from src.lingua_viva.sources.ledger import compute_source_record_id, now_iso, upsert
+        from src.lingua_viva.sources.schema import SourceRecord
+
+        observed_at = now_iso()
+        container = root or "drive-root"
+        for file_meta in files:
+            source_record_id = compute_source_record_id("drive", file_meta["id"], container, file_meta["id"])
+            upsert(SourceRecord(
+                source_record_id=source_record_id,
+                source_type="drive",
+                source_id=file_meta["id"],
+                container=container,
+                record_id=file_meta["id"],
+                title=file_meta["name"],
+                uri=f"gdrive://{file_meta['id']}",
+                retrieval_scope="metadata",
+                created_at=observed_at,
+                observed_at=observed_at,
+                provenance="fetch",
+                sensitivity_hint="medium" if "student" in file_meta["name"].lower() else "low",
+                content_hash=str(file_meta.get("modified_time") or file_meta.get("size") or ""),
+                summary=file_meta["mime_type"],
+            ), detail={"operation": "list_files"})
+    except Exception:
+        pass
     next_token = data.get("nextPageToken")
     return {"files": files, "next_page_token": next_token if isinstance(next_token, str) else None}
 
@@ -726,6 +752,31 @@ def import_files(
                 "supported_for_extraction": supported_extraction,
                 "status": "imported",
             })
+            try:
+                from src.lingua_viva.sources.ledger import compute_source_record_id, now_iso, upsert
+                from src.lingua_viva.sources.schema import SourceRecord
+
+                observed_at = now_iso()
+                source_record_id = compute_source_record_id("drive", file_id, "drive-import", file_id)
+                upsert(SourceRecord(
+                    source_record_id=source_record_id,
+                    source_type="drive",
+                    source_id=file_id,
+                    container="drive-import",
+                    record_id=file_id,
+                    title=file_meta["name"],
+                    uri=str(local_path),
+                    retrieval_scope="content" if supported_extraction else "metadata",
+                    created_at=observed_at,
+                    observed_at=observed_at,
+                    provenance="import",
+                    student_data=purpose == "student_lens_source",
+                    sensitivity_hint="protect" if purpose == "student_lens_source" else "medium",
+                    content_hash=hashlib.sha256(content).hexdigest(),
+                    summary=f"Drive import for {purpose}",
+                ), detail={"purpose": purpose})
+            except Exception:
+                pass
         except DriveFileTooLarge:
             failed.append({
                 "drive_id": file_id,

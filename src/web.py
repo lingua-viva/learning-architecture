@@ -168,6 +168,12 @@ async def icon_asset(name: str):
     return FileResponse(LV_ROOT / "static" / "icons" / safe_name)
 
 
+@app.get("/assets/{name}")
+async def static_asset(name: str):
+    safe_name = Path(name).name
+    return FileResponse(LV_ROOT / "static" / "assets" / safe_name)
+
+
 @app.get("/api/health")
 async def health():
     try:
@@ -2016,6 +2022,19 @@ async def sources_status():
                 "student_zones_excluded": None, "setup_view": "settings",
             })
 
+        try:
+            from src.lingua_viva.sources import ledger as source_ledger
+
+            if source_ledger.is_initialized():
+                ledger_counts = source_ledger.counts_by_type()
+                for source in sources:
+                    if source["id"] in ledger_counts and source.get("status") != "unavailable":
+                        source["count"] = ledger_counts[source["id"]]
+                        source["count_label"] = "ledger record(s)"
+                        source["ledger_backed"] = True
+        except Exception:
+            pass
+
         connected = [s for s in sources if s["status"] == "connected"]
         excluded = sum(s["student_zones_excluded"] or 0 for s in sources)
         return {
@@ -2030,6 +2049,125 @@ async def sources_status():
         }
 
     return await asyncio.to_thread(build)
+
+
+@app.get("/api/sources/records")
+async def source_records(type: str | None = None, limit: int = 25, q: str | None = None):
+    from src.lingua_viva.sources.ledger import read_records
+
+    bounded = max(1, min(int(limit or 25), 200))
+    source_type = (type or "").strip() or None
+    if source_type and source_type not in {"local", "drive", "slack"}:
+        return JSONResponse({"error": "type must be local, drive, or slack"}, status_code=400)
+    records = await asyncio.to_thread(read_records, source_type, bounded, q)
+    return {"records": records, "count": len(records)}
+
+
+@app.get("/api/sources/observations")
+async def source_observations(source_record_id: str | None = None, limit: int = 25):
+    from src.lingua_viva.sources.ledger import read_observations
+
+    bounded = max(1, min(int(limit or 25), 200))
+    observations = await asyncio.to_thread(read_observations, source_record_id, bounded)
+    return {"observations": observations, "count": len(observations)}
+
+
+@app.post("/api/action-plans/preview")
+async def action_plan_preview(payload: dict):
+    from src.lingua_viva.action_plans.schema import (
+        ActionPlan,
+        Approval,
+        GroundingSummary,
+        PlanPolicy,
+        PlannedAction,
+    )
+    from src.lingua_viva.action_plans.store import compute_action_plan_id, now_iso, upsert_plan
+    from src.lingua_viva.actions import preview_for
+
+    action_id = str(payload.get("action_id") or "").strip()
+    preview = preview_for(action_id)
+    if not preview:
+        return JSONResponse({"error": "Unknown action_id."}, status_code=404)
+    source_record_ids = [str(item) for item in (payload.get("source_record_ids") or []) if item]
+    grounding = payload.get("grounding") if isinstance(payload.get("grounding"), dict) else {}
+    leaves_machine = bool(preview.get("leaves_machine"))
+    plan = ActionPlan(
+        action_plan_id=compute_action_plan_id(),
+        created_at=now_iso(),
+        session_id=str(payload.get("session_id") or ""),
+        trace_id=str(payload.get("trace_id") or ""),
+        grounding_id=str(payload.get("grounding_id") or grounding.get("grounding_id") or ""),
+        intent=str(payload.get("intent") or ""),
+        user_goal=str(payload.get("user_goal") or preview.get("label") or ""),
+        source_record_ids=source_record_ids,
+        grounding_summary=GroundingSummary(
+            tier_used=str(grounding.get("tier_used") or "none"),
+            gir_score=float((grounding.get("gir") or {}).get("score", 1.0)) if isinstance(grounding.get("gir"), dict) else 1.0,
+            external_called=False,
+        ),
+        actions=[PlannedAction(
+            action_id=action_id,
+            name=str(preview.get("label") or action_id),
+            params=dict(payload.get("params") or {}),
+            param_sources={"input": source_record_ids} if source_record_ids else {},
+            risk_level="medium" if leaves_machine else "low",
+            side_effects=["external_upload"] if leaves_machine else [],
+            allows_external=leaves_machine,
+            requires_approval=True,
+            expected_output="drive_export" if leaves_machine else "none",
+        )],
+        approval=Approval(status="pending"),
+        policy=PlanPolicy(
+            egress_hosts=["drive.google.com"] if leaves_machine else [],
+            protect_forced_local=not leaves_machine,
+            can_execute=False,
+            reason="awaiting_approval",
+        ),
+    )
+    stored = await asyncio.to_thread(upsert_plan, plan)
+    return {"plan": stored.as_dict()}
+
+
+@app.post("/api/action-plans/approve")
+async def action_plan_approve(payload: dict):
+    from src.lingua_viva.action_plans.store import now_iso, read_plan, upsert_plan
+
+    plan_id = str(payload.get("action_plan_id") or "").strip()
+    plan = await asyncio.to_thread(read_plan, plan_id)
+    if not plan:
+        return JSONResponse({"error": "Action plan not found."}, status_code=404)
+    plan.approval.status = "approved"
+    plan.approval.approved_by = str(payload.get("approved_by") or "operator")
+    plan.approval.approved_at = now_iso()
+    plan.policy.can_execute = True
+    plan.policy.reason = "ready"
+    await asyncio.to_thread(upsert_plan, plan)
+    return {"plan": plan.as_dict()}
+
+
+@app.post("/api/action-plans/reject")
+async def action_plan_reject(payload: dict):
+    from src.lingua_viva.action_plans.store import read_plan, upsert_plan
+
+    plan_id = str(payload.get("action_plan_id") or "").strip()
+    plan = await asyncio.to_thread(read_plan, plan_id)
+    if not plan:
+        return JSONResponse({"error": "Action plan not found."}, status_code=404)
+    plan.approval.status = "rejected"
+    plan.approval.rejected_reason = str(payload.get("reason") or "")
+    plan.policy.can_execute = False
+    plan.policy.reason = "blocked"
+    await asyncio.to_thread(upsert_plan, plan)
+    return {"plan": plan.as_dict()}
+
+
+@app.get("/api/action-plans/history")
+async def action_plans_history(status: str | None = None, limit: int = 50):
+    from src.lingua_viva.action_plans.store import read_plans
+
+    bounded = max(1, min(int(limit or 50), 200))
+    plans = await asyncio.to_thread(read_plans, status, bounded)
+    return {"plans": plans, "count": len(plans)}
 
 
 # --- Governance control plane (Slice 4) ------------------------------------
@@ -2082,7 +2220,25 @@ async def governance_observation_export(payload: dict):
                     "__status__": 422,
                     "__safety__": safety,
                 }
-            return {"pack": pack, "publication_safety": safety}
+            try:
+                from src.lingua_viva.audit_receipts.builder import build_receipt
+                from src.lingua_viva.deliverables.schema import DeliverableLocation, DeliverableRecord
+                from src.lingua_viva.deliverables.store import upsert_deliverable
+
+                receipt = build_receipt(scope="observation_export", session_id=broadcaster.session_id or "")
+                deliverable = DeliverableRecord(
+                    deliverable_id=f"DLV-{receipt.audit_receipt_id}",
+                    session_id=broadcaster.session_id or "",
+                    type="observation_export",
+                    title="Observation export",
+                    status="created",
+                    location=DeliverableLocation(kind="download"),
+                    summary="Sealed observation export; student identifiers remain inside the sealed pack only.",
+                )
+                upsert_deliverable(deliverable)
+                return {"pack": pack, "publication_safety": safety, "audit_receipt": receipt.as_dict(), "deliverable": deliverable.as_dict()}
+            except Exception:
+                return {"pack": pack, "publication_safety": safety}
 
         return _with_student_store(do)
 
@@ -2093,6 +2249,34 @@ async def governance_observation_export(payload: dict):
             body["publication_safety"] = result["__safety__"]
         return JSONResponse(body, status_code=result["__status__"])
     return result
+
+
+@app.get("/api/deliverables")
+async def deliverables(limit: int = 50, session_id: str = "", action_plan_id: str = ""):
+    from src.lingua_viva.deliverables.store import read_deliverables
+
+    bounded = max(1, min(int(limit or 50), 200))
+    records = await asyncio.to_thread(read_deliverables, session_id, action_plan_id, bounded)
+    return {"deliverables": records, "count": len(records)}
+
+
+@app.post("/api/audit-receipts/export")
+async def audit_receipts_export(payload: dict):
+    from src.lingua_viva.audit_receipts.builder import build_receipt
+
+    source_record_ids = payload.get("source_record_ids") if isinstance(payload.get("source_record_ids"), list) else []
+    receipt = await asyncio.to_thread(
+        build_receipt,
+        scope=str(payload.get("scope") or "query"),
+        session_id=str(payload.get("session_id") or broadcaster.session_id or ""),
+        trace_id=str(payload.get("trace_id") or ""),
+        action_plan_id=str(payload.get("action_plan_id") or ""),
+        deliverable_id=str(payload.get("deliverable_id") or ""),
+        grounding_id=str(payload.get("grounding_id") or ""),
+        source_record_ids=[str(item) for item in source_record_ids],
+        export_format=str(payload.get("format") or "json"),
+    )
+    return {"receipt": receipt.as_dict()}
 
 
 @app.post("/api/governance/verify-pack")
@@ -2114,6 +2298,50 @@ async def governance_verify_pack(payload: dict):
             else "The seal does not match. This pack was changed, or it came from a different computer."
         ),
     }
+
+
+@app.get("/api/voice/probe")
+async def voice_probe():
+    import shutil
+
+    try:
+        import faster_whisper  # noqa: F401
+
+        stt_available = True
+    except Exception:
+        stt_available = False
+    return {
+        "stt": {
+            "available": bool(stt_available and shutil.which("ffmpeg")),
+            "provider": "faster-whisper",
+            "ffmpeg": bool(shutil.which("ffmpeg")),
+            "local_only": True,
+        },
+        "tts": {
+            "rime_configured": bool(_rime_api_key()),
+            "student_data_gate": True,
+            "local_fallback": True,
+        },
+    }
+
+
+@app.post("/api/voice/stt")
+async def voice_stt(request: Request):
+    audio = await request.body()
+    if not audio:
+        return JSONResponse({"error": "audio body required"}, status_code=400)
+    try:
+        from src.lingua_viva.voice_stt import get_stt_provider
+
+        provider = get_stt_provider()
+        transcript = await asyncio.to_thread(provider.transcribe, audio)
+    except RuntimeError as exc:
+        return JSONResponse({"error": str(exc), "available": False}, status_code=503)
+    except ModuleNotFoundError:
+        return JSONResponse({"error": "faster-whisper is not installed.", "available": False}, status_code=503)
+    except Exception as exc:  # noqa: BLE001
+        return JSONResponse({"error": f"Could not transcribe audio ({type(exc).__name__})."}, status_code=422)
+    return {"transcript": transcript, "provider": "faster-whisper", "local_only": True}
 
 
 @app.get("/api/profile")
@@ -3621,6 +3849,48 @@ async def google_drive_upload(payload: dict):
             await asyncio.to_thread(prune_student_exports, student_id)
         except Exception:
             pass
+
+    # Integration loop Stage 4: this is the highest-risk action in the app —
+    # data actually leaves the machine — yet it produced no durable record
+    # before this. Every successful share now gets a DeliverableRecord (and,
+    # when at least one file uploaded, an AuditReceipt) so it shows up next
+    # to the observation export in Governance -> Deliverables and receipts.
+    # Best-effort: a durable-record failure must never mask a real upload.
+    uploaded = result.get("uploaded") or []
+    if uploaded:
+        try:
+            from src.lingua_viva.audit_receipts.builder import build_receipt
+            from src.lingua_viva.deliverables.schema import (
+                DeliverableLocation,
+                DeliverableRecord,
+                compute_deliverable_id,
+            )
+            from src.lingua_viva.deliverables.store import upsert_deliverable
+
+            trace_id = f"drive-upload-{uuid.uuid4().hex[:12]}"
+            deliverable_id = compute_deliverable_id(trace_id, "")
+            names = ", ".join(item.get("name", "") for item in uploaded if item.get("name"))
+            deliverable = DeliverableRecord(
+                deliverable_id=deliverable_id,
+                session_id=broadcaster.session_id or "",
+                trace_id=trace_id,
+                type="drive_export",
+                title=f"Shared to Drive: {names}" if names else "Shared to Drive",
+                status="exported",
+                location=DeliverableLocation(kind="drive_file", external_id=folder_id),
+                summary=f"{len(uploaded)} file(s) shared to the connected Drive folder.",
+            )
+            upsert_deliverable(deliverable)
+            receipt = build_receipt(
+                scope="deliverable",
+                session_id=broadcaster.session_id or "",
+                trace_id=trace_id,
+                deliverable_id=deliverable_id,
+            )
+            result["deliverable"] = deliverable.as_dict()
+            result["audit_receipt"] = receipt.as_dict()
+        except Exception:
+            pass
     return result
 
 
@@ -3723,6 +3993,24 @@ async def query_endpoint(payload: dict):
         )
         append_trace(query_trace)
         log_event("query_processed_locally", query_text=query_text)
+        try:
+            from src.lingua_viva.grounding.build import build_grounding_result
+
+            grounding = build_grounding_result(
+                trace={
+                    "trace_id": query_trace.trace_id,
+                    "session_id": session_id,
+                    "model_used": result.synthesis.model_used,
+                    "source_citations": source_citations,
+                },
+                classification=result.classification,
+                content=result.synthesis.content,
+                query_text=query_text,
+                session_id=session_id,
+                intent=str(intent or ""),
+            ).as_dict()
+        except Exception:
+            grounding = None
         if session_id and not eval_mode:
             increment_session()
 
@@ -3750,6 +4038,7 @@ async def query_endpoint(payload: dict):
             "duration_ms": result.duration_ms,
             "source_citation": source_citations[0] if source_citations else "Manuale v1",
             "sources": source_citations,
+            "grounding": grounding,
             "external_calls": 1 if answered_externally else 0,
             "session_id": session_id,
             "timestamp": time.time(),

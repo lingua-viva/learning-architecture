@@ -65,6 +65,10 @@ reachable_from_ui:
   - route: "GET /icons/{name}"
     call_site: 'href="/icons/icon.svg"'
 
+  - route: "GET /assets/{name}"
+    call_site: 'src="/assets/mc-avatar.png"'
+    note: "Voice companion avatar asset."
+
   - route: "GET /api/health"
     call_site: 'api("/api/health")'
 
@@ -94,9 +98,26 @@ reachable_from_ui:
   - route: "GET /api/actions/history"
     call_site: 'api("/api/actions/history")'
 
+  # Integration loop Stage 3 — durable action plans (renderActionPlans).
+  - route: "GET /api/action-plans/history"
+    call_site: 'api("/api/action-plans/history?limit=12")'
+
+  - route: "POST /api/action-plans/approve"
+    call_site: 'api("/api/action-plans/approve"'
+
+  - route: "POST /api/action-plans/reject"
+    call_site: 'api("/api/action-plans/reject"'
+
   # Slice 1 — Sources registry panel (renderSourceRegistry).
   - route: "GET /api/sources/status"
     call_site: 'api("/api/sources/status")'
+
+  # Integration loop Stage 1 — source ledger records and observations.
+  - route: "GET /api/sources/records"
+    call_site: 'api("/api/sources/records?limit=12")'
+
+  - route: "GET /api/sources/observations"
+    call_site: 'api("/api/sources/observations?limit=5")'
 
   # Slice 4 — Governance view (renderGovernance / renderGovernanceExportControls).
   - route: "GET /api/governance/trust"
@@ -107,6 +128,17 @@ reachable_from_ui:
 
   - route: "POST /api/governance/verify-pack"
     call_site: 'api("/api/governance/verify-pack", {'
+
+  # Integration loop Stage 4 — deliverable ledger and receipt export.
+  - route: "GET /api/deliverables"
+    call_site: 'api("/api/deliverables?limit=5")'
+
+  - route: "POST /api/audit-receipts/export"
+    call_site: 'api("/api/audit-receipts/export"'
+
+  # Voice-first local STT — MediaRecorder capture posts the blob here.
+  - route: "POST /api/voice/stt"
+    call_site: 'fetch("/api/voice/stt"'
 
   # Slice 5 — Settings -> Integrations Slack setup panel
   # (renderIntegrationsControls / renderSlackPanel in static/index.html).
@@ -357,6 +389,21 @@ reachable_from_ui:
       archives the teacher's copy before replacing — never destroys work.
 
 intentionally_backend_only:
+  - route: "POST /api/action-plans/preview"
+    status: deferred_undecided
+    reason: >-
+      Durable preview API for source-backed action planning. Current UI shows
+      durable plan history plus approve/reject controls; plan creation remains
+      owned by existing action-specific forms until the operator decides where
+      a generic preview composer belongs.
+
+  - route: "GET /api/voice/probe"
+    status: permanent
+    reason: >-
+      Runtime capability probe for desktop setup and health automation. The
+      teacher-facing voice control already degrades through POST /api/voice/stt;
+      this route is for diagnostics, not a separate UI action.
+
   - route: "GET /api/categories"
     status: deferred_undecided
     reason: >-
