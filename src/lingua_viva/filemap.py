@@ -181,6 +181,7 @@ def _scan_directory(
     root: str | Path,
     max_depth: int = 3,
     exclusions: list[str] | None = None,
+    skip_tcc: bool = False,
 ) -> tuple[list[FileMapEntry], list[str]]:
     root_path = _normal(root)
     if not root_path.exists() or not root_path.is_dir():
@@ -197,9 +198,13 @@ def _scan_directory(
         except ValueError:
             continue
 
+        skip_names = SKIP_DIRS
+        if skip_tcc and sys.platform == "darwin" and current_path == root_path:
+            skip_names = skip_names | MACOS_TCC_DIRS
+
         dirs[:] = [
             name for name in dirs
-            if name not in SKIP_DIRS
+            if name not in skip_names
             and not name.startswith(".")
             and not (current_path / name).is_symlink()
         ]
@@ -317,10 +322,10 @@ def clear_map() -> None:
         return
 
 
-def run_scan(root_path: str | Path, max_depth: int = 3) -> FileMap:
+def run_scan(root_path: str | Path, max_depth: int = 3, skip_tcc: bool = False) -> FileMap:
     existing = load_map()
     root = _normal(root_path)
-    entries, student_zones = _scan_directory(root, max_depth=max_depth, exclusions=existing.exclusions)
+    entries, student_zones = _scan_directory(root, max_depth=max_depth, exclusions=existing.exclusions, skip_tcc=skip_tcc)
     existing.entries = [
         entry for entry in existing.entries
         if not (Path(_path_from_storage(entry.path)) == root or _is_relative_to(Path(_path_from_storage(entry.path)), root))
@@ -652,6 +657,17 @@ def build_filemap_context(query_domain: Optional[str], *, local_only: bool = Tru
 # ported. LV's run_scan() already merges, prunes and saves, so the auto-scan
 # only has to decide WHEN to call it.
 
+# macOS TCC-protected directories that trigger permission dialogs when accessed
+# without prior user consent.  Scanning these on startup — before the teacher
+# has any context — produces three system popups ("access Desktop", "access
+# Documents", "access data from other apps") that will confuse or alarm
+# teachers.  Skip them during auto-scan; let teachers add them explicitly via
+# the folder picker where they'll understand the request.
+MACOS_TCC_DIRS: frozenset[str] = frozenset({
+    "Desktop", "Documents", "Downloads", "Library",
+    "Movies", "Music", "Pictures",
+})
+
 AUTO_SCAN_THREAD_NAME = "lv-filemap-autoscan"
 
 _scan_state_lock = threading.Lock()
@@ -738,12 +754,20 @@ def auto_scan_on_startup(max_depth: int = 4) -> dict:
         if not current.roots:
             targets = [Path.home()]
             trigger = "first launch"
+            # First launch scans ~/ but skips macOS TCC-protected dirs
+            # (Desktop, Documents, Downloads, Library, etc.) to avoid
+            # three permission popups before the teacher has any context.
+            # Teachers add those folders explicitly via the folder picker.
+            tcc_skip = True
         else:
             targets = [
                 _normal(_path_from_storage(root.path))
                 for root in roots_needing_rescan(current)
             ]
             trigger = "changed since last scan"
+            # Re-scans of teacher-chosen roots should NOT skip TCC dirs —
+            # the teacher already granted access when they picked the folder.
+            tcc_skip = False
 
         if not targets:
             return {
@@ -755,7 +779,7 @@ def auto_scan_on_startup(max_depth: int = 4) -> dict:
         scanned: list[str] = []
         for target in targets:
             try:
-                run_scan(target, max_depth=max_depth)
+                run_scan(target, max_depth=max_depth, skip_tcc=tcc_skip)
                 scanned.append(display_path(target))
             except Exception:
                 # One unreadable root must not abandon the others.

@@ -225,3 +225,53 @@ def test_progress_flag_is_cleared_even_when_the_scan_fails(monkeypatch, unguarde
 
     assert result["ran"] is False
     assert filemap.is_scan_in_progress() is False, "a failed scan must not wedge the flag"
+
+
+# --- macOS TCC skip ----------------------------------------------------------
+
+
+def test_first_launch_skips_tcc_dirs_on_macos(scan_home, monkeypatch, unguarded):
+    """Auto-scan from home must not descend into Desktop/Documents/Downloads
+    on macOS. These trigger TCC permission dialogs that alarm teachers."""
+    home = scan_home
+    for tcc_dir in ("Desktop", "Documents", "Downloads", "Library"):
+        d = home / tcc_dir
+        d.mkdir()
+        (d / "lesson.pdf").write_text("x", encoding="utf-8")
+    # Non-TCC dir should be scanned
+    safe = home / "Teaching"
+    safe.mkdir()
+    (safe / "unit.pdf").write_text("x", encoding="utf-8")
+
+    monkeypatch.setattr(filemap.Path, "home", staticmethod(lambda: home))
+    monkeypatch.setattr(filemap.sys, "platform", "darwin")
+
+    filemap.auto_scan_on_startup(max_depth=4)
+    current = filemap.load_map()
+
+    scanned_paths = " ".join(entry.path for entry in current.entries).lower()
+    assert "teaching" in scanned_paths, "non-TCC dirs should be scanned"
+    for tcc_name in ("desktop", "documents", "downloads", "library"):
+        assert tcc_name not in scanned_paths, (
+            f"{tcc_name}/ should be skipped during first-launch auto-scan on macOS"
+        )
+
+
+def test_explicit_scan_still_enters_tcc_dirs(scan_home, monkeypatch, unguarded):
+    """A teacher-initiated scan (via folder picker) must NOT skip TCC dirs —
+    the teacher explicitly chose to scan that folder."""
+    home = scan_home
+    docs = home / "Documents"
+    docs.mkdir()
+    (docs / "lesson.pdf").write_text("x", encoding="utf-8")
+
+    monkeypatch.setattr(filemap.sys, "platform", "darwin")
+
+    # Explicit scan via run_scan (not auto_scan_on_startup)
+    filemap.run_scan(home, max_depth=4, skip_tcc=False)
+    current = filemap.load_map()
+
+    scanned_paths = " ".join(entry.path for entry in current.entries).lower()
+    assert "documents" in scanned_paths, (
+        "explicit teacher-initiated scans must not skip TCC dirs"
+    )
