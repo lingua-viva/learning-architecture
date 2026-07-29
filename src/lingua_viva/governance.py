@@ -349,9 +349,14 @@ def check_publication_safety(pack: dict, student_names: Optional[list[str]] = No
             violations.append(
                 {
                     "rule": "privacy_rules.student_data",
+                    # Context-neutral: this gate now runs on observation
+                    # exports AND parent drafts, which need different
+                    # remedies (an anonymous reference vs "your child"), so
+                    # the caller's UI supplies the fix and this states the
+                    # fact.
                     "message": (
-                        "A student's name appears in this export. Exports use an "
-                        "anonymous reference instead."
+                        "A student's name appears in this text. It must be "
+                        "replaced before this is shared."
                     ),
                 }
             )

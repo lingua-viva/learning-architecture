@@ -343,7 +343,22 @@
 #     student record returns readable=false with an explicit note, because
 #     an empty widget set would read as "nothing waiting".
 #     static/index.html: "Your day" panel above the Slack schedule.
-version: 58
+#   v59 (2026-07-29): Gap 1 parent report safety gate
+#     (SPEC_LV_REMAINING_GAPS_2026-07-29 Gap 1, P0). src/web.py:
+#     POST /api/parents/recommendation now runs check_publication_safety()
+#     on the POST-strip draft — the words that actually reach the teacher.
+#     _strip_parent_output() does case-sensitive exact replacement, so
+#     "Marco" was removed while "marco" reached the screen unflagged; the
+#     gate lowercases before matching and catches that class of miss. Both
+#     run: the stripper fixes what it can, the gate reports what it could
+#     not. Flags (safety_warnings + review_required), never blocks — a draft
+#     the teacher cannot see is one they cannot fix, and nothing reaches a
+#     parent until they send it. static/index.html: warnings render in a
+#     red-bordered block ABOVE the draft, not as a dismissible toast.
+#     governance.py: the shared violation message is now context-neutral,
+#     since this gate serves both observation exports and parent drafts and
+#     they need different remedies.
+version: 59
 files:
   - static/index.html
   - static/sw.js

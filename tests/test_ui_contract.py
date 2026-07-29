@@ -129,7 +129,9 @@ REPO = Path(__file__).resolve().parent.parent
 #     inline preview in Prepare.
 #   v58 (2026-07-28): Slice 6 Daily augmentation — GET /api/daily/briefing +
 #     "Your day" widgets, anonymous student references.
-EXPECTED_VERSION = 58
+#   v59 (2026-07-29): Gap 1 — parent report safety gate wired on
+#     /api/parents/recommendation; warnings rendered above the draft.
+EXPECTED_VERSION = 59
 
 
 def _html() -> str:

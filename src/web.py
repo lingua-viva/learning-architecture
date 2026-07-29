@@ -2919,13 +2919,43 @@ async def parent_recommendation(payload: dict):
                 f"{body} At home, you might offer a {extra} and notice what your child "
                 "chooses to try first."
             )
-        return {
+        result = {
             "subject_line": _strip_parent_output(draft.subject_line, names),
             "body": _strip_parent_output(body, names),
             "home_activities": [_strip_parent_output(item, names) for item in draft.home_activities],
             "review_label": "Review before sending. No AI attribution in final message.",
             "source_citation": "Source: Manuale v1 and local teacher observations.",
         }
+
+        # Gap 1 (SPEC_LV_REMAINING_GAPS_2026-07-29): the same gate the
+        # observation export uses, run on the POST-strip text — the words that
+        # actually reach the teacher's screen.
+        #
+        # _strip_parent_output() is best-effort cleanup, not a gate: it does
+        # case-sensitive exact replacement, so "Marco" is removed while
+        # "marco" or a possessive survives. check_publication_safety()
+        # lowercases before matching, so it catches what the stripper missed.
+        # Both run — the stripper still fixes what it can, this reports what
+        # it could not.
+        #
+        # Flag, never block. A draft the teacher cannot see is a draft they
+        # cannot fix, and the failure mode we care about is a name reaching a
+        # parent — which only happens after the teacher presses send.
+        from src.lingua_viva.governance import check_publication_safety
+
+        safety = check_publication_safety(
+            {
+                "subject_line": result["subject_line"],
+                "body": result["body"],
+                "home_activities": result["home_activities"],
+            },
+            student_names=names,
+        )
+        result["publication_safety"] = safety
+        if safety["blocked"]:
+            result["safety_warnings"] = safety["violations"]
+            result["review_required"] = True
+        return result
 
     return await asyncio.to_thread(_with_student_store, generate)
 

@@ -1625,7 +1625,18 @@
         method: "POST",
         body: JSON.stringify({student_id: $("parent-student").value, focus: $("parent-focus").value})
       });
-      $("parent-output").innerHTML = `<h3>${escapeHtml(data.subject_line)}</h3>${sourceLine(data.source_citation)}<textarea>${escapeHtml(data.body + "\n\n" + data.home_activities.join("\n"))}</textarea><p>${escapeHtml(data.review_label)}</p>`;
+      // Gap 1: publication-safety warnings render ABOVE the draft with a red
+      // border, not as a dismissible toast. The draft is still shown — a
+      // teacher cannot fix a name they are not allowed to see, and nothing
+      // reaches a parent until they press send themselves.
+      const warnings = (data.safety_warnings || []).length
+        ? `<div style="border:2px solid var(--risk);border-radius:8px;padding:12px;margin-bottom:12px;">
+             <div class="source-line"><span class="badge risk">Check this before sending</span></div>
+             ${data.safety_warnings.map(item => `<p style="margin:8px 0 0;">${escapeHtml(item.message)}</p>`).join("")}
+             <p class="voice-hint" style="margin-top:8px;">Replace it with &ldquo;your child&rdquo;, then send. This draft was not sent anywhere.</p>
+           </div>`
+        : "";
+      $("parent-output").innerHTML = `${warnings}<h3>${escapeHtml(data.subject_line)}</h3>${sourceLine(data.source_citation)}<textarea>${escapeHtml(data.body + "\n\n" + data.home_activities.join("\n"))}</textarea><p>${escapeHtml(data.review_label)}</p>`;
     }
 
     function healthBadgeClass(status) {
