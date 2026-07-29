@@ -18,16 +18,21 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import pytest
 from fastapi.testclient import TestClient
 
 import src.lingua_viva.ingest as lv_ingest
 import src.web as web
+from src.lingua_viva.config import ollama_reachable
 
 client = TestClient(web.app)
 
 FIXTURE = Path(__file__).parent / "fixtures" / "sample_myp_guide.pdf"
 
 
+@pytest.mark.skipif(
+    not ollama_reachable(), reason="local Ollama embedding endpoint unavailable"
+)
 def test_ingest_endpoint_accepts_pdf_and_stores_chunks(tmp_path, monkeypatch):
     monkeypatch.setattr(lv_ingest, "DOCUMENT_STORE_PATH", tmp_path / "documents.db")
 

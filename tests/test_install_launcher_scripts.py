@@ -137,15 +137,24 @@ def test_lv_launch_ps1_extractable_and_has_required_structure():
 def test_no_shellcheck_or_pwsh_available_here_documented():
     """Documents the acknowledged tooling gap this file works around, so a
     future run on a machine WITH these tools knows to extend coverage
-    rather than assume it's already maximal."""
-    import shutil
+    rather than assume it's already maximal.
 
-    assert shutil.which("shellcheck") is None, (
-        "shellcheck is now available -- extend test coverage for install.sh/"
-        "install.ps1 with real static analysis instead of sh -n only."
-    )
-    assert shutil.which("pwsh") is None and shutil.which("powershell") is None, (
-        "A PowerShell runtime is now available -- extend "
-        "test_lv_launch_ps1_extractable_and_has_required_structure into a "
-        "real execution test."
-    )
+    Soft-fails via skip (not assert) since CI runner images commonly ship
+    shellcheck preinstalled -- a hard failure here would block every build
+    on an environmental fact, not a regression. The skip reason still
+    surfaces the same "go extend coverage" signal for a human to see."""
+    import shutil
+    import pytest
+
+    if shutil.which("shellcheck") is not None:
+        pytest.skip(
+            "shellcheck is now available -- extend test coverage for "
+            "install.sh/install.ps1 with real static analysis instead of "
+            "sh -n only."
+        )
+    if shutil.which("pwsh") is not None or shutil.which("powershell") is not None:
+        pytest.skip(
+            "A PowerShell runtime is now available -- extend "
+            "test_lv_launch_ps1_extractable_and_has_required_structure into "
+            "a real execution test."
+        )

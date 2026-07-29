@@ -24,12 +24,23 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import asyncio
 
+import pytest
+
 from src.education.document_parser import DocumentParser
 from src.education.document_store import DocumentStore, EmbeddingUnavailableError
 from src.education.document_retrieval import DocumentRetriever
+from src.lingua_viva.config import ollama_reachable
 from src.pipeline import Pipeline, ReasonResult
 
 FIXTURE = Path(__file__).parent / "fixtures" / "sample_myp_guide.pdf"
+
+# These tests call store.add_chunks(), which hits the real local Ollama
+# embedding endpoint by design (see module docstring). Dev machines with
+# Ollama running get real integration coverage; CI/hermetic environments
+# without it skip rather than fail on an environmental gap.
+requires_ollama = pytest.mark.skipif(
+    not ollama_reachable(), reason="local Ollama embedding endpoint unavailable"
+)
 
 
 class RecordingReasoning:
@@ -82,6 +93,7 @@ def test_parser_redacts_and_flags_review():
     assert table.redactions == []
 
 
+@requires_ollama
 def test_store_round_trip_ranks_semantically_relevant_chunk_first(tmp_path):
     chunks = DocumentParser().parse(FIXTURE)
     store = DocumentStore(tmp_path / "test.db")
@@ -98,6 +110,7 @@ def test_store_round_trip_ranks_semantically_relevant_chunk_first(tmp_path):
         store.close()
 
 
+@requires_ollama
 def test_retriever_gates_by_ontology_domain(tmp_path):
     chunks = DocumentParser().parse(FIXTURE)
     store = DocumentStore(tmp_path / "test.db")
@@ -130,6 +143,7 @@ def test_retriever_gates_by_ontology_domain(tmp_path):
         store.close()
 
 
+@requires_ollama
 def test_retriever_degrades_safely_when_embedding_unavailable(tmp_path):
     """DocumentRetriever.retrieve() must swallow EmbeddingUnavailableError and
     return [] rather than propagating it — a governed query should still
@@ -152,6 +166,7 @@ def test_retriever_degrades_safely_when_embedding_unavailable(tmp_path):
         store.close()
 
 
+@requires_ollama
 def test_pipeline_injects_document_context_for_scoped_domain(tmp_path):
     """The real integration point: a DocumentRetriever wired into Pipeline
     surfaces retrieved chunks in the system prompt the model sees, for a
@@ -178,6 +193,7 @@ def test_pipeline_injects_document_context_for_scoped_domain(tmp_path):
         store.close()
 
 
+@requires_ollama
 def test_pipeline_skips_document_context_for_out_of_scope_domain(tmp_path):
     chunks = DocumentParser().parse(FIXTURE)
     store = DocumentStore(tmp_path / "test.db")
