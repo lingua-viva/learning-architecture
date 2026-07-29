@@ -358,7 +358,20 @@
 #     governance.py: the shared violation message is now context-neutral,
 #     since this gate serves both observation exports and parent drafts and
 #     they need different remedies.
-version: 59
+#   v60 (2026-07-29): Gap 2 filemap auto-scan
+#     (SPEC_LV_REMAINING_GAPS_2026-07-29 Gap 2). src/web.py: new
+#     _startup_filemap_autoscan handler starting a daemon thread so the file
+#     map populates on first launch without the teacher pressing anything.
+#     Never awaited — a home-folder scan takes seconds to minutes and the app
+#     must be usable immediately. src/lingua_viva/filemap.py:
+#     auto_scan_on_startup(), is_scan_in_progress(), roots_needing_rescan(),
+#     _scan_root_is_stale(). Guarded by LV_AGENT=1 (new, documented
+#     convention mirroring MC_AGENT) AND by a pytest check, so a test that
+#     forgets the env var still cannot scan a developer's real home folder.
+#     No route added. The spec's instruction to port MC's
+#     auto_scan_on_startup() could not be followed — MC has no such symbol —
+#     so this is written for LV's shape.
+version: 60
 files:
   - static/index.html
   - static/sw.js

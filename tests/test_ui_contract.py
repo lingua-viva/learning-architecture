@@ -131,7 +131,9 @@ REPO = Path(__file__).resolve().parent.parent
 #     "Your day" widgets, anonymous student references.
 #   v59 (2026-07-29): Gap 1 — parent report safety gate wired on
 #     /api/parents/recommendation; warnings rendered above the draft.
-EXPECTED_VERSION = 59
+#   v60 (2026-07-29): Gap 2 — filemap auto-scan on startup (daemon thread,
+#     LV_AGENT + pytest guarded). src/web.py startup handler only.
+EXPECTED_VERSION = 60
 
 
 def _html() -> str:

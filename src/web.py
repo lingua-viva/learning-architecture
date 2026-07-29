@@ -1322,6 +1322,35 @@ async def _startup_state_migrations():
 app.router.add_event_handler("startup", _startup_state_migrations)
 
 
+async def _startup_filemap_autoscan():
+    """Populate the file map on first launch without the teacher asking.
+
+    Gap 2 (SPEC_LV_REMAINING_GAPS_2026-07-29). Runs on a daemon thread and is
+    never awaited: scanning a home folder takes seconds to minutes, and the
+    teacher's app must be usable immediately. The scan itself is guarded
+    (LV_AGENT / pytest) and never raises — see
+    filemap.auto_scan_disabled_reason().
+    """
+    import threading
+
+    def _scan() -> None:
+        try:
+            from src.lingua_viva.filemap import auto_scan_on_startup
+
+            auto_scan_on_startup(max_depth=4)
+        except Exception:
+            pass  # a failed scan must never take the app down
+
+    from src.lingua_viva.filemap import AUTO_SCAN_THREAD_NAME, auto_scan_disabled_reason
+
+    if auto_scan_disabled_reason():
+        return
+    threading.Thread(target=_scan, daemon=True, name=AUTO_SCAN_THREAD_NAME).start()
+
+
+app.router.add_event_handler("startup", _startup_filemap_autoscan)
+
+
 def _safe_unit(unit_id: str | None = None, grade: str | None = None) -> dict:
     from src.lingua_viva.curriculum import CurriculumService
 

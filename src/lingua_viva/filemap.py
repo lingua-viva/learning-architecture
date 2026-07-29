@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import sys
+import threading
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -636,3 +638,131 @@ def build_filemap_context(query_domain: Optional[str], *, local_only: bool = Tru
     for entry in matching[:5]:
         lines.append(f"  - {display_path(entry.path)} ({entry.file_count} files)")
     return "\n".join(lines)
+
+
+# --- Auto-scan on startup (Gap 2) ------------------------------------------
+# SPEC_LV_REMAINING_GAPS_2026-07-29 Gap 2. The scan intelligence already
+# existed — infer_education_domain(), is_student_data_zone(), the bilingual
+# keyword lists. What was missing was the automatic trigger: nothing ran
+# unless a teacher pressed a button, which makes "local-first" hollow.
+#
+# The spec says to port MC's auto_scan_on_startup(). That function does not
+# exist in MC (src/filemap.py has no such symbol; the cited line 516 is inside
+# generate_lens_claims), so this is written for LV's own shape rather than
+# ported. LV's run_scan() already merges, prunes and saves, so the auto-scan
+# only has to decide WHEN to call it.
+
+AUTO_SCAN_THREAD_NAME = "lv-filemap-autoscan"
+
+_scan_state_lock = threading.Lock()
+_scan_in_progress = False
+
+
+def is_scan_in_progress() -> bool:
+    """True while an auto-scan is running. Safe to call from any thread."""
+    with _scan_state_lock:
+        return _scan_in_progress
+
+
+def _set_scan_in_progress(value: bool) -> None:
+    global _scan_in_progress
+    with _scan_state_lock:
+        _scan_in_progress = value
+
+
+def auto_scan_disabled_reason() -> Optional[str]:
+    """Why the auto-scan must not run, or None when it may.
+
+    Two guards, and the second is not belt-and-braces — it is load-bearing.
+    ``LV_AGENT=1`` is the documented convention (mirroring MC's ``MC_AGENT``),
+    but a test that forgets to set it would otherwise scan the developer's
+    real home directory: slow, and it would read personal files that have
+    nothing to do with the test. Detecting pytest directly means the unsafe
+    default cannot be reached by forgetting an env var.
+    """
+    if os.environ.get("LV_AGENT", "").strip() in {"1", "true", "yes", "on"}:
+        return "LV_AGENT is set — agent and CI runs never scan the home folder."
+    if "pytest" in sys.modules:
+        return "running under pytest — the home folder is never scanned in tests."
+    return None
+
+
+def _scan_root_is_stale(scan_root: ScanRoot) -> bool:
+    """True when a recorded root has changed since it was last scanned.
+
+    Compares the directory's own mtime against the recorded scan time. A root
+    that has vanished is NOT stale — re-scanning a missing path would only
+    raise; it is left alone so the recorded entries survive an unplugged
+    external drive rather than being silently deleted.
+    """
+    root = _normal(_path_from_storage(scan_root.path))
+    try:
+        if not root.is_dir():
+            return False
+        changed_at = root.stat().st_mtime
+    except OSError:
+        return False
+    try:
+        scanned_at = datetime.fromisoformat(scan_root.scanned_at).timestamp()
+    except (ValueError, TypeError):
+        return True  # unparseable timestamp — treat as stale and re-scan
+    return changed_at > scanned_at
+
+
+def roots_needing_rescan(file_map: Optional[FileMap] = None) -> list[ScanRoot]:
+    current = file_map if file_map is not None else load_map()
+    return [root for root in current.roots if _scan_root_is_stale(root)]
+
+
+def auto_scan_on_startup(max_depth: int = 4) -> dict:
+    """Populate or refresh the file map without the teacher asking.
+
+    First launch (no recorded roots): scans the home folder. Later launches:
+    re-scans only the roots whose directory mtime moved.
+
+    Never raises. This runs on a daemon thread during startup, so a failure
+    here must degrade to "no file map" rather than taking the teacher's app
+    down with it. The returned dict says what happened, which is what the
+    tests assert against and what a status route could surface.
+    """
+    blocked = auto_scan_disabled_reason()
+    if blocked:
+        return {"ran": False, "reason": blocked, "roots_scanned": []}
+
+    if is_scan_in_progress():
+        return {"ran": False, "reason": "a scan is already running.", "roots_scanned": []}
+
+    _set_scan_in_progress(True)
+    try:
+        current = load_map()
+        if not current.roots:
+            targets = [Path.home()]
+            trigger = "first launch"
+        else:
+            targets = [
+                _normal(_path_from_storage(root.path))
+                for root in roots_needing_rescan(current)
+            ]
+            trigger = "changed since last scan"
+
+        if not targets:
+            return {
+                "ran": False,
+                "reason": "every recorded folder is up to date.",
+                "roots_scanned": [],
+            }
+
+        scanned: list[str] = []
+        for target in targets:
+            try:
+                run_scan(target, max_depth=max_depth)
+                scanned.append(display_path(target))
+            except Exception:
+                # One unreadable root must not abandon the others.
+                continue
+
+        return {"ran": bool(scanned), "reason": trigger, "roots_scanned": scanned}
+    except Exception as exc:  # noqa: BLE001 - reported, never raised at startup
+        return {"ran": False, "reason": f"scan failed ({type(exc).__name__})", "roots_scanned": []}
+    finally:
+        _set_scan_in_progress(False)
