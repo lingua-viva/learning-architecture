@@ -41,6 +41,7 @@ def _generic_detail(event_type: str) -> str:
         "query_processed_locally": "Teacher query processed locally.",
         "ai_attribution_stripped": "AI attribution wording removed from parent draft.",
         "external_call_made": "Query was sent to a teacher-connected external model provider.",
+        "student_data_kept_local_for_reasoning": "A question mentioning student or family information was answered on this computer instead of the connected cloud provider.",
         "drive_upload_shared": "A deliverable was explicitly shared to the connected Google Drive folder.",
         "drive_files_imported": "Files were explicitly copied from Google Drive to this machine.",
         "drive_folder_connected": "A Google Drive folder was connected (folder access verified; no file content moved).",

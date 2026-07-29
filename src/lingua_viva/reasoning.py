@@ -35,7 +35,20 @@ class ReasoningEngine:
         model: Optional[str] = None,
         default_model: Optional[str] = None,
         system_prompt: Optional[str] = None,
+        local_only: bool = False,
     ) -> ReasonResult:
+        """`local_only` is set by Pipeline.run() when the entry gate detected
+        student/family data in this query.
+
+        This engine is the one the real teacher path uses — src/web.py's
+        /api/query calls run_teacher_query(), which injects it into Pipeline —
+        so this is where the guarantee has to hold. The query arriving here is
+        the raw text (ContextBuilder is built from `query`, not the gate's
+        sanitized copy), which is fine for a local model and unsafe for a
+        cloud one. Every external candidate is discarded, including an
+        explicit `model` override; with no local model it fails closed rather
+        than falling back to a provider.
+        """
         context = context or {}
         start = time.time()
         resolved_model = (
@@ -45,6 +58,40 @@ class ReasoningEngine:
             or os.environ.get("LV_REASON_MODEL")
             or self._resolve_best_model()
         )
+
+        if local_only and self._is_external_model(resolved_model):
+            fallback = next(
+                (
+                    candidate
+                    for candidate in (
+                        default_model,
+                        os.environ.get("LV_REASON_MODEL"),
+                        self._resolve_best_model(),
+                    )
+                    if candidate and not self._is_external_model(candidate)
+                ),
+                None,
+            )
+            try:
+                log_event("student_data_kept_local_for_reasoning")
+            except Exception:
+                pass
+            if fallback is None:
+                result = ReasonResult(
+                    content=(
+                        "This question mentions student or family information, so it "
+                        "can only be answered by a model running on this computer. No "
+                        "local model is available right now — start Ollama, or remove "
+                        "the student details and ask again."
+                    ),
+                    confidence=0.0,
+                    model_used="none:local_only",
+                )
+                # Still traced: a query that was refused for privacy reasons is
+                # exactly the kind the governance view must be able to show.
+                self._append_trace(query, context, result, start)
+                return result
+            resolved_model = fallback
 
         if system_prompt:
             prompt = system_prompt
@@ -148,11 +195,24 @@ class ReasoningEngine:
 
     @staticmethod
     def _is_external_model(model: str) -> bool:
-        return model.startswith(("openai/", "groq/", "mistral/"))
+        """True when the call leaves this machine.
+
+        Ollama ":cloud" tags are dispatched through the local daemon but
+        execute on Ollama's servers, so a localhost endpoint does not make
+        them local. config.detect_model() falls back to a ":cloud" model when
+        no preferred local model is installed, which is exactly the case a
+        student-data query must not be answered by.
+        """
+        candidate = (model or "").lower()
+        return candidate.startswith(("openai/", "groq/", "mistral/")) or ":cloud" in candidate
 
     @staticmethod
     def _is_ollama_model(model: str) -> bool:
-        return not ReasoningEngine._is_external_model(model)
+        """Whether the Ollama circuit breaker applies. A ':cloud' tag is still
+        dispatched via the local daemon, so it belongs to the breaker even
+        though _is_external_model() counts it as leaving the machine."""
+        candidate = (model or "").lower()
+        return not candidate.startswith(("openai/", "groq/", "mistral/"))
 
     @classmethod
     def _ollama_breaker_open(cls, model: str) -> bool:

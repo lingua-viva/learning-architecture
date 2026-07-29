@@ -255,6 +255,17 @@ class ReasoningEngine:
     on a known map with all available evidence.
     """
 
+    # Model strings whose call leaves this machine. Ollama ":cloud" tags go
+    # through the local daemon but execute on Ollama's servers, so they are
+    # external for privacy purposes even though _resolve_endpoint() sends
+    # them to localhost.
+    EXTERNAL_MODEL_PREFIXES = ("openai/", "groq/", "mistral/")
+
+    @classmethod
+    def _is_external_model(cls, model: Optional[str]) -> bool:
+        candidate = (model or "").lower()
+        return candidate.startswith(cls.EXTERNAL_MODEL_PREFIXES) or ":cloud" in candidate
+
     async def reason(
         self,
         query: str,
@@ -262,6 +273,7 @@ class ReasoningEngine:
         model: Optional[str] = None,
         default_model: Optional[str] = None,
         system_prompt: Optional[str] = None,
+        local_only: bool = False,
     ) -> ReasonResult:
         """
         Model reasoning. Resolution order (Gap 5a, SPEC_ONE_CLICK_LOCAL_APP
@@ -281,8 +293,25 @@ class ReasoningEngine:
         5. Best available Ollama model (auto-detected).
 
         The resolved model may be local (qwen, phi, llama) or cloud
-        (kimi:cloud, OpenAI, Groq, Mistral). Governance holds regardless —
-        the query reaching this step is already sanitized.
+        (kimi:cloud, OpenAI, Groq, Mistral).
+
+        `local_only` — set by the caller when the entry gate detected
+        student/family data in this query. It is NOT advisory: every
+        external candidate is discarded, including an explicit `model`
+        override, and if no local model can be resolved the call fails
+        closed with an honest message rather than reaching for a cloud
+        provider.
+
+        This parameter exists because the query arriving here is the RAW
+        query, not the entry gate's sanitized one — ContextBuilder.build()
+        is called with `query`, so `user_message` carries the original
+        text. That is correct for a local model (the data is already on the
+        teacher's machine) and unsafe for a cloud one. Before this flag, a
+        teacher who connected a cloud provider in Settings had their
+        provider choice sit ABOVE `default_model` in the resolution order,
+        so a query naming a student and their IEP was sent verbatim to
+        OpenAI/Groq/Mistral while the entry gate — which only guards the
+        research/gateway path — reported the data as blocked.
         """
         resolved_model = (
             model
@@ -291,6 +320,40 @@ class ReasoningEngine:
             or os.environ.get("LV_REASON_MODEL")
             or self._resolve_best_model()
         )
+
+        if local_only and self._is_external_model(resolved_model):
+            fallback = next(
+                (
+                    candidate
+                    for candidate in (
+                        default_model,
+                        os.environ.get("LV_REASON_MODEL"),
+                        self._resolve_best_model(),
+                    )
+                    if candidate and not self._is_external_model(candidate)
+                ),
+                None,
+            )
+            try:
+                from src.lingua_viva.privacy_log import log_event
+
+                log_event("student_data_kept_local_for_reasoning")
+            except Exception:
+                pass
+            if fallback is None:
+                # Fail closed: no local model available and the data may not
+                # leave. Say so instead of quietly answering from the cloud.
+                return ReasonResult(
+                    content=(
+                        "This question mentions student or family information, so it "
+                        "can only be answered by a model running on this computer. No "
+                        "local model is available right now — start Ollama, or remove "
+                        "the student details and ask again."
+                    ),
+                    confidence=0.0,
+                    model_used="none:local_only",
+                )
+            resolved_model = fallback
 
         if system_prompt:
             result = await self._call_model(query, system_prompt, resolved_model)
@@ -811,6 +874,7 @@ class Pipeline:
                 model=explicit_model,
                 default_model=classification.default_model,
                 system_prompt=wrapper_system_prompt,
+                local_only=entry_gate_blocked_external,
             )
             local_result = ReasonResult(
                 content=f"{wrapper_result.content}\n\n{execution_result.markdown}",
@@ -825,6 +889,7 @@ class Pipeline:
                 model=explicit_model,
                 default_model=classification.default_model,
                 system_prompt=system_prompt,
+                local_only=entry_gate_blocked_external,
             )
         steps_executed.append("REASON")
 

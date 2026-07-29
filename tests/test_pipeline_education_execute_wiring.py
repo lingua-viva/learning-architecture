@@ -45,7 +45,7 @@ class RecordingReasoning:
         self.call_count = 0
         self.response_content = response_content
 
-    async def reason(self, query, context, model=None, default_model=None, system_prompt=None):
+    async def reason(self, query, context, model=None, default_model=None, system_prompt=None, local_only=False):
         self.call_count += 1
         return ReasonResult(content=self.response_content, confidence=0.8, model_used="fake-model")
 
