@@ -1,0 +1,99 @@
+name: Auto Desktop Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "desktop/**"
+      - "src/**"
+      - "static/**"
+      - "docs/index.html"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/auto-release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  auto-release:
+    if: ${{ !startsWith(github.event.head_commit.message, 'chore(release):') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python package
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Test gate
+        run: pytest -q tests/
+
+      - name: Health
+        run: python3 -m src.lingua_viva.cli health
+
+      - name: Backend smoke
+        run: |
+          python3 src/web.py 8787 > /tmp/lv-web.log 2>&1 &
+          echo $! > /tmp/lv-web.pid
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:8787/api/health >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/lv-web.log
+          exit 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Compute next desktop tag
+        id: tag
+        run: |
+          latest="$(git tag -l 'desktop-v*' --sort=-v:refname | head -1)"
+          if [ -z "$latest" ]; then latest="desktop-v0.2.15"; fi
+          version="${latest#desktop-v}"
+          IFS=. read -r major minor patch <<EOF
+          $version
+          EOF
+          patch=$((patch + 1))
+          next="desktop-v${major}.${minor}.${patch}"
+          echo "tag=$next" >> "$GITHUB_OUTPUT"
+
+      - name: Pin live site to new tag
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import os, re
+          path = Path("docs/index.html")
+          tag = os.environ["NEXT_TAG"]
+          text = path.read_text(encoding="utf-8")
+          text = re.sub(r"desktop-v[0-9]+\\.[0-9]+\\.[0-9]+", tag, text)
+          path.write_text(text, encoding="utf-8")
+          PY
+        env:
+          NEXT_TAG: ${{ steps.tag.outputs.tag }}
+
+      - name: Commit site pin
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet docs/index.html; then
+            git add docs/index.html
+            git commit -m "chore(release): pin ${{ steps.tag.outputs.tag }}"
+            git push origin main
+          fi
+
+      - name: Create release tag
+        run: |
+          git tag "${{ steps.tag.outputs.tag }}"
+          git push origin "${{ steps.tag.outputs.tag }}"
