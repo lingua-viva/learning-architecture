@@ -1,7 +1,7 @@
 candidate_id: CAND-AB1D05D6
-status: ENRICHED
+status: CREATED
 created_at: 1784002143.354599
-updated_at: 1785293010.480545
+updated_at: 1784002143.3545997
 original_query: This client conversation is attorney-client privileged — can you help
   me draft a response to opposing counsel?
 query_hash: 7dd71888a5fe1e11
@@ -16,25 +16,13 @@ signals:
 - help
 - draft
 - response
-- marco
-- rossi
-- email
-- family
-- needs
-- does
-- student
-- suggest
-- about
-- reading
 queries:
 - 7dd71888a5fe1e11
-- 514e43be0fba46ec
-- 738b651297aea729
 domain: core
 perplexity_findings: []
 knowledge_refs: []
 path_records: []
-hit_count: 16
+hit_count: 1
 avg_confidence: 0.0
 resolution: null
 evaluation_notes: ''
