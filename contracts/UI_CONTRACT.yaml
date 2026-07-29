@@ -321,7 +321,18 @@
 #     reference as the governance packs. An unreadable student record yields
 #     an explicit "unknown" entry, because an empty pending list would read
 #     as "you are caught up", which is a claim.
-version: 56
+#   v57 (2026-07-28): Slice 2 Dispatcher — teacher action registry +
+#     governance preview (SPEC_ACTION_DISPATCHER_FORMS_2026-07-28 §Lingua
+#     Viva items 1 and 3; item 2's parameter forms already existed in
+#     Prepare and Assess). src/lingua_viva/actions.py (new): 8 code-defined
+#     actions, each naming the route that implements it and declaring what it
+#     reads and whether anything leaves the machine. Exactly one —
+#     Drive upload — is marked outbound, and says so plainly in its preview.
+#     preview_for() returns None for an unknown id rather than a generic
+#     reassurance, per the build order's no-fake-affordance law. src/web.py:
+#     GET /api/actions/registry. static/index.html: "What you can do" panel
+#     in Activity, and an inline preview in Prepare before Generate.
+version: 57
 files:
   - static/index.html
   - static/sw.js

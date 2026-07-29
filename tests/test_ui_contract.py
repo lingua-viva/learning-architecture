@@ -124,7 +124,10 @@ REPO = Path(__file__).resolve().parent.parent
 #   v56 (2026-07-28): Slice 3 Action Queue — Activity view + GET
 #     /api/actions/history, built from the trace and privacy logs. No student
 #     names (projection constraint); unreadable records report unknown.
-EXPECTED_VERSION = 56
+#   v57 (2026-07-28): Slice 2 Dispatcher — action registry + governance
+#     preview. GET /api/actions/registry; Activity "What you can do" panel;
+#     inline preview in Prepare.
+EXPECTED_VERSION = 57
 
 
 def _html() -> str:

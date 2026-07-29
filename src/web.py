@@ -1597,6 +1597,19 @@ async def privacy_events():
     return {**summary, "events": [asdict(event) for event in events]}
 
 
+@app.get("/api/actions/registry")
+async def actions_registry():
+    """The teacher actions LV can run, each with its governance preview.
+
+    Slice 2 (SPEC_ACTION_DISPATCHER_FORMS_2026-07-28 §Lingua Viva item 3):
+    before an action that touches student data, a teacher should be able to
+    see what it reads and whether anything leaves the machine.
+    """
+    from src.lingua_viva.actions import registry
+
+    return await asyncio.to_thread(registry)
+
+
 @app.get("/api/actions/history")
 async def actions_history(limit: int = 40):
     """Action Queue — what was done on this computer, and what is pending.

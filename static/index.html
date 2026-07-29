@@ -1001,6 +1001,7 @@
             <label class="full">Topic<input id="prep-topic" value="" placeholder="Optional focus for today's lesson"></label>
           </div>
           <button id="generate-activity" class="primary" type="button">Generate Activity</button>
+          <div id="prepare-privacy-preview" class="source-line" style="margin-top:10px;"></div>
         </div>
         <div id="activity-output" class="grid three" style="margin-top:14px;"></div>
         <div id="differentiated-groups" class="panel" style="margin-top:14px;"><h3>Differentiated Groups</h3><p>Loading tier assignments...</p></div>`;
@@ -1010,7 +1011,27 @@
       });
       await populateUnitSelect("prep-unit");
       $("generate-activity").addEventListener("click", generateActivity);
+      await renderPrivacyPreview("generate_activity_pack", "prepare-privacy-preview");
       await renderDifferentiatedGroups();
+    }
+
+    // Governance preview for one action, rendered before the teacher runs it
+    // (Slice 2 item 3). Silent when the action is unknown to the registry —
+    // an unrecognised id must not produce a reassuring message.
+    async function renderPrivacyPreview(actionId, targetId) {
+      const host = $(targetId);
+      if (!host) return;
+      try {
+        const data = await api("/api/actions/registry");
+        const action = (data.actions || []).find(item => item.id === actionId);
+        if (!action) { host.innerHTML = ""; return; }
+        const badge = action.leaves_machine
+          ? '<span class="badge warn">sends something off this computer</span>'
+          : '<span class="badge ok">stays on this computer</span>';
+        host.innerHTML = `${badge}<span class="voice-hint">${escapeHtml(action.preview)}</span>`;
+      } catch {
+        host.innerHTML = "";
+      }
     }
 
     async function renderDifferentiatedGroups() {
@@ -1692,12 +1713,59 @@
           <span class="badge">${data.entry_count} recorded</span>
         </div>
         ${pendingPanel}
+        <div id="actions-registry" style="margin-top:14px;"></div>
         <div class="panel" style="margin-top:14px;">
           <h3>Recent</h3>
           <div class="list" style="margin-top:12px;">${
             entryRows || `<p class="voice-hint">${escapeHtml(data.empty_reason || "Nothing recorded yet.")}</p>`
           }</div>
           <p class="voice-hint" style="margin-top:10px;">${escapeHtml(data.privacy_note)}</p>
+        </div>`;
+
+      await renderActionRegistry();
+    }
+
+    // --- Action registry + governance preview (Slice 2) --------------------
+    // SPEC_ACTION_DISPATCHER_FORMS_2026-07-28 §Lingua Viva items 1 and 3.
+    // Prepare and Assess already have parameter forms; what was missing was a
+    // declared answer to "what will this read, and can any of it leave?"
+    // asked BEFORE the teacher acts.
+
+    async function renderActionRegistry() {
+      const host = $("actions-registry");
+      if (!host) return;
+      let data;
+      try { data = await api("/api/actions/registry"); } catch (error) {
+        host.innerHTML = `<div class="panel"><h3>What you can do</h3><p class="voice-hint">Could not read the action list: ${escapeHtml(error.message || "unknown error")}</p></div>`;
+        return;
+      }
+
+      const rows = (data.actions || []).map(action => {
+        const badges = [
+          action.leaves_machine
+            ? '<span class="badge warn">sends something off this computer</span>'
+            : '<span class="badge ok">stays on this computer</span>',
+          action.reads_student_data ? '<span class="badge">reads a student record</span>' : "",
+          action.writes_student_data ? '<span class="badge">changes a student record</span>' : ""
+        ].filter(Boolean).join("");
+        return `
+          <div class="item">
+            <h3>${escapeHtml(action.label)}</h3>
+            <div class="source-line">${badges}</div>
+            <p>${escapeHtml(action.preview)}</p>
+            <p class="voice-hint">Open the ${escapeHtml(action.view)} view to run this.</p>
+          </div>`;
+      }).join("");
+
+      host.innerHTML = `
+        <div class="panel">
+          <div class="view-head">
+            <div><h3 style="margin:0;">What you can do</h3>
+            <p>What each action reads before you run it, and whether anything leaves this computer.</p></div>
+            <span class="badge ${data.leave_this_computer ? "warn" : "ok"}">${data.leave_this_computer} of ${data.total} send anything out</span>
+          </div>
+          <div class="list" style="margin-top:12px;">${rows}</div>
+          <p class="voice-hint" style="margin-top:10px;">${escapeHtml(data.note)}</p>
         </div>`;
     }
 
