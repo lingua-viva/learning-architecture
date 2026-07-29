@@ -310,7 +310,18 @@
 #     Sources with the student-zone privacy badge, and the Ask route badge
 #     no longer defaults to "local" when the field is absent (it reads
 #     "route not recorded").
-version: 55
+#   v56 (2026-07-28): Slice 3 Action Queue — "Activity" utility-nav view
+#     (SPEC_NATIVE_WORKSTATION_SURFACES_2026-07-28 §Lingua Viva item 1).
+#     src/lingua_viva/activity.py (new) + GET /api/actions/history: a feed of
+#     what happened on this computer and what is still waiting, merged from
+#     the existing trace and privacy logs so it has real history on day one
+#     rather than being empty until a new store fills. Honours that spec's LV
+#     constraint — these surfaces get projected in classrooms, so no question
+#     text and no student names appear; pending items use the same anonymous
+#     reference as the governance packs. An unreadable student record yields
+#     an explicit "unknown" entry, because an empty pending list would read
+#     as "you are caught up", which is a claim.
+version: 56
 files:
   - static/index.html
   - static/sw.js

@@ -74,6 +74,10 @@ reachable_from_ui:
   - route: "GET /api/slack/ops/status"
     call_site: 'api("/api/slack/ops/status")'
 
+  # Slice 3 — Activity view (renderActions).
+  - route: "GET /api/actions/history"
+    call_site: 'api("/api/actions/history")'
+
   # Slice 1 — Sources registry panel (renderSourceRegistry).
   - route: "GET /api/sources/status"
     call_site: 'api("/api/sources/status")'

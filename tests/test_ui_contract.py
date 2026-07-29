@@ -121,7 +121,10 @@ REPO = Path(__file__).resolve().parent.parent
 #   v55 (2026-07-28): Slice 1 Sources — GET /api/sources/status registry,
 #     student-zone badges, and measured route/external_calls provenance
 #     (previously hardcoded in the response, new_trace() and read_traces()).
-EXPECTED_VERSION = 55
+#   v56 (2026-07-28): Slice 3 Action Queue — Activity view + GET
+#     /api/actions/history, built from the trace and privacy logs. No student
+#     names (projection constraint); unreadable records report unknown.
+EXPECTED_VERSION = 56
 
 
 def _html() -> str:
@@ -186,7 +189,7 @@ def test_sidebar_nav_contract_counts_and_handlers():
 
     assert len(arrays["teacherNav"]) == 9
     assert len(arrays["adminNav"]) == 5
-    assert len(arrays["utilityNav"]) == 9
+    assert len(arrays["utilityNav"]) == 10
 
     view_map = re.search(r"const views = \{(.*?)\n      \};", html, flags=re.S)
     assert view_map, "renderView() view handler map missing"

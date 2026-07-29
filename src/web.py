@@ -1597,6 +1597,20 @@ async def privacy_events():
     return {**summary, "events": [asdict(event) for event in events]}
 
 
+@app.get("/api/actions/history")
+async def actions_history(limit: int = 40):
+    """Action Queue — what was done on this computer, and what is pending.
+
+    Slice 3 (SPEC_NATIVE_WORKSTATION_SURFACES_2026-07-28 §Lingua Viva item 1).
+    Built from the existing trace and privacy logs so it has real history from
+    the moment it ships, rather than being empty until a new store fills up.
+    """
+    from src.lingua_viva.activity import activity_feed
+
+    bounded = max(1, min(int(limit or 40), 200))
+    return await asyncio.to_thread(activity_feed, bounded)
+
+
 @app.get("/api/sources/status")
 async def sources_status():
     """One registry row per source: status, count, and what is excluded.

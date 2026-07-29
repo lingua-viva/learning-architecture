@@ -767,6 +767,7 @@
     const utilityNav = [
       ["slack", "Slack", "💬"],
       ["sources", "Sources", "📁"],
+      ["actions", "Activity", "📋"],
       ["governance", "Governance", "🛡️"],
       ["why", "Why", "❓"],
       ["health", "Health", "❤️"],
@@ -876,6 +877,7 @@
         assess: renderAssess,
         ask: renderAsk,
         parents: renderParents,
+        actions: renderActions,
         governance: renderGovernance,
         why: renderWhy,
         health: renderHealth,
@@ -1613,6 +1615,90 @@
       if (status === "OK") return "ok";
       if (status === "PRIVATE_RISK") return "risk";
       return "warn";
+    }
+
+    // --- Action Queue / Activity (Slice 3) ---------------------------------
+    // SPEC_NATIVE_WORKSTATION_SURFACES_2026-07-28 §Lingua Viva item 1. Built
+    // from the trace and privacy logs, so it has real history immediately.
+    // Safe to project: no question text, no student names — the LV constraint
+    // in that spec. Anything student-linked shows an anonymous reference.
+
+    const ACTIVITY_ICON = {
+      question: "💬", observation: "📝", parent: "✉️",
+      source: "📁", privacy: "🔒"
+    };
+
+    async function renderActions() {
+      setTitle("Activity", "what happened here");
+      $("content").innerHTML = `<div class="panel"><h2>Reading what was recorded...</h2></div>`;
+
+      let data;
+      try { data = await api("/api/actions/history"); } catch (error) {
+        $("content").innerHTML = `
+          <div class="view-head"><div><h2>Activity</h2></div></div>
+          <div class="panel"><p>Could not read the activity log: ${escapeHtml(error.message || "unknown error")}</p></div>`;
+        return;
+      }
+
+      const pendingRows = (data.pending || []).map(item => `
+        <div class="item">
+          <h3>${escapeHtml(item.label)}${item.reference ? ` &middot; ${escapeHtml(item.reference)}` : ""}</h3>
+          <div class="source-line">
+            <span class="badge ${item.unknown ? "risk" : "warn"}">${item.count === null || item.count === undefined ? "unknown" : `${item.count} item${item.count === 1 ? "" : "s"}`}</span>
+          </div>
+          <p>${escapeHtml(item.detail)}</p>
+        </div>`).join("");
+
+      const pendingPanel = (data.pending || []).length
+        ? `<div class="panel" style="margin-top:14px;">
+             <div class="view-head">
+               <div><h3 style="margin:0;">Waiting for you</h3>
+               <p>Nothing here reaches a parent until you confirm it.</p></div>
+               <span class="badge warn">${data.pending_total === null ? "unknown" : data.pending_total}</span>
+             </div>
+             <div class="list" style="margin-top:12px;">${pendingRows}</div>
+           </div>`
+        : `<div class="panel" style="margin-top:14px;">
+             <h3>Waiting for you</h3>
+             <p class="voice-hint">Nothing is waiting for your review.</p>
+           </div>`;
+
+      const entryRows = (data.entries || []).map(entry => {
+        const when = (entry.at || "").slice(0, 19).replace("T", " ");
+        const sources = (entry.sources || []).length
+          ? entry.sources.map(s => `<span class="badge">${escapeHtml(s)}</span>`).join("")
+          : "";
+        const routeBadge = entry.kind === "question"
+          ? (entry.route === "external"
+              ? '<span class="badge warn">cloud model</span>'
+              : '<span class="badge ok">on this computer</span>')
+          : "";
+        return `
+          <div class="item">
+            <h3>${ACTIVITY_ICON[entry.kind] || "•"} ${escapeHtml(entry.label)}</h3>
+            <div class="source-line">
+              ${routeBadge}
+              ${entry.model ? `<span class="badge">${escapeHtml(entry.model)}</span>` : ""}
+              ${sources}
+            </div>
+            <p>${escapeHtml(entry.detail)}</p>
+            <p class="voice-hint">${escapeHtml(when)} UTC</p>
+          </div>`;
+      }).join("");
+
+      $("content").innerHTML = `
+        <div class="view-head">
+          <div><h2>Activity</h2><p>What has happened on this computer, and what is still waiting for you.</p></div>
+          <span class="badge">${data.entry_count} recorded</span>
+        </div>
+        ${pendingPanel}
+        <div class="panel" style="margin-top:14px;">
+          <h3>Recent</h3>
+          <div class="list" style="margin-top:12px;">${
+            entryRows || `<p class="voice-hint">${escapeHtml(data.empty_reason || "Nothing recorded yet.")}</p>`
+          }</div>
+          <p class="voice-hint" style="margin-top:10px;">${escapeHtml(data.privacy_note)}</p>
+        </div>`;
     }
 
     // --- Governance control plane (Slice 4) --------------------------------
