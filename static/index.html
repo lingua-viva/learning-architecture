@@ -767,6 +767,7 @@
     const utilityNav = [
       ["slack", "Slack", "💬"],
       ["sources", "Sources", "📁"],
+      ["governance", "Governance", "🛡️"],
       ["why", "Why", "❓"],
       ["health", "Health", "❤️"],
       ["privacy", "Privacy", "🔒"],
@@ -875,6 +876,7 @@
         assess: renderAssess,
         ask: renderAsk,
         parents: renderParents,
+        governance: renderGovernance,
         why: renderWhy,
         health: renderHealth,
         privacy: renderPrivacy,
@@ -1597,6 +1599,196 @@
       return "warn";
     }
 
+    // --- Governance control plane (Slice 4) --------------------------------
+    // SPEC_GOVERNANCE_CONTROL_PLANE_2026-07-28 §Lingua Viva. One view that
+    // answers the five questions a school administrator asks, then shows the
+    // evidence behind them (privacy log, reasoning traces, Doctor) and lets a
+    // teacher produce a sealed observation pack.
+    //
+    // Every number is rendered from /api/governance/trust, which counts real
+    // local artefacts. Where the student database cannot be read the question
+    // renders "Unknown" — never a comfortable zero.
+
+    const TRUST_BADGE = {ok: "badge ok", attention: "badge warn", unknown: "badge risk"};
+
+    async function renderGovernance() {
+      setTitle("Governance", "student data trust");
+      $("content").innerHTML = `<div class="panel"><h2>Checking what is on this computer...</h2></div>`;
+
+      let trust = null;
+      try { trust = await api("/api/governance/trust"); } catch (error) {
+        $("content").innerHTML = `
+          <div class="view-head"><div><h2>Governance</h2></div></div>
+          <div class="panel"><p>Could not read the trust status: ${escapeHtml(error.message || "unknown error")}</p>
+          <p class="voice-hint">This screen reports on student data, so it shows nothing rather than guessing.</p></div>`;
+        return;
+      }
+
+      const unreadable = !trust.student_record_readable;
+      const headline = unreadable
+        ? '<span class="badge risk">Some answers unknown</span>'
+        : '<span class="badge ok">All student data on this computer</span>';
+
+      const questions = trust.questions.map(item => `
+        <div class="item">
+          <h3>${escapeHtml(item.question)}</h3>
+          <div class="source-line">
+            <span class="${TRUST_BADGE[item.status] || "badge"}">${escapeHtml(item.answer)}</span>
+          </div>
+          <p>${escapeHtml(item.detail)}</p>
+        </div>`).join("");
+
+      $("content").innerHTML = `
+        <div class="view-head">
+          <div><h2>Governance</h2><p>What Lingua Viva did with student information on this computer.</p></div>
+          ${headline}
+        </div>
+        <div class="panel">
+          <h3>Trust Status</h3>
+          <p class="voice-hint">Counted from the files on this computer at ${escapeHtml((trust.generated_at || "").slice(0, 19).replace("T", " "))} UTC.</p>
+          <div class="list" style="margin-top:12px;">${questions}</div>
+        </div>
+        <div class="panel" style="margin-top:14px;">
+          <div class="view-head">
+            <div><h3 style="margin:0;">Observation export</h3>
+            <p>A sealed record for a school administrator: what was captured, what the model suggested, and what you confirmed. The child's name is never in the pack.</p></div>
+          </div>
+          <div class="form-grid" style="margin-top:12px;">
+            <label style="display:flex;flex-direction:column;gap:4px;">
+              <span>Student</span>
+              <select id="gov-export-student"><option value="">Loading students...</option></select>
+            </label>
+          </div>
+          <div class="row" style="margin-top:12px;">
+            <button id="gov-export-run" class="primary" type="button">Create sealed pack</button>
+            <span id="gov-export-status" class="voice-hint" aria-live="polite"></span>
+          </div>
+          <div id="gov-export-result" style="margin-top:12px;"></div>
+        </div>
+        <div class="panel" style="margin-top:14px;">
+          <h3>Evidence</h3>
+          <p class="voice-hint">The records the answers above are counted from.</p>
+          <div class="row" style="margin-top:10px;">
+            <button id="gov-tab-privacy" type="button">Privacy log</button>
+            <button id="gov-tab-why" type="button">Reasoning traces</button>
+            <button id="gov-tab-health" type="button">Doctor</button>
+          </div>
+          <div id="gov-evidence" style="margin-top:12px;"><p class="voice-hint">Choose a record above.</p></div>
+        </div>`;
+
+      await renderGovernanceExportControls();
+      wireGovernanceEvidenceTabs();
+    }
+
+    async function renderGovernanceExportControls() {
+      const select = $("gov-export-student");
+      const status = $("gov-export-status");
+      const result = $("gov-export-result");
+      if (!select) return;
+      try {
+        const roster = await api("/api/students");
+        const students = roster.students || [];
+        select.innerHTML = students.length
+          ? students.map(s => `<option value="${escapeHtml(s.student_id)}">${escapeHtml(s.display_name || s.student_id)}</option>`).join("")
+          : `<option value="">No students on this computer yet</option>`;
+      } catch (error) {
+        select.innerHTML = `<option value="">Could not load students</option>`;
+      }
+
+      const button = $("gov-export-run");
+      if (!button) return;
+      button.addEventListener("click", async () => {
+        const studentId = select.value;
+        if (!studentId) { status.textContent = "Choose a student first."; return; }
+        button.disabled = true;
+        status.textContent = "Building and sealing...";
+        result.innerHTML = "";
+        try {
+          const data = await api("/api/governance/observation-export", {
+            method: "POST",
+            body: JSON.stringify({student_id: studentId})
+          });
+          const pack = data.pack;
+          status.textContent = "Sealed.";
+          result.innerHTML = `
+            <div class="item">
+              <h3>Pack for ${escapeHtml(pack.student.reference)}</h3>
+              <div class="source-line">
+                <span class="badge ok">${pack.confirmed_by_teacher.count} confirmed by you</span>
+                <span class="badge">${pack.model_suggested_not_confirmed.count} suggested, not confirmed</span>
+                <span class="badge">${escapeHtml(pack.seal.algorithm)}</span>
+              </div>
+              <p>${escapeHtml(pack.student.note)}</p>
+              <p class="voice-hint">${escapeHtml(pack.seal.means)}</p>
+              <div class="row" style="margin-top:10px;">
+                <button id="gov-export-download" type="button">Download pack</button>
+                <button id="gov-export-verify" type="button">Check the seal</button>
+                <span id="gov-verify-status" class="voice-hint"></span>
+              </div>
+            </div>`;
+          const download = $("gov-export-download");
+          if (download) download.addEventListener("click", () => {
+            const blob = new Blob([JSON.stringify(pack, null, 2)], {type: "application/json"});
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = `observation-pack-${pack.student.reference}.json`;
+            link.click();
+            URL.revokeObjectURL(url);
+          });
+          const verify = $("gov-export-verify");
+          if (verify) verify.addEventListener("click", async () => {
+            const target = $("gov-verify-status");
+            target.textContent = "Checking...";
+            try {
+              const check = await api("/api/governance/verify-pack", {
+                method: "POST",
+                body: JSON.stringify({pack})
+              });
+              target.textContent = check.detail;
+            } catch (error) {
+              target.textContent = error.message || "Could not check the seal.";
+            }
+          });
+        } catch (error) {
+          status.textContent = error.message || "Could not create the pack.";
+        }
+        button.disabled = false;
+      });
+    }
+
+    function wireGovernanceEvidenceTabs() {
+      const host = $("gov-evidence");
+      if (!host) return;
+      const show = async (loader, empty) => {
+        host.innerHTML = `<p class="voice-hint">Loading...</p>`;
+        try { host.innerHTML = await loader(); }
+        catch (error) { host.innerHTML = `<p class="voice-hint">${escapeHtml(error.message || empty)}</p>`; }
+      };
+      const privacyTab = $("gov-tab-privacy");
+      if (privacyTab) privacyTab.addEventListener("click", () => show(async () => {
+        const privacy = await api("/api/privacy");
+        const events = privacy.events || [];
+        return `<div class="list">${events.length
+          ? events.map(event => `<div class="item"><h3>${escapeHtml(event.event_type)}</h3><p>${escapeHtml(event.detail)}</p><p class="voice-hint">${escapeHtml((event.timestamp || "").slice(0, 19).replace("T", " "))}</p></div>`).join("")
+          : "<p>No privacy events recorded yet.</p>"}</div>`;
+      }, "Could not read the privacy log."));
+      const whyTab = $("gov-tab-why");
+      if (whyTab) whyTab.addEventListener("click", () => show(async () => {
+        const data = await api("/api/why");
+        const traces = data.traces || [];
+        return `<div class="list">${traces.length
+          ? traces.map(trace => `<div class="item"><h3>${escapeHtml(trace.classification_domain || "unclassified")} &middot; ${escapeHtml(trace.model_used || "none")}</h3><p>Sources: ${escapeHtml((trace.source_citations || []).join(", ") || "Manuale v1")}</p><p class="voice-hint">No question text is stored, only a hash.</p></div>`).join("")
+          : "<p>No traces recorded yet.</p>"}</div>`;
+      }, "Could not read the traces."));
+      const healthTab = $("gov-tab-health");
+      if (healthTab) healthTab.addEventListener("click", () => show(async () => {
+        const data = await api("/api/health");
+        return `<div class="source-line"><span class="badge ${healthBadgeClass(data.status)}">${escapeHtml(data.status)}</span></div>
+          <div class="list" style="margin-top:10px;">${(data.checks || []).map(check => `<div class="item"><h3>${escapeHtml(check.status)} &middot; ${escapeHtml(check.id)}</h3><p>${escapeHtml(check.message)}</p></div>`).join("")}</div>`;
+      }, "Could not run Doctor."));
+    }
+
     async function renderHealth() {
       setTitle("Health", "doctor");
       $("content").innerHTML = `<div class="panel"><h2>Running Doctor...</h2></div>`;
@@ -1630,7 +1822,7 @@
       const data = await api(path);
       const traces = state.selectedTraceId ? [data] : (data.traces || []);
       $("content").innerHTML = `
-        <div class="view-head"><div><h2>Why</h2><p>Every query is processed locally. No query text is stored, only a hash, route, sources, and timing.</p></div><span class="badge ok">external calls: 0</span></div>
+        <div class="view-head"><div><h2>Why</h2><p>No query text is stored, only a hash, route, sources, and timing. See Governance for whether anything was sent outside this computer.</p></div><span class="badge">${traces.length} trace${traces.length === 1 ? "" : "s"}</span></div>
         <div class="panel">
           <div class="list">${traces.length ? traces.map(trace => `
             <div class="item">
@@ -1662,13 +1854,13 @@
         <div class="grid three">
           <div class="panel"><h3>${privacy.total_queries_local}</h3><p>queries processed locally</p></div>
           <div class="panel"><h3>${privacy.student_blocks}</h3><p>student data blocks</p></div>
-          <div class="panel"><h3>${privacy.external_calls}</h3><p>No external calls</p></div>
+          <div class="panel"><h3>${privacy.external_calls}</h3><p>${privacy.external_calls === 0 ? "external calls (none)" : "external calls — questions with no student information sent to a cloud model you connected"}</p></div>
         </div>
         <div class="panel" style="margin-top:14px;">
           <h3>Data Protection Log</h3>
           <div class="source-line"><span class="badge ok">.docx modifications: ${privacy.docx_modifications}</span><span class="badge">AI attribution stripped: ${privacy.ai_attribution_stripped}</span><span class="badge">observations local: ${privacy.observations_saved_locally}</span></div>
           <div class="list" style="margin-top:12px;">${(privacy.events || []).length ? privacy.events.map(event => `<div class="item"><h3>${escapeHtml(event.event_type)}</h3><p>${escapeHtml(event.detail)}</p></div>`).join("") : "<p>No privacy events recorded yet.</p>"}</div>
-          <p>No student names appear in this log. No data has left this machine.</p>
+          <p>No student names appear in this log &mdash; entries are event types and hashes only. For what did or did not leave this computer, see Governance.</p>
         </div>
         <div class="panel" style="margin-top:14px;">
           <h3>Publication Readiness</h3>

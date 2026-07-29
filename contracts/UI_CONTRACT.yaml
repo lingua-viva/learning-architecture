@@ -273,7 +273,28 @@
 #     labelled, saved secrets show as empty "leave blank to keep" boxes
 #     because the page never receives them) and a Google Drive status card
 #     pointing at the existing Sources -> Drive sign-in.
-version: 53
+#   v54 (2026-07-28): Slice 4 Governance control plane
+#     (SPEC_GOVERNANCE_CONTROL_PLANE_2026-07-28 §Lingua Viva Application).
+#     src/lingua_viva/governance.py (new): Trust Status answering the five
+#     questions a school administrator asks, counted from real local
+#     artefacts — and reporting "unknown" when the student database cannot
+#     be read rather than printing a comfortable 0. Sealed observation packs
+#     (HMAC-SHA256 on a machine-local 0600 key, verify_pack() really
+#     verifies) carrying an anonymous student reference, with confirmed-by-
+#     teacher separated from model-suggested-not-confirmed. Publication
+#     safety enforces the two mechanically decidable rules from
+#     governance/publication_safety.yaml (student names, AI attribution) and
+#     reports the rest as advisory instead of implying it cleared them.
+#     src/web.py: GET /api/governance/trust, POST
+#     /api/governance/observation-export (refuses on violation rather than
+#     silently dropping the field), POST /api/governance/verify-pack.
+#     static/index.html: Governance utility-nav view merging Trust Status +
+#     export + evidence tabs over privacy log / traces / Doctor.
+#     Also removed three claims the old views rendered regardless of fact:
+#     a hardcoded "external calls: 0" badge in Why, the external-call count
+#     labelled "No external calls" in Privacy, and Privacy's flat "No data
+#     has left this machine." — which was untrue until 53360dc.
+version: 54
 files:
   - static/index.html
   - static/sw.js

@@ -57,4 +57,10 @@ def test_teacher_sidebar_contract():
     assert "lvSchedule" in html
     assert "My Schedule" in html
     assert "Review before sending. No AI attribution in final message." in html
-    assert "No external calls" in html
+    # Was: assert "No external calls" in html. That string was rendered as the
+    # label of the external-call COUNT, so a machine that had made three
+    # external calls displayed "3 / No external calls". Slice 4 replaced it
+    # with a label that reads correctly at any count, and moved the actual
+    # local-vs-external answer to the Governance view, which measures it.
+    assert "external calls" in html
+    assert "<p>No external calls</p>" not in html, "the count must not be labelled as a zero"

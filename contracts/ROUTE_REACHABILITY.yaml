@@ -74,6 +74,16 @@ reachable_from_ui:
   - route: "GET /api/slack/ops/status"
     call_site: 'api("/api/slack/ops/status")'
 
+  # Slice 4 — Governance view (renderGovernance / renderGovernanceExportControls).
+  - route: "GET /api/governance/trust"
+    call_site: 'api("/api/governance/trust")'
+
+  - route: "POST /api/governance/observation-export"
+    call_site: 'api("/api/governance/observation-export", {'
+
+  - route: "POST /api/governance/verify-pack"
+    call_site: 'api("/api/governance/verify-pack", {'
+
   # Slice 5 — Settings -> Integrations Slack setup panel
   # (renderIntegrationsControls / renderSlackPanel in static/index.html).
   - route: "GET /api/slack/credentials"

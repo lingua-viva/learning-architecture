@@ -1597,6 +1597,90 @@ async def privacy_events():
     return {**summary, "events": [asdict(event) for event in events]}
 
 
+# --- Governance control plane (Slice 4) ------------------------------------
+# SPEC_GOVERNANCE_CONTROL_PLANE_2026-07-28 §Lingua Viva. Trust Status answers
+# the five questions a school administrator asks; the observation export is
+# the compliance artefact they can be handed.
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/governance/trust")
+async def governance_trust():
+    """Trust Status — five plain-language answers from local artefacts."""
+    from src.lingua_viva.governance import trust_status
+
+    return await asyncio.to_thread(trust_status)
+
+
+@app.post("/api/governance/observation-export")
+async def governance_observation_export(payload: dict):
+    """Signed observation pack for one student.
+
+    Refuses rather than exports when the publication-safety check finds a
+    violation — an export that silently drops an offending field would leave
+    the teacher believing the policy passed.
+    """
+    student_id = str(payload.get("student_id") or "").strip()
+    if not student_id:
+        return JSONResponse({"error": "student_id is required"}, status_code=400)
+
+    def build():
+        from src.education.student_lens import LensNotFoundError
+        from src.lingua_viva.governance import (
+            build_observation_pack,
+            check_publication_safety,
+        )
+
+        def do(store):
+            names = [
+                str(lens.get("display_name") or "")
+                for lens in store.list_lenses()
+            ]
+            try:
+                pack = build_observation_pack(student_id, store=store)
+            except LensNotFoundError:
+                return {"__error__": "No student with that id on this computer.", "__status__": 404}
+            safety = check_publication_safety(pack, student_names=names)
+            if safety["blocked"]:
+                return {
+                    "__error__": safety["violations"][0]["message"],
+                    "__status__": 422,
+                    "__safety__": safety,
+                }
+            return {"pack": pack, "publication_safety": safety}
+
+        return _with_student_store(do)
+
+    result = await asyncio.to_thread(build)
+    if "__error__" in result:
+        body = {"error": result["__error__"]}
+        if "__safety__" in result:
+            body["publication_safety"] = result["__safety__"]
+        return JSONResponse(body, status_code=result["__status__"])
+    return result
+
+
+@app.post("/api/governance/verify-pack")
+async def governance_verify_pack(payload: dict):
+    """Check a pack's seal. Lets an administrator confirm a file they were
+    sent is unchanged, rather than taking the seal on faith."""
+    from src.lingua_viva.governance import SIGNATURE_MEANING, verify_pack
+
+    pack = payload.get("pack")
+    if not isinstance(pack, dict):
+        return JSONResponse({"error": "Expected a pack object."}, status_code=400)
+    valid = await asyncio.to_thread(verify_pack, pack)
+    return {
+        "valid": valid,
+        "means": SIGNATURE_MEANING,
+        "detail": (
+            "The pack is unchanged since this computer created it."
+            if valid
+            else "The seal does not match. This pack was changed, or it came from a different computer."
+        ),
+    }
+
+
 @app.get("/api/profile")
 async def profile():
     from src.lingua_viva.filemap import load_map, summarize

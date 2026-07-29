@@ -110,7 +110,15 @@ REPO = Path(__file__).resolve().parent.parent
 #     GET/PUT/DELETE /api/slack/credentials + POST
 #     /api/slack/credentials/test. static/index.html: Settings ->
 #     Integrations panel (Slack form + Drive status).
-EXPECTED_VERSION = 53
+#   v54 (2026-07-28): Slice 4 Governance — unified Governance view with
+#     Trust Status (5 questions), sealed observation export, and evidence
+#     tabs over the privacy log / traces / Doctor. src/web.py: GET
+#     /api/governance/trust, POST /api/governance/observation-export, POST
+#     /api/governance/verify-pack. Also removed three UI claims that were
+#     rendered regardless of the facts (hardcoded "external calls: 0" badge,
+#     a count labelled "No external calls", and "No data has left this
+#     machine.").
+EXPECTED_VERSION = 54
 
 
 def _html() -> str:
@@ -175,7 +183,7 @@ def test_sidebar_nav_contract_counts_and_handlers():
 
     assert len(arrays["teacherNav"]) == 9
     assert len(arrays["adminNav"]) == 5
-    assert len(arrays["utilityNav"]) == 8
+    assert len(arrays["utilityNav"]) == 9
 
     view_map = re.search(r"const views = \{(.*?)\n      \};", html, flags=re.S)
     assert view_map, "renderView() view handler map missing"
