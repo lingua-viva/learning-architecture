@@ -294,7 +294,23 @@
 #     a hardcoded "external calls: 0" badge in Why, the external-call count
 #     labelled "No external calls" in Privacy, and Privacy's flat "No data
 #     has left this machine." — which was untrue until 53360dc.
-version: 54
+#   v55 (2026-07-28): Slice 1 Sources — unified source registry + measured
+#     provenance (SPEC_UNIFIED_SOURCES_WORKBENCH_2026-07-28 §Lingua Viva).
+#     src/web.py: GET /api/sources/status aggregating local folders, Drive
+#     and Slack into one row-per-source registry with status, count and
+#     excluded student zones; each source resolves independently so one
+#     outage degrades its own row (count null, "could not read") instead of
+#     reporting a false 0. Provenance is now measured rather than asserted:
+#     the query response's route/external_called/external_calls were
+#     hardcoded local/False/0, and src/lingua_viva/traces.py destroyed the
+#     same receipt twice more — new_trace() pinned them at write time and
+#     read_traces() overwrote them again at read time, so the Why view could
+#     only ever say "local". All three now derive from the model that
+#     actually answered. static/index.html: registry panel at the top of
+#     Sources with the student-zone privacy badge, and the Ask route badge
+#     no longer defaults to "local" when the field is absent (it reads
+#     "route not recorded").
+version: 55
 files:
   - static/index.html
   - static/sw.js

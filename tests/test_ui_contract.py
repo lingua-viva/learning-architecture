@@ -118,7 +118,10 @@ REPO = Path(__file__).resolve().parent.parent
 #     rendered regardless of the facts (hardcoded "external calls: 0" badge,
 #     a count labelled "No external calls", and "No data has left this
 #     machine.").
-EXPECTED_VERSION = 54
+#   v55 (2026-07-28): Slice 1 Sources — GET /api/sources/status registry,
+#     student-zone badges, and measured route/external_calls provenance
+#     (previously hardcoded in the response, new_trace() and read_traces()).
+EXPECTED_VERSION = 55
 
 
 def _html() -> str:

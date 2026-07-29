@@ -1500,7 +1500,22 @@
       if (message.isError) {
         return `<div class="message error-message"><strong>${escapeHtml(message.role)}</strong><p style="color:var(--muted);font-style:italic;">${escapeHtml(message.text)}</p><div class="source-line"><span class="badge warn">unavailable</span></div></div>`;
       }
-      const meta = message.meta ? `<div class="source-line"><span class="badge ok">${escapeHtml(message.meta.route || "local")}</span><span class="badge">${escapeHtml(message.meta.model_used || "model unavailable")}</span><span class="badge">${((message.meta.duration_ms || 0) / 1000).toFixed(1)}s</span><span class="badge">${escapeHtml(message.meta.source_citation || "Manuale v1")}</span><button type="button" data-why="${escapeHtml(message.meta.trace_id || "")}">Why?</button></div>` : "";
+      // Provenance (Slice 1): the route badge reflects where the answer was
+      // actually produced. It used to render "local" whenever the field was
+      // missing, which read as a guarantee rather than a default.
+      const routeValue = message.meta && message.meta.route;
+      const routeBadge = routeValue === "external"
+        ? '<span class="badge warn">answered by a cloud model</span>'
+        : (routeValue === "local"
+            ? '<span class="badge ok">answered on this computer</span>'
+            : '<span class="badge">route not recorded</span>');
+      const sources = (message.meta && message.meta.sources && message.meta.sources.length)
+        ? message.meta.sources
+        : (message.meta && message.meta.source_citation ? [message.meta.source_citation] : []);
+      const sourceBadges = sources.length
+        ? sources.map(source => `<span class="badge">${escapeHtml(source)}</span>`).join("")
+        : '<span class="badge">no sources recorded</span>';
+      const meta = message.meta ? `<div class="source-line">${routeBadge}<span class="badge">${escapeHtml(message.meta.model_used || "model unavailable")}</span><span class="badge">${((message.meta.duration_ms || 0) / 1000).toFixed(1)}s</span>${sourceBadges}<button type="button" data-why="${escapeHtml(message.meta.trace_id || "")}">Why?</button></div>` : "";
       return `<div class="message ${message.role === "teacher" ? "user" : ""}"><strong>${message.role}</strong><p>${escapeHtml(message.text)}</p>${meta}</div>`;
     }
 
@@ -1545,7 +1560,8 @@
             route: data.route,
             model_used: data.model_used,
             duration_ms: data.duration_ms,
-            source_citation: data.source_citation
+            source_citation: data.source_citation,
+            sources: data.sources
           }
         });
       }
@@ -2465,12 +2481,78 @@
             <p>Where Lingua Viva's materials come from: your school Slack, shared Google Drive folders, and folders on this computer.</p>
           </div>
         </div>
+        <div id="sources-registry"></div>
         <div id="sources-slack"></div>
         <div id="sources-drive"></div>
         <div id="sources-local"></div>`;
+      await renderSourceRegistry();
       await renderSlackSourceCard();
       await renderDriveSection();
       await renderLocalFoldersSection();
+    }
+
+    // --- Source registry (Slice 1) ----------------------------------------
+    // SPEC_UNIFIED_SOURCES_WORKBENCH_2026-07-28 §Lingua Viva. One row per
+    // source with a real status and count, plus the student-zone exclusion
+    // made visible — a teacher should be able to see at a glance what Lingua
+    // Viva can read and what it is deliberately not reading.
+
+    const SOURCE_STATUS_BADGE = {
+      connected: "badge ok",
+      not_configured: "badge",
+      unavailable: "badge risk"
+    };
+    const SOURCE_STATUS_TEXT = {
+      connected: "connected",
+      not_configured: "not set up",
+      unavailable: "could not read"
+    };
+
+    async function renderSourceRegistry() {
+      const host = $("sources-registry");
+      if (!host) return;
+      let data;
+      try { data = await api("/api/sources/status"); } catch (error) {
+        host.innerHTML = `<div class="panel"><h3>Sources</h3><p class="voice-hint">Could not read the source list: ${escapeHtml(error.message || "unknown error")}</p></div>`;
+        return;
+      }
+
+      const rows = (data.sources || []).map(source => {
+        const count = source.count === null || source.count === undefined
+          ? '<span class="badge risk">unknown</span>'
+          : `<span class="badge">${source.count} ${escapeHtml(source.count_label || "")}</span>`;
+        const zones = source.student_zones_excluded
+          ? `<span class="badge warn">${source.student_zones_excluded} student data zone${source.student_zones_excluded === 1 ? "" : "s"} excluded</span>`
+          : "";
+        return `
+          <div class="item">
+            <h3>${escapeHtml(source.label)}</h3>
+            <div class="source-line">
+              <span class="${SOURCE_STATUS_BADGE[source.status] || "badge"}">${escapeHtml(SOURCE_STATUS_TEXT[source.status] || source.status)}</span>
+              ${count}
+              ${zones}
+            </div>
+            <p>${escapeHtml(source.detail || "")}</p>
+          </div>`;
+      }).join("");
+
+      const zoneNote = data.student_zones_excluded
+        ? `<div class="source-line" style="margin-top:10px;">
+             <span class="badge warn">Student data zone &mdash; excluded from AI processing</span>
+           </div>
+           <p class="voice-hint">${escapeHtml(data.student_zone_note)}</p>`
+        : `<p class="voice-hint">${escapeHtml(data.student_zone_note)}</p>`;
+
+      host.innerHTML = `
+        <div class="panel">
+          <div class="view-head">
+            <div><h3 style="margin:0;">What Lingua Viva can see</h3>
+            <p>Every source, whether it is set up, and how much is in it.</p></div>
+            <span class="badge ${data.connected_count ? "ok" : ""}">${data.connected_count} of ${data.total_count} set up</span>
+          </div>
+          <div class="list" style="margin-top:12px;">${rows}</div>
+          ${zoneNote}
+        </div>`;
     }
 
     async function renderSlackSourceCard() {

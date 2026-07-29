@@ -1597,6 +1597,116 @@ async def privacy_events():
     return {**summary, "events": [asdict(event) for event in events]}
 
 
+@app.get("/api/sources/status")
+async def sources_status():
+    """One registry row per source: status, count, and what is excluded.
+
+    Slice 1 (SPEC_UNIFIED_SOURCES_WORKBENCH_2026-07-28 §Lingua Viva). Each
+    source resolves independently and a failure degrades that row only — a
+    Drive outage must not blank the local-folder count, because the whole
+    point of the registry is to say what Lingua Viva can currently see.
+    """
+
+    def build() -> dict:
+        sources = []
+
+        # Local folders
+        try:
+            from src.lingua_viva.filemap import load_map, summarize
+
+            summary = summarize(load_map())
+            zones = summary.get("student_zones_excluded", 0)
+            sources.append({
+                "id": "local",
+                "label": "Folders on this computer",
+                "status": "connected" if summary.get("configured") else "not_configured",
+                "count": summary.get("total_directories", 0),
+                "count_label": "folders indexed",
+                "detail": (
+                    f"{summary.get('root_count', 0)} folder(s) scanned."
+                    if summary.get("configured")
+                    else "No folders added yet."
+                ),
+                "student_zones_excluded": zones,
+                "setup_view": "sources",
+            })
+        except Exception as exc:  # noqa: BLE001
+            sources.append({
+                "id": "local", "label": "Folders on this computer",
+                "status": "unavailable", "count": None,
+                "detail": f"Could not read the file map ({type(exc).__name__}).",
+                "student_zones_excluded": None, "setup_view": "sources",
+            })
+
+        # Google Drive
+        try:
+            from src.lingua_viva.google_drive_integration import list_connected_folders, status
+
+            drive = status()
+            folders = list_connected_folders()
+            sources.append({
+                "id": "drive",
+                "label": "Google Drive",
+                "status": "connected" if drive.get("configured") else "not_configured",
+                "count": len(folders),
+                "count_label": "folders connected",
+                "detail": (
+                    drive.get("account_email") or "Signed in."
+                    if drive.get("configured")
+                    else drive.get("setup_message") or "Not set up on this machine."
+                ),
+                "student_zones_excluded": None,
+                "setup_view": "sources",
+            })
+        except Exception as exc:  # noqa: BLE001
+            sources.append({
+                "id": "drive", "label": "Google Drive", "status": "unavailable",
+                "count": None, "detail": f"Could not read Drive status ({type(exc).__name__}).",
+                "student_zones_excluded": None, "setup_view": "sources",
+            })
+
+        # Slack ops assistant
+        try:
+            from src.lingua_viva.slack_socket import ops_status
+
+            ops = ops_status()
+            sources.append({
+                "id": "slack",
+                "label": "Slack",
+                "status": "connected" if ops.get("configured") else "not_configured",
+                "count": ops.get("teacher_count", 0),
+                "count_label": "teachers in the roster",
+                "detail": (
+                    "Daily briefing assistant is set up."
+                    if ops.get("configured")
+                    else "Set up in Settings -> Integrations."
+                ),
+                "student_zones_excluded": None,
+                "setup_view": "settings",
+            })
+        except Exception as exc:  # noqa: BLE001
+            sources.append({
+                "id": "slack", "label": "Slack", "status": "unavailable",
+                "count": None, "detail": f"Could not read Slack status ({type(exc).__name__}).",
+                "student_zones_excluded": None, "setup_view": "settings",
+            })
+
+        connected = [s for s in sources if s["status"] == "connected"]
+        excluded = sum(s["student_zones_excluded"] or 0 for s in sources)
+        return {
+            "sources": sources,
+            "connected_count": len(connected),
+            "total_count": len(sources),
+            "student_zones_excluded": excluded,
+            "student_zone_note": (
+                "Folders that look like student records are found during a scan and "
+                "left out of everything Lingua Viva reads."
+            ),
+        }
+
+    return await asyncio.to_thread(build)
+
+
 # --- Governance control plane (Slice 4) ------------------------------------
 # SPEC_GOVERNANCE_CONTROL_PLANE_2026-07-28 §Lingua Viva. Trust Status answers
 # the five questions a school administrator asks; the observation export is
@@ -3240,6 +3350,13 @@ async def query_endpoint(payload: dict):
         from src.lingua_viva.traces import append_trace, new_trace
 
         source_citations = result.synthesis.citations or ["Manuale v1"]
+        # Provenance is only worth showing if it is measured. Derive it from
+        # the model that actually answered rather than asserting "local".
+        from src.lingua_viva.reasoning import ReasoningEngine as _NativeReasoner
+
+        answered_externally = _NativeReasoner._is_external_model(
+            result.synthesis.model_used or ""
+        )
         query_trace = new_trace(
             query_text,
             domain=result.classification.domain,
@@ -3248,6 +3365,8 @@ async def query_endpoint(payload: dict):
             token_count=0,
             source_citations=source_citations,
             privacy_events=[],
+            external_calls=1 if answered_externally else 0,
+            route="external" if answered_externally else "local",
         )
         append_trace(query_trace)
         log_event("query_processed_locally", query_text=query_text)
@@ -3268,16 +3387,17 @@ async def query_endpoint(payload: dict):
             },
             "pipeline": {
                 "steps": result.steps_executed,
-                "external_called": False,
+                "external_called": answered_externally,
                 "duration_ms": result.duration_ms,
                 "gap_signals": result.gap_signals,
             },
             "trace_id": query_trace.trace_id,
-            "route": "local",
+            "route": "external" if answered_externally else "local",
             "model_used": result.synthesis.model_used,
             "duration_ms": result.duration_ms,
             "source_citation": source_citations[0] if source_citations else "Manuale v1",
-            "external_calls": 0,
+            "sources": source_citations,
+            "external_calls": 1 if answered_externally else 0,
             "session_id": session_id,
             "timestamp": time.time(),
         }

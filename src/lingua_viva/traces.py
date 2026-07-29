@@ -46,7 +46,18 @@ def new_trace(
     token_count: int = 0,
     source_citations: list[str] | None = None,
     privacy_events: list[str] | None = None,
+    external_calls: int = 0,
+    route: str | None = None,
 ) -> ReasoningTrace:
+    """Record what actually happened.
+
+    `external_calls` and `route` used to be hardcoded to 0/"local" here AND
+    overwritten again in read_traces(), so the receipt was destroyed at both
+    ends and the Why view could only ever report "local" — true or not. That
+    is receipt decay (AGENTS.md lagging indicator #4): a value computed
+    correctly at the moment of truth and lost before it is read back. The
+    caller knows which model answered, so the caller decides.
+    """
     return ReasoningTrace(
         trace_id=str(uuid.uuid4()),
         timestamp=datetime.now(timezone.utc).isoformat(),
@@ -57,8 +68,8 @@ def new_trace(
         token_count=max(int(token_count), 0),
         source_citations=source_citations or [],
         privacy_events=privacy_events or [],
-        external_calls=0,
-        route="local",
+        external_calls=max(int(external_calls), 0),
+        route=route or ("external" if external_calls else "local"),
     )
 
 
@@ -80,8 +91,11 @@ def read_traces(limit: int = 20) -> list[ReasoningTrace]:
     for line in lines:
         try:
             data = json.loads(line)
-            data["external_calls"] = 0
-            data["route"] = "local"
+            # Read back what was recorded. These two were previously forced to
+            # 0/"local" on every read, which silently rewrote history — see
+            # new_trace()'s docstring.
+            data.setdefault("external_calls", 0)
+            data.setdefault("route", "local")
             traces.append(ReasoningTrace(**data))
         except (TypeError, json.JSONDecodeError):
             continue

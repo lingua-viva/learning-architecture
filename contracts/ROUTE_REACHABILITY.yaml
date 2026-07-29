@@ -74,6 +74,10 @@ reachable_from_ui:
   - route: "GET /api/slack/ops/status"
     call_site: 'api("/api/slack/ops/status")'
 
+  # Slice 1 — Sources registry panel (renderSourceRegistry).
+  - route: "GET /api/sources/status"
+    call_site: 'api("/api/sources/status")'
+
   # Slice 4 — Governance view (renderGovernance / renderGovernanceExportControls).
   - route: "GET /api/governance/trust"
     call_site: 'api("/api/governance/trust")'
