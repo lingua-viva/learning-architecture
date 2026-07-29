@@ -117,6 +117,9 @@ def test_ingest_endpoint_gives_friendly_error_on_corrupt_pdf(tmp_path, monkeypat
     assert "couldn't be read" in response.json()["error"]
 
 
+@pytest.mark.skipif(
+    not ollama_reachable(), reason="local Ollama embedding endpoint unavailable"
+)
 def test_ingest_endpoint_never_trusts_a_client_supplied_path(tmp_path, monkeypatch):
     """The uploaded filename must never be used as a real filesystem path —
     only its suffix is inspected, and the bytes are written to a
