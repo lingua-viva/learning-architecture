@@ -17,14 +17,22 @@ def test_admin_evidence_endpoint_smoke():
     response = client.get("/api/admin/evidence")
 
     assert response.status_code == 200
-    assert response.json()["status"] == "deferred"
+    body = response.json()
+    # Gap 4: real metrics, not a deferred stub. Either data or a stated
+    # reason there is none — never a silent empty payload.
+    assert "status" not in body
+    assert body["available"] is True
 
 
 def test_admin_capacity_endpoint_smoke():
     response = client.get("/api/admin/capacity")
 
     assert response.status_code == 200
-    assert response.json()["status"] == "deferred"
+    body = response.json()
+    # Gap 4: real metrics, not a deferred stub. Either data or a stated
+    # reason there is none — never a silent empty payload.
+    assert "status" not in body
+    assert body["available"] is True
 
 
 def test_stats_endpoint_smoke():

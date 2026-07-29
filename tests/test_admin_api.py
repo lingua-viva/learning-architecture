@@ -15,12 +15,18 @@ def test_admin_programme_returns_overview():
     assert body["source_status"]["badge"] == "Authoritative source: Manuale v1"
 
 
-def test_admin_trends_deferred_with_reason():
+def test_admin_trends_reports_a_real_distribution_or_withholds_it():
+    """Was: asserted the deferred stub. Gap 4 built the view, and the concern
+    the stub named — not overclaiming on a handful of children — is now
+    enforced by a minimum-cohort guard rather than by refusing to render."""
     response = client.get("/api/admin/trends")
 
     assert response.status_code == 200
     body = response.json()
-    assert body["status"] == "deferred"
-    assert body["phase"] == "LV Phase 7 admin dashboard"
-    assert "anonymized observations" in body["reason"]
-    assert body["requires"]
+    assert "status" not in body, "the deferred stub is gone"
+    assert body["available"] is True
+    if body["withheld"]:
+        assert body["current"] == []
+        assert body["empty_reason"]
+    else:
+        assert sum(row["students"] for row in body["current"]) == body["cohort"]

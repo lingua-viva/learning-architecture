@@ -380,7 +380,21 @@
 #     it means; every place an S-XXXX code appears — Activity pending items,
 #     Daily briefing badges, observation-export pack heading — carries a
 #     tooltip explaining it and that it cannot be reversed into a name.
-version: 61
+#   v62 (2026-07-29): Gap 4 admin views with real data
+#     (SPEC_LV_REMAINING_GAPS_2026-07-29 Gap 4, Option A). Evidence,
+#     Capacity and Trends were honest "deferred" stubs — three nav items that
+#     did nothing. src/lingua_viva/admin_metrics.py (new): observation
+#     coverage per student (ARON) and per domain; recorded activity per week
+#     aggregated from the same activity_feed the Activity view renders, so
+#     the two cannot disagree; support-tier distribution withheld below a
+#     minimum cohort. src/web.py: the three routes now return those metrics
+#     and the dead _admin_deferred() helper is gone. static/index.html:
+#     renderAdmin dispatches to three simple table renderers — no charts.
+#     The honesty requirement moved rather than vanished: empty states state
+#     a reason, unreadable records report unknown rather than zero, Capacity
+#     says in the payload that it is not a staffing model, and Trends notes
+#     that Tier 1 is a default rather than a finding.
+version: 62
 files:
   - static/index.html
   - static/sw.js

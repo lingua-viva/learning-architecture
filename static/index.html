@@ -4253,11 +4253,95 @@
         $("content").innerHTML = `<div class="panel"><h2>Programme of Inquiry overview coming soon</h2><p>Current curriculum matrix structure is available from the local curriculum service.</p><div class="list">${data.grade_bands.map(g => `<div class="item"><h3>${escapeHtml(g.grade)}</h3><p>${escapeHtml(g.curriculum_focus)}</p></div>`).join("")}</div></div>`;
         return;
       }
+      // Gap 4: these three now show real counts instead of a "deferred" stub.
+      // Simple tables on purpose — a coordinator can act on "4 students have
+      // no observation this week"; a trend line through six points is
+      // decoration. Students appear as ARON codes: these views get shown in
+      // meetings and on projectors.
       const data = await api(`/api/admin/${state.view}`);
-      const requirements = (data.requires || []).map(item => `<li>${escapeHtml(item)}</li>`).join("");
-      $("content").innerHTML = `
-        <div class="view-head"><div><h2>${escapeHtml(data.title || title)}</h2><p>${escapeHtml(data.reason || "This coordinator view depends on pilot data.")}</p></div><span class="badge warn">${escapeHtml(data.status || "deferred")}</span></div>
-        <div class="panel"><h3>Required Before Activation</h3><ul>${requirements}</ul><p class="muted">${escapeHtml(data.phase || "LV Phase 7 admin dashboard")}</p></div>`;
+
+      if (data.available === false) {
+        $("content").innerHTML = `
+          <div class="view-head"><div><h2>${escapeHtml(title)}</h2></div><span class="badge risk">unknown</span></div>
+          <div class="panel"><p>${escapeHtml(data.empty_reason || "This data could not be read.")}</p></div>`;
+        return;
+      }
+
+      const renderers = {evidence: adminEvidenceHtml, capacity: adminCapacityHtml, trends: adminTrendsHtml};
+      const render = renderers[state.view];
+      $("content").innerHTML = render ? render(data, title) : "";
+    }
+
+    function adminTable(headers, rows, emptyText) {
+      if (!rows.length) return `<p class="voice-hint">${escapeHtml(emptyText)}</p>`;
+      return `<div class="list">${rows.map(cells => `
+        <div class="item">
+          <h3>${cells[0]}</h3>
+          <div class="source-line">${cells.slice(1).join("")}</div>
+        </div>`).join("")}</div>`;
+    }
+
+    function adminEvidenceHtml(data, title) {
+      const students = (data.students || []).map(row => [
+        `<span title="${escapeHtml(ARON_TITLE)}">${escapeHtml(row.student)}</span>`,
+        `<span class="badge ${row.covered ? "ok" : "warn"}">${row.covered ? "observed" : "not this period"}</span>`,
+        `<span class="badge">${row.this_window} in ${data.window_days} days</span>`,
+        `<span class="badge">${row.observations} total</span>`
+      ]);
+      const domains = (data.domains || []).map(row => [
+        escapeHtml(row.domain), `<span class="badge">${row.observations}</span>`
+      ]);
+      return `
+        <div class="view-head">
+          <div><h2>${escapeHtml(title)}</h2><p>Which children have been observed, and in what.</p></div>
+          <span class="badge ${data.not_covered ? "warn" : "ok"}">${data.not_covered || 0} without a recent observation</span>
+        </div>
+        ${data.empty_reason ? `<div class="panel"><p class="voice-hint">${escapeHtml(data.empty_reason)}</p></div>` : ""}
+        <div class="panel"><h3>Coverage</h3>${adminTable(null, students, "No students on this computer yet.")}
+          <p class="voice-hint" title="${escapeHtml(ARON_TITLE)}">${escapeHtml(ARON_HINT)}</p></div>
+        <div class="panel" style="margin-top:14px;"><h3>By focus</h3>${adminTable(null, domains, "No observations classified yet.")}
+          <p class="voice-hint">${data.total_observations || 0} observation(s) recorded in total.</p></div>`;
+    }
+
+    function adminCapacityHtml(data, title) {
+      const weeks = (data.per_week || []).map(row => [
+        escapeHtml(row.week), `<span class="badge">${row.actions} recorded</span>`
+      ]);
+      const kinds = (data.per_kind || []).map(row => [
+        escapeHtml(row.kind), `<span class="badge">${row.actions}</span>`
+      ]);
+      return `
+        <div class="view-head">
+          <div><h2>${escapeHtml(title)}</h2><p>How much has been recorded on this computer, week by week.</p></div>
+          <span class="badge">${data.total_actions || 0} in ${data.weeks} weeks</span>
+        </div>
+        ${data.empty_reason ? `<div class="panel"><p class="voice-hint">${escapeHtml(data.empty_reason)}</p></div>` : ""}
+        <div class="panel"><h3>Per week</h3>${adminTable(null, weeks, "Nothing recorded in this period yet.")}</div>
+        <div class="panel" style="margin-top:14px;"><h3>By activity</h3>${adminTable(null, kinds, "Nothing recorded yet.")}
+          <p class="voice-hint" style="margin-top:10px;">${escapeHtml(data.measures)}</p></div>`;
+    }
+
+    function adminTrendsHtml(data, title) {
+      if (data.withheld) {
+        return `
+          <div class="view-head"><div><h2>${escapeHtml(title)}</h2></div><span class="badge warn">not enough data</span></div>
+          <div class="panel"><p>${escapeHtml(data.empty_reason)}</p></div>`;
+      }
+      const tiers = (data.current || []).map(row => [
+        `Tier ${row.tier}`, `<span class="badge">${row.students} student${row.students === 1 ? "" : "s"}</span>`
+      ]);
+      return `
+        <div class="view-head">
+          <div><h2>${escapeHtml(title)}</h2><p>Where support tiers sit right now.</p></div>
+          <span class="badge">${data.cohort} in the cohort</span>
+        </div>
+        <div class="panel"><h3>Support tiers</h3>${adminTable(null, tiers, "No tiers recorded yet.")}
+          <p class="voice-hint" style="margin-top:10px;">${escapeHtml(data.note || "")}</p></div>
+        <div class="panel" style="margin-top:14px;"><h3>Recorded changes</h3>
+          <div class="source-line">
+            <span class="badge">${data.tier_changes_recorded || 0} tier change(s)</span>
+            <span class="badge">${data.students_with_tier_history || 0} student(s) with history</span>
+          </div></div>`;
     }
 
     async function renderKnowledge() {

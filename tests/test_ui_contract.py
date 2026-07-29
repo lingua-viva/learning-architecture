@@ -135,7 +135,9 @@ REPO = Path(__file__).resolve().parent.parent
 #     LV_AGENT + pytest guarded). src/web.py startup handler only.
 #   v61 (2026-07-29): Gap 3 — ARON named (aron_ref), explained in Privacy,
 #     tooltips wherever S-XXXX codes appear.
-EXPECTED_VERSION = 61
+#   v62 (2026-07-29): Gap 4 — Evidence/Capacity/Trends return real counts;
+#     deferred stubs and _admin_deferred() removed.
+EXPECTED_VERSION = 62
 
 
 def _html() -> str:

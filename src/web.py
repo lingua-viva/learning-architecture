@@ -3104,47 +3104,38 @@ async def updates_resolve(payload: dict):
     return result
 
 
-def _admin_deferred(title: str, reason: str, requires: list[str]) -> dict:
-    return {
-        "status": "deferred",
-        "phase": "LV Phase 7 admin dashboard",
-        "title": title,
-        "reason": reason,
-        "requires": requires,
-    }
+# Gap 4 (SPEC_LV_REMAINING_GAPS_2026-07-29): these three were honest
+# "deferred" stubs — three nav items that did nothing. Each now returns real
+# counts from data that already existed. Simple on purpose: a coordinator can
+# act on "4 students have no observation this week"; they cannot act on a
+# trend line drawn through six points.
 
 
 @app.get("/api/admin/evidence")
-async def admin_evidence():
-    # DEFERRED: requires accumulated, consent-aware teacher evidence data.
-    # Date: 2026-07-18. Owner: LV Phase 7 admin dashboard.
-    return _admin_deferred(
-        "Evidence",
-        "Evidence bundles need consent-aware teacher observations accumulated over time.",
-        ["teacher observation history", "consent review", "evidence export policy"],
-    )
+async def admin_evidence(window_days: int = 7):
+    """Observation coverage per student (ARON) and per domain."""
+    from src.lingua_viva.admin_metrics import evidence_metrics
+
+    window = max(1, min(int(window_days or 7), 90))
+    return await asyncio.to_thread(evidence_metrics, window)
 
 
 @app.get("/api/admin/capacity")
-async def admin_capacity():
-    # DEFERRED: requires staffing/capacity model inputs that do not exist yet.
-    # Date: 2026-07-18. Owner: LV Phase 7 admin dashboard.
-    return _admin_deferred(
-        "Capacity",
-        "Capacity planning needs staffing, enrollment, and classroom allocation inputs.",
-        ["staffing roster", "projected enrollment", "classroom allocation model"],
-    )
+async def admin_capacity(weeks: int = 4):
+    """Recorded activity per week. Explicitly NOT a staffing model."""
+    from src.lingua_viva.admin_metrics import capacity_metrics
+
+    span = max(1, min(int(weeks or 4), 52))
+    return await asyncio.to_thread(capacity_metrics, span)
 
 
 @app.get("/api/admin/trends")
-async def admin_trends():
-    # DEFERRED: requires accumulated anonymized trend data.
-    # Date: 2026-07-18. Owner: LV Phase 7 admin dashboard.
-    return _admin_deferred(
-        "Trends",
-        "School-wide trends need enough anonymized observations to avoid overclaiming.",
-        ["anonymized observation history", "minimum cohort size", "trend review policy"],
-    )
+async def admin_trends(min_cohort: int = 1):
+    """Support-tier distribution, withheld below a minimum cohort size."""
+    from src.lingua_viva.admin_metrics import trends_metrics
+
+    floor = max(1, min(int(min_cohort or 1), 100))
+    return await asyncio.to_thread(trends_metrics, floor)
 
 
 @app.get("/api/ontology/domains")
