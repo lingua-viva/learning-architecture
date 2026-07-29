@@ -159,7 +159,7 @@ class Context:
         self.kind = "lingua-viva"
         self.remote = "origin"
         self.gh_repo = "lingua-viva/learning-architecture"
-        self.has_auto_release = False
+        self.has_auto_release = (self.repo_root / ".github/workflows/auto-release.yml").exists()
         self.has_wizard_contract = (self.repo_root / "scripts/check_wizard_contract.py").exists()
         self.desktop_dir = self.repo_root / "desktop"
         self.site_url = "https://linguaviva.art"
