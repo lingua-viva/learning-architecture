@@ -139,7 +139,9 @@ REPO = Path(__file__).resolve().parent.parent
 #     deferred stubs and _admin_deferred() removed.
 #   v63 (2026-07-29): Gap 5 — POST /api/voice/tts with the publication-safety
 #     gate ahead of the key check; UI falls back to the local Italian voice.
-EXPECTED_VERSION = 63
+#   v64 (2026-07-29): Gap 6 — assessment deltas, growth badges, tier
+#     recommendations (never applied automatically).
+EXPECTED_VERSION = 64
 
 
 def _html() -> str:

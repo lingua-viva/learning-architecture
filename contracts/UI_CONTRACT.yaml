@@ -407,7 +407,18 @@
 #     falls back to speakLocally(), which keeps the v52 Italian voice — the
 #     fallback is the private path, not a degraded one. stopSpeaking() also
 #     halts Rime playback so the two voices cannot talk over each other.
-version: 63
+#   v64 (2026-07-29): Gap 6 adaptive learning Phase 1
+#     (SPEC_LV_REMAINING_GAPS_2026-07-29 Gap 6). src/lingua_viva/adaptive.py
+#     (new): the missing "compare" step of observe -> assess -> compare ->
+#     adjust -> differentiate. Computes per-dimension CEFR deltas from the
+#     append-only observations table, produces a growth/stable/regression
+#     badge, and — only on 3+ consistent moves — a tier RECOMMENDATION.
+#     Never changes a tier: a test parses the module's AST and asserts
+#     update_rti_tier() is not among its call nodes. src/web.py: GET
+#     /api/students/growth, plus a tier_recommendations widget in the Daily
+#     briefing. static/index.html: growth badge per student in the roster,
+#     with the suggestion and its reasoning in a tooltip.
+version: 64
 files:
   - static/index.html
   - static/sw.js

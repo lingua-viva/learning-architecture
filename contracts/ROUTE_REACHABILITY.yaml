@@ -74,6 +74,10 @@ reachable_from_ui:
   - route: "GET /api/slack/ops/status"
     call_site: 'api("/api/slack/ops/status")'
 
+  # Gap 6 — Adaptive learning growth badges (loadGrowth / growthBadge).
+  - route: "GET /api/students/growth"
+    call_site: 'api("/api/students/growth")'
+
   # Gap 5 — Rime TTS with student-data privacy gate (voiceRuntime.speak).
   - route: "POST /api/voice/tts"
     call_site: '"/api/voice/tts"'

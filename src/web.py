@@ -1678,6 +1678,28 @@ def _request_rime_audio(text: str, speaker: str, model_id: str, key: str) -> byt
         return response.read()
 
 
+@app.get("/api/students/growth")
+async def students_growth():
+    """Growth badge and any tier recommendation per student (Gap 6, Phase 1).
+
+    Recommendations only — nothing here changes a tier. The teacher confirms.
+    """
+    def build(store):
+        from src.lingua_viva.adaptive import RECOMMENDATION_THRESHOLD, growth_for_all
+
+        rows = growth_for_all(store)
+        return {
+            "students": rows,
+            "with_recommendations": sum(1 for row in rows if row["recommendation"]),
+            "threshold": RECOMMENDATION_THRESHOLD,
+            "note": (
+                "Lingua Viva suggests; you decide. No support tier changes on its own."
+            ),
+        }
+
+    return await asyncio.to_thread(_with_student_store, build)
+
+
 @app.post("/api/voice/tts")
 async def voice_tts(request: Request):
     """Read text aloud via Rime, but only after proving it names no child.
@@ -1780,9 +1802,12 @@ async def daily_briefing(days: int = 7):
             revision_log_path=_revision_log_path(),
         )
         try:
+            from src.lingua_viva.adaptive import pending_recommendations
+
             with service.student_store_factory() as store:
                 unobserved = service._unobserved(store, window)
                 rti_pending = service._rti_pending(store)
+                tier_suggestions = pending_recommendations(store)
             readable = True
         except Exception as exc:  # noqa: BLE001
             return {
@@ -1822,6 +1847,20 @@ async def daily_briefing(days: int = 7):
                     else "No support tiers are flagged."
                 ),
                 "status": "attention" if rti_pending else "ok",
+            },
+            {
+                # Gap 6: recommendations surface here as pending items. They
+                # are suggestions — the teacher confirms, nothing auto-applies.
+                "id": "tier_recommendations",
+                "label": "Support-tier suggestions to review",
+                "count": len(tier_suggestions),
+                "students": [row["reference"] for row in tier_suggestions],
+                "detail": (
+                    "Based on recorded level changes. Lingua Viva suggests; you decide."
+                    if tier_suggestions
+                    else "No tier suggestions right now."
+                ),
+                "status": "attention" if tier_suggestions else "ok",
             },
             {
                 "id": "confirmations",

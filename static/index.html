@@ -1356,9 +1356,43 @@
       }
     }
 
+    // Gap 6: growth badges. Lingua Viva suggests movement and, where the
+    // evidence is consistent enough, a tier to consider — it never changes
+    // one. The teacher confirms, and the decision is recorded as theirs.
+    const GROWTH_BADGE = {
+      growth: ["ok", "moving up"],
+      regression: ["warn", "moving down"],
+      stable: ["", "steady"],
+      insufficient_data: ["", "not enough yet"]
+    };
+    let growthByStudent = {};
+
+    function growthBadge(studentId) {
+      const row = growthByStudent[studentId];
+      if (!row) return "";
+      const [cls, label] = GROWTH_BADGE[row.growth.signal] || ["", row.growth.signal];
+      const rec = row.recommendation
+        ? ` <span class="badge warn" title="${escapeHtml(row.recommendation.because)} You decide whether to apply it.">suggests tier ${row.recommendation.suggested_tier}</span>`
+        : "";
+      return `<span class="badge ${cls}" title="${escapeHtml(row.growth.detail)}">${escapeHtml(label)}</span>${rec}`;
+    }
+
+    async function loadGrowth() {
+      try {
+        const data = await api("/api/students/growth");
+        growthByStudent = {};
+        (data.students || []).forEach(row => { growthByStudent[row.student_id] = row; });
+        return data;
+      } catch (error) {
+        growthByStudent = {};
+        return null;
+      }
+    }
+
     async function renderStudents() {
       setTitle("Students", "teacher decision gate");
       await ensureStudents();
+      const growth = await loadGrowth();
       $("content").innerHTML = `
         <div class="view-head"><div><h2>Student Lenses</h2><p>View profiles, observations, CEFR trajectory, grouping notes, and support proposals. The system suggests; the teacher decides.</p></div></div>
         <div class="panel" style="margin-bottom:14px;">
@@ -1372,7 +1406,8 @@
           <p id="add-student-status" style="margin-top:6px;"></p>
         </div>
         <div class="grid two">
-          <div class="panel"><h3>Roster</h3><div class="list">${state.students.map(s => `<button type="button" data-student="${s.student_id}"><strong>${escapeHtml(s.display_name)}</strong><br>${escapeHtml(s.cefr_trajectory_30d || "trajectory pending")} · support tier ${s.rti_current_tier} · ${escapeHtml(s.grade_level)}</button>`).join("")}</div></div>
+          <div class="panel"><h3>Roster</h3><div class="list">${state.students.map(s => `<button type="button" data-student="${s.student_id}"><strong>${escapeHtml(s.display_name)}</strong> ${growthBadge(s.student_id)}<br>${escapeHtml(s.cefr_trajectory_30d || "trajectory pending")} · support tier ${s.rti_current_tier} · ${escapeHtml(s.grade_level)}</button>`).join("")}</div>
+            <p class="voice-hint" id="growth-note" style="margin-top:10px;"></p></div>
           <div id="lens" class="panel"></div>
         </div>`;
       $("add-student-form").addEventListener("submit", async (event) => {
@@ -1391,6 +1426,12 @@
           await renderStudents();
         } catch (err) { $("add-student-status").textContent = "Network error."; }
       });
+      const growthNote = $("growth-note");
+      if (growthNote) {
+        growthNote.textContent = growth
+          ? `${growth.note} ${growth.with_recommendations} suggestion(s) waiting.`
+          : "Growth signals could not be read.";
+      }
       document.querySelectorAll("[data-student]").forEach(button => button.addEventListener("click", () => {
         state.selectedStudent = button.dataset.student;
         loadLens();
