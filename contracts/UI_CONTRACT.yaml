@@ -245,7 +245,17 @@
 #     garbled text. No route, layout, or handler-flow change — one string per
 #     handler. NOTE: TTS playback (voiceRuntime speak) still selects an
 #     English voice; tracked separately, not part of this bump.
-version: 51
+#   v52 (2026-07-28): Italian TTS — the other half of the v51 voice fix.
+#     static/index.html voiceRuntime.speak(): playback selected an English
+#     voice by name (samantha|aria|serena|google uk english female) and fell
+#     back to any /^en[-_]/ voice, so after v51 a teacher spoke Italian and
+#     was answered in English. Now sets utterance.lang = "it-IT" BEFORE
+#     reading the voice list (getVoices() returns [] until Chrome loads
+#     voices asynchronously; lang alone then still drives an Italian default
+#     rather than an English one), then prefers a named Italian voice
+#     (alice|federica|google italiano), else any it-* voice, else null.
+#     No route, layout, or handler-flow change.
+version: 52
 files:
   - static/index.html
   - static/sw.js

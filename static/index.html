@@ -551,9 +551,15 @@
           .replace(/\s+/g, " ")
           .trim();
         const utterance = new SpeechSynthesisUtterance(clean);
+        // Teachers speak Italian and are answered in Italian. Set lang first:
+        // getVoices() returns [] until the browser has loaded its voice list
+        // (Chrome does this asynchronously), and in that case lang alone still
+        // drives the engine to an Italian default instead of an English one.
+        utterance.lang = "it-IT";
         const voices = window.speechSynthesis.getVoices();
-        utterance.voice = voices.find(voice => /samantha|aria|serena|google uk english female/i.test(voice.name))
-          || voices.find(voice => /^en[-_]/i.test(voice.lang))
+        const italianVoices = voices.filter(voice => /^it([-_]|$)/i.test(voice.lang));
+        utterance.voice = italianVoices.find(voice => /alice|federica|google italiano/i.test(voice.name))
+          || italianVoices[0]
           || null;
         utterance.rate = 0.94;
         utterance.pitch = 1.02;

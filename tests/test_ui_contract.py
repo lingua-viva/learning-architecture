@@ -99,7 +99,14 @@ REPO = Path(__file__).resolve().parent.parent
 #   v50 (2026-07-27): LV-5 startup blocker — web.py event handlers moved
 #     to app.router.add_event_handler (app-level method removed in
 #     Starlette 1.0; unpinned installs crashed at import). No UI change.
-EXPECTED_VERSION = 51
+#   v51 (2026-07-28): Italian STT — recognition.lang "en-US" -> "it-IT" in
+#     both voice handlers (toggleAsk, toggleObserve). Teachers speak
+#     Italian; the recogniser was using an English model.
+#   v52 (2026-07-28): Italian TTS — voiceRuntime.speak() sets
+#     utterance.lang = "it-IT" before reading the voice list and prefers an
+#     Italian voice, replacing the English name/lang preference. Completes
+#     the v51 fix (was: listens Italian, answers English).
+EXPECTED_VERSION = 52
 
 
 def _html() -> str:
