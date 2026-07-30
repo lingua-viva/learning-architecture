@@ -156,7 +156,7 @@ def test_bad_input_is_rejected(text, status):
 def test_ui_tries_the_endpoint_then_the_local_voice():
     body = client.get("/").text
     assert '"/api/voice/tts"' in body, "voice handler never calls the endpoint"
-    assert "this.speakLocally(text)" in body, "no fallback to the local voice"
+    assert "this.speakLocally(" in body, "no fallback to the local voice"
 
 
 def test_local_fallback_still_speaks_italian():
@@ -171,5 +171,56 @@ def test_stopping_speech_also_stops_rime_playback():
     """Otherwise the browser voice and the Rime audio talk over each other."""
     body = client.get("/").text
     start = body.index("stopSpeaking() {")
-    end = body.index("speak(text)")
+    end = body.index("speak(text,")
     assert "this.remoteAudio.pause()" in body[start:end]
+
+
+# --- GIR voice tone prefix --------------------------------------------------
+
+
+def test_tts_prepends_tone_prefix_to_spoken_text(monkeypatch):
+    """When tone_prefix is supplied, it is prepended to the text sent to Rime."""
+    monkeypatch.setenv("RIME_API_KEY", "rime-test-key")
+    captured = {}
+
+    def fake_audio(text, speaker, model_id, key):
+        captured["text"] = text
+        return b"RIFF....WAVEfmt "
+
+    monkeypatch.setattr(web, "_request_rime_audio", fake_audio)
+
+    response = _tts(
+        "Le vocali sono cinque.",
+        tone_prefix="I'm fairly sure, but let's double check this together. ",
+    )
+    assert response.status_code == 200
+    assert captured["text"].startswith("I'm fairly sure")
+    assert "Le vocali sono cinque." in captured["text"]
+
+
+def test_tts_no_prefix_sends_text_unchanged(monkeypatch):
+    """Without tone_prefix the text is sent as-is (no spurious whitespace)."""
+    monkeypatch.setenv("RIME_API_KEY", "rime-test-key")
+    captured = {}
+
+    def fake_audio(text, speaker, model_id, key):
+        captured["text"] = text
+        return b"RIFF....WAVEfmt "
+
+    monkeypatch.setattr(web, "_request_rime_audio", fake_audio)
+
+    response = _tts("Buongiorno a tutti")
+    assert response.status_code == 200
+    assert captured["text"] == "Buongiorno a tutti"
+
+
+def test_frontend_passes_tone_prefix_to_speak():
+    """The frontend's speak() call after /api/query includes tone_prefix."""
+    body = client.get("/").text
+    assert "data.tone_prefix" in body, "frontend does not read tone_prefix from response"
+
+
+def test_frontend_fallback_preserves_prefix():
+    """The speakLocally fallback inside speak() includes the tone prefix."""
+    body = client.get("/").text
+    assert "tonePrefix" in body, "tone prefix variable missing from frontend"

@@ -1731,6 +1731,12 @@ async def voice_tts(request: Request):
     text = str(payload.get("text") or "").strip()
     if not text:
         return JSONResponse({"error": "text required"}, status_code=400)
+    # GIR voice tone: prepend the hedge prefix before the safety gate and
+    # length check so it's included in both — the prefix is static,
+    # non-student-data copy so it doesn't change the gate's behavior.
+    tone_prefix = str(payload.get("tone_prefix") or "").strip()
+    if tone_prefix:
+        text = tone_prefix + " " + text if not tone_prefix.endswith(" ") else tone_prefix + text
     if len(text) > RIME_MAX_CHARS:
         return JSONResponse(
             {"error": f"Text must be under {RIME_MAX_CHARS:,} characters."},
@@ -3993,24 +3999,12 @@ async def query_endpoint(payload: dict):
         )
         append_trace(query_trace)
         log_event("query_processed_locally", query_text=query_text)
-        try:
-            from src.lingua_viva.grounding.build import build_grounding_result
-
-            grounding = build_grounding_result(
-                trace={
-                    "trace_id": query_trace.trace_id,
-                    "session_id": session_id,
-                    "model_used": result.synthesis.model_used,
-                    "source_citations": source_citations,
-                },
-                classification=result.classification,
-                content=result.synthesis.content,
-                query_text=query_text,
-                session_id=session_id,
-                intent=str(intent or ""),
-            ).as_dict()
-        except Exception:
-            grounding = None
+        grounding = result.grounding.as_dict() if result.grounding else None
+        voice_tone = result.path_record.voice_tone if result.grounding else "plain"
+        gir_score = result.path_record.gir_score if result.grounding else 1.0
+        gir_method = result.path_record.gir_method if result.grounding else ""
+        from src.lingua_viva.voice_tone import resolve_voice_tone
+        tone_prefix = resolve_voice_tone(gir_score)["prefix"]
         if session_id and not eval_mode:
             increment_session()
 
@@ -4039,6 +4033,10 @@ async def query_endpoint(payload: dict):
             "source_citation": source_citations[0] if source_citations else "Manuale v1",
             "sources": source_citations,
             "grounding": grounding,
+            "gir_score": gir_score,
+            "gir_method": gir_method,
+            "voice_tone": voice_tone,
+            "tone_prefix": tone_prefix,
             "external_calls": 1 if answered_externally else 0,
             "session_id": session_id,
             "timestamp": time.time(),

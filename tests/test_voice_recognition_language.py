@@ -47,7 +47,7 @@ def test_playback_speaks_italian_not_english():
     recognisers.
     """
     body = _served_index()
-    start = body.index("speak(text)")
+    start = body.index("speak(text,")
     end = body.index("toggleAsk()")
     speak_body = body[start:end]
 
@@ -70,7 +70,7 @@ def test_playback_sets_language_before_reading_the_voice_list():
     would fall back to an English default. Order matters, so pin it.
     """
     body = _served_index()
-    start = body.index("speak(text)")
+    start = body.index("speak(text,")
     speak_body = body[start:body.index("toggleAsk()")]
     # Match the qualified call, not the bare name — the explanatory comment
     # above the assignment also mentions getVoices().

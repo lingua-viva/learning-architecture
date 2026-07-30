@@ -826,14 +826,16 @@
       // voice. The backend refuses (403) when the text names a student, and
       // that fallback is the private path, not a degraded one — the local
       // voice speaks Italian (contract v52).
-      async speak(text) {
+      async speak(text, tonePrefix) {
         if (!text) return;
         this.stopSpeaking();
         try {
+          const body = {text: String(text)};
+          if (tonePrefix) body.tone_prefix = String(tonePrefix);
           const response = await fetch("/api/voice/tts", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({text: String(text)})
+            body: JSON.stringify(body)
           });
           if (response.ok) {
             const blob = await response.blob();
@@ -846,14 +848,14 @@
               if (status) status.textContent = "Tap once to talk. Pause when finished, or tap again to stop.";
               updateVoiceCompanion("idle", "Ready");
             };
-            audio.onerror = () => { URL.revokeObjectURL(url); this.speakLocally(text); };
+            audio.onerror = () => { URL.revokeObjectURL(url); this.speakLocally(tonePrefix ? (tonePrefix + text) : text); };
             await audio.play();
             return;
           }
         } catch (error) {
           // network or CORS failure — fall through to the local voice
         }
-        this.speakLocally(text);
+        this.speakLocally(tonePrefix ? (tonePrefix + text) : text);
       },
       speakLocally(text) {
         if (!("speechSynthesis" in window) || !text) return;
@@ -1868,7 +1870,9 @@
             duration_ms: data.duration_ms,
             source_citation: data.source_citation,
             sources: data.sources,
-            grounding: data.grounding
+            grounding: data.grounding,
+            voice_tone: data.voice_tone,
+            tone_prefix: data.tone_prefix
           }
         });
       }
@@ -1877,7 +1881,7 @@
       if (fromVoice && !data.error) {
         const reply = state.chat[state.chat.length - 1];
         updateVoiceCompanion("speaking", "Speaking");
-        voiceRuntime.speak(reply.text);
+        voiceRuntime.speak(reply.text, data.tone_prefix || "");
       } else if (fromVoice && data.error) {
         const status = voiceRuntime.get("ask-voice-status");
         if (status) status.textContent = "I could not answer aloud. The error is shown above.";

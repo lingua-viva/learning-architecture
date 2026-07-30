@@ -152,7 +152,10 @@ REPO = Path(__file__).resolve().parent.parent
 #     route, and Electron blob-media CSP.
 #   v69 (2026-07-29): pre-push audit fix — Drive share-back now writes a
 #     DeliverableRecord + AuditReceipt (src/web.py only, no markup change).
-EXPECTED_VERSION = 69
+#   v70 (2026-07-29): GIR → voice delivery tone — speak() accepts tonePrefix,
+#     /api/query returns voice_tone + tone_prefix, speakLocally fallback
+#     preserves hedge prefix.
+EXPECTED_VERSION = 70
 
 
 def _html() -> str:

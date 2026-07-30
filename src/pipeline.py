@@ -155,6 +155,7 @@ class PipelineResult:
     steps_executed: list[str] = field(default_factory=list)
     external_called: bool = False
     gap_signals: list[str] = field(default_factory=list)
+    grounding: Optional[object] = None       # GroundingResult when computed
 
 
 class GatewayInterface:
@@ -916,6 +917,28 @@ class Pipeline:
         steps_executed.append("SYNTHESIZE")
 
         # ================================================================
+        # Step 6.25: GROUND — compute grounding inline, at the moment of truth
+        # ================================================================
+        from src.lingua_viva.grounding.build import build_grounding_result
+        from src.lingua_viva.voice_tone import resolve_voice_tone
+
+        grounding = build_grounding_result(
+            trace={
+                "trace_id": query_hash,
+                "session_id": session_id,
+                "model_used": local_result.model_used,
+                "source_citations": synthesis_result.citations,
+            },
+            classification=classification,
+            content=synthesis_result.content,
+            query_text=query,
+            query_hash=query_hash,
+            session_id=session_id,
+            intent=classification.default_intent or "",
+        )
+        voice_tone_result = resolve_voice_tone(grounding.gir.score)
+
+        # ================================================================
         # Step 6.5: REHYDRATE — restore tokens for human-facing output
         # The LLM saw <SSN_abc123>; the user should see their original data.
         # Only fires if sanitization produced token substitutions.
@@ -950,6 +973,9 @@ class Pipeline:
             knowledge_entries_used=[e["id"] for e in knowledge_dicts],
             gap_signals=gap_signals,
             duration_ms=duration_ms,
+            gir_score=grounding.gir.score,
+            gir_method=grounding.gir.method,
+            voice_tone=voice_tone_result["tone"],
         )
 
         if not eval_mode:
@@ -967,4 +993,5 @@ class Pipeline:
             steps_executed=steps_executed,
             external_called=external_called,
             gap_signals=gap_signals,
+            grounding=grounding,
         )

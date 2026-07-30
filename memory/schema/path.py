@@ -42,6 +42,9 @@ class PathRecord:
     knowledge_entries_used: list[str] = field(default_factory=list)
     gap_signals: list[str] = field(default_factory=list)  # What was missing
     duration_ms: Optional[int] = None        # Pipeline execution time
+    gir_score: float = 1.0                   # Grounding integrity score (0.0–1.0)
+    gir_method: str = ""                     # e.g. "claim_support_v1_heuristic"
+    voice_tone: str = "plain"                # "plain", "clarify", or "name_boundary"
 
     def to_dict(self) -> dict:
         return {k: getattr(self, k) for k in self.__dataclass_fields__}

@@ -456,7 +456,11 @@
 #     durable record at all, while the lower-risk observation export did.
 #     No UI markup changed; the new record surfaces through the existing
 #     Governance -> Deliverables and receipts panel.
-version: 69
+# v70 (2026-07-29): GIR → voice delivery tone — speak() accepts tonePrefix,
+#     /api/query returns gir_score/voice_tone/tone_prefix, speakLocally
+#     fallback preserves hedge prefix so low-GIR answers stay hedged even
+#     on the privacy fallback path.
+version: 70
 files:
   - static/index.html
   - static/sw.js
