@@ -77,7 +77,7 @@ jobs:
           path = Path("docs/index.html")
           tag = os.environ["NEXT_TAG"]
           text = path.read_text(encoding="utf-8")
-          text = re.sub(r"desktop-v[0-9]+\\.[0-9]+\\.[0-9]+", tag, text)
+          text = re.sub(r"desktop-v[0-9]+\.[0-9]+\.[0-9]+", tag, text)
           path.write_text(text, encoding="utf-8")
           PY
         env:
@@ -94,6 +94,18 @@ jobs:
           fi
 
       - name: Create release tag
+        # KNOWN GAP (found 2026-07-29): this push uses the default
+        # GITHUB_TOKEN via actions/checkout's persisted credentials. GitHub
+        # deliberately does NOT fire other workflows (incl. this repo's
+        # desktop-release.yml, which triggers on `push: tags: ['desktop-v*']`)
+        # for pushes authored by GITHUB_TOKEN, to prevent recursive workflow
+        # chains. Net effect: this step creates the tag, but desktop-release.yml
+        # never runs from it -- confirmed by a real failed run that sat with
+        # zero triggered builds. Until a PAT-backed secret (repo+workflow
+        # scope) replaces GITHUB_TOKEN here, or desktop-release.yml is
+        # restructured as a `workflow_call` invoked directly from this job,
+        # every tag this step creates needs a manual re-push (delete + push
+        # again with non-Actions credentials) to actually build.
         run: |
           git tag "${{ steps.tag.outputs.tag }}"
           git push origin "${{ steps.tag.outputs.tag }}"
