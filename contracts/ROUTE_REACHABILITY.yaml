@@ -399,6 +399,18 @@ intentionally_backend_only:
       summary from ops records. UI surface deferred — backend/reporting is
       the safer first slice per spec.
 
+  - route: "GET /api/ops/request-summary"
+    status: deferred_undecided
+    reason: >-
+      Still I Rise Phase 2A ops request center (2026-07-30). Read-only
+      operational request summary from ops records. UI surface deferred.
+
+  - route: "GET /api/ops/schedule-ack-summary"
+    status: deferred_undecided
+    reason: >-
+      Still I Rise Phase 2B schedule-change acks (2026-07-30). Read-only
+      acknowledgement summary from ops records. UI surface deferred.
+
   - route: "POST /api/action-plans/preview"
     status: deferred_undecided
     reason: >-

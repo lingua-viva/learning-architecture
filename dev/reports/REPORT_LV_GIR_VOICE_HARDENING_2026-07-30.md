@@ -95,3 +95,20 @@ Two passes were run:
 2. **GIR Error-State Guard** - skip or floor GIR computation when `synthesis_result.confidence < threshold` (e.g., 0.1). Small, tightly scoped fix to prevent F2.
 
 3. **Rime Integration Testing** - once a key is available, run the 15 scenarios again to verify: audio returned for clean text, privacy refusal for student data, tone prefix audible in spoken output.
+
+## Review Addendum - 2026-07-30
+
+Follow-up review closed the immediate F1/F2 implementation defects:
+
+- `build_grounding_result()` now requires simple query/source relevance before ledger records or generic citations can ground an answer. This prevents unrelated durable source records from making every answer score `1.0`.
+- Generic `Manuale v1` citations are no longer treated as universal support; they only ground curriculum/manuale-shaped queries.
+- Low-confidence synthesis results (`synthesis_confidence < 0.1`) now floor GIR to `0.0`, so model outage/error fallback text cannot receive a high grounding score.
+- `/api/query` no longer invents `Manuale v1` when `result.synthesis.citations` is empty; `sources` stays empty and `source_citation` is `""`.
+
+Retest after review:
+
+- `python3 -m src.lingua_viva.cli golden-workflows --only GW-VOICE-006` -> `1/1 passed`
+- `python3 -m src.lingua_viva.cli preflight` -> `6/6`
+- `python3 -m pytest -q` -> `1575 passed, 13 skipped`
+
+Remaining calibration risk: the lexical relevance guard is deliberately conservative and deterministic. A future GIR calibration spec should still define richer source relevance and expected GIR bands against real teacher queries.

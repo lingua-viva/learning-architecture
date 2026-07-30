@@ -162,7 +162,11 @@ REPO = Path(__file__).resolve().parent.parent
 #   v74 (2026-07-30): GIR hardening review — /api/query stops inventing
 #     Manuale v1 citations for uncited answers.
 #   v75 (2026-07-30): Still I Rise absence+coverage MVP staffing-summary endpoint.
-EXPECTED_VERSION = 75
+#   v76 (2026-07-30): SIR Phase 2A ops request center request-summary endpoint.
+#   v77 (2026-07-30): SIR Phase 2B schedule-change ack summary endpoint.
+#   v78 (2026-07-30): server-side auth role gate middleware.
+#   v79 (2026-07-30): auth role gate hardening for teacher-owned writes.
+EXPECTED_VERSION = 79
 
 
 def _html() -> str:

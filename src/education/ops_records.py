@@ -382,6 +382,36 @@ class OpsRecordStore:
         self._audit("ops_record_reviewed", updated)
         return updated
 
+    def mark_needs_review(self, record_id: str, reason: str) -> OpsRecord:
+        """Flag a record for human review without bypassing the store API.
+
+        Non-coverage records use the existing `needs_review` status so the
+        daily file can surface them consistently. Coverage requests keep
+        their workflow status because an open/claimed coverage card must
+        remain actionable while also being visible for review.
+        """
+        record = self.get_record(record_id)
+        if record is None:
+            raise ValueError(f"unknown record: {record_id!r}")
+        new_status = record.status
+        if record.category != "coverage_request":
+            self._validate_status_for_category(record.category, "needs_review")
+            new_status = "needs_review"
+        now = utc_now_iso()
+        self._conn.execute(
+            """
+            UPDATE ops_records
+               SET status = ?, needs_review = 1, review_reason = ?, updated_at = ?
+             WHERE id = ?
+            """,
+            (new_status, reason, now, record_id),
+        )
+        self._conn.commit()
+        updated = self.get_record(record_id)
+        assert updated is not None
+        self._audit("ops_record_needs_review", updated)
+        return updated
+
     def reclassify_record(self, record_id: str, category: str) -> OpsRecord:
         """Admin teach-loop record fix (spec v2 §4): move a record to the
         category it should have been filed under, clearing the review flag.

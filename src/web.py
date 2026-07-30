@@ -61,6 +61,65 @@ def _answer_sentences(text: str) -> list[str]:
 
 
 @app.middleware("http")
+async def _enforce_role_gate(request: Request, call_next):
+    """Server-side role gate (SPEC_LV_SERVER_SIDE_AUTH_ROLE_GATE)."""
+    from src.lingua_viva.access_roles import (
+        ADMIN_ONLY, COORDINATOR_OR_ADMIN, TEACHER_OR_HIGHER,
+        VALID_ROLES, access_context_from_request, auth_mode, role_allows,
+    )
+    if auth_mode() == "off":
+        return await call_next(request)
+
+    path = request.url.path
+    required_roles = None
+
+    if any(path.startswith(p) for p in (
+        "/api/slack/credentials", "/api/ops/setup/", "/api/provider/", "/api/google-drive/",
+    )):
+        required_roles = ADMIN_ONLY
+    elif path.startswith("/api/admin/"):
+        required_roles = COORDINATOR_OR_ADMIN
+    elif path in ("/api/governance/observation-export", "/api/audit-receipts/export"):
+        required_roles = COORDINATOR_OR_ADMIN
+    elif path in ("/api/ops/request-summary", "/api/ops/schedule-ack-summary", "/api/ops/staffing-summary"):
+        required_roles = COORDINATOR_OR_ADMIN
+    elif path in ("/api/ops/daily", "/api/ops/records"):
+        ctx = access_context_from_request(request)
+        if not ctx.authenticated:
+            return JSONResponse({"error": "authentication_required"}, status_code=401)
+        if ctx.role not in VALID_ROLES:
+            return JSONResponse({"error": "forbidden"}, status_code=403)
+        qt = request.query_params.get("teacher_id", "")
+        if (qt and qt != ctx.teacher_id) or (not qt and not role_allows(ctx.role, COORDINATOR_OR_ADMIN)):
+            if not role_allows(ctx.role, COORDINATOR_OR_ADMIN):
+                return JSONResponse({"error": "forbidden"}, status_code=403)
+        return await call_next(request)
+    elif (
+        path.startswith("/api/observe/")
+        or path.startswith("/api/students")
+        or path.startswith("/api/teacher/")
+        or path.startswith("/api/extraction/")
+    ):
+        required_roles = TEACHER_OR_HIGHER
+    elif path in ("/api/profile", "/api/profile/export", "/api/profile/clear"):
+        required_roles = TEACHER_OR_HIGHER
+    elif path == "/api/parents/recommendation" and request.method == "POST":
+        required_roles = TEACHER_OR_HIGHER
+
+    if required_roles is None:
+        return await call_next(request)
+
+    ctx = access_context_from_request(request)
+    if not ctx.authenticated:
+        return JSONResponse({"error": "authentication_required"}, status_code=401)
+    if ctx.role not in VALID_ROLES:
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+    if not role_allows(ctx.role, required_roles):
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+    return await call_next(request)
+
+
+@app.middleware("http")
 async def _log_request_outcome(request: Request, call_next):
     """Append one request-outcome event per response (MC-lessons §5).
 
@@ -550,6 +609,117 @@ async def ops_records_for_day(teacher_id: str | None = None, date: str | None = 
                 "date": date_iso,
                 "count": len(records),
                 "records": [asdict(record) for record in records],
+            }
+
+    return await asyncio.to_thread(build)
+
+
+@app.get("/api/ops/request-summary")
+async def ops_request_summary(date: str | None = None):
+    """Daily operational request summary — facilities/IT/supplies counts."""
+
+    def build() -> dict:
+        from src.education.ops_records import OpsRecordStore
+
+        date_iso = (date or "").strip() or _ops_local_today()
+        with OpsRecordStore() as store:
+            records = store.records_for_day(date_iso)
+            requests = [
+                r for r in records
+                if r.category == "facilities" and (r.extra or {}).get("workflow") == "sir_ops_request"
+            ]
+            by_type: dict[str, int] = {}
+            severity_counts = {"routine": 0, "same_day": 0, "teaching_blocked": 0, "urgent": 0}
+            unassigned = 0
+            assigned_open = 0
+            resolved = 0
+            reopened = 0
+            for r in requests:
+                rt = (r.extra or {}).get("request_type", "facilities")
+                by_type[rt] = by_type.get(rt, 0) + 1
+                sev = (r.extra or {}).get("severity", "routine")
+                if sev in severity_counts:
+                    severity_counts[sev] += 1
+                if r.status == "resolved":
+                    resolved += 1
+                elif (r.extra or {}).get("owner_slack_id"):
+                    assigned_open += 1
+                else:
+                    unassigned += 1
+                if (r.extra or {}).get("reopened_from"):
+                    reopened += 1
+            return {
+                "date": date_iso,
+                "total_requests": len(requests),
+                "by_type": by_type,
+                **severity_counts,
+                "unassigned": unassigned,
+                "assigned_open": assigned_open,
+                "resolved": resolved,
+                "reopened": reopened,
+            }
+
+    return await asyncio.to_thread(build)
+
+
+@app.get("/api/ops/schedule-ack-summary")
+async def ops_schedule_ack_summary(date: str | None = None):
+    """Schedule-change acknowledgement summary."""
+
+    def build() -> dict:
+        from src.education.ops_records import OpsRecordStore
+
+        date_iso = (date or "").strip() or _ops_local_today()
+        with OpsRecordStore() as store:
+            records = store.records_for_day(date_iso)
+            schedule = [
+                r for r in records
+                if r.category == "schedule_change"
+                and (r.extra or {}).get("workflow") == "sir_schedule_ack"
+            ]
+            ack_required = [r for r in schedule if (r.extra or {}).get("ack_required")]
+            total_conflicts = 0
+            total_clarify = 0
+            fully_acked = 0
+            missing_ack = 0
+            changes = []
+            valid_ack_statuses = {"seen", "conflict", "need_clarification"}
+            for r in ack_required:
+                affected = (r.extra or {}).get("affected_slack_ids", [])
+                acks = (r.extra or {}).get("acknowledgements", {})
+                targeted_acks = [
+                    acks[slack_id] for slack_id in affected
+                    if slack_id in acks and acks[slack_id].get("status") in valid_ack_statuses
+                ]
+                seen = sum(1 for a in targeted_acks if a.get("status") == "seen")
+                conflicts = sum(1 for a in targeted_acks if a.get("status") == "conflict")
+                clarify = sum(1 for a in targeted_acks if a.get("status") == "need_clarification")
+                miss = max(0, len(affected) - len(targeted_acks))
+                total_conflicts += conflicts
+                total_clarify += clarify
+                if miss == 0 and conflicts == 0 and clarify == 0:
+                    fully_acked += 1
+                else:
+                    missing_ack += 1
+                changes.append({
+                    "record_id": r.id,
+                    "campus": (r.extra or {}).get("campus", ""),
+                    "changed_item": (r.extra or {}).get("changed_item", ""),
+                    "target_count": len(affected),
+                    "seen_count": seen,
+                    "conflict_count": conflicts,
+                    "clarification_count": clarify,
+                    "missing_count": miss,
+                })
+            return {
+                "date": date_iso,
+                "schedule_changes": len(schedule),
+                "ack_required": len(ack_required),
+                "fully_acknowledged": fully_acked,
+                "missing_acknowledgement": missing_ack,
+                "conflicts": total_conflicts,
+                "needs_clarification": total_clarify,
+                "changes": changes,
             }
 
     return await asyncio.to_thread(build)
@@ -2618,8 +2788,11 @@ def _with_teacher_lens_builder(teacher_id: str, callback):
 
 
 @app.get("/api/teacher/lens")
-async def teacher_lens(teacher_id: str = "local-teacher"):
+async def teacher_lens(request: Request, teacher_id: str = "local-teacher"):
     from dataclasses import asdict
+    from src.lingua_viva.access_roles import effective_teacher_id
+
+    teacher_id = effective_teacher_id(request, teacher_id)
 
     def get_lens(builder):
         return asdict(builder.build_lens())
@@ -2634,10 +2807,11 @@ async def teacher_lens(teacher_id: str = "local-teacher"):
 
 
 @app.post("/api/teacher/ingest")
-async def teacher_ingest(payload: dict):
+async def teacher_ingest(request: Request, payload: dict):
     from dataclasses import asdict
+    from src.lingua_viva.access_roles import effective_teacher_id
 
-    teacher_id = str(payload.get("teacher_id") or "local-teacher")
+    teacher_id = effective_teacher_id(request, str(payload.get("teacher_id") or "local-teacher"))
     file_path = str(payload.get("file_path") or "").strip()
     doc_type = str(payload.get("doc_type") or "auto")
     if not file_path:
@@ -2656,10 +2830,11 @@ async def teacher_ingest(payload: dict):
 
 
 @app.post("/api/teacher/holdout")
-async def teacher_holdout(payload: dict):
+async def teacher_holdout(request: Request, payload: dict):
     from dataclasses import asdict
+    from src.lingua_viva.access_roles import effective_teacher_id
 
-    teacher_id = str(payload.get("teacher_id") or "local-teacher")
+    teacher_id = effective_teacher_id(request, str(payload.get("teacher_id") or "local-teacher"))
     test_artifact = str(payload.get("test_artifact") or "").strip()
     artifact_type = str(payload.get("artifact_type") or "").strip()
     if not test_artifact or not artifact_type:
@@ -2678,10 +2853,14 @@ async def teacher_holdout(payload: dict):
 
 
 @app.post("/api/observe/capture")
-async def observe_capture(payload: dict):
+async def observe_capture(request: Request, payload: dict):
     from src.education.observation_capture import ObservationCapturePipeline
+    from src.lingua_viva.access_roles import effective_teacher_id
 
     student_id = str(payload.get("student_id") or "student-marco")
+    teacher_id = effective_teacher_id(
+        request, str(payload.get("teacher_id") or "local-teacher")
+    )
     transcript = str(payload.get("transcript") or payload.get("raw_transcript") or "").strip()
     if not transcript:
         return JSONResponse({"error": "Observation text is required."}, status_code=400)
@@ -2690,7 +2869,7 @@ async def observe_capture(payload: dict):
         pipeline = ObservationCapturePipeline(store=store)
         return pipeline.capture(
             student_id=student_id,
-            teacher_id=str(payload.get("teacher_id") or "local-teacher"),
+            teacher_id=teacher_id,
             raw_transcript=transcript,
             template_type=str(payload.get("template_type") or "cefr"),
             cefr_dimension=str(payload.get("cefr_dimension") or "speaking"),
@@ -3127,9 +3306,10 @@ async def extraction_run(payload: dict):
 
 
 @app.post("/api/extraction/review")
-async def extraction_review(payload: dict):
+async def extraction_review(request: Request, payload: dict):
     """Submit teacher confirmations/rejections and write confirmed fields into student lens."""
     from src.lingua_viva.extraction_engine import extract
+    from src.lingua_viva.access_roles import effective_teacher_id
     from src.lingua_viva.student_lens_writer import write_student_lens
 
     file_path = str(payload.get("file_path") or "").strip()
@@ -3141,6 +3321,7 @@ async def extraction_review(payload: dict):
 
     confirmed = payload.get("confirmed_fields") or []
     rejected = payload.get("rejected_fields") or []
+    teacher_id = effective_teacher_id(request, str(payload.get("teacher_id") or "local-teacher"))
 
     if file_path and Path(file_path).exists():
         ext_result = await extract([file_path], target_schema_id=target_schema, hint=hint)
@@ -3169,7 +3350,7 @@ async def extraction_review(payload: dict):
     def do_write(store):
         return write_student_lens(
             ext_result,
-            teacher_id=str(payload.get("teacher_id") or "local-teacher"),
+            teacher_id=teacher_id,
             confirmed_fields=confirmed,
             rejected_fields=rejected,
             hint=hint,
@@ -3387,10 +3568,14 @@ async def assess_rubric(unit_id: str):
 
 
 @app.post("/api/parents/recommendation")
-async def parent_recommendation(payload: dict):
+async def parent_recommendation(request: Request, payload: dict):
     from src.education.parent_report import ParentReportGenerator
+    from src.lingua_viva.access_roles import effective_teacher_id
 
     student_id = str(payload.get("student_id") or "student-nora")
+    teacher_id = effective_teacher_id(
+        request, str(payload.get("teacher_id") or "local-teacher")
+    )
 
     def generate(store):
         generator = ParentReportGenerator(store)
@@ -3400,7 +3585,7 @@ async def parent_recommendation(payload: dict):
         except Exception:
             target_student_id = "student-nora"
             lens = store.get_lens(target_student_id)
-        draft = generator.generate_draft(target_student_id, str(payload.get("teacher_id") or "local-teacher"))
+        draft = generator.generate_draft(target_student_id, teacher_id)
         names = [lens.get("display_name") or ""]
         extra = str(payload.get("focus") or "").strip()
         body = draft.body

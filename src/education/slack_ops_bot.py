@@ -118,6 +118,39 @@ MSG_PARTIAL_CLAIM_NOTED = (
 
 SIR_ABSENCE_MODAL_CALLBACK_ID = "sir_absence_modal"
 SIR_PARTIAL_CLAIM_CALLBACK_ID = "sir_partial_claim_modal"
+SIR_OPS_REQUEST_MODAL_CALLBACK_ID = "sir_ops_request_modal"
+SIR_SCHEDULE_CHANGE_MODAL_CALLBACK_ID = "sir_schedule_change_modal"
+
+MSG_SCHEDULE_CARD = (
+    "Schedule change: {item} -> {new_time}, {campus}."
+)
+MSG_SCHEDULE_ACK_STATUS = (
+    " Acknowledged: {seen}/{total}. Conflicts: {conflicts}. Needs clarification: {clarify}."
+)
+MSG_SCHEDULE_ACK_DM = (
+    "Schedule change on {date}: {item} -> {new_time} ({campus}). "
+    "Please acknowledge below."
+)
+MSG_SCHEDULE_SEEN = "Noted — thank you."
+MSG_SCHEDULE_CONFLICT = "Conflict recorded. The coordinator will follow up."
+MSG_SCHEDULE_CLARIFY = "Clarification needed — the coordinator will follow up."
+MSG_SCHEDULE_NOT_TARGETED = "This change doesn't target you — no action needed."
+MSG_SCHEDULE_INVALID_ACK = "I couldn't record that acknowledgement."
+MSG_SCHEDULE_RECEIPT = "Schedule change posted. {ack_note}"
+MSG_SCHEDULE_ACK_REQUIRED_NOTE = "Acknowledgement requests sent to {count} staff."
+SCHEDULE_ACK_STATUSES = frozenset({"seen", "conflict", "need_clarification"})
+
+MSG_OPS_REQUEST_CARD = (
+    "Ops request [{request_type}]: {campus}, {location} — {severity}. {description}"
+)
+MSG_OPS_REQUEST_RECEIPT = (
+    "Got it — your {request_type} request has been logged.{teaching_note}"
+)
+MSG_OPS_REQUEST_TEACHING_BLOCKED = " This is marked as blocking teaching."
+MSG_OPS_REQUEST_CLAIMED = "Claimed by {owner}. Working on it."
+MSG_OPS_REQUEST_RESOLVED = "Resolved by {owner}. {note}"
+MSG_OPS_REQUEST_REOPENED = "Reopened — still blocked. A new follow-up has been created."
+MSG_OPS_REQUEST_NOT_REQUESTER = "Only the original requester can reopen this request."
 
 # Greetings / help asks in a DM. Deliberately narrow: only short messages
 # that are *entirely* a greeting or a help request, so real operational
@@ -627,6 +660,47 @@ class SlackOpsBot:
                 value, claimer=display_name, claimer_user_id=user,
                 card_channel=channel, card_ts=message_ts,
             )
+        elif action_id == "ops_request_claim":
+            if user not in self.teacher_map:
+                if channel:
+                    await self.client.post_message(
+                        channel, MSG_UNKNOWN_USER, thread_ts=message_ts or None
+                    )
+                return
+            await self._claim_ops_request(
+                value, claimer=display_name, claimer_user_id=user,
+                card_channel=channel, card_ts=message_ts,
+            )
+        elif action_id == "ops_request_resolve":
+            if user not in self.teacher_map:
+                if channel:
+                    await self.client.post_message(
+                        channel, MSG_UNKNOWN_USER, thread_ts=message_ts or None
+                    )
+                return
+            await self._resolve_ops_request(
+                value, resolved_by=display_name,
+                card_channel=channel, card_ts=message_ts,
+            )
+        elif action_id == "ops_request_still_blocked":
+            record = self.store.get_record(value)
+            if record is None:
+                return
+            if user != (record.extra or {}).get("requester_slack_id"):
+                if channel:
+                    await self.client.post_message(
+                        channel, MSG_OPS_REQUEST_NOT_REQUESTER, thread_ts=message_ts or None
+                    )
+                return
+            await self._reopen_ops_request(
+                value, reporter_user_id=user, card_channel=channel,
+            )
+        elif action_id == "ops_schedule_seen":
+            await self._handle_schedule_ack(value, user, "seen", channel)
+        elif action_id == "ops_schedule_conflict":
+            await self._handle_schedule_ack(value, user, "conflict", channel)
+        elif action_id == "ops_schedule_clarify":
+            await self._handle_schedule_ack(value, user, "need_clarification", channel)
 
     async def _claim_coverage(self, record_id, *, claimer, card_channel, card_ts):
         record = self.store.get_record(record_id)
@@ -687,10 +761,16 @@ class SlackOpsBot:
 
     async def _handle_slash_command(self, payload: dict) -> None:
         command = str(payload.get("command") or "").strip().lower()
+        trigger_id = payload.get("trigger_id", "")
         if command == "/absence":
-            trigger_id = payload.get("trigger_id", "")
             if trigger_id and hasattr(self.client, "open_view"):
                 await self.client.open_view(trigger_id, self._build_absence_modal())
+        elif command == "/ops-request":
+            if trigger_id and hasattr(self.client, "open_view"):
+                await self.client.open_view(trigger_id, self._build_ops_request_modal())
+        elif command == "/schedule-change":
+            if trigger_id and hasattr(self.client, "open_view"):
+                await self.client.open_view(trigger_id, self._build_schedule_change_modal())
 
     @staticmethod
     def _build_absence_modal() -> dict:
@@ -773,6 +853,95 @@ class SlackOpsBot:
             ],
         }
 
+    @staticmethod
+    def _build_ops_request_modal() -> dict:
+        """Construct the /ops-request modal view payload."""
+        def _inp(block_id, label, *, optional=False, multiline=False, placeholder=""):
+            el: dict = {"type": "plain_text_input", "action_id": block_id}
+            if multiline:
+                el["multiline"] = True
+            if placeholder:
+                el["placeholder"] = {"type": "plain_text", "text": placeholder}
+            return {"type": "input", "block_id": block_id, "optional": optional,
+                    "label": {"type": "plain_text", "text": label}, "element": el}
+
+        def _sel(block_id, label, options, *, optional=False):
+            return {"type": "input", "block_id": block_id, "optional": optional,
+                    "label": {"type": "plain_text", "text": label},
+                    "element": {"type": "static_select", "action_id": block_id,
+                                "options": [{"text": {"type": "plain_text", "text": o}, "value": o} for o in options]}}
+
+        def _radio(block_id, label, options):
+            return {"type": "input", "block_id": block_id,
+                    "label": {"type": "plain_text", "text": label},
+                    "element": {"type": "radio_buttons", "action_id": block_id,
+                                "options": [{"text": {"type": "plain_text", "text": o}, "value": o} for o in options]}}
+
+        return {
+            "type": "modal",
+            "callback_id": SIR_OPS_REQUEST_MODAL_CALLBACK_ID,
+            "title": {"type": "plain_text", "text": "Ops Request"},
+            "submit": {"type": "plain_text", "text": "Submit"},
+            "close": {"type": "plain_text", "text": "Cancel"},
+            "blocks": [
+                _sel("request_type", "Request type", ["facilities", "it", "supplies"]),
+                _inp("campus", "Campus", placeholder="e.g. Nairobi"),
+                _inp("location", "Room / Location", placeholder="e.g. Room 12"),
+                _sel("severity", "Severity", ["routine", "same_day", "teaching_blocked", "urgent"]),
+                _inp("description", "Short description", placeholder="What's the problem?"),
+                _radio("teaching_blocked", "Is teaching currently blocked?", ["Yes", "No"]),
+                _inp("photo_link", "Photo or link (optional)", optional=True),
+                _sel("followup_pref", "Preferred follow-up", ["thread", "DM"], optional=True),
+            ],
+        }
+
+    @staticmethod
+    def _build_schedule_change_modal() -> dict:
+        def _inp(bid, label, *, optional=False, placeholder=""):
+            el: dict = {"type": "plain_text_input", "action_id": bid}
+            if placeholder:
+                el["placeholder"] = {"type": "plain_text", "text": placeholder}
+            return {"type": "input", "block_id": bid, "optional": optional,
+                    "label": {"type": "plain_text", "text": label}, "element": el}
+
+        def _sel(bid, label, options, *, optional=False):
+            return {"type": "input", "block_id": bid, "optional": optional,
+                    "label": {"type": "plain_text", "text": label},
+                    "element": {"type": "static_select", "action_id": bid,
+                                "options": [{"text": {"type": "plain_text", "text": o}, "value": o} for o in options]}}
+
+        def _dp(bid, label):
+            return {"type": "input", "block_id": bid,
+                    "label": {"type": "plain_text", "text": label},
+                    "element": {"type": "datepicker", "action_id": bid}}
+
+        def _radio(bid, label, options):
+            return {"type": "input", "block_id": bid,
+                    "label": {"type": "plain_text", "text": label},
+                    "element": {"type": "radio_buttons", "action_id": bid,
+                                "options": [{"text": {"type": "plain_text", "text": o}, "value": o} for o in options]}}
+
+        return {
+            "type": "modal",
+            "callback_id": SIR_SCHEDULE_CHANGE_MODAL_CALLBACK_ID,
+            "title": {"type": "plain_text", "text": "Schedule Change"},
+            "submit": {"type": "plain_text", "text": "Submit"},
+            "close": {"type": "plain_text", "text": "Cancel"},
+            "blocks": [
+                _inp("campus", "Campus", placeholder="e.g. Nairobi"),
+                _sel("affected_scope", "Affected scope",
+                     ["whole_campus", "grade", "department", "named_staff"]),
+                _inp("affected_staff", "Affected staff (Slack IDs or names, comma-separated)",
+                     optional=True, placeholder="Leave blank for all staff"),
+                _dp("effective_date", "Effective date"),
+                _inp("changed_item", "Changed item", placeholder="e.g. Assembly"),
+                _inp("old_time", "Old time/location (optional)", optional=True),
+                _inp("new_time", "New time/location"),
+                _inp("description", "Short description", optional=True),
+                _radio("ack_required", "Acknowledgement required?", ["Yes", "No"]),
+            ],
+        }
+
     # ------------------------------------------------------------------
     # Still I Rise: modal submission handling
     # ------------------------------------------------------------------
@@ -781,6 +950,10 @@ class SlackOpsBot:
         callback_id = (payload.get("view") or {}).get("callback_id", "")
         if callback_id == SIR_ABSENCE_MODAL_CALLBACK_ID:
             await self._handle_absence_submission(payload)
+        elif callback_id == SIR_OPS_REQUEST_MODAL_CALLBACK_ID:
+            await self._handle_ops_request_submission(payload)
+        elif callback_id == SIR_SCHEDULE_CHANGE_MODAL_CALLBACK_ID:
+            await self._handle_schedule_change_submission(payload)
         elif callback_id == SIR_PARTIAL_CLAIM_CALLBACK_ID:
             await self._handle_partial_claim_submission(payload)
 
@@ -874,6 +1047,389 @@ class SlackOpsBot:
                 elif atype == "datepicker":
                     values[block_id] = action_data.get("selected_date") or ""
         return values
+
+    # ------------------------------------------------------------------
+    # Still I Rise: schedule-change acknowledgements (Phase 2B)
+    # ------------------------------------------------------------------
+
+    def _resolve_affected_staff_detail(self, raw_input: str) -> tuple[list[str], list[str]]:
+        if not raw_input.strip():
+            return list(self.teacher_map.keys()), []
+        targets: list[str] = []
+        unmatched: list[str] = []
+        seen: set[str] = set()
+        for token in raw_input.split(","):
+            token = token.strip()
+            if not token:
+                continue
+            matched = None
+            if token in self.teacher_map:
+                matched = token
+            else:
+                for slack_id, entry in self.teacher_map.items():
+                    if token.lower() in entry.get("display_name", "").lower():
+                        matched = slack_id
+                        break
+            if matched:
+                if matched not in seen:
+                    targets.append(matched)
+                    seen.add(matched)
+            else:
+                unmatched.append(token)
+        return targets, unmatched
+
+    def _resolve_affected_staff(self, raw_input: str) -> list[str]:
+        targets, _unmatched = self._resolve_affected_staff_detail(raw_input)
+        return targets
+
+    async def _handle_schedule_change_submission(self, payload: dict) -> None:
+        user_id = (payload.get("user") or {}).get("id", "")
+        if user_id not in self.teacher_map:
+            dm = await self.client.open_dm(user_id) if user_id else None
+            if dm:
+                await self.client.post_message(dm, MSG_UNKNOWN_USER)
+            return
+
+        teacher_id, display_name = self._teacher_for(user_id)
+        values = self._extract_modal_values(payload)
+
+        campus = values.get("campus", "")
+        affected_staff_raw = values.get("affected_staff", "")
+        effective_date = values.get("effective_date") or self._today().isoformat()
+        changed_item = values.get("changed_item", "")
+        old_time = values.get("old_time", "")
+        new_time = values.get("new_time", "")
+        description = values.get("description", "")
+        ack_required = values.get("ack_required", "").lower() == "yes"
+
+        affected_ids, unmatched_targets = self._resolve_affected_staff_detail(affected_staff_raw)
+
+        extra: dict = {
+            "workflow": "sir_schedule_ack",
+            "campus": campus,
+            "affected_scope": values.get("affected_scope", "whole_campus"),
+            "affected_slack_ids": affected_ids,
+            "unmatched_targets": unmatched_targets,
+            "changed_item": changed_item,
+            "old_time": old_time,
+            "new_time": new_time,
+            "effective_date": effective_date,
+            "ack_required": ack_required,
+            "acknowledgements": {},
+            "submitted_by": display_name,
+        }
+
+        text_clean = f"Schedule change: {changed_item} -> {new_time}, {campus}. {description}".strip()
+        record = self.store.add_record(
+            category="schedule_change",
+            teacher_id=teacher_id,
+            date_for=effective_date,
+            text_raw=text_clean,
+            text_clean=text_clean,
+            source_channel="",
+            source_ts="",
+            extra=extra,
+        )
+        self._refresh_daily(record)
+
+        card_text = MSG_SCHEDULE_CARD.format(item=changed_item, new_time=new_time, campus=campus)
+        if ack_required:
+            ack_summary = self._schedule_ack_summary(extra)
+            card_text += MSG_SCHEDULE_ACK_STATUS.format(**ack_summary)
+
+        response = await self.client.post_message(self.ops_channel, card_text)
+        card_ts = (response or {}).get("ts", "")
+        if card_ts:
+            self.store.update_extra(record.id, card_ts=card_ts)
+
+        if ack_required:
+            dm_text = MSG_SCHEDULE_ACK_DM.format(
+                date=effective_date, item=changed_item, new_time=new_time, campus=campus,
+            )
+            for slack_id in affected_ids:
+                if slack_id in self.teacher_map:
+                    dm = await self.client.open_dm(slack_id)
+                    if dm:
+                        await self.client.post_message(
+                            dm, dm_text,
+                            blocks=_blocks(dm_text, [
+                                _button("Seen", "ops_schedule_seen", record.id),
+                                _button("Conflict", "ops_schedule_conflict", record.id),
+                                _button("Need clarification", "ops_schedule_clarify", record.id),
+                            ]),
+                        )
+
+        dm = await self.client.open_dm(user_id)
+        if dm:
+            ack_note = MSG_SCHEDULE_ACK_REQUIRED_NOTE.format(count=len(affected_ids)) if ack_required else ""
+            await self.client.post_message(dm, MSG_SCHEDULE_RECEIPT.format(ack_note=ack_note))
+
+    async def _handle_schedule_ack(self, record_id: str, user_id: str, status: str, card_channel: str):
+        record = self.store.get_record(record_id)
+        if record is None:
+            return
+        if status not in SCHEDULE_ACK_STATUSES:
+            dm = await self.client.open_dm(user_id)
+            if dm:
+                await self.client.post_message(dm, MSG_SCHEDULE_INVALID_ACK)
+            return
+        if user_id not in self.teacher_map:
+            dm = await self.client.open_dm(user_id)
+            if dm:
+                await self.client.post_message(dm, MSG_UNKNOWN_USER)
+            return
+        affected = (record.extra or {}).get("affected_slack_ids", [])
+        if user_id not in affected:
+            dm = await self.client.open_dm(user_id)
+            if dm:
+                await self.client.post_message(dm, MSG_SCHEDULE_NOT_TARGETED)
+            return
+
+        _tid, display_name = self._teacher_for(user_id)
+        acks = dict(record.extra.get("acknowledgements", {}))
+        acks[user_id] = {"status": status, "display_name": display_name, "at": utc_now_iso()}
+        record = self.store.update_extra(record_id, acknowledgements=acks)
+
+        if status in ("conflict", "need_clarification") and not record.needs_review:
+            record = self.store.mark_needs_review(
+                record_id, f"schedule ack: {status} from {display_name}"
+            )
+        self._refresh_daily(record)
+
+        card_ts = record.extra.get("card_ts", "")
+        if card_ts:
+            ack_summary = self._schedule_ack_summary(record.extra)
+            card_text = MSG_SCHEDULE_CARD.format(
+                item=record.extra.get("changed_item", ""),
+                new_time=record.extra.get("new_time", ""),
+                campus=record.extra.get("campus", ""),
+            ) + MSG_SCHEDULE_ACK_STATUS.format(**ack_summary)
+            await self.client.update_message(self.ops_channel, card_ts, card_text)
+
+        dm = await self.client.open_dm(user_id)
+        if dm:
+            msg = {"seen": MSG_SCHEDULE_SEEN, "conflict": MSG_SCHEDULE_CONFLICT,
+                   "need_clarification": MSG_SCHEDULE_CLARIFY}.get(status, MSG_SCHEDULE_SEEN)
+            await self.client.post_message(dm, msg)
+
+    @staticmethod
+    def _schedule_ack_summary(extra: dict) -> dict:
+        affected = extra.get("affected_slack_ids", [])
+        acks = extra.get("acknowledgements", {})
+        targeted_acks = [
+            acks[slack_id] for slack_id in affected
+            if slack_id in acks and acks[slack_id].get("status") in SCHEDULE_ACK_STATUSES
+        ]
+        seen = sum(1 for a in targeted_acks if a.get("status") == "seen")
+        conflicts = sum(1 for a in targeted_acks if a.get("status") == "conflict")
+        clarify = sum(1 for a in targeted_acks if a.get("status") == "need_clarification")
+        return {"seen": seen, "total": len(affected), "conflicts": conflicts,
+                "clarify": clarify, "missing": max(0, len(affected) - len(targeted_acks))}
+
+    # ------------------------------------------------------------------
+    # Still I Rise: operational request center (Phase 2A)
+    # ------------------------------------------------------------------
+
+    async def _handle_ops_request_submission(self, payload: dict) -> None:
+        user_id = (payload.get("user") or {}).get("id", "")
+        if user_id not in self.teacher_map:
+            dm = await self.client.open_dm(user_id) if user_id else None
+            if dm:
+                await self.client.post_message(dm, MSG_UNKNOWN_USER)
+            return
+
+        teacher_id, display_name = self._teacher_for(user_id)
+        values = self._extract_modal_values(payload)
+
+        request_type = values.get("request_type", "facilities")
+        campus = values.get("campus", "")
+        location = values.get("location", "")
+        severity = values.get("severity", "routine")
+        description = values.get("description", "")
+        teaching_blocked = values.get("teaching_blocked", "").lower() == "yes"
+        photo_link = values.get("photo_link", "")
+
+        extra: dict = {
+            "workflow": "sir_ops_request",
+            "request_type": request_type,
+            "campus": campus,
+            "location": location,
+            "severity": severity,
+            "description": description,
+            "teaching_blocked": teaching_blocked,
+            "photo_url": photo_link,
+            "followup_pref": values.get("followup_pref", ""),
+            "requester_slack_id": user_id,
+            "requester_name": display_name,
+            "requester_confirmation_required": severity in ("teaching_blocked", "urgent"),
+        }
+
+        needs_review = severity in ("teaching_blocked", "urgent")
+        text_clean = f"Ops request [{request_type}]: {campus}, {location} — {severity}. {description}"
+
+        record = self.store.add_record(
+            category="facilities",
+            teacher_id=teacher_id,
+            date_for=self._today().isoformat(),
+            text_raw=text_clean,
+            text_clean=text_clean,
+            needs_review=needs_review,
+            review_reason=f"{severity} ops request" if needs_review else "",
+            source_channel="",
+            source_ts="",
+            extra=extra,
+        )
+        self._refresh_daily(record)
+
+        # Post triage card to ops channel
+        card_text = MSG_OPS_REQUEST_CARD.format(
+            request_type=request_type, campus=campus,
+            location=location, severity=severity, description=description[:80],
+        )
+        response = await self.client.post_message(
+            self.ops_channel, card_text,
+            blocks=_blocks(card_text, [
+                _button("Claim", "ops_request_claim", record.id),
+                _button("Resolve", "ops_request_resolve", record.id),
+            ]),
+        )
+        card_ts = (response or {}).get("ts", "")
+        if card_ts:
+            self.store.update_extra(record.id, card_ts=card_ts)
+
+        # DM receipt to requester
+        dm = await self.client.open_dm(user_id)
+        if dm:
+            teaching_note = MSG_OPS_REQUEST_TEACHING_BLOCKED if teaching_blocked else ""
+            receipt = MSG_OPS_REQUEST_RECEIPT.format(
+                request_type=request_type, teaching_note=teaching_note,
+            )
+            await self.client.post_message(dm, receipt)
+
+    async def _claim_ops_request(self, record_id, *, claimer, claimer_user_id, card_channel, card_ts):
+        """Owner claims an operational request."""
+        record = self.store.get_record(record_id)
+        if record is None:
+            return
+        if record.extra.get("owner_slack_id"):
+            if card_channel:
+                await self.client.post_message(
+                    card_channel, "This request already has an owner.", thread_ts=card_ts
+                )
+            return
+
+        record = self.store.update_extra(
+            record_id,
+            owner_slack_id=claimer_user_id,
+            owner_name=claimer,
+            owner_claimed_at=utc_now_iso(),
+        )
+        # Move needs_review -> logged if applicable
+        if record.needs_review:
+            record = self.store.mark_reviewed(record_id)
+        self._refresh_daily(record)
+
+        # Update card
+        claimed_text = MSG_OPS_REQUEST_CLAIMED.format(owner=claimer)
+        channel = card_channel or self.ops_channel
+        ts = card_ts or record.extra.get("card_ts", "")
+        if ts:
+            await self.client.update_message(
+                channel, ts, claimed_text,
+                blocks=_blocks(claimed_text, [
+                    _button("Resolve", "ops_request_resolve", record_id),
+                ]),
+            )
+
+        # Notify requester
+        requester_slack = record.extra.get("requester_slack_id", "")
+        if requester_slack:
+            dm = await self.client.open_dm(requester_slack)
+            if dm:
+                await self.client.post_message(dm, claimed_text)
+
+    async def _resolve_ops_request(self, record_id, *, resolved_by, card_channel, card_ts):
+        """Mark an operational request as resolved."""
+        record = self.store.get_record(record_id)
+        if record is None or record.status == "resolved":
+            return
+        # Ensure we're at 'logged' before resolving
+        if record.needs_review:
+            record = self.store.mark_reviewed(record_id)
+        record = self.store.update_status(record_id, "resolved")
+        record = self.store.update_extra(
+            record_id, resolved_by=resolved_by, resolved_at=utc_now_iso(),
+        )
+        self._refresh_daily(record)
+
+        resolved_text = MSG_OPS_REQUEST_RESOLVED.format(
+            owner=resolved_by, note=record.extra.get("description", ""),
+        )
+        channel = card_channel or self.ops_channel
+        ts = card_ts or record.extra.get("card_ts", "")
+        if ts:
+            await self.client.update_message(channel, ts, resolved_text)
+
+        # Notify requester with a "Still blocked?" option
+        requester_slack = record.extra.get("requester_slack_id", "")
+        if requester_slack:
+            dm = await self.client.open_dm(requester_slack)
+            if dm:
+                await self.client.post_message(
+                    dm, resolved_text,
+                    blocks=_blocks(resolved_text, [
+                        _button("Still blocked", "ops_request_still_blocked", record_id),
+                    ]),
+                )
+
+    async def _reopen_ops_request(self, original_record_id, *, reporter_user_id, card_channel):
+        """Create a follow-up record linked to the original."""
+        original = self.store.get_record(original_record_id)
+        if original is None:
+            return
+
+        # Copy safe fields from original
+        extra = dict(original.extra or {})
+        extra["reopened_from"] = original_record_id
+        extra["workflow"] = "sir_ops_request"
+        extra.pop("owner_slack_id", None)
+        extra.pop("owner_name", None)
+        extra.pop("owner_claimed_at", None)
+        extra.pop("resolved_by", None)
+        extra.pop("resolved_at", None)
+        extra.pop("card_ts", None)
+
+        followup = self.store.add_record(
+            category="facilities",
+            teacher_id=original.teacher_id,
+            date_for=self._today().isoformat(),
+            text_raw=f"Reopened: {original.text_clean}",
+            text_clean=f"Reopened: {original.text_clean}",
+            needs_review=True,
+            review_reason="reopened — still blocked",
+            source_channel="",
+            source_ts="",
+            extra=extra,
+        )
+        self._refresh_daily(followup)
+
+        # Post new triage card
+        card_text = f"Reopened ops request: {original.text_clean}"
+        response = await self.client.post_message(
+            self.ops_channel, card_text,
+            blocks=_blocks(card_text, [
+                _button("Claim", "ops_request_claim", followup.id),
+            ]),
+        )
+        card_ts = (response or {}).get("ts", "")
+        if card_ts:
+            self.store.update_extra(followup.id, card_ts=card_ts)
+
+        # Notify requester
+        if reporter_user_id:
+            dm = await self.client.open_dm(reporter_user_id)
+            if dm:
+                await self.client.post_message(dm, MSG_OPS_REQUEST_REOPENED)
 
     # ------------------------------------------------------------------
     # Still I Rise: coordinator-confirmed coverage
