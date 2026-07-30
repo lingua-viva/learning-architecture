@@ -7,6 +7,7 @@ from src.lingua_viva.audit_receipts.schema import AuditReceipt, compute_receipt_
 
 _STUDENT_ID_RE = re.compile(r"\b(?:student[_ -]?id|student|child|pupil)[:= ]+[A-Za-z0-9_-]+\b", re.IGNORECASE)
 _NAME_HINT_RE = re.compile(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b")
+LOCAL_EVIDENCE_SCOPES = {"help_artifact", "portfolio_entry"}
 
 
 def sanitize_student_text(value: str) -> str:
@@ -91,14 +92,15 @@ def build_receipt(
                     source_ids.append(sid)
 
     if source_ids:
-        try:
-            from src.lingua_viva.sources.ledger import read_records
+        if scope not in LOCAL_EVIDENCE_SCOPES:
+            try:
+                from src.lingua_viva.sources.ledger import read_records
 
-            existing = {r.get("source_record_id") for r in read_records(limit=1000)}
-            if not any(sid in existing for sid in source_ids):
+                existing = {r.get("source_record_id") for r in read_records(limit=1000)}
+                if not any(sid in existing for sid in source_ids):
+                    missing.append("source_record_ids")
+            except Exception:
                 missing.append("source_record_ids")
-        except Exception:
-            missing.append("source_record_ids")
     elif scope != "query":
         missing.append("source_record_ids")
 
