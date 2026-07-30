@@ -482,7 +482,20 @@
 #     LV_AUTH_MODE=local_header enforces 401/403 on route groups.
 # v79 (2026-07-30): auth role gate hardening — validate custom ops
 #     route roles and force header teacher_id on teacher-owned write paths.
-version: 79
+# v80 (2026-07-30): native exit integrity gates — src/web.py routes Rime TTS,
+#     Drive upload, and governance observation export through the central
+#     exit gate before external-boundary actions.
+# v81 (2026-07-30): exit gate hardening — blocked Drive upload responses no
+#     longer echo rejected local file paths.
+# v82 (2026-07-30): teacher decision flywheel — backend preview/approval
+#     routes for help artifacts and portfolio entries from student lens evidence.
+# v83 (2026-07-30): teacher decision flywheel hardening — preview routes are
+#     fully non-mutating; only approval writes local decision records.
+# v84 (2026-07-30): teacher decision flywheel audit hardening — approved
+#     artifacts carry source observation ids into complete local receipts.
+# v85 (2026-07-30): cohort lesson-planning backend routes — preview,
+#     approval, and listing for local teacher-owned cohort plan records.
+version: 85
 files:
   - static/index.html
   - static/sw.js

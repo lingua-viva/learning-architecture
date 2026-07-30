@@ -4,7 +4,17 @@ import hashlib
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 
-DELIVERABLE_TYPES = ("parent_report", "daily_file", "assessment", "drive_export", "observation_export", "none")
+DELIVERABLE_TYPES = (
+    "parent_report",
+    "daily_file",
+    "assessment",
+    "drive_export",
+    "observation_export",
+    "help_artifact",
+    "portfolio_entry",
+    "cohort_lesson_plan",
+    "none",
+)
 STATUSES = ("created", "updated", "sent", "exported", "failed", "not_applicable")
 LOCATION_KINDS = ("local_path", "drive_file", "download", "none")
 

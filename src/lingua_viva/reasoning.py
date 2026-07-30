@@ -60,6 +60,20 @@ class ReasoningEngine:
         )
 
         if local_only and self._is_external_model(resolved_model):
+            try:
+                from src.lingua_viva.exit_gates import ExitRequest, check_exit
+
+                check_exit(
+                    ExitRequest(
+                        surface="reasoning",
+                        destination=self._exit_destination(resolved_model),
+                        payload_text=query,
+                        student_names=tuple(self._known_student_names()),
+                        metadata={"local_only": True},
+                    )
+                )
+            except Exception:
+                pass
             fallback = next(
                 (
                     candidate
@@ -130,6 +144,19 @@ class ReasoningEngine:
         return self._cached_model
 
     async def _call_model(self, query: str, system_prompt: str, model: str) -> Optional[ReasonResult]:
+        if self._is_external_model(model):
+            from src.lingua_viva.exit_gates import ExitRequest, check_exit
+
+            decision = check_exit(
+                ExitRequest(
+                    surface="reasoning",
+                    destination=self._exit_destination(model),
+                    payload_text=f"{system_prompt}\n\n{query}",
+                    student_names=tuple(self._known_student_names()),
+                )
+            )
+            if not decision.allowed:
+                return None
         url, headers = self._resolve_endpoint(model)
         if self._is_external_model(model):
             log_event("external_call_made", query_text=query)
@@ -205,6 +232,41 @@ class ReasoningEngine:
         """
         candidate = (model or "").lower()
         return candidate.startswith(("openai/", "groq/", "mistral/")) or ":cloud" in candidate
+
+    @staticmethod
+    def _exit_destination(model: str) -> str:
+        candidate = (model or "").lower()
+        if candidate.startswith("openai/"):
+            return "openai"
+        if candidate.startswith("groq/"):
+            return "groq"
+        if candidate.startswith("mistral/"):
+            return "mistral"
+        if ":cloud" in candidate:
+            return "ollama:cloud"
+        return "local"
+
+    @staticmethod
+    def _known_student_names() -> list[str]:
+        """Best-effort roster names for outbound checks.
+
+        Reasoning is lower-level than the web route, so it cannot depend on
+        request context. Reading the local student store here gives the exit
+        gate enough context to catch name-only prompts before cloud calls.
+        Failure stays fail-soft because explicit privacy patterns and
+        local_only still fail closed independently.
+        """
+        try:
+            from src.education.student_lens import StudentLensStore
+
+            with StudentLensStore() as store:
+                return [
+                    str(lens.get("display_name") or "")
+                    for lens in store.list_lenses()
+                    if str(lens.get("display_name") or "").strip()
+                ]
+        except Exception:
+            return []
 
     @staticmethod
     def _is_ollama_model(model: str) -> bool:

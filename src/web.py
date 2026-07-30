@@ -98,6 +98,7 @@ async def _enforce_role_gate(request: Request, call_next):
         path.startswith("/api/observe/")
         or path.startswith("/api/students")
         or path.startswith("/api/teacher/")
+        or path.startswith("/api/cohort-plans")
         or path.startswith("/api/extraction/")
     ):
         required_roles = TEACHER_OR_HIGHER
@@ -1959,12 +1960,20 @@ async def voice_tts(request: Request):
             status_code=400,
         )
 
-    from src.lingua_viva.governance import check_publication_safety
+    from src.lingua_viva.exit_gates import ExitRequest, check_exit
     from src.lingua_viva.privacy_log import log_event
 
     def gate() -> dict:
         names = _active_student_names()
-        return check_publication_safety({"text": text}, student_names=names)
+        decision = check_exit(
+            ExitRequest(
+                surface="tts",
+                destination="rime",
+                payload_text=text,
+                student_names=tuple(names),
+            )
+        )
+        return decision.as_dict()
 
     try:
         safety = await asyncio.to_thread(gate)
@@ -1979,7 +1988,7 @@ async def voice_tts(request: Request):
             status_code=403,
         )
 
-    if safety["blocked"]:
+    if not safety["allowed"]:
         await asyncio.to_thread(log_event, "voice_kept_local_student_data")
         return JSONResponse(
             {
@@ -2421,10 +2430,8 @@ async def governance_observation_export(payload: dict):
 
     def build():
         from src.education.student_lens import LensNotFoundError
-        from src.lingua_viva.governance import (
-            build_observation_pack,
-            check_publication_safety,
-        )
+        from src.lingua_viva.exit_gates import ExitRequest, check_exit
+        from src.lingua_viva.governance import build_observation_pack
 
         def do(store):
             names = [
@@ -2435,10 +2442,23 @@ async def governance_observation_export(payload: dict):
                 pack = build_observation_pack(student_id, store=store)
             except LensNotFoundError:
                 return {"__error__": "No student with that id on this computer.", "__status__": 404}
-            safety = check_publication_safety(pack, student_names=names)
-            if safety["blocked"]:
+            exit_decision = check_exit(
+                ExitRequest(
+                    surface="governance_export",
+                    destination="governance_export",
+                    student_ids=(student_id,),
+                    student_names=tuple(names),
+                    metadata={"pack": pack},
+                )
+            )
+            safety = {
+                "blocked": not exit_decision.allowed,
+                "violations": list(exit_decision.violations),
+                "enforced_rules": ["privacy_rules.student_data", "privacy_rules.ai_attribution"],
+            }
+            if not exit_decision.allowed:
                 return {
-                    "__error__": safety["violations"][0]["message"],
+                    "__error__": (safety["violations"] or [{"message": "This export is not safe to share."}])[0]["message"],
                     "__status__": 422,
                     "__safety__": safety,
                 }
@@ -2458,9 +2478,19 @@ async def governance_observation_export(payload: dict):
                     summary="Sealed observation export; student identifiers remain inside the sealed pack only.",
                 )
                 upsert_deliverable(deliverable)
-                return {"pack": pack, "publication_safety": safety, "audit_receipt": receipt.as_dict(), "deliverable": deliverable.as_dict()}
+                return {
+                    "pack": pack,
+                    "publication_safety": safety,
+                    "exit_gate": {"allowed": True, "external": True, "surface": "governance_export"},
+                    "audit_receipt": receipt.as_dict(),
+                    "deliverable": deliverable.as_dict(),
+                }
             except Exception:
-                return {"pack": pack, "publication_safety": safety}
+                return {
+                    "pack": pack,
+                    "publication_safety": safety,
+                    "exit_gate": {"allowed": True, "external": True, "surface": "governance_export"},
+                }
 
         return _with_student_store(do)
 
@@ -3517,6 +3547,268 @@ async def student_rti_update(student_id: str, payload: dict):
         raise
 
 
+def _decision_deliverable(record: dict, record_type: str, session_id: str = "") -> tuple[dict, dict]:
+    if record_type == "cohort_lesson_plan":
+        from src.education.cohort_planning import content_hash
+    else:
+        from src.education.help_artifacts import content_hash
+    from src.lingua_viva.audit_receipts.builder import build_receipt
+    from src.lingua_viva.deliverables.schema import (
+        DeliverableLocation,
+        DeliverableRecord,
+        compute_deliverable_id,
+    )
+    from src.lingua_viva.deliverables.store import upsert_deliverable
+
+    record_id = str(record.get("artifact_id") or record.get("portfolio_entry_id") or record.get("plan_id") or uuid.uuid4().hex)
+    trace_id = f"{record_type}-{record_id}"
+    deliverable_id = compute_deliverable_id(trace_id, "")
+    title = str(record.get("title") or record_type.replace("_", " ").title())
+    deliverable = DeliverableRecord(
+        deliverable_id=deliverable_id,
+        session_id=session_id,
+        trace_id=trace_id,
+        type=record_type,
+        title=title,
+        status="created",
+        location=DeliverableLocation(kind="none"),
+        summary="Teacher-approved local learning artifact. Not sent or shared.",
+        content_hash=content_hash(record),  # type: ignore[arg-type]
+    )
+    upsert_deliverable(deliverable)
+    receipt = build_receipt(
+        scope=record_type,
+        session_id=session_id,
+        trace_id=trace_id,
+        deliverable_id=deliverable_id,
+        source_record_ids=[
+            str(item)
+            for item in record.get("source_observation_ids", [])
+            if str(item).strip()
+        ],
+    )
+    return deliverable.as_dict(), receipt.as_dict()
+
+
+def _cohort_lesson_from_payload(data: dict, teacher_id: str):
+    from src.education.content_differentiator import LessonInput
+
+    lesson_payload = data.get("lesson") if isinstance(data.get("lesson"), dict) else {}
+    lesson = LessonInput(
+        ib_programme=str(lesson_payload.get("ib_programme") or "PYP"),
+        subject=str(lesson_payload.get("subject") or ""),
+        unit_title=str(lesson_payload.get("unit_title") or ""),
+        topic=str(lesson_payload.get("topic") or ""),
+        atl_skills=[str(item) for item in lesson_payload.get("atl_skills") or []],
+        cefr_target=str(lesson_payload.get("cefr_target") or "A2"),
+        duration_minutes=int(lesson_payload.get("duration_minutes") or 45),
+        language_of_instruction=str(lesson_payload.get("language_of_instruction") or "en"),
+        created_by=teacher_id,
+    )
+    errors = lesson.validate()
+    if errors:
+        raise ValueError("; ".join(errors))
+    return lesson
+
+
+@app.post("/api/cohort-plans/preview")
+async def cohort_plans_preview(request: Request, payload: dict):
+    from src.education.cohort_planning import generate_cohort_plan
+    from src.lingua_viva.access_roles import effective_teacher_id
+
+    teacher_id = effective_teacher_id(request, str(payload.get("teacher_id") or "local-teacher"))
+    try:
+        lesson = _cohort_lesson_from_payload(payload, teacher_id)
+    except (TypeError, ValueError) as exc:
+        return JSONResponse({"error": "invalid_lesson", "detail": str(exc)}, status_code=400)
+    student_ids = payload.get("student_ids") if isinstance(payload.get("student_ids"), list) else None
+    teacher_notes = payload.get("teacher_notes") if isinstance(payload.get("teacher_notes"), list) else None
+
+    def build(store):
+        return generate_cohort_plan(store, teacher_id, lesson, student_ids=student_ids, teacher_notes=teacher_notes).as_dict()
+
+    try:
+        plan = await asyncio.to_thread(_with_student_store, build)
+    except PermissionError as exc:
+        return JSONResponse({"error": "unauthorized_student_ids", "detail": str(exc)}, status_code=422)
+    except ValueError as exc:
+        return JSONResponse({"error": "unsafe_teacher_edit", "detail": str(exc)}, status_code=422)
+    return {"plan": plan, "requires_teacher_approval": True, "writes": {"deliverables": 0, "audit_receipts": 0}}
+
+
+@app.post("/api/cohort-plans/approve")
+async def cohort_plans_approve(request: Request, payload: dict):
+    from src.education.cohort_planning import approve_cohort_plan, save_cohort_plan
+    from src.lingua_viva.access_roles import effective_teacher_id
+    from src.lingua_viva.governance import check_publication_safety
+
+    teacher_id = effective_teacher_id(request, str(payload.get("teacher_id") or "local-teacher"))
+    draft = payload.get("plan") if isinstance(payload.get("plan"), dict) else payload.get("draft")
+    if not isinstance(draft, dict) or not draft:
+        return JSONResponse({"error": "plan is required"}, status_code=400)
+    draft = dict(draft)
+    draft["teacher_id"] = teacher_id
+    teacher_edits = payload.get("teacher_edits") if isinstance(payload.get("teacher_edits"), dict) else {}
+
+    def approve(_store):
+        approved = approve_cohort_plan(draft, teacher_edits)
+        student_names = [item.get("display_name", "") for item in approved.as_dict().get("student_assignments", [])]
+        student_facing_safety = check_publication_safety(
+            {"tiers": (approved.content_pack.get("tiers") or {})},
+            student_names=[str(name) for name in student_names],
+        )
+        teacher_facing_safety = check_publication_safety(
+            {"teacher_guide_markdown": approved.teacher_guide_markdown, "teacher_notes": approved.teacher_notes},
+            student_names=[],
+        )
+        if student_facing_safety["blocked"] or teacher_facing_safety["blocked"]:
+            return {
+                "__error__": "unsafe_teacher_edit",
+                "__status__": 422,
+                "__safety__": {"student_facing": student_facing_safety, "teacher_facing": teacher_facing_safety},
+            }
+        save_cohort_plan(approved)
+        deliverable, receipt = _decision_deliverable(approved.as_dict(), "cohort_lesson_plan", broadcaster.session_id or "")
+        return {
+            "record": approved.as_dict(),
+            "publication_safety": {"student_facing": student_facing_safety, "teacher_facing": teacher_facing_safety},
+            "deliverable": deliverable,
+            "audit_receipt": receipt,
+        }
+
+    try:
+        result = await asyncio.to_thread(_with_student_store, approve)
+    except ValueError as exc:
+        return JSONResponse({"error": "unsafe_teacher_edit", "detail": str(exc)}, status_code=422)
+    if "__error__" in result:
+        return JSONResponse({"error": result["__error__"], "publication_safety": result.get("__safety__")}, status_code=result["__status__"])
+    return result
+
+
+@app.get("/api/cohort-plans")
+async def cohort_plans_list(request: Request, teacher_id: str = "local-teacher", limit: int = 50):
+    from src.education.cohort_planning import read_cohort_plans
+    from src.lingua_viva.access_roles import effective_teacher_id
+
+    effective_id = effective_teacher_id(request, teacher_id)
+    return {"plans": read_cohort_plans(effective_id, limit=limit), "teacher_id": effective_id}
+
+
+@app.post("/api/students/{student_id}/help-artifact/preview")
+async def help_artifact_preview(student_id: str, request: Request, payload: dict):
+    from src.education.help_artifacts import generate_help_artifact
+    from src.lingua_viva.access_roles import effective_teacher_id
+
+    teacher_id = effective_teacher_id(request, str(payload.get("teacher_id") or "local-teacher"))
+    artifact_type = str(payload.get("artifact_type") or "practice")
+
+    def build(store):
+        draft = generate_help_artifact(store, student_id, teacher_id, artifact_type)
+        return draft.as_dict()
+
+    try:
+        draft = await asyncio.to_thread(_with_student_store, build)
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=404)
+    return {"draft": draft, "requires_teacher_approval": True, "writes": {"deliverables": 0, "audit_receipts": 0}}
+
+
+@app.post("/api/students/{student_id}/help-artifact/approve")
+async def help_artifact_approve(student_id: str, request: Request, payload: dict):
+    from src.education.help_artifacts import approve_help_artifact, save_draft
+    from src.lingua_viva.access_roles import effective_teacher_id
+    from src.lingua_viva.governance import check_publication_safety
+
+    teacher_id = effective_teacher_id(request, str(payload.get("teacher_id") or "local-teacher"))
+    draft = payload.get("draft") if isinstance(payload.get("draft"), dict) else {}
+    if not draft:
+        return JSONResponse({"error": "draft is required"}, status_code=400)
+    draft["student_id"] = student_id
+    draft["teacher_id"] = teacher_id
+
+    def approve(store):
+        lens = store.get_lens(student_id)
+        approved = approve_help_artifact(draft, payload.get("teacher_edits") if isinstance(payload.get("teacher_edits"), dict) else {})
+        safety = check_publication_safety(
+            {
+                "title": approved.title,
+                "instructions": approved.instructions,
+                "student_prompt": approved.student_prompt,
+            },
+            student_names=[str(lens.get("display_name") or "")],
+        )
+        if safety["blocked"]:
+            return {"__error__": "unsafe_teacher_edit", "__status__": 422, "__safety__": safety}
+        save_draft(approved)
+        deliverable, receipt = _decision_deliverable(approved.as_dict(), "help_artifact", broadcaster.session_id or "")
+        return {"record": approved.as_dict(), "publication_safety": safety, "deliverable": deliverable, "audit_receipt": receipt}
+
+    try:
+        result = await asyncio.to_thread(_with_student_store, approve)
+    except ValueError as exc:
+        return JSONResponse({"error": "unsafe_teacher_edit", "detail": str(exc)}, status_code=422)
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=404)
+    if "__error__" in result:
+        return JSONResponse({"error": result["__error__"], "publication_safety": result.get("__safety__")}, status_code=result["__status__"])
+    return result
+
+
+@app.post("/api/students/{student_id}/portfolio-entry/preview")
+async def portfolio_entry_preview(student_id: str, request: Request, payload: dict):
+    from src.education.help_artifacts import generate_portfolio_entry
+    from src.lingua_viva.access_roles import effective_teacher_id
+
+    teacher_id = effective_teacher_id(request, str(payload.get("teacher_id") or "local-teacher"))
+
+    def build(store):
+        draft = generate_portfolio_entry(store, student_id, teacher_id)
+        return draft.as_dict()
+
+    try:
+        draft = await asyncio.to_thread(_with_student_store, build)
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=404)
+    return {"draft": draft, "requires_teacher_approval": True, "writes": {"deliverables": 0, "audit_receipts": 0}}
+
+
+@app.post("/api/students/{student_id}/portfolio-entry/approve")
+async def portfolio_entry_approve(student_id: str, request: Request, payload: dict):
+    from src.education.help_artifacts import approve_portfolio_entry, save_draft
+    from src.lingua_viva.access_roles import effective_teacher_id
+    from src.lingua_viva.governance import check_publication_safety
+
+    teacher_id = effective_teacher_id(request, str(payload.get("teacher_id") or "local-teacher"))
+    draft = payload.get("draft") if isinstance(payload.get("draft"), dict) else {}
+    if not draft:
+        return JSONResponse({"error": "draft is required"}, status_code=400)
+    draft["student_id"] = student_id
+    draft["teacher_id"] = teacher_id
+
+    def approve(store):
+        lens = store.get_lens(student_id)
+        approved = approve_portfolio_entry(draft, payload.get("teacher_edits") if isinstance(payload.get("teacher_edits"), dict) else {})
+        safety = check_publication_safety(
+            {"title": approved.title, "body": approved.body},
+            student_names=[str(lens.get("display_name") or "")],
+        )
+        if safety["blocked"]:
+            return {"__error__": "unsafe_teacher_edit", "__status__": 422, "__safety__": safety}
+        save_draft(approved)
+        deliverable, receipt = _decision_deliverable(approved.as_dict(), "portfolio_entry", broadcaster.session_id or "")
+        return {"record": approved.as_dict(), "publication_safety": safety, "deliverable": deliverable, "audit_receipt": receipt}
+
+    try:
+        result = await asyncio.to_thread(_with_student_store, approve)
+    except ValueError as exc:
+        return JSONResponse({"error": "unsafe_teacher_edit", "detail": str(exc)}, status_code=422)
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=404)
+    if "__error__" in result:
+        return JSONResponse({"error": result["__error__"], "publication_safety": result.get("__safety__")}, status_code=result["__status__"])
+    return result
+
+
 @app.get("/api/students/{student_id}/lens-as-of")
 async def student_lens_as_of(student_id: str, as_of: str):
     """Reconstruct a student's lens (CEFR snapshot + RTI tier) as it stood at a past timestamp."""
@@ -4028,6 +4320,7 @@ async def google_drive_upload(payload: dict):
     from src.lingua_viva.google_drive_integration import (
         DriveAuthError,
         DriveConfigError,
+        _allowed_export_roots,
         _atomic_write_private_json,
         export_dir,
         prune_student_exports,
@@ -4064,6 +4357,40 @@ async def google_drive_upload(payload: dict):
         return JSONResponse(
             {"error": "Provide student_id or a non-empty file_paths list."}, status_code=400
         )
+
+    from src.lingua_viva.exit_gates import ExitRequest, check_exit
+
+    path_decision = await asyncio.to_thread(
+        check_exit,
+        ExitRequest(
+            surface="drive_upload",
+            destination="google_drive",
+            file_paths=tuple(str(item) for item in file_paths),
+            student_ids=(student_id,) if student_id else (),
+            metadata={"allowed_roots": tuple(str(root) for root in _allowed_export_roots())},
+        ),
+    )
+    if not path_decision.allowed:
+        import hashlib
+
+        def path_hash(raw_path) -> str:
+            return hashlib.sha256(str(raw_path).encode("utf-8")).hexdigest()[:16]
+
+        return {
+            "uploaded": [],
+            "failed": [
+                {
+                    "path_hash": path_hash(path),
+                    "status": "outside_shareable_area",
+                    "message": "Only Lingua Viva deliverables can be shared to Drive.",
+                }
+                for path in file_paths
+            ],
+            "exit_gate": {
+                "allowed": False,
+                "blocked_reason": path_decision.blocked_reason,
+            },
+        }
 
     try:
         result = await asyncio.to_thread(upload_paths, file_paths, folder_id)

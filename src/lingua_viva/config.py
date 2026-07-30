@@ -120,6 +120,23 @@ def ollama_reachable() -> bool:
         return False
 
 
+def ollama_embedding_reachable(model: str = "nomic-embed-text", timeout: int = 3) -> bool:
+    payload = json.dumps({"model": model, "prompt": "probe"}).encode("utf-8")
+    req = request.Request(
+        "http://localhost:11434/api/embeddings",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with request.urlopen(req, timeout=timeout) as response:
+            body = json.loads(response.read())
+        embedding = body.get("embedding")
+        return isinstance(embedding, list) and bool(embedding)
+    except (error.URLError, ConnectionError, TimeoutError, OSError, json.JSONDecodeError):
+        return False
+
+
 def provider_status() -> dict:
     config = read_provider_config() or {}
     default_provider = config.get("default_provider")

@@ -166,7 +166,14 @@ REPO = Path(__file__).resolve().parent.parent
 #   v77 (2026-07-30): SIR Phase 2B schedule-change ack summary endpoint.
 #   v78 (2026-07-30): server-side auth role gate middleware.
 #   v79 (2026-07-30): auth role gate hardening for teacher-owned writes.
-EXPECTED_VERSION = 79
+#   v80 (2026-07-30): native exit integrity gates for TTS, Drive upload,
+#     and governance export web paths.
+#   v81 (2026-07-30): exit gate hardening for blocked Drive path disclosure.
+#   v82 (2026-07-30): teacher decision flywheel backend preview/approval routes.
+#   v83 (2026-07-30): teacher decision flywheel preview non-mutation hardening.
+#   v84 (2026-07-30): teacher decision flywheel complete local audit receipts.
+#   v85 (2026-07-30): cohort lesson-planning backend preview/approval/list routes.
+EXPECTED_VERSION = 85
 
 
 def _html() -> str:

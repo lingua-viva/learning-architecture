@@ -29,7 +29,7 @@ import pytest
 from src.education.document_parser import DocumentParser
 from src.education.document_store import DocumentStore, EmbeddingUnavailableError
 from src.education.document_retrieval import DocumentRetriever
-from src.lingua_viva.config import ollama_reachable
+from src.lingua_viva.config import ollama_embedding_reachable
 from src.pipeline import Pipeline, ReasonResult
 
 FIXTURE = Path(__file__).parent / "fixtures" / "sample_myp_guide.pdf"
@@ -39,7 +39,7 @@ FIXTURE = Path(__file__).parent / "fixtures" / "sample_myp_guide.pdf"
 # Ollama running get real integration coverage; CI/hermetic environments
 # without it skip rather than fail on an environmental gap.
 requires_ollama = pytest.mark.skipif(
-    not ollama_reachable(), reason="local Ollama embedding endpoint unavailable"
+    not ollama_embedding_reachable(), reason="local Ollama embedding endpoint unavailable"
 )
 
 

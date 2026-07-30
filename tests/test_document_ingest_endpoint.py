@@ -23,7 +23,7 @@ from fastapi.testclient import TestClient
 
 import src.lingua_viva.ingest as lv_ingest
 import src.web as web
-from src.lingua_viva.config import ollama_reachable
+from src.lingua_viva.config import ollama_embedding_reachable
 
 client = TestClient(web.app)
 
@@ -31,7 +31,7 @@ FIXTURE = Path(__file__).parent / "fixtures" / "sample_myp_guide.pdf"
 
 
 @pytest.mark.skipif(
-    not ollama_reachable(), reason="local Ollama embedding endpoint unavailable"
+    not ollama_embedding_reachable(), reason="local Ollama embedding endpoint unavailable"
 )
 def test_ingest_endpoint_accepts_pdf_and_stores_chunks(tmp_path, monkeypatch):
     monkeypatch.setattr(lv_ingest, "DOCUMENT_STORE_PATH", tmp_path / "documents.db")
@@ -118,7 +118,7 @@ def test_ingest_endpoint_gives_friendly_error_on_corrupt_pdf(tmp_path, monkeypat
 
 
 @pytest.mark.skipif(
-    not ollama_reachable(), reason="local Ollama embedding endpoint unavailable"
+    not ollama_embedding_reachable(), reason="local Ollama embedding endpoint unavailable"
 )
 def test_ingest_endpoint_never_trusts_a_client_supplied_path(tmp_path, monkeypatch):
     """The uploaded filename must never be used as a real filesystem path —

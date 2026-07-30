@@ -392,6 +392,51 @@ reachable_from_ui:
       archives the teacher's copy before replacing — never destroys work.
 
 intentionally_backend_only:
+  - route: "POST /api/cohort-plans/preview"
+    status: deferred_undecided
+    reason: >-
+      Cohort lesson-planning backend slice (2026-07-30). Builds a local
+      draft plan from teacher lesson intent plus the effective teacher roster;
+      UI workbench placement is deferred.
+
+  - route: "POST /api/cohort-plans/approve"
+    status: deferred_undecided
+    reason: >-
+      Cohort lesson-planning backend slice (2026-07-30). Explicit approval
+      writes the local cohort_lesson_plan deliverable/audit records; UI
+      workbench placement is deferred.
+
+  - route: "GET /api/cohort-plans"
+    status: deferred_undecided
+    reason: >-
+      Cohort lesson-planning backend slice (2026-07-30). Lists locally saved
+      teacher-owned plans for API/QA verification; UI workbench placement is
+      deferred.
+
+  - route: "POST /api/students/{student_id}/help-artifact/preview"
+    status: deferred_undecided
+    reason: >-
+      Teacher decision flywheel backend slice (2026-07-30). Produces a local
+      draft from student lens evidence; UI workbench placement is deferred.
+
+  - route: "POST /api/students/{student_id}/help-artifact/approve"
+    status: deferred_undecided
+    reason: >-
+      Teacher decision flywheel backend slice (2026-07-30). Explicit approval
+      writes deliverable/audit records; UI workbench placement is deferred.
+
+  - route: "POST /api/students/{student_id}/portfolio-entry/preview"
+    status: deferred_undecided
+    reason: >-
+      Teacher decision flywheel backend slice (2026-07-30). Produces a local
+      portfolio-entry draft; UI workbench placement is deferred.
+
+  - route: "POST /api/students/{student_id}/portfolio-entry/approve"
+    status: deferred_undecided
+    reason: >-
+      Teacher decision flywheel backend slice (2026-07-30). Explicit approval
+      writes deliverable/audit records; UI workbench placement is deferred.
+
   - route: "GET /api/ops/staffing-summary"
     status: deferred_undecided
     reason: >-

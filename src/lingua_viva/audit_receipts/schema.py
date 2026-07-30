@@ -5,7 +5,16 @@ import json
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 
-SCOPES = ("query", "action_plan", "deliverable", "workflow", "observation_export")
+SCOPES = (
+    "query",
+    "action_plan",
+    "deliverable",
+    "workflow",
+    "observation_export",
+    "help_artifact",
+    "portfolio_entry",
+    "cohort_lesson_plan",
+)
 
 
 def now_iso() -> str:

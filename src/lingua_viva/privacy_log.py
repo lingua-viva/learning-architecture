@@ -50,6 +50,9 @@ def _generic_detail(event_type: str) -> str:
         "drive_folder_disconnected": "A Google Drive folder was disconnected. Local copies stayed on this machine.",
         "drive_account_connected": "A Google account was signed in for Drive access on this machine.",
         "drive_account_disconnected": "The Google account was signed out and its saved access was removed from this machine.",
+        "exit_gate_allowed": "A requested external boundary action passed Lingua Viva's exit gate.",
+        "exit_gate_blocked": "Lingua Viva blocked a requested external boundary action before private data could leave this computer.",
+        "exit_gate_scrubbed": "Lingua Viva scrubbed a requested external boundary action before it left this computer.",
     }
     return details.get(event_type, "Privacy event recorded locally.")
 
