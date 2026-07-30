@@ -37,3 +37,56 @@ def test_grounding_gir_penalizes_unsupported_claims(monkeypatch, tmp_path):
     assert result.gir.total_claims == 2
     assert result.gir.unsupported_claims == 1
     assert result.gir.uncertainty_claims == 1
+
+
+def test_grounding_floors_low_confidence_synthesis_even_with_citation(monkeypatch, tmp_path):
+    monkeypatch.setenv("LV_STATE_HOME", str(tmp_path))
+    result = build_grounding_result(
+        trace={"trace_id": "T3", "source_citations": ["Manuale v1"]},
+        query_text="How should I teach an Italian lesson?",
+        content="Ollama appears to be down. Check if it is running, then try again.",
+        synthesis_confidence=0.0,
+    )
+    assert result.tier_used == "knowledge"
+    assert result.gir.total_claims == 2
+    assert result.gir.unsupported_claims == 2
+    assert result.gir.score == 0.0
+
+
+def test_grounding_ignores_irrelevant_ledger_records(monkeypatch, tmp_path):
+    monkeypatch.setenv("LV_STATE_HOME", str(tmp_path))
+    observed_at = now_iso()
+    upsert(SourceRecord(
+        source_record_id=compute_source_record_id("drive", "folder", "container", "doc"),
+        source_type="drive",
+        source_id="folder",
+        container="container",
+        record_id="doc",
+        title="Drive lesson",
+        uri="gdrive://doc",
+        retrieval_scope="content",
+        created_at=observed_at,
+        observed_at=observed_at,
+        provenance="import",
+        summary="Italian curriculum lesson material",
+    ))
+    result = build_grounding_result(
+        trace={"trace_id": "T4"},
+        query_text="Which bus route should a new family take tomorrow?",
+        content="The bus route is number 42.",
+    )
+    assert result.tier_used == "none"
+    assert result.sources_used == []
+    assert result.gir.unsupported_claims == 1
+    assert result.gir.score == 0.0
+
+
+def test_grounding_does_not_treat_generic_manuale_as_universal_source(monkeypatch, tmp_path):
+    monkeypatch.setenv("LV_STATE_HOME", str(tmp_path))
+    result = build_grounding_result(
+        trace={"trace_id": "T5", "source_citations": ["Manuale v1"]},
+        query_text="What is the latest local train disruption near school?",
+        content="The train is delayed.",
+    )
+    assert result.tier_used == "none"
+    assert result.gir.score == 0.0

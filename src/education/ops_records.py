@@ -88,7 +88,7 @@ _COVERAGE_TRANSITIONS: dict[str, frozenset[str]] = {
     # "resolved" from open/claimed = withdrawn (teacher pressed Cancel on
     # the absence flow, or the request became moot before confirmation).
     "open": frozenset({"claimed", "confirmed", "resolved"}),
-    "claimed": frozenset({"confirmed", "resolved"}),
+    "claimed": frozenset({"confirmed", "resolved", "open"}),  # open = coordinator rejection
     "confirmed": frozenset(),
     "resolved": frozenset(),
 }

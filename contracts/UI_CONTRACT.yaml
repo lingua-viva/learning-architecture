@@ -460,7 +460,21 @@
 #     /api/query returns gir_score/voice_tone/tone_prefix, speakLocally
 #     fallback preserves hedge prefix so low-GIR answers stay hedged even
 #     on the privacy fallback path.
-version: 70
+# v71 (2026-07-30): re-lock after concurrent commit of GIR voice tone build
+#     in another window.
+# v72 (2026-07-30): voice query streaming slice — src/web.py adds
+#     POST /api/query/stream with SSE lifecycle, answer_sentence, and final
+#     result events while keeping /api/query JSON-compatible; static/index.html
+#     routes voice-originated Ask through the stream when available and queues
+#     early sentence TTS without interrupting prior segments.
+# v73 (2026-07-30): re-lock after removing a dead local variable from the
+#     v72 stream parser; no behavior change beyond the settled v72 slice.
+# v74 (2026-07-30): GIR hardening review — src/web.py no longer invents
+#     Manuale v1 citations for uncited /api/query answers; protected API
+#     response helper re-locked after grounding calibration fix.
+# v75 (2026-07-30): Still I Rise absence+coverage MVP — added
+#     GET /api/ops/staffing-summary endpoint (src/web.py only).
+version: 75
 files:
   - static/index.html
   - static/sw.js

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 
-WORKFLOW_IDS = ("GW-EDU-001", "GW-EDU-002", "GW-EDU-003", "GW-DRIVE-004", "GW-SLACK-005")
+WORKFLOW_IDS = ("GW-EDU-001", "GW-EDU-002", "GW-EDU-003", "GW-DRIVE-004", "GW-SLACK-005", "GW-VOICE-006")
 WORKFLOW_STATUSES = ("PASS", "FAIL", "SKIPPED_MISSING_CREDENTIALS", "SKIPPED_NOT_BUILT")
 STEP_STATUSES = ("PASS", "FAIL", "SKIP")
 MODES = ("hermetic", "live")

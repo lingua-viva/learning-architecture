@@ -312,6 +312,9 @@ reachable_from_ui:
   - route: "POST /api/query"
     call_site: 'api("/api/query"'
 
+  - route: "POST /api/query/stream"
+    call_site: '"/api/query/stream"'
+
   - route: "GET /api/students/support-summary"
     call_site: 'api("/api/students/support-summary")'
 
@@ -389,6 +392,13 @@ reachable_from_ui:
       archives the teacher's copy before replacing — never destroys work.
 
 intentionally_backend_only:
+  - route: "GET /api/ops/staffing-summary"
+    status: deferred_undecided
+    reason: >-
+      Still I Rise absence+coverage MVP (2026-07-30). Read-only staffing
+      summary from ops records. UI surface deferred — backend/reporting is
+      the safer first slice per spec.
+
   - route: "POST /api/action-plans/preview"
     status: deferred_undecided
     reason: >-

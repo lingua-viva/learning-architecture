@@ -16,6 +16,18 @@ from src.lingua_viva.grounding.schema import (
 
 _SENTENCE_SPLIT_RE = re.compile(r"[.!?]+")
 _UNCERTAINTY_MARKERS = ("might", "may ", "maybe", "possibly", "unclear", "unknown", "uncertain", "probably", "likely")
+_TOKEN_RE = re.compile(r"[a-z0-9]+")
+_STOPWORDS = frozenset({
+    "a", "about", "and", "are", "as", "at", "be", "by", "can", "do", "does", "for",
+    "from", "give", "how", "i", "in", "is", "it", "me", "of", "on", "or", "our",
+    "should", "student", "students", "tell", "that", "the", "their", "this", "to",
+    "tomorrow", "what", "when", "where", "which", "with",
+})
+_MANUALE_RELEVANT_TERMS = frozenset({
+    "beginner", "beginners", "cefr", "class", "classroom", "curriculum", "grade",
+    "greetings", "independent", "italian", "language", "lesson", "listening",
+    "manuale", "practice", "speaking", "unit",
+})
 
 
 def _get(obj: Any, name: str, default: Any = None) -> Any:
@@ -39,6 +51,29 @@ def _count_claims(content: str) -> tuple[int, int]:
     fragments = [f.strip() for f in _SENTENCE_SPLIT_RE.split(content or "") if f.strip()]
     uncertain = sum(1 for f in fragments if any(marker in f.lower() for marker in _UNCERTAINTY_MARKERS))
     return len(fragments), uncertain
+
+
+def _tokens(text: str) -> set[str]:
+    return {token for token in _TOKEN_RE.findall((text or "").lower()) if token not in _STOPWORDS and len(token) > 2}
+
+
+def _record_relevant(record: dict, query_tokens: set[str]) -> bool:
+    if not query_tokens:
+        return False
+    haystack = " ".join(
+        str(record.get(field) or "")
+        for field in ("title", "summary", "uri", "container")
+    )
+    record_tokens = _tokens(haystack)
+    return bool(query_tokens & record_tokens)
+
+
+def _citation_relevant(citation: str, query_tokens: set[str]) -> bool:
+    citation_tokens = _tokens(citation)
+    if query_tokens & citation_tokens:
+        return True
+    generic_manuale = (citation or "").strip().lower() in {"manuale", "manuale v1"}
+    return generic_manuale and bool(query_tokens & _MANUALE_RELEVANT_TERMS)
 
 
 def _records_by_type() -> dict[str, list[dict]]:
@@ -65,6 +100,7 @@ def build_grounding_result(
     query_hash: str = "",
     session_id: str = "",
     intent: str = "",
+    synthesis_confidence: float | None = None,
 ) -> GroundingResult:
     trace_id = _get(trace, "trace_id", "") or ""
     resolved_session_id = session_id or _get(trace, "session_id", "") or ""
@@ -77,12 +113,15 @@ def build_grounding_result(
     tier_attempts: list[TierAttempt] = []
     sources_used: list[SourceUsed] = []
     tier_used = "none"
+    query_tokens = _tokens(query_text)
+
     for tier in ("local", "drive", "slack"):
         records = grouped.get(tier, [])[:5]
+        relevant_records = [record for record in records if _record_relevant(record, query_tokens)]
         ids = [str(r.get("source_record_id") or "") for r in records if r.get("source_record_id")]
         status = "hit" if records else "miss"
         tier_attempts.append(TierAttempt(tier=tier, status=status, reason="records_found" if records else "no_records", source_record_ids=ids, count=len(records)))
-        if records and tier_used == "none":
+        if relevant_records and tier_used == "none":
             tier_used = tier
             sources_used = [
                 SourceUsed(
@@ -92,10 +131,11 @@ def build_grounding_result(
                     retrieval_scope=str(r.get("retrieval_scope") or "snippet"),
                     sensitivity_hint=str(r.get("sensitivity_hint") or "unknown"),
                 )
-                for r in records
+                for r in relevant_records
             ]
 
-    knowledge_hit = bool(_get(trace, "source_citations", None) or _get(trace, "sources", None))
+    citation_values = list(_get(trace, "source_citations", None) or _get(trace, "sources", None) or [])
+    knowledge_hit = any(_citation_relevant(str(citation), query_tokens) for citation in citation_values)
     tier_attempts.append(TierAttempt(tier="knowledge", status="hit" if knowledge_hit else "miss", reason="citations_present" if knowledge_hit else "no_entries", count=1 if knowledge_hit else 0))
     if tier_used == "none" and knowledge_hit:
         tier_used = "knowledge"
@@ -103,8 +143,13 @@ def build_grounding_result(
 
     total_claims, uncertainty_claims = _count_claims(content)
     grounded = bool(sources_used or knowledge_hit)
-    unsupported_claims = max(total_claims - uncertainty_claims, 0) if total_claims and not grounded else 0
-    score = 1.0 - ((unsupported_claims + uncertainty_claims) / max(total_claims, 1))
+    low_synthesis_confidence = synthesis_confidence is not None and synthesis_confidence < 0.1
+    if low_synthesis_confidence:
+        unsupported_claims = total_claims
+        score = 0.0
+    else:
+        unsupported_claims = max(total_claims - uncertainty_claims, 0) if total_claims and not grounded else 0
+        score = 1.0 - ((unsupported_claims + uncertainty_claims) / max(total_claims, 1))
 
     return GroundingResult(
         grounding_id=compute_grounding_id(trace_id, resolved_query_hash),

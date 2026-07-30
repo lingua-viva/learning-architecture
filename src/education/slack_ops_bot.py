@@ -99,6 +99,25 @@ MSG_VOICE_CLIP = (
     "I can't listen to voice clips yet — type it as a message and I'll "
     "log it."
 )
+MSG_ABSENCE_MODAL_RECEIPT = (
+    "Got it — your absence for {date} has been recorded.{coverage}"
+)
+MSG_ABSENCE_MODAL_COVERAGE_SENT = " A coverage request has been posted to the ops channel."
+MSG_COVERAGE_CLAIMED_PENDING = (
+    "Coverage claimed: {claimer}{window}. Awaiting coordinator confirmation."
+)
+MSG_COVERAGE_COORDINATOR_CONFIRM = (
+    "Please confirm coverage for {who}{window}{date}. "
+    "Claimed by {claimer}."
+)
+MSG_COVERAGE_CONFIRMED = "Coverage confirmed: {claimer}{window}."
+MSG_PARTIAL_CLAIM_NOTED = (
+    "Partial coverage noted: {claimer} can cover {detail}. "
+    "Full coverage is not yet confirmed — this request needs review."
+)
+
+SIR_ABSENCE_MODAL_CALLBACK_ID = "sir_absence_modal"
+SIR_PARTIAL_CLAIM_CALLBACK_ID = "sir_partial_claim_modal"
 
 # Greetings / help asks in a DM. Deliberately narrow: only short messages
 # that are *entirely* a greeting or a help request, so real operational
@@ -200,8 +219,13 @@ class SlackOpsBot:
                 if event.get("type") == "message":
                     await self._handle_message(event)
             elif envelope_type == "interactive":
-                if (payload or {}).get("type") == "block_actions":
+                ptype = (payload or {}).get("type", "")
+                if ptype == "block_actions":
                     await self._handle_block_actions(payload)
+                elif ptype == "view_submission":
+                    await self._handle_view_submission(payload)
+            elif envelope_type == "slash_commands":
+                await self._handle_slash_command(payload)
         except Exception:  # never kill the transport loop
             logger.exception("[slack-ops] envelope handler failed")
 
@@ -380,7 +404,10 @@ class SlackOpsBot:
             self.ops_channel,
             card_text,
             blocks=_blocks(
-                card_text, [_button("Claim coverage", "ops_coverage_claim", cov.id)]
+                card_text, [
+                    _button("Claim all", "ops_coverage_claim", cov.id),
+                    _button("Claim part", "ops_coverage_claim_part", cov.id),
+                ]
             ),
         )
         card_ts = (response or {}).get("ts", "")
@@ -583,6 +610,23 @@ class SlackOpsBot:
                 channel,
                 "Today's file will move to Daily Updates at the start of the next school day.",
             )
+        elif action_id == "ops_coverage_coordinator_confirm":
+            await self._confirm_coverage(
+                value, confirmed_by=display_name, card_channel=channel, card_ts=message_ts
+            )
+        elif action_id == "ops_coverage_coordinator_reject":
+            await self._reject_coverage_claim(value, card_channel=channel, card_ts=message_ts)
+        elif action_id == "ops_coverage_claim_part":
+            if user not in self.teacher_map:
+                if channel:
+                    await self.client.post_message(
+                        channel, MSG_UNKNOWN_USER, thread_ts=message_ts or None
+                    )
+                return
+            await self._handle_partial_claim(
+                value, claimer=display_name, claimer_user_id=user,
+                card_channel=channel, card_ts=message_ts,
+            )
 
     async def _claim_coverage(self, record_id, *, claimer, card_channel, card_ts):
         record = self.store.get_record(record_id)
@@ -636,6 +680,345 @@ class SlackOpsBot:
                         self.ops_channel, card_ts, MSG_COVERAGE_WITHDRAWN
                     )
         await self.client.post_message(channel, MSG_CANCELLED)
+
+    # ------------------------------------------------------------------
+    # Still I Rise: /absence slash command + modal
+    # ------------------------------------------------------------------
+
+    async def _handle_slash_command(self, payload: dict) -> None:
+        command = str(payload.get("command") or "").strip().lower()
+        if command == "/absence":
+            trigger_id = payload.get("trigger_id", "")
+            if trigger_id and hasattr(self.client, "open_view"):
+                await self.client.open_view(trigger_id, self._build_absence_modal())
+
+    @staticmethod
+    def _build_absence_modal() -> dict:
+        """Construct the /absence modal view payload."""
+        def _text_input(block_id: str, label: str, *, optional: bool = False, multiline: bool = False, placeholder: str = "") -> dict:
+            element: dict = {"type": "plain_text_input", "action_id": block_id}
+            if multiline:
+                element["multiline"] = True
+            if placeholder:
+                element["placeholder"] = {"type": "plain_text", "text": placeholder}
+            return {
+                "type": "input",
+                "block_id": block_id,
+                "optional": optional,
+                "label": {"type": "plain_text", "text": label},
+                "element": element,
+            }
+
+        def _static_select(block_id: str, label: str, options: list[str], *, optional: bool = False) -> dict:
+            return {
+                "type": "input",
+                "block_id": block_id,
+                "optional": optional,
+                "label": {"type": "plain_text", "text": label},
+                "element": {
+                    "type": "static_select",
+                    "action_id": block_id,
+                    "options": [
+                        {"text": {"type": "plain_text", "text": o}, "value": o}
+                        for o in options
+                    ],
+                },
+            }
+
+        def _datepicker(block_id: str, label: str) -> dict:
+            return {
+                "type": "input",
+                "block_id": block_id,
+                "label": {"type": "plain_text", "text": label},
+                "element": {"type": "datepicker", "action_id": block_id},
+            }
+
+        def _radio(block_id: str, label: str, options: list[str]) -> dict:
+            return {
+                "type": "input",
+                "block_id": block_id,
+                "label": {"type": "plain_text", "text": label},
+                "element": {
+                    "type": "radio_buttons",
+                    "action_id": block_id,
+                    "options": [
+                        {"text": {"type": "plain_text", "text": o}, "value": o}
+                        for o in options
+                    ],
+                },
+            }
+
+        return {
+            "type": "modal",
+            "callback_id": SIR_ABSENCE_MODAL_CALLBACK_ID,
+            "title": {"type": "plain_text", "text": "Report Absence"},
+            "submit": {"type": "plain_text", "text": "Submit"},
+            "close": {"type": "plain_text", "text": "Cancel"},
+            "blocks": [
+                _text_input("campus", "Campus", placeholder="e.g. Nairobi"),
+                _datepicker("date_for", "Date"),
+                _static_select("periods", "Full day or periods",
+                               ["Full day", "Period 1", "Period 2", "Period 3",
+                                "Period 4", "Period 5", "Period 6",
+                                "Morning only", "Afternoon only"]),
+                _text_input("grade_class", "Grade / Class", optional=True, placeholder="e.g. Grade 7"),
+                _text_input("subject", "Subject / Responsibility", optional=True, placeholder="e.g. Mathematics"),
+                _static_select("absence_type", "Absence type",
+                               ["planned_leave", "illness", "emergency", "late_arrival"]),
+                _radio("coverage_needed", "Coverage needed?", ["Yes", "No"]),
+                _text_input("handover_link", "Handover or lesson-plan link", optional=True),
+                _radio("emergency_plan", "Emergency plan available?", ["Yes", "No"]),
+                _radio("contact_teacher", "Coordinator should contact you?", ["Yes", "No"]),
+                _text_input("private_note", "Private note (not shared publicly)", optional=True, multiline=True),
+            ],
+        }
+
+    # ------------------------------------------------------------------
+    # Still I Rise: modal submission handling
+    # ------------------------------------------------------------------
+
+    async def _handle_view_submission(self, payload: dict) -> None:
+        callback_id = (payload.get("view") or {}).get("callback_id", "")
+        if callback_id == SIR_ABSENCE_MODAL_CALLBACK_ID:
+            await self._handle_absence_submission(payload)
+        elif callback_id == SIR_PARTIAL_CLAIM_CALLBACK_ID:
+            await self._handle_partial_claim_submission(payload)
+
+    async def _handle_absence_submission(self, payload: dict) -> None:
+        user_id = (payload.get("user") or {}).get("id", "")
+        if user_id not in self.teacher_map:
+            # Unrostered user — cannot create records
+            dm = await self.client.open_dm(user_id) if user_id else None
+            if dm:
+                await self.client.post_message(dm, MSG_UNKNOWN_USER)
+            return
+
+        teacher_id, display_name = self._teacher_for(user_id)
+        values = self._extract_modal_values(payload)
+
+        date_for = values.get("date_for") or self._today().isoformat()
+        coverage_needed = values.get("coverage_needed", "").lower() == "yes"
+        periods_val = values.get("periods", "Full day")
+        periods_list = [periods_val] if periods_val != "Full day" else []
+
+        # Create absence record — private fields go in extra only
+        extra: dict = {
+            "campus": values.get("campus", ""),
+            "grade_class": values.get("grade_class", ""),
+            "subject": values.get("subject", ""),
+            "absence_type": values.get("absence_type", ""),
+            "handover_link": values.get("handover_link", ""),
+            "emergency_plan": values.get("emergency_plan", "").lower() == "yes",
+            "contact_teacher": values.get("contact_teacher", "").lower() == "yes",
+            "private_note_present": bool(values.get("private_note", "").strip()),
+            "source": "sir_absence_modal",
+        }
+        # Store private note in extra — never in public channels
+        private_note = values.get("private_note", "").strip()
+        if private_note:
+            extra["private_note"] = private_note
+
+        absence = self.store.add_record(
+            category="absence",
+            teacher_id=teacher_id,
+            date_for=date_for,
+            time_window=periods_val if periods_val != "Full day" else "",
+            periods=periods_list,
+            text_raw=f"Absence: {display_name}, {date_for}",
+            text_clean=f"Absence: {display_name}, {date_for}",
+            source_channel="",
+            source_ts="",
+            extra=extra,
+        )
+        self._refresh_daily(absence)
+
+        # If coverage is needed, post a coverage card
+        coverage_msg = ""
+        coverage_record = None
+        if coverage_needed:
+            coverage_record = await self._post_coverage_card(
+                teacher_display=display_name,
+                teacher_id=teacher_id,
+                date_for=date_for,
+                time_window=periods_val if periods_val != "Full day" else "",
+                periods=periods_list,
+                text_clean=f"Coverage needed: {display_name}, {date_for}",
+                source={"source_channel": "", "source_ts": ""},
+            )
+            coverage_msg = MSG_ABSENCE_MODAL_COVERAGE_SENT
+
+        # DM receipt to requester
+        dm = await self.client.open_dm(user_id)
+        if dm:
+            receipt = MSG_ABSENCE_MODAL_RECEIPT.format(
+                date=date_for, coverage=coverage_msg
+            )
+            await self.client.post_message(dm, receipt)
+
+    @staticmethod
+    def _extract_modal_values(payload: dict) -> dict:
+        """Extract flat key-value pairs from Slack view_submission state."""
+        values: dict = {}
+        state = (payload.get("view") or {}).get("state", {}).get("values", {})
+        for block_id, block_data in state.items():
+            for action_id, action_data in block_data.items():
+                atype = action_data.get("type", "")
+                if atype == "plain_text_input":
+                    values[block_id] = action_data.get("value") or ""
+                elif atype == "static_select":
+                    sel = action_data.get("selected_option") or {}
+                    values[block_id] = sel.get("value", "")
+                elif atype == "radio_buttons":
+                    sel = action_data.get("selected_option") or {}
+                    values[block_id] = sel.get("value", "")
+                elif atype == "datepicker":
+                    values[block_id] = action_data.get("selected_date") or ""
+        return values
+
+    # ------------------------------------------------------------------
+    # Still I Rise: coordinator-confirmed coverage
+    # ------------------------------------------------------------------
+
+    async def _claim_coverage_with_confirmation(
+        self, record_id, *, claimer, claimer_user_id, card_channel, card_ts
+    ):
+        """Claim coverage with coordinator approval step."""
+        record = self.store.get_record(record_id)
+        if record is None:
+            return
+        if record.status != "open":
+            if card_channel:
+                await self.client.post_message(
+                    card_channel, MSG_COVERAGE_ALREADY, thread_ts=card_ts
+                )
+            return
+
+        # Transition open -> claimed (not yet confirmed)
+        record = self.store.update_status(
+            record_id, "claimed", claim_by=claimer, claim_at=utc_now_iso()
+        )
+        record = self.store.update_extra(
+            record_id, coordinator_pending=True, claimer_user_id=claimer_user_id
+        )
+        self._refresh_daily(record)
+
+        # Update original card to show tentative
+        window = self._window_label(record)
+        pending_text = MSG_COVERAGE_CLAIMED_PENDING.format(
+            claimer=claimer, window=f", {window}" if window else ""
+        )
+        channel = card_channel or self.ops_channel
+        ts = card_ts or record.extra.get("card_ts", "")
+        if ts:
+            confirm_blocks = _blocks(pending_text, [
+                _button("Confirm assignment", "ops_coverage_coordinator_confirm", record_id),
+                _button("Choose another", "ops_coverage_coordinator_reject", record_id),
+            ])
+            await self.client.update_message(channel, ts, pending_text, blocks=confirm_blocks)
+        else:
+            await self.client.post_message(self.ops_channel, pending_text)
+
+    async def _confirm_coverage(self, record_id, *, confirmed_by, card_channel, card_ts):
+        """Coordinator confirms a claimed coverage assignment."""
+        record = self.store.get_record(record_id)
+        if record is None or record.status != "claimed":
+            return
+        record = self.store.update_status(record_id, "confirmed")
+        record = self.store.update_extra(
+            record_id,
+            coordinator_confirmed_by=confirmed_by,
+            coordinator_confirmed_at=utc_now_iso(),
+            coordinator_pending=False,
+        )
+        self._refresh_daily(record)
+
+        window = self._window_label(record)
+        confirmed_text = MSG_COVERAGE_CONFIRMED.format(
+            claimer=record.claim_by or "unknown",
+            window=f", {window}" if window else "",
+        )
+        channel = card_channel or self.ops_channel
+        ts = card_ts or record.extra.get("card_ts", "")
+        if ts:
+            await self.client.update_message(channel, ts, confirmed_text)
+        else:
+            await self.client.post_message(self.ops_channel, confirmed_text)
+
+        # DM the requester
+        requester_slack = self._slack_user_for_teacher(record.teacher_id)
+        if requester_slack:
+            dm = await self.client.open_dm(requester_slack)
+            if dm:
+                await self.client.post_message(dm, confirmed_text)
+
+    async def _reject_coverage_claim(self, record_id, *, card_channel, card_ts):
+        """Coordinator rejects a claim — revert to open."""
+        record = self.store.get_record(record_id)
+        if record is None or record.status != "claimed":
+            return
+        # Revert to open by creating a fresh coverage request at the same slot
+        record = self.store.update_status(record_id, "open")
+        record = self.store.update_extra(
+            record_id, coordinator_pending=False, claimer_user_id=""
+        )
+        self._refresh_daily(record)
+
+        window = self._window_label(record)
+        card_text = MSG_COVERAGE_CARD.format(
+            who=record.actor_name or "a teacher",
+            window=f", {window}" if window else "",
+            date=f" on {record.date_for}" if record.date_for else "",
+        )
+        channel = card_channel or self.ops_channel
+        ts = card_ts or record.extra.get("card_ts", "")
+        if ts:
+            await self.client.update_message(
+                channel, ts, card_text,
+                blocks=_blocks(card_text, [
+                    _button("Claim coverage", "ops_coverage_claim", record_id),
+                ]),
+            )
+
+    # ------------------------------------------------------------------
+    # Still I Rise: partial coverage claim
+    # ------------------------------------------------------------------
+
+    async def _handle_partial_claim(self, record_id, *, claimer, claimer_user_id, card_channel, card_ts):
+        """Open a partial claim modal or store a simplified partial claim."""
+        record = self.store.get_record(record_id)
+        if record is None or record.status not in ("open", "claimed"):
+            return
+        # Store partial claim in extra, mark needs_review
+        record = self.store.update_extra(
+            record_id,
+            partial_claim={"claimer": claimer, "claimer_user_id": claimer_user_id},
+        )
+        record = self.store.update_status(
+            record_id, "claimed", claim_by=claimer, claim_at=utc_now_iso()
+        ) if record.status == "open" else record
+        # Mark as needing review since full coverage isn't proven
+        if not record.needs_review:
+            self.store._conn.execute(
+                "UPDATE ops_records SET needs_review = 1, review_reason = ? WHERE id = ?",
+                ("partial coverage — not all periods confirmed", record_id),
+            )
+            self.store._conn.commit()
+        self._refresh_daily(record)
+
+        window = self._window_label(record)
+        partial_text = MSG_PARTIAL_CLAIM_NOTED.format(
+            claimer=claimer, detail=window or "some periods",
+        )
+        channel = card_channel or self.ops_channel
+        ts = card_ts or record.extra.get("card_ts", "")
+        if ts:
+            await self.client.update_message(channel, ts, partial_text)
+        else:
+            await self.client.post_message(self.ops_channel, partial_text)
+
+    async def _handle_partial_claim_submission(self, payload: dict) -> None:
+        """Handle partial claim modal submission (future expansion)."""
+        pass  # Minimal path: partial claims use button-based flow above
 
     # ------------------------------------------------------------------
     # Briefings (called by the scheduler or buttons)

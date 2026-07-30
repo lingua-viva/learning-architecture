@@ -1,5 +1,6 @@
 from pathlib import Path
 import asyncio
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
@@ -106,3 +107,124 @@ def test_query_endpoint_times_out_cleanly(monkeypatch):
     body = response.json()
     assert body["type"] == "error"
     assert body["timeout"] is True
+
+
+def _mock_query_result():
+    grounding = SimpleNamespace(
+        as_dict=lambda: {
+            "tier_used": "local",
+            "gir": {"score": 0.91, "method": "claim_support_v1_heuristic"},
+        }
+    )
+    return SimpleNamespace(
+        synthesis=SimpleNamespace(
+            content="Italian is taught through songs. Students also practice classroom phrases.",
+            confidence=0.82,
+            citations=["Manuale v1"],
+            model_used="none",
+        ),
+        classification=SimpleNamespace(
+            riu_id="LV-EDU-001",
+            name="Curriculum support",
+            domain="curriculum",
+            confidence=0.88,
+        ),
+        path_record=SimpleNamespace(
+            gir_score=0.91,
+            gir_method="claim_support_v1_heuristic",
+            voice_tone="plain",
+        ),
+        duration_ms=12,
+        steps_executed=["SCAN", "CLASSIFY", "RETRIEVE", "REASON", "SYNTHESIZE", "STORE"],
+        gap_signals=[],
+        grounding=grounding,
+    )
+
+
+def test_query_stream_emits_sentence_events_and_final_result(monkeypatch, tmp_path):
+    _isolate_runtime(monkeypatch, tmp_path)
+
+    async def fake_query(*_args, **_kwargs):
+        return _mock_query_result()
+
+    import src.lingua_viva.app as lv_app
+
+    monkeypatch.setattr(lv_app, "run_teacher_query", fake_query)
+    response = client.post("/api/query/stream", json={
+        "query": "What languages does this school teach?",
+        "intent": "TEACH",
+    })
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    body = response.text
+    assert "event: query_received" in body
+    assert "event: status" in body
+    assert "event: answer_sentence" in body
+    assert "Italian is taught through songs." in body
+    assert "event: result" in body
+    assert '"gir_score":0.91' in body
+
+
+def test_query_stream_timeout_is_an_sse_error(monkeypatch):
+    async def slow_query(*_args, **_kwargs):
+        await asyncio.sleep(1)
+
+    import src.lingua_viva.app as lv_app
+
+    monkeypatch.setattr(lv_app, "run_teacher_query", slow_query)
+    response = client.post("/api/query/stream", json={
+        "query": "How do I scaffold listening?",
+        "timeout_seconds": 0.01,
+    })
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    body = response.text
+    assert "event: error" in body
+    assert '"timeout":true' in body
+
+
+def test_query_json_shape_survives_stream_helper_extraction(monkeypatch, tmp_path):
+    _isolate_runtime(monkeypatch, tmp_path)
+
+    async def fake_query(*_args, **_kwargs):
+        return _mock_query_result()
+
+    import src.lingua_viva.app as lv_app
+
+    monkeypatch.setattr(lv_app, "run_teacher_query", fake_query)
+    response = client.post("/api/query", json={
+        "query": "What languages does this school teach?",
+        "intent": "TEACH",
+    })
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["type"] == "result"
+    assert body["result"]["content"].startswith("Italian is taught")
+    assert body["gir_score"] == 0.91
+    assert body["gir_method"] == "claim_support_v1_heuristic"
+    assert body["voice_tone"] == "plain"
+
+
+def test_query_response_does_not_invent_default_citation(monkeypatch, tmp_path):
+    _isolate_runtime(monkeypatch, tmp_path)
+    result = _mock_query_result()
+    result.synthesis.citations = []
+
+    async def fake_query(*_args, **_kwargs):
+        return result
+
+    import src.lingua_viva.app as lv_app
+
+    monkeypatch.setattr(lv_app, "run_teacher_query", fake_query)
+    response = client.post("/api/query", json={
+        "query": "What unsupported thing can you tell me?",
+        "intent": "TEACH",
+    })
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["sources"] == []
+    assert body["source_citation"] == ""

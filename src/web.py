@@ -36,6 +36,7 @@ from fastapi.responses import (
     JSONResponse,
     RedirectResponse,
     Response,
+    StreamingResponse,
 )
 import uvicorn
 from urllib.parse import urlencode
@@ -45,6 +46,18 @@ if str(LV_ROOT) not in sys.path:
     sys.path.insert(0, str(LV_ROOT))
 
 app = FastAPI(title="Lingua Viva", docs_url=None, redoc_url=None)
+
+
+def _sse(event: str, data: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, separators=(',', ':'))}\n\n"
+
+
+def _answer_sentences(text: str) -> list[str]:
+    clean = re.sub(r"\s+", " ", str(text or "")).strip()
+    if not clean:
+        return []
+    chunks = re.split(r"(?<=[.!?])\s+|\n+", clean)
+    return [chunk.strip() for chunk in chunks if chunk.strip()] or [clean]
 
 
 @app.middleware("http")
@@ -537,6 +550,39 @@ async def ops_records_for_day(teacher_id: str | None = None, date: str | None = 
                 "date": date_iso,
                 "count": len(records),
                 "records": [asdict(record) for record in records],
+            }
+
+    return await asyncio.to_thread(build)
+
+
+@app.get("/api/ops/staffing-summary")
+async def ops_staffing_summary(date: str | None = None):
+    """Daily staffing summary — absence and coverage counts for a date."""
+
+    def build() -> dict:
+        from src.education.ops_records import OpsRecordStore
+
+        date_iso = (date or "").strip() or _ops_local_today()
+        with OpsRecordStore() as store:
+            records = store.records_for_day(date_iso)
+            absences = [r for r in records if r.category == "absence"]
+            coverage = [r for r in records if r.category == "coverage_request"]
+            confirmed = [r for r in coverage if r.status == "confirmed"]
+            claimed = [r for r in coverage if r.status == "claimed"]
+            awaiting = [r for r in coverage if r.status == "open"]
+            # Periods assigned: sum periods from confirmed coverage records
+            periods_assigned = sum(len(r.periods) for r in confirmed)
+            # Critical unfilled: open requests with no claim
+            critical = [r for r in awaiting if not r.claim_by]
+            return {
+                "date": date_iso,
+                "reported_absences": len(absences),
+                "coverage_requests": len(coverage),
+                "fully_covered": len(confirmed),
+                "awaiting_coverage": len(awaiting),
+                "claimed_awaiting_confirmation": len(claimed),
+                "substitute_periods_assigned": periods_assigned,
+                "critical_unfilled": len(critical),
             }
 
     return await asyncio.to_thread(build)
@@ -3940,6 +3986,95 @@ async def provider_disconnect():
     return {"status": "disconnected"}
 
 
+def _query_timeout_error() -> dict:
+    return {
+        "type": "error",
+        "error": "Local reasoning timed out. Check Ollama, then try again.",
+        "timeout": True,
+        "timestamp": time.time(),
+    }
+
+
+def _query_unavailable_error() -> dict:
+    return {
+        "type": "error",
+        "error": "Ask isn't able to answer free-form questions in this build yet. Try Plan, Prepare, or Observe for now.",
+        "unavailable": True,
+        "timestamp": time.time(),
+    }
+
+
+def _build_query_response(result, query_text: str, session_id: str, eval_mode: bool) -> dict:
+    from src.lingua_viva.privacy_log import log_event
+    from src.lingua_viva.traces import append_trace, new_trace
+
+    source_citations = list(result.synthesis.citations or [])
+    # Provenance is only worth showing if it is measured. Derive it from
+    # the model that actually answered rather than asserting "local".
+    from src.lingua_viva.reasoning import ReasoningEngine as _NativeReasoner
+
+    answered_externally = _NativeReasoner._is_external_model(
+        result.synthesis.model_used or ""
+    )
+    query_trace = new_trace(
+        query_text,
+        domain=result.classification.domain,
+        model_used=result.synthesis.model_used,
+        duration_ms=result.duration_ms,
+        token_count=0,
+        source_citations=source_citations,
+        privacy_events=[],
+        external_calls=1 if answered_externally else 0,
+        route="external" if answered_externally else "local",
+    )
+    append_trace(query_trace)
+    log_event("query_processed_locally", query_text=query_text)
+    grounding = result.grounding.as_dict() if result.grounding else None
+    voice_tone = result.path_record.voice_tone if result.grounding else "plain"
+    gir_score = result.path_record.gir_score if result.grounding else 1.0
+    gir_method = result.path_record.gir_method if result.grounding else ""
+    from src.lingua_viva.voice_tone import resolve_voice_tone
+    tone_prefix = resolve_voice_tone(gir_score)["prefix"]
+    if session_id and not eval_mode:
+        from src.session import increment_session
+
+        increment_session()
+
+    return {
+        "type": "result",
+        "classification": {
+            "node": result.classification.riu_id,
+            "name": result.classification.name,
+            "domain": result.classification.domain,
+            "confidence": result.classification.confidence,
+        },
+        "result": {
+            "content": result.synthesis.content,
+            "confidence": result.synthesis.confidence,
+        },
+        "pipeline": {
+            "steps": result.steps_executed,
+            "external_called": answered_externally,
+            "duration_ms": result.duration_ms,
+            "gap_signals": result.gap_signals,
+        },
+        "trace_id": query_trace.trace_id,
+        "route": "external" if answered_externally else "local",
+        "model_used": result.synthesis.model_used,
+        "duration_ms": result.duration_ms,
+        "source_citation": source_citations[0] if source_citations else "",
+        "sources": source_citations,
+        "grounding": grounding,
+        "gir_score": gir_score,
+        "gir_method": gir_method,
+        "voice_tone": voice_tone,
+        "tone_prefix": tone_prefix,
+        "external_calls": 1 if answered_externally else 0,
+        "session_id": session_id,
+        "timestamp": time.time(),
+    }
+
+
 @app.post("/api/query")
 async def query_endpoint(payload: dict):
     """Run a teacher query through the Lingua Viva app runtime."""
@@ -3950,7 +4085,7 @@ async def query_endpoint(payload: dict):
     if not query_text:
         return JSONResponse({"error": "query is required"}, status_code=400)
 
-    from src.session import get_active_session, increment_session
+    from src.session import get_active_session
 
     session_id = get_active_session()
 
@@ -3975,93 +4110,18 @@ async def query_endpoint(payload: dict):
             ),
             timeout=timeout_seconds,
         )
-        from src.lingua_viva.privacy_log import log_event
-        from src.lingua_viva.traces import append_trace, new_trace
-
-        source_citations = result.synthesis.citations or ["Manuale v1"]
-        # Provenance is only worth showing if it is measured. Derive it from
-        # the model that actually answered rather than asserting "local".
-        from src.lingua_viva.reasoning import ReasoningEngine as _NativeReasoner
-
-        answered_externally = _NativeReasoner._is_external_model(
-            result.synthesis.model_used or ""
-        )
-        query_trace = new_trace(
-            query_text,
-            domain=result.classification.domain,
-            model_used=result.synthesis.model_used,
-            duration_ms=result.duration_ms,
-            token_count=0,
-            source_citations=source_citations,
-            privacy_events=[],
-            external_calls=1 if answered_externally else 0,
-            route="external" if answered_externally else "local",
-        )
-        append_trace(query_trace)
-        log_event("query_processed_locally", query_text=query_text)
-        grounding = result.grounding.as_dict() if result.grounding else None
-        voice_tone = result.path_record.voice_tone if result.grounding else "plain"
-        gir_score = result.path_record.gir_score if result.grounding else 1.0
-        gir_method = result.path_record.gir_method if result.grounding else ""
-        from src.lingua_viva.voice_tone import resolve_voice_tone
-        tone_prefix = resolve_voice_tone(gir_score)["prefix"]
-        if session_id and not eval_mode:
-            increment_session()
-
-        response = {
-            "type": "result",
-            "classification": {
-                "node": result.classification.riu_id,
-                "name": result.classification.name,
-                "domain": result.classification.domain,
-                "confidence": result.classification.confidence,
-            },
-            "result": {
-                "content": result.synthesis.content,
-                "confidence": result.synthesis.confidence,
-            },
-            "pipeline": {
-                "steps": result.steps_executed,
-                "external_called": answered_externally,
-                "duration_ms": result.duration_ms,
-                "gap_signals": result.gap_signals,
-            },
-            "trace_id": query_trace.trace_id,
-            "route": "external" if answered_externally else "local",
-            "model_used": result.synthesis.model_used,
-            "duration_ms": result.duration_ms,
-            "source_citation": source_citations[0] if source_citations else "Manuale v1",
-            "sources": source_citations,
-            "grounding": grounding,
-            "gir_score": gir_score,
-            "gir_method": gir_method,
-            "voice_tone": voice_tone,
-            "tone_prefix": tone_prefix,
-            "external_calls": 1 if answered_externally else 0,
-            "session_id": session_id,
-            "timestamp": time.time(),
-        }
+        response = _build_query_response(result, query_text, session_id, eval_mode)
 
         await broadcaster.broadcast(response)
         return response
 
     except asyncio.TimeoutError:
-        error = {
-            "type": "error",
-            "error": "Local reasoning timed out. Check Ollama, then try again.",
-            "timeout": True,
-            "timestamp": time.time(),
-        }
+        error = _query_timeout_error()
         await broadcaster.broadcast(error)
         return error
 
     except (ModuleNotFoundError, ImportError):
-        error = {
-            "type": "error",
-            "error": "Ask isn't able to answer free-form questions in this build yet. Try Plan, Prepare, or Observe for now.",
-            "unavailable": True,
-            "timestamp": time.time(),
-        }
+        error = _query_unavailable_error()
         await broadcaster.broadcast(error)
         return error
 
@@ -4069,6 +4129,95 @@ async def query_endpoint(payload: dict):
         error = {"type": "error", "error": str(e), "timestamp": time.time()}
         await broadcaster.broadcast(error)
         return error
+
+
+@app.post("/api/query/stream")
+async def query_stream_endpoint(payload: dict):
+    """Run a teacher query and stream lifecycle + answer sentence events."""
+    query_text = payload.get("query", "")
+    intent = payload.get("intent")
+    eval_mode = payload.get("eval_mode", False)
+
+    if not query_text:
+        return JSONResponse({"error": "query is required"}, status_code=400)
+
+    from src.session import get_active_session
+
+    session_id = get_active_session()
+
+    async def event_stream():
+        await broadcaster.broadcast({
+            "type": "query_received",
+            "query": query_text,
+            "intent": intent,
+            "timestamp": time.time(),
+        })
+        yield _sse("query_received", {"type": "query_received", "timestamp": time.time()})
+        yield _sse("status", {
+            "type": "status",
+            "stage": "thinking",
+            "label": "Thinking",
+            "timestamp": time.time(),
+        })
+
+        try:
+            from src.lingua_viva.app import run_teacher_query
+
+            timeout_seconds = float(payload.get("timeout_seconds") or 25)
+            result = await asyncio.wait_for(
+                run_teacher_query(
+                    query_text,
+                    intent=intent,
+                    session_id=session_id,
+                    eval_mode=eval_mode,
+                ),
+                timeout=timeout_seconds,
+            )
+            yield _sse("status", {
+                "type": "status",
+                "stage": "grounding",
+                "label": "Checking grounding",
+                "timestamp": time.time(),
+            })
+            response = _build_query_response(result, query_text, session_id, eval_mode)
+            tone_prefix = str(response.get("tone_prefix") or "")
+            voice_tone = str(response.get("voice_tone") or "plain")
+            gir_score = float(response.get("gir_score") or 1.0)
+            for index, sentence in enumerate(_answer_sentences(result.synthesis.content)):
+                yield _sse("answer_sentence", {
+                    "type": "answer_sentence",
+                    "index": index,
+                    "text": sentence,
+                    "tone_prefix": tone_prefix if index == 0 else "",
+                    "voice_tone": voice_tone,
+                    "gir_score": gir_score,
+                })
+            yield _sse("status", {
+                "type": "status",
+                "stage": "ready",
+                "label": "Ready",
+                "timestamp": time.time(),
+            })
+            await broadcaster.broadcast(response)
+            yield _sse("result", response)
+        except asyncio.TimeoutError:
+            error = _query_timeout_error()
+            await broadcaster.broadcast(error)
+            yield _sse("error", error)
+        except (ModuleNotFoundError, ImportError):
+            error = _query_unavailable_error()
+            await broadcaster.broadcast(error)
+            yield _sse("error", error)
+        except Exception as e:
+            error = {"type": "error", "error": str(e), "timestamp": time.time()}
+            await broadcaster.broadcast(error)
+            yield _sse("error", error)
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 # Gap 2, SPEC_ONE_CLICK_LOCAL_APP_2026-07-14.md: PDF upload -> governed

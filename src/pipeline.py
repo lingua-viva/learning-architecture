@@ -935,6 +935,7 @@ class Pipeline:
             query_hash=query_hash,
             session_id=session_id,
             intent=classification.default_intent or "",
+            synthesis_confidence=synthesis_result.confidence,
         )
         voice_tone_result = resolve_voice_tone(grounding.gir.score)
 

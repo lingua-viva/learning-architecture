@@ -224,3 +224,13 @@ def test_frontend_fallback_preserves_prefix():
     """The speakLocally fallback inside speak() includes the tone prefix."""
     body = client.get("/").text
     assert "tonePrefix" in body, "tone prefix variable missing from frontend"
+
+
+def test_frontend_voice_ask_uses_query_stream_with_sentence_queue():
+    """Voice-originated Ask uses POST SSE and queues sentence playback."""
+    body = client.get("/").text
+    assert '"/api/query/stream"' in body
+    assert "response.body.getReader()" in body
+    assert 'message.event === "answer_sentence"' in body
+    assert "voiceRuntime.speakQueue" in body
+    assert "submitAskTextStream(text)" in body

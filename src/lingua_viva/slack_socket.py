@@ -58,6 +58,7 @@ AUTH_TEST_URL = "https://slack.com/api/auth.test"
 CHAT_POST_MESSAGE_URL = "https://slack.com/api/chat.postMessage"
 CHAT_UPDATE_URL = "https://slack.com/api/chat.update"
 CONVERSATIONS_OPEN_URL = "https://slack.com/api/conversations.open"
+VIEWS_OPEN_URL = "https://slack.com/api/views.open"
 
 WEB_API_TIMEOUT_SECONDS = 10
 WEB_API_MAX_RESPONSE_BYTES = 512 * 1024
@@ -643,3 +644,13 @@ class SlackSocketClient:
                 return channel_id
         logger.warning("conversations.open returned no channel id")
         return None
+
+    async def open_view(self, trigger_id: str, view: dict) -> bool:
+        """views.open — returns True on success, False on Slack API error."""
+        result = await asyncio.to_thread(
+            self._call_web_api_sync,
+            VIEWS_OPEN_URL,
+            {"trigger_id": trigger_id, "view": view},
+            self._config.bot_token,
+        )
+        return bool(result.get("ok"))

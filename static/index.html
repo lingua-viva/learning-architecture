@@ -815,11 +815,18 @@
         this.mediaRecorder.start();
       },
       remoteAudio: null,
+      speechQueue: [],
+      speechQueueActive: false,
+      preserveQueueOnLocalSpeak: false,
       stopSpeaking() {
         if ("speechSynthesis" in window) window.speechSynthesis.cancel();
         if (this.remoteAudio) {
           try { this.remoteAudio.pause(); } catch (error) { /* already stopped */ }
           this.remoteAudio = null;
+        }
+        if (!this.preserveQueueOnLocalSpeak) {
+          this.speechQueue = [];
+          this.speechQueueActive = false;
         }
       },
       // Gap 5: try the Rime speech service, fall back to this computer's own
@@ -856,6 +863,70 @@
           // network or CORS failure — fall through to the local voice
         }
         this.speakLocally(tonePrefix ? (tonePrefix + text) : text);
+      },
+      speakQueue(items, tonePrefix) {
+        const segments = (items || []).map((text, index) => ({
+          text: String(text || "").trim(),
+          tonePrefix: index === 0 ? (tonePrefix || "") : ""
+        })).filter(item => item.text);
+        if (!segments.length) return;
+        this.speechQueue.push(...segments);
+        if (!this.speechQueueActive) this.playNextQueuedSpeech();
+      },
+      playNextQueuedSpeech() {
+        const item = this.speechQueue.shift();
+        if (!item) {
+          this.speechQueueActive = false;
+          return;
+        }
+        this.speechQueueActive = true;
+        this.playQueuedSegment(item.text, item.tonePrefix, () => this.playNextQueuedSpeech());
+      },
+      playQueuedSegment(text, tonePrefix, onDone) {
+        if (!text) { onDone(); return; }
+        const done = () => {
+          const status = this.get("ask-voice-status");
+          if (status && !this.speechQueue.length) status.textContent = "Tap once to talk. Pause when finished, or tap again to stop.";
+          if (!this.speechQueue.length) updateVoiceCompanion("idle", "Ready");
+          onDone();
+        };
+        try {
+          const body = {text: String(text)};
+          if (tonePrefix) body.tone_prefix = String(tonePrefix);
+          fetch("/api/voice/tts", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(body)
+          }).then(async response => {
+            if (!response.ok) throw new Error("tts fallback");
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const audio = new Audio(url);
+            this.remoteAudio = audio;
+            audio.onended = () => { URL.revokeObjectURL(url); done(); };
+            audio.onerror = () => {
+              URL.revokeObjectURL(url);
+              this.preserveQueueOnLocalSpeak = true;
+              this.speakLocally(tonePrefix ? (tonePrefix + text) : text);
+              this.preserveQueueOnLocalSpeak = false;
+              setTimeout(done, this.estimateSpeechMs(text));
+            };
+            await audio.play();
+          }).catch(() => {
+            this.preserveQueueOnLocalSpeak = true;
+            this.speakLocally(tonePrefix ? (tonePrefix + text) : text);
+            this.preserveQueueOnLocalSpeak = false;
+            setTimeout(done, this.estimateSpeechMs(text));
+          });
+        } catch (error) {
+          this.preserveQueueOnLocalSpeak = true;
+          this.speakLocally(tonePrefix ? (tonePrefix + text) : text);
+          this.preserveQueueOnLocalSpeak = false;
+          setTimeout(done, this.estimateSpeechMs(text));
+        }
+      },
+      estimateSpeechMs(text) {
+        return Math.min(9000, Math.max(1400, String(text || "").length * 65));
       },
       speakLocally(text) {
         if (!("speechSynthesis" in window) || !text) return;
@@ -1834,6 +1905,104 @@
       await submitAskText(text, false);
     }
 
+    function parseSseBlock(block) {
+      const event = {event: "message", data: ""};
+      block.split("\n").forEach(line => {
+        if (line.startsWith("event:")) event.event = line.slice(6).trim();
+        if (line.startsWith("data:")) event.data += line.slice(5).trim();
+      });
+      try {
+        return {event: event.event, data: JSON.parse(event.data || "{}")};
+      } catch {
+        return {event: event.event, data: {}};
+      }
+    }
+
+    function appendLinguaVivaMessage(data) {
+      state.chat.push({
+        role: "Lingua Viva",
+        text: data.result?.content || "No response.",
+        meta: {
+          trace_id: data.trace_id,
+          route: data.route,
+          model_used: data.model_used,
+          duration_ms: data.duration_ms,
+          source_citation: data.source_citation,
+          sources: data.sources,
+          grounding: data.grounding,
+          voice_tone: data.voice_tone,
+          tone_prefix: data.tone_prefix
+        }
+      });
+    }
+
+    async function submitAskTextStream(text) {
+      if (!window.ReadableStream || !window.TextDecoder) return false;
+      let response;
+      try {
+        response = await fetch("/api/query/stream", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({query: text, intent: "TEACH"})
+        });
+      } catch {
+        return false;
+      }
+      if (!response.ok || !response.body) return false;
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let finalData = null;
+      let streamError = null;
+      let speechStarted = false;
+
+      while (true) {
+        const {value, done} = await reader.read();
+        buffer += decoder.decode(value || new Uint8Array(), {stream: !done});
+        const blocks = buffer.split(/\n\n/);
+        buffer = blocks.pop() || "";
+        for (const block of blocks) {
+          if (!block.trim()) continue;
+          const message = parseSseBlock(block);
+          const data = message.data || {};
+          if (message.event === "status" && data.label) {
+            if ($("ask-voice-status")) $("ask-voice-status").textContent = data.label + "...";
+            updateVoiceCompanion("processing", data.label);
+          } else if (message.event === "answer_sentence") {
+            const sentence = String(data.text || "").trim();
+            if (!sentence) continue;
+            if (!speechStarted) {
+              speechStarted = true;
+              updateVoiceCompanion("speaking", "Speaking");
+              voiceRuntime.speakQueue([sentence], data.tone_prefix || "");
+            } else {
+              voiceRuntime.speakQueue([sentence], "");
+            }
+          } else if (message.event === "result") {
+            finalData = data;
+          } else if (message.event === "error") {
+            streamError = data;
+          }
+        }
+        if (done) break;
+      }
+
+      if (streamError && !finalData) {
+        state.chat.push({
+          role: "Lingua Viva",
+          text: streamError.error || "I could not answer aloud. The error is shown above.",
+          isError: true
+        });
+        return true;
+      }
+      if (finalData) {
+        appendLinguaVivaMessage(finalData);
+        return true;
+      }
+      return false;
+    }
+
     async function submitAskText(text, fromVoice = false) {
       if (!text || voiceRuntime.busy) return;
       voiceRuntime.busy = true;
@@ -1842,6 +2011,14 @@
       renderAsk();
       if ($("ask-voice-status")) $("ask-voice-status").textContent = "Thinking…";
       if (fromVoice) updateVoiceCompanion("processing", "Thinking...");
+      if (fromVoice) {
+        const streamed = await submitAskTextStream(text);
+        if (streamed) {
+          voiceRuntime.busy = false;
+          renderAsk();
+          return;
+        }
+      }
       let data;
       try {
         const response = await fetch("/api/query", {
@@ -1860,21 +2037,7 @@
           isError: true
         });
       } else {
-        state.chat.push({
-          role: "Lingua Viva",
-          text: data.result?.content || "No response.",
-          meta: {
-            trace_id: data.trace_id,
-            route: data.route,
-            model_used: data.model_used,
-            duration_ms: data.duration_ms,
-            source_citation: data.source_citation,
-            sources: data.sources,
-            grounding: data.grounding,
-            voice_tone: data.voice_tone,
-            tone_prefix: data.tone_prefix
-          }
-        });
+        appendLinguaVivaMessage(data);
       }
       voiceRuntime.busy = false;
       renderAsk();

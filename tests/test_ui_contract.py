@@ -155,7 +155,14 @@ REPO = Path(__file__).resolve().parent.parent
 #   v70 (2026-07-29): GIR → voice delivery tone — speak() accepts tonePrefix,
 #     /api/query returns voice_tone + tone_prefix, speakLocally fallback
 #     preserves hedge prefix.
-EXPECTED_VERSION = 70
+#   v71 (2026-07-30): re-lock after concurrent commit of GIR voice tone build.
+#   v72 (2026-07-30): voice-originated Ask uses /api/query/stream SSE and
+#     queued answer_sentence playback while /api/query stays JSON-compatible.
+#   v73 (2026-07-30): re-lock after v72 stream parser cleanup.
+#   v74 (2026-07-30): GIR hardening review — /api/query stops inventing
+#     Manuale v1 citations for uncited answers.
+#   v75 (2026-07-30): Still I Rise absence+coverage MVP staffing-summary endpoint.
+EXPECTED_VERSION = 75
 
 
 def _html() -> str:
