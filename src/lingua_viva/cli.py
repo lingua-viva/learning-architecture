@@ -431,6 +431,19 @@ def _candidates(args) -> int:
     return 0
 
 
+def _spec_status(args: argparse.Namespace) -> int:
+    from .spec_status import _main as spec_status_main
+
+    argv: list[str] = []
+    if args.json:
+        argv.append("--json")
+    if args.markdown:
+        argv.append("--markdown")
+    if args.strict:
+        argv.append("--strict")
+    return spec_status_main(argv)
+
+
 def _golden_workflows(args: argparse.Namespace) -> int:
     from src.lingua_viva.golden_workflows.runner import print_matrix, run_workflows
 
@@ -508,6 +521,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Include resolved candidates (promoted/discarded), not just active ones",
     )
 
+    spec_status = sub.add_parser("spec-status", help="Report spec/status drift")
+    spec_status.add_argument("--json", action="store_true", help="Print JSON report")
+    spec_status.add_argument("--markdown", action="store_true", help="Print Markdown report")
+    spec_status.add_argument("--strict", action="store_true", help="Exit 1 when warn or fail findings exist")
+
     golden_workflows = sub.add_parser("golden-workflows", help="Run integration-loop golden workflows")
     mode = golden_workflows.add_mutually_exclusive_group()
     mode.add_argument("--hermetic", action="store_true", default=True)
@@ -551,6 +569,8 @@ def main(argv: list[str] | None = None) -> int:
         return _distill(args)
     if args.command == "candidates":
         return _candidates(args)
+    if args.command == "spec-status":
+        return _spec_status(args)
     if args.command == "golden-workflows":
         return _golden_workflows(args)
     if args.command == "filemap":

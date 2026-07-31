@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 from src.lingua_viva.spec_status import (
+    _topic_key,
     check_spec_status,
     discover_specs,
     parse_index,
@@ -168,6 +169,16 @@ def test_cli_exit_behavior_default_vs_strict(tmp_path):
 
     assert default.returncode == 0
     assert strict.returncode == 1
+
+
+def test_topic_key_pairs_common_build_suffixes():
+    spec = Path("dev/SPEC_LV_COHORT_LESSON_PLANNING_WORKFLOW_2026-07-30.md")
+    prompt = Path("dev/PROMPT_LV_COHORT_LESSON_PLANNING_BUILD_2026-07-30.md")
+    loop_spec = Path("dev/SPEC_LV_GIR_VOICE_HARDENING_LOOP_2026-07-30.md")
+    loop_prompt = Path("dev/PROMPT_LV_GIR_VOICE_HARDENING_BUILD_2026-07-30.md")
+
+    assert _topic_key(spec) == _topic_key(prompt)
+    assert _topic_key(loop_spec) == _topic_key(loop_prompt)
 
 
 def test_checker_does_not_mutate_inputs(tmp_path):

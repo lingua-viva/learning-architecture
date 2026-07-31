@@ -183,6 +183,7 @@ def _topic_key(path: Path) -> tuple[str, str]:
     date_text = date.group(0) if date else ""
     stem = DATE_RE.sub("", stem)
     stem = re.sub(r"_+", "_", stem).strip("_-")
+    stem = re.sub(r"_(workflow|loop)$", "", stem)
     return stem, date_text
 
 

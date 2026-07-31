@@ -1,7 +1,7 @@
 # SPEC: Still I Rise SlackBot - Absence + Coverage MVP
 
 **Date**: 2026-07-30
-**Status**: DRAFT - build handoff
+**Status**: SHIPPED - committed `247ade8`, tested
 **Proposal source**: `dev/PROPOSAL_STILL_I_RISE_SLACKBOT_WORKFLOWS_2026-07-30.md`
 **Primary surface**: Lingua Viva Slack Daily Operations Assistant
 **Priority rationale**: staff absence and substitute coverage is the highest-leverage Still I Rise SlackBot workflow because it is urgent, frequent, auditable, and already close to the existing Lingua Viva Slack ops architecture.

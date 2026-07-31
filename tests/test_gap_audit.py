@@ -120,9 +120,10 @@ def test_distribution_concentration_and_fragmentation():
 def test_vocabulary_exact_membership_no_prefix_tolerance():
     # MC pass-10 lesson: 'integrity_extended' shares a prefix with a known
     # family but is NOT in the emitter set — it must be flagged as drift.
-    entries = [_entry("N", ["integrity_extended:x", "integrity:ok", "brand_new_family"])]
+    entries = [_entry("N", ["integrity_extended:x", "integrity:ok", "voice_loop_failure:stt_mismatch", "brand_new_family"])]
     assert audit_vocabulary(entries) == ["brand_new_family", "integrity_extended"]
     assert "integrity" in KNOWN_SIGNAL_FAMILIES
+    assert "voice_loop_failure" in KNOWN_SIGNAL_FAMILIES
 
 
 def test_aging_candidates_and_unavailable_degradation(files, tmp_path):

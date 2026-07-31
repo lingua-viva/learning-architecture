@@ -58,6 +58,19 @@ def test_eval_golden_subcommand(capsys):
     assert output["failed"] == 0
 
 
+def test_spec_status_subcommand_dispatches(monkeypatch):
+    called = {}
+
+    def fake_spec_status_main(argv):
+        called["argv"] = argv
+        return 0
+
+    monkeypatch.setattr("src.lingua_viva.spec_status._main", fake_spec_status_main)
+
+    assert cli.main(["spec-status", "--json"]) == 0
+    assert called["argv"] == ["--json"]
+
+
 def test_full_health_subcommand(monkeypatch, capsys):
     class Completed:
         returncode = 0

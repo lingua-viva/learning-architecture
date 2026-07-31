@@ -1,7 +1,7 @@
 # SPEC: Lingua Viva Cohort Lesson-Planning & Differentiation Workflow
 
 **Date**: 2026-07-30
-**Status**: DRAFT - build handoff
+**Status**: SHIPPED - committed `b67d736`, tested
 **Source matrix**: `dev/LV_SYSTEM_IMPROVEMENT_MATRIX_2026-07-30.md`
 **Systems**: EDU Product Modules / OBS Student Lens / ACT Action Approval
 **Primary surfaces**: cohort planning engine, Prepare backend routes, student-lens roster reads, differentiated content packs, teacher guides, deliverables

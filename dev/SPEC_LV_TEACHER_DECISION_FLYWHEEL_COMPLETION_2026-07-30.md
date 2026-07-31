@@ -1,7 +1,7 @@
 # SPEC: Lingua Viva Teacher Decision Flywheel Completion
 
 **Date**: 2026-07-30
-**Status**: DRAFT - build handoff
+**Status**: SHIPPED - committed `f4d0446`, tested
 **Source matrix**: `dev/LV_SYSTEM_IMPROVEMENT_MATRIX_2026-07-30.md`
 **Systems**: OBS Observation / ACT Action Approval / EDU Product Modules
 **Primary surfaces**: student lens, observation decisions, differentiated help artifacts, portfolio entries, deliverables

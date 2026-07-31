@@ -1,7 +1,7 @@
 # SPEC: GIR + Voice Real-App Hardening Loop
 
 **Date**: 2026-07-30
-**Status**: DRAFT - run after the voice streaming build settles
+**Status**: SHIPPED - committed `247ade8`, tested
 **Lens**: product truth (primary), protection (student-data/privacy gates), measurement
 **Depends on**:
 - `dev/SPEC_LV_GIR_VOICE_TONE_2026-07-29.md`

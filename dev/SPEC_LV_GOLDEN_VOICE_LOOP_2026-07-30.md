@@ -1,7 +1,7 @@
 # SPEC: Golden Voice Loop + Gap→Eval Enrichment
 
 **Date**: 2026-07-30
-**Status**: DRAFT — operator review before build
+**Status**: SHIPPED - committed `247ade8`, tested
 **Lens**: architect (primary), precision (measurement discipline)
 **Depends on**: `dev/SPEC_LV_GIR_VOICE_TONE_2026-07-29.md` **must land first** — this spec
 reads `PipelineResult.grounding` and `PathRecord.voice_tone`, neither of which exist

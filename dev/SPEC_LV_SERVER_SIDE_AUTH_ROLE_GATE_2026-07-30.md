@@ -1,7 +1,7 @@
 # SPEC: Lingua Viva Server-Side Auth And Role Gate
 
 **Date**: 2026-07-30
-**Status**: DRAFT - build handoff
+**Status**: SHIPPED - committed `2fa5cd9`, tested
 **Source matrix**: `dev/LV_IMPROVEMENT_CYCLE_SPEC_IDEA_MATRICES_GROUPED_2026-07-30_2.md`
 **Primary surface**: Lingua Viva local web API
 **Selection rationale**: Schedule acknowledgements are already present in the working tree. The matrix ranks this as the next highest-leverage slice and calls it a hard blocker before any second real user.

@@ -1,7 +1,7 @@
 # SPEC: Still I Rise SlackBot - Operational Request Center Phase 2A
 
 **Date**: 2026-07-30
-**Status**: DRAFT - build handoff
+**Status**: SHIPPED - committed `2fa5cd9`, tested
 **Proposal source**: `dev/PROPOSAL_STILL_I_RISE_SLACKBOT_WORKFLOWS_2026-07-30.md`
 **Previous slice**: `dev/SPEC_LV_SIR_SLACK_ABSENCE_COVERAGE_MVP_2026-07-30.md`
 **Primary surface**: Lingua Viva Slack Daily Operations Assistant

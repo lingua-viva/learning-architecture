@@ -1,7 +1,7 @@
 # SPEC: Voice Query Streaming + Early Sentence TTS
 
 **Date**: 2026-07-30
-**Status**: DRAFT - operator review before build
+**Status**: SHIPPED - committed `247ade8`, tested
 **Lens**: runtime/product truth (primary), protection (privacy-preserving voice path)
 **Depends on**: `dev/SPEC_LV_GIR_VOICE_TONE_2026-07-29.md` must already be built - this
 streaming slice preserves `gir_score`, `voice_tone`, and `tone_prefix` from the inline

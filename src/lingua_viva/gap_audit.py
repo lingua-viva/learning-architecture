@@ -54,6 +54,7 @@ KNOWN_SIGNAL_FAMILIES = frozenset({
     "integrity",
     "weak_classification",
     "no_knowledge_at_node",
+    "voice_loop_failure",
 })
 
 REPEAT_THRESHOLD = 3

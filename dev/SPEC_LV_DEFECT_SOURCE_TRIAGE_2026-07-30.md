@@ -1,7 +1,7 @@
 # SPEC: Lingua Viva Education Defect Source Triage
 
 **Date**: 2026-07-30
-**Status**: DRAFT - build handoff
+**Status**: SHIPPED - committed `7f2b8e2` + hardened in `f2345e9`, tested
 **Source matrix**: `dev/LV_SYSTEM_IMPROVEMENT_MATRIX_2026-07-30.md`
 **Systems**: EON Education Ontology / EVA Evaluation / AGV Artifact Governance
 **Primary artifact**: `src/lingua_viva/defect_triage.py`

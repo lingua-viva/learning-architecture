@@ -1,7 +1,7 @@
 # SPEC: Lingua Viva Native Exit And Integrity Gates
 
 **Date**: 2026-07-30
-**Status**: DRAFT - build handoff
+**Status**: SHIPPED - committed `f4d0446`, tested
 **Source matrix**: `dev/LV_SYSTEM_IMPROVEMENT_MATRIX_2026-07-30.md`
 **Systems**: PRV Privacy / RTE Runtime Execution / CON Connectors
 **Primary surfaces**: external LLM provider calls, Rime TTS, Google Drive upload/share-back, governance exports

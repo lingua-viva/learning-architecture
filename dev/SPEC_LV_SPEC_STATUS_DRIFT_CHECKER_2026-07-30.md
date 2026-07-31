@@ -1,7 +1,7 @@
 # SPEC: Lingua Viva Spec Status Drift Checker
 
 **Date**: 2026-07-30
-**Status**: DRAFT - build handoff
+**Status**: SHIPPED - committed `8dbf4e6`, CLI-wired in this run, tested
 **Source matrix**: `dev/LV_SYSTEM_IMPROVEMENT_MATRIX_2026-07-30.md`
 **Systems**: AGV Artifact Governance / HTH Health / SRF Surfaces
 **Primary artifact**: `src/lingua_viva/spec_status.py`
@@ -236,7 +236,7 @@ Minimum coverage:
 3. Missing index row emits `warn`.
 4. Header/index status contradiction emits `warn`.
 5. Built/shipped spec claiming missing concrete `src/...` file emits `fail`.
-6. Draft spec that says "Create `src/foo.py`" does not fail missing file.
+6. Draft spec that says "Create a placeholder source module" does not fail missing file.
 7. Missing concrete test file claim emits `warn` or `fail` based on status.
 8. Top-level spec without prompt pair emits `warn`.
 9. Prompt without spec emits `warn`.

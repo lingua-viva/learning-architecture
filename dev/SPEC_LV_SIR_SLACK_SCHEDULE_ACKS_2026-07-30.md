@@ -1,7 +1,7 @@
 # SPEC: Still I Rise SlackBot - Schedule Change Acknowledgements Phase 2B
 
 **Date**: 2026-07-30
-**Status**: DRAFT - build handoff
+**Status**: SHIPPED - committed `2fa5cd9`, tested
 **Proposal source**: `dev/PROPOSAL_STILL_I_RISE_SLACKBOT_WORKFLOWS_2026-07-30.md`
 **Previous slices**:
 
