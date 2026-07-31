@@ -3583,7 +3583,15 @@ def _decision_deliverable(record: dict, record_type: str, session_id: str = "") 
         deliverable_id=deliverable_id,
         source_record_ids=[
             str(item)
-            for item in record.get("source_observation_ids", [])
+            for item in (
+                record.get("source_observation_ids", [])
+                if record_type != "cohort_lesson_plan"
+                else [
+                    assignment.get("student_id", "")
+                    for assignment in record.get("student_assignments", [])
+                    if isinstance(assignment, dict)
+                ]
+            )
             if str(item).strip()
         ],
     )

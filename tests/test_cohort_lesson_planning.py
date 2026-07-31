@@ -181,6 +181,8 @@ def test_approval_creates_cohort_deliverable_and_audit_receipt(monkeypatch, tmp_
         assert body["record"]["status"] == "approved"
         assert body["deliverable"]["type"] == "cohort_lesson_plan"
         assert body["deliverable"]["deliverable_id"] in body["audit_receipt"]["deliverable_ids"]
+        assert body["audit_receipt"]["is_complete"] is True
+        assert body["audit_receipt"]["source_record_ids"]
         assert "Marco" not in str(body["audit_receipt"])
         assert cohort_planning.read_cohort_plans("teacher-a", limit=5)
 

@@ -173,7 +173,8 @@ REPO = Path(__file__).resolve().parent.parent
 #   v83 (2026-07-30): teacher decision flywheel preview non-mutation hardening.
 #   v84 (2026-07-30): teacher decision flywheel complete local audit receipts.
 #   v85 (2026-07-30): cohort lesson-planning backend preview/approval/list routes.
-EXPECTED_VERSION = 85
+#   v86 (2026-07-30): cohort lesson-planning complete local audit receipts.
+EXPECTED_VERSION = 86
 
 
 def _html() -> str:

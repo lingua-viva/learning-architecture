@@ -495,7 +495,9 @@
 #     artifacts carry source observation ids into complete local receipts.
 # v85 (2026-07-30): cohort lesson-planning backend routes — preview,
 #     approval, and listing for local teacher-owned cohort plan records.
-version: 85
+# v86 (2026-07-30): cohort lesson-planning audit hardening — approved
+#     cohort plans carry hashed local evidence ids into complete receipts.
+version: 86
 files:
   - static/index.html
   - static/sw.js
