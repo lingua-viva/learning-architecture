@@ -62,6 +62,23 @@ def test_preview_write_or_incomplete_audit_receipt_is_product_code():
     assert result.primary_layer == "product_code"
 
 
+def test_common_underscore_failure_phrases_do_not_fall_to_unknown():
+    receipt = classify_failure("audit_receipt incomplete for cohort_lesson_plan approval")
+    voice = classify_failure("voice_loop_failure:tts_prefix_wrong")
+    contract = classify_failure("tests/test_ui_contract.py AssertionError expected 84 == 85")
+
+    assert receipt.primary_layer == "product_code"
+    assert voice.primary_layer == "product_code"
+    assert contract.primary_layer == "checker_logic"
+
+
+def test_live_connector_word_does_not_override_local_route_invariant():
+    result = classify_failure("Google Drive route returned 500 from src/web.py invariant wrong shape")
+
+    assert result.primary_layer == "product_code"
+    assert "live_layer_drift" in result.secondary_layers
+
+
 def test_voice_loop_failure_classes_are_deterministic():
     stt = triage_gap_signal_record(
         {

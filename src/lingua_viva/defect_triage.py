@@ -106,7 +106,6 @@ PATTERNS: dict[str, tuple[str, ...]] = {
     "live_layer_drift": (
         "slack",
         "google drive",
-        "drive",
         "rime",
         "whisper",
         "ollama",
@@ -136,7 +135,10 @@ PATTERNS: dict[str, tuple[str, ...]] = {
         "route returned 500",
         "500 internal server error",
         "audit receipt incomplete",
+        "audit_receipt incomplete",
+        "audit_receipt_incomplete",
         "incomplete audit receipt",
+        "incomplete audit_receipt",
         "approval writes in preview",
         "deliverable",
         "invariant",
@@ -145,6 +147,10 @@ PATTERNS: dict[str, tuple[str, ...]] = {
         "tone_mismatch",
         "tts_prefix_wrong",
         "gir_out_of_range",
+        "voice_loop_failure:pipeline_error",
+        "voice_loop_failure:tone_mismatch",
+        "voice_loop_failure:tts_prefix_wrong",
+        "voice_loop_failure:gir_out_of_range",
     ),
 }
 
@@ -296,16 +302,22 @@ def _score_evidence(evidence: DefectEvidence) -> tuple[dict[str, float], list[st
 
 def _tie_break(scores: dict[str, float], evidence: DefectEvidence) -> str:
     blob = _search_blob(evidence)
-    if max(scores.values(), default=0.0) < 0.2:
+    if max(scores.values(), default=0.0) < 0.15:
         return "unknown"
 
     contract_only = any(
         marker in blob
-        for marker in ("ui_contract", "route_reachability", "expected_version", "hash drifted", "protected file changed")
+        for marker in ("ui_contract", "route_reachability", "expected_version", "hash drifted", "protected file changed", "test_ui_contract.py", "tests/test_ui_contract.py")
     )
     local_invariant = any(
         marker in blob
-        for marker in ("privacy gate bypass", "preview wrote", "preview writes", "approval writes", "audit receipt incomplete", "voice_loop_failure:pipeline_error", "voice_loop_failure:tone_mismatch", "voice_loop_failure:tts_prefix_wrong")
+        for marker in (
+            "privacy gate bypass", "preview wrote", "preview writes", "approval writes",
+            "audit receipt incomplete", "audit_receipt incomplete", "audit_receipt_incomplete",
+            "route returned 500", "500 internal server error", "invariant", "wrong shape",
+            "voice_loop_failure:pipeline_error", "voice_loop_failure:tone_mismatch",
+            "voice_loop_failure:tts_prefix_wrong", "voice_loop_failure:gir_out_of_range",
+        )
     )
     provider = any(
         marker in blob
@@ -341,7 +353,7 @@ def classify_failure(evidence: DefectEvidence | dict | str) -> DefectTriageResul
         confidence = min(0.95, max(0.35, 0.45 + top - (runner_up * 0.35)))
     secondary = [
         layer for layer, score in sorted(scores.items(), key=lambda item: (-item[1], item[0]))
-        if layer != primary and score >= 0.2
+        if layer != primary and score >= 0.15
     ][:3]
     return DefectTriageResult(
         defect_id=f"DEF-{evidence_hash[:12]}",
