@@ -508,7 +508,11 @@
 # v90 (2026-08-01): MVP sprint Spec 4 — POST /api/voice/act: voice intent
 #     router (observation/generate/question) with signal-based classification
 #     (SPEC_LV_VOICE_INTENT_ROUTER_2026-08-01).
-version: 90
+# v91 (2026-08-01): MVP sprint Spec 5 — frontend voice wire: mic routes
+#     through /api/voice/act (single-shot voice commands), transcript toast,
+#     clarification memory, text-field fallback
+#     (SPEC_LV_FRONTEND_VOICE_WIRE_2026-08-01).
+version: 91
 files:
   - static/index.html
   - static/sw.js

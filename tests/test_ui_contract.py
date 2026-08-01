@@ -176,7 +176,8 @@ REPO = Path(__file__).resolve().parent.parent
 #   v86 (2026-07-30): cohort lesson-planning complete local audit receipts.
 #   v89 (2026-08-01): lesson-materials generate endpoint (MVP sprint Spec 3).
 #   v90 (2026-08-01): voice intent router endpoint (MVP sprint Spec 4).
-EXPECTED_VERSION = 90
+#   v91 (2026-08-01): frontend voice wire — mic routes through /api/voice/act.
+EXPECTED_VERSION = 91
 
 
 def _html() -> str:

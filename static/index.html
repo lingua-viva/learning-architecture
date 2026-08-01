@@ -440,6 +440,35 @@
       box-shadow: 0 0 16px rgba(214, 92, 103, .65);
       animation: none;
     }
+    .voice-companion.is-success .vc-visor {
+      box-shadow: 0 0 16px rgba(141, 216, 184, .75);
+      animation: none;
+    }
+    .voice-companion.is-success .vc-state { color: #8dd8b8; }
+    .voice-companion.is-clarify .vc-visor {
+      box-shadow: 0 0 16px rgba(238, 190, 92, .7);
+      animation: none;
+    }
+    .voice-companion.is-clarify .vc-state { color: #eebe5c; }
+    /* Frontend voice wire (contract v91): transcript toast so the teacher can
+       verify what was heard before/while the action executes. */
+    .voice-transcript {
+      position: fixed;
+      bottom: 130px;
+      right: 20px;
+      max-width: 300px;
+      padding: 8px 12px;
+      background: rgba(6, 26, 20, .92);
+      border: 1px solid rgba(141, 216, 184, .45);
+      color: #d7e8e1;
+      border-radius: 8px;
+      font-size: 13px;
+      opacity: 0;
+      transition: opacity .3s;
+      pointer-events: none;
+      z-index: 1000;
+    }
+    .voice-transcript.visible { opacity: 1; }
     .vc-mic {
       width: 48px;
       height: 48px;
@@ -645,6 +674,7 @@
     <div id="vc-state" class="vc-state" role="status" aria-live="polite">Ready</div>
     <div id="vc-badge" class="vc-badge">Student data protected</div>
   </aside>
+  <div id="voice-transcript" class="voice-transcript" aria-live="polite"></div>
 
   <div id="role-choice" class="role-choice">
       <div class="role-dialog">
@@ -995,12 +1025,16 @@
       panel.classList.toggle("is-listening", mode === "listening");
       panel.classList.toggle("is-processing", mode === "processing" || mode === "speaking");
       panel.classList.toggle("has-error", mode === "error");
+      panel.classList.toggle("is-success", mode === "success");
+      panel.classList.toggle("is-clarify", mode === "clarify");
       if (stateLabel) {
         stateLabel.textContent = label || (
           mode === "listening" ? "Listening" :
           mode === "processing" ? "Processing" :
           mode === "speaking" ? "Speaking" :
           mode === "error" ? "Try again" :
+          mode === "success" ? "Done" :
+          mode === "clarify" ? "Which student?" :
           "Ready"
         );
       }
@@ -1010,27 +1044,118 @@
       }
     }
 
+    // Frontend voice wire (contract v91): the mic always routes the STT
+    // transcript through /api/voice/act, which classifies (observation /
+    // generate / question) and executes. Voice = fast path, typing = careful
+    // path — the manual Ask and Observe forms are untouched.
     async function toggleVoiceCompanion() {
       voiceRuntime.stopSpeaking();
-      if (state.view === "observe") {
-        if (!$("obs-text")) await switchView("observe");
-        voiceRuntime.captureLocalStt({
-          statusId: "vc-state",
-          micId: "vc-mic",
-          inputId: "obs-text",
-          onTranscript: () => updateVoiceCompanion("idle", "Captured")
-        });
-        return;
-      }
-      if (state.view !== "ask" || !$("ask-input")) {
-        await switchView("ask");
-      }
       voiceRuntime.captureLocalStt({
         statusId: "vc-state",
         micId: "vc-mic",
-        inputId: "ask-input",
-        onTranscript: text => submitAskText(text, true)
+        inputId: "",
+        onTranscript: text => handleVoiceActResult(text)
       });
+    }
+
+    // Clarification memory: the backend router is stateless, so when it asks
+    // "which student?", we hold the transcript here and append the teacher's
+    // next utterance ("Marco") before re-sending.
+    let voiceActPending = null;
+    const VOICE_ACT_PENDING_MS = 120000;
+
+    function showVoiceTranscript(text) {
+      const el = $("voice-transcript");
+      if (!el) return;
+      el.textContent = `"${text}"`;
+      el.classList.add("visible");
+      clearTimeout(showVoiceTranscript._timer);
+      showVoiceTranscript._timer = setTimeout(() => el.classList.remove("visible"), 6000);
+    }
+
+    function voiceActFallback(transcript) {
+      // Old behavior as the safety net: the words land in the nearest text
+      // field so nothing the teacher said is lost.
+      const target = state.view === "observe" ? $("obs-text") : $("ask-input");
+      if (target) target.value = transcript;
+      showVoiceTranscript(target
+        ? "Voice action failed — your words are in the text box."
+        : `Voice action failed. You said: "${transcript}"`);
+      updateVoiceCompanion("error", "Try again");
+      setTimeout(() => updateVoiceCompanion("idle", "Ready"), 4000);
+    }
+
+    async function handleVoiceActResult(transcript) {
+      transcript = String(transcript || "").trim();
+      if (!transcript) return;
+      if (voiceActPending && Date.now() - voiceActPending.at < VOICE_ACT_PENDING_MS) {
+        transcript = `${voiceActPending.transcript} ${transcript}`;
+      }
+      voiceActPending = null;
+      showVoiceTranscript(transcript);
+      updateVoiceCompanion("processing", "Thinking...");
+      voiceRuntime.busy = true;
+      let result;
+      try {
+        const response = await fetch("/api/voice/act", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({transcript, timeout_seconds: 60})
+        });
+        result = await response.json();
+        if (!response.ok) throw new Error(result.error || `voice act failed: ${response.status}`);
+      } catch (error) {
+        voiceRuntime.busy = false;
+        voiceActFallback(transcript);
+        return;
+      }
+      voiceRuntime.busy = false;
+
+      if (result.intent === "observation") {
+        if (result.needs_clarification) {
+          voiceActPending = {transcript, at: Date.now()};
+          updateVoiceCompanion("clarify", "Which student?");
+          voiceRuntime.speak(result.spoken_confirmation || "Which student was that?");
+          return;
+        }
+        updateVoiceCompanion("success", "Saved");
+        voiceRuntime.speak(result.spoken_confirmation || "Saved.", result.tone_prefix || "");
+        if (state.view === "observe") {
+          try { await loadLens("obs-lens", false); } catch (error) { /* view refresh only */ }
+        }
+        setTimeout(() => updateVoiceCompanion("idle", "Ready"), 4000);
+        return;
+      }
+
+      if (result.intent === "generate") {
+        updateVoiceCompanion("success", "Ready");
+        voiceRuntime.speak(result.spoken_confirmation || "Ready to create materials.");
+        setTimeout(() => updateVoiceCompanion("idle", "Ready"), 4000);
+        return;
+      }
+
+      // Question (default). result.result is the same shape /api/query
+      // returns, so it renders through the existing chat pipeline.
+      const data = result.result || {};
+      state.chat.push({role: "teacher", text: transcript});
+      if (result.action_taken === "timeout" || (data.error && !data.result)) {
+        state.chat.push({
+          role: "Lingua Viva",
+          text: data.error || result.spoken_confirmation || "That took too long. Try a simpler question.",
+          isError: true
+        });
+      } else {
+        appendLinguaVivaMessage(data);
+      }
+      if (state.view === "ask") renderAsk(); else await switchView("ask");
+      const reply = state.chat[state.chat.length - 1];
+      if (reply && !reply.isError) {
+        updateVoiceCompanion("speaking", "Speaking");
+        voiceRuntime.speak(reply.text, result.tone_prefix || "");
+      } else {
+        updateVoiceCompanion("error", "Could not answer");
+        setTimeout(() => updateVoiceCompanion("idle", "Ready"), 4000);
+      }
     }
 
     function initVoiceCompanion() {
