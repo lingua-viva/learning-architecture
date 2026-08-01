@@ -20,6 +20,8 @@ class ReasonResult:
     confidence: float
     model_used: str
     tokens_used: int = 0
+    error: str = ""
+    error_detail: str = ""
 
 
 class ReasoningEngine:
@@ -181,7 +183,7 @@ class ReasoningEngine:
                 return json.loads(response.read())
 
         try:
-            timeout_seconds = float(os.environ.get("LV_REASON_TIMEOUT_SECONDS", "20"))
+            timeout_seconds = float(os.environ.get("LV_REASON_TIMEOUT_SECONDS", "60"))
             # `request.urlopen` is a blocking call with no await points, so it
             # was previously freezing the whole asyncio event loop for its
             # duration — that made outer `asyncio.wait_for(...)` callers
@@ -193,7 +195,18 @@ class ReasoningEngine:
             # (LV_REASON_TIMEOUT_SECONDS's own internal socket timeout)
             # before returning, instead of honoring the requested budget.
             body = await asyncio.to_thread(_blocking_call)
-        except (error.URLError, ConnectionError, TimeoutError, OSError, json.JSONDecodeError):
+        except TimeoutError:
+            if self._is_ollama_model(model):
+                self._record_ollama_failure()
+            return ReasonResult(
+                content="",
+                confidence=0.0,
+                model_used=model,
+                tokens_used=0,
+                error="timeout",
+                error_detail=f"The model took longer than {timeout_seconds:.0f}s to respond. Try a smaller model or a simpler question.",
+            )
+        except (error.URLError, ConnectionError, OSError, json.JSONDecodeError):
             if self._is_ollama_model(model):
                 self._record_ollama_failure()
             return None

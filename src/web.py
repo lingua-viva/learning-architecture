@@ -2596,6 +2596,132 @@ async def voice_stt(request: Request):
     return {"transcript": transcript, "provider": "faster-whisper", "local_only": True}
 
 
+@app.post("/api/voice/act")
+async def voice_act(request: Request, payload: dict):
+    """Voice intent router (MVP sprint Spec 4) — classify a transcript as
+    observation / generation request / question, execute the appropriate
+    action, and return spoken confirmation text.
+
+    Sits downstream of /api/voice/stt: receives text, never audio. Intent
+    classification is signal-based (no LLM) so it is instant; LLM work only
+    happens inside the routed action (query pipeline / materials generator).
+    """
+    from src.lingua_viva.access_roles import effective_teacher_id
+    from src.lingua_viva.voice_intent import classify_intent
+
+    transcript = str(payload.get("transcript") or "").strip()
+    if not transcript:
+        return JSONResponse({"error": "transcript is required"}, status_code=400)
+    teacher_id = effective_teacher_id(request, str(payload.get("teacher_id") or "local-teacher"))
+
+    def load_roster(store):
+        return [
+            {"student_id": str(lens.get("student_id") or ""), "display_name": str(lens.get("display_name") or "")}
+            for lens in store.list_lenses_for_teacher(teacher_id)
+        ]
+
+    roster = await asyncio.to_thread(_with_student_store, load_roster)
+    classification = classify_intent(transcript, roster)
+
+    if classification.intent == "observation":
+        if classification.needs_clarification:
+            return {
+                "intent": "observation",
+                "action_taken": "needs_clarification",
+                "spoken_confirmation": (
+                    "I heard an observation but I'm not sure which student. "
+                    "Can you say their name?"
+                ),
+                "tone_prefix": "",
+                "needs_clarification": True,
+                "transcript": transcript,
+            }
+
+        ctx = classification.observation_context
+
+        def capture(store):
+            from src.education.observation_capture import ObservationCapturePipeline
+
+            pipeline = ObservationCapturePipeline(store=store)
+            return pipeline.capture(
+                student_id=classification.student_id,
+                teacher_id=teacher_id,
+                raw_transcript=transcript,
+                template_type="cefr",
+                cefr_dimension=str(ctx.get("cefr_dimension") or "speaking"),
+                cefr_level_observed=str(ctx.get("cefr_level_hint") or "A1+"),
+                cefr_direction=str(ctx.get("direction") or "progressing"),
+            )
+
+        result = await asyncio.to_thread(_with_student_store, capture)
+        result["local_only"] = True
+
+        from src.lingua_viva.drive_sync import trigger_sync
+
+        trigger_sync(classification.student_id)
+
+        # First name only in spoken text (privacy rule: never speak a full
+        # student name — /api/voice/tts enforces this too, belt and braces).
+        first_name = (classification.student_name or "").split()[0] if classification.student_name else "the student"
+        return {
+            "intent": "observation",
+            "action_taken": "saved",
+            "result": result,
+            "spoken_confirmation": f"Got it. Observation saved for {first_name}.",
+            "tone_prefix": "Confirmed. ",
+            "gir_score": 1.0,
+        }
+
+    if classification.intent == "generate":
+        # Voice can't reliably carry every lesson param (CEFR target,
+        # duration, roster subset) — return the parsed context and let the
+        # UI confirm before calling /api/lesson-materials/generate.
+        gen_ctx = classification.generation_context
+        topic = str(gen_ctx.get("topic") or "that topic")
+        return {
+            "intent": "generate",
+            "action_taken": "ready_to_generate",
+            "generation_context": gen_ctx,
+            "spoken_confirmation": (
+                f"Ready to create materials about {topic}. "
+                "Which students should I include?"
+            ),
+            "tone_prefix": "",
+            "gir_score": 1.0,
+            "needs_confirmation": True,
+        }
+
+    # Default: read-only question through the existing query pipeline.
+    from src.session import get_active_session
+
+    session_id = get_active_session()
+    try:
+        from src.lingua_viva.app import run_teacher_query
+
+        result = await asyncio.wait_for(
+            run_teacher_query(transcript, intent=None, session_id=session_id, eval_mode=False),
+            timeout=float(payload.get("timeout_seconds") or 25),
+        )
+        response = _build_query_response(result, transcript, session_id, False)
+    except asyncio.TimeoutError:
+        return {
+            "intent": "question",
+            "action_taken": "timeout",
+            "spoken_confirmation": "That's taking too long. Try asking a simpler question.",
+            "tone_prefix": "",
+            "gir_score": 0.0,
+        }
+    spoken = str((response.get("result") or {}).get("content") or "")[:300]
+    return {
+        "intent": "question",
+        "action_taken": "answered",
+        "result": response,
+        "spoken_response": spoken,
+        "tone_prefix": str(response.get("tone_prefix") or ""),
+        "gir_score": float(response.get("gir_score") if response.get("gir_score") is not None else 1.0),
+    }
+
+
 @app.get("/api/profile")
 async def profile():
     from src.lingua_viva.filemap import load_map, summarize
@@ -2930,6 +3056,11 @@ async def observe_capture(request: Request, payload: dict):
             )
         raise
     result["local_only"] = True
+
+    # Trigger async lens sync to Drive (fire-and-forget)
+    from src.lingua_viva.drive_sync import trigger_sync
+    trigger_sync(student_id)
+
     return result
 
 
@@ -3702,6 +3833,51 @@ async def cohort_plans_list(request: Request, teacher_id: str = "local-teacher",
     return {"plans": read_cohort_plans(effective_id, limit=limit), "teacher_id": effective_id}
 
 
+@app.post("/api/lesson-materials/generate")
+async def lesson_materials_generate(request: Request, payload: dict):
+    from src.lingua_viva.access_roles import effective_teacher_id
+    from src.lingua_viva.lesson_materials import (
+        assign_tier_groups,
+        generate_lesson_materials,
+        materials_as_dicts,
+    )
+
+    teacher_id = effective_teacher_id(request, str(payload.get("teacher_id") or "local-teacher"))
+    try:
+        lesson = _cohort_lesson_from_payload(payload, teacher_id)
+    except (TypeError, ValueError) as exc:
+        return JSONResponse({"error": "invalid_lesson", "detail": str(exc)}, status_code=400)
+    student_ids = payload.get("student_ids") if isinstance(payload.get("student_ids"), list) else None
+    push_to_drive = bool(payload.get("push_to_drive", True))
+
+    # Store phase in one thread hop (sqlite is thread-bound), seeded roster —
+    # same store the cohort endpoints see. LLM phase runs async afterwards.
+    def load(store):
+        return assign_tier_groups(store, teacher_id, student_ids)
+
+    try:
+        groups, roster_names = await asyncio.to_thread(_with_student_store, load)
+        result = await generate_lesson_materials(
+            lesson=lesson,
+            teacher_id=teacher_id,
+            push_to_drive=push_to_drive,
+            tier_groups=groups,
+            roster_names=roster_names,
+        )
+    except PermissionError as exc:
+        return JSONResponse({"error": "unauthorized_student_ids", "detail": str(exc)}, status_code=422)
+    except ValueError as exc:
+        return JSONResponse({"error": "generation_failed", "detail": str(exc)}, status_code=422)
+
+    return {
+        "materials": materials_as_dicts(result),
+        "lesson_summary": result.lesson_summary,
+        "sync_status": result.sync_status,
+        "requires_teacher_approval": True,
+        "writes": {"deliverables": 0, "audit_receipts": 0},
+    }
+
+
 @app.post("/api/students/{student_id}/help-artifact/preview")
 async def help_artifact_preview(student_id: str, request: Request, payload: dict):
     from src.education.help_artifacts import generate_help_artifact
@@ -4314,6 +4490,39 @@ async def google_drive_import(payload: dict):
             log_event("drive_files_imported", query_text=item.get("name", ""))
         except Exception:
             pass
+
+    # Auto-trigger extraction for student_lens_source imports
+    if purpose == "student_lens_source" and result.get("imported"):
+        try:
+            from src.lingua_viva.extraction_engine import extract, chunk_file
+            from src.lingua_viva.student_lens_writer import write_student_lens
+            from src.lingua_viva.config import lv_home
+
+            extraction_results = []
+            for item in result["imported"]:
+                local_path = item.get("local_path", "")
+                if not local_path:
+                    continue
+                try:
+                    extraction = await extract(
+                        file_paths=[local_path],
+                        target_schema_id="student_lens",
+                        hint={"assigned_student_id": assigned_student_id} if assigned_student_id else {},
+                    )
+                    extraction_results.append({
+                        "file": item.get("name", local_path),
+                        "extraction": extraction,
+                    })
+                except Exception as exc:
+                    extraction_results.append({
+                        "file": item.get("name", local_path),
+                        "error": str(exc),
+                    })
+            result["extractions"] = extraction_results
+        except Exception:
+            # Extraction is best-effort — never block the import
+            pass
+
     return result
 
 
@@ -4466,6 +4675,29 @@ async def google_drive_upload(payload: dict):
     return result
 
 
+@app.post("/api/google-drive/sync-folder")
+async def set_drive_sync_folder(payload: dict):
+    """Set or clear the Drive folder used for automatic lens sync."""
+    from src.lingua_viva.drive_sync import get_sync_folder_id, set_sync_folder_id
+
+    folder_id = str(payload.get("folder_id") or "").strip()
+    if not folder_id:
+        # Clear sync folder
+        set_sync_folder_id("")
+        return {"sync_folder_id": None, "status": "cleared"}
+    set_sync_folder_id(folder_id)
+    return {"sync_folder_id": folder_id, "status": "configured"}
+
+
+@app.get("/api/google-drive/sync-folder")
+async def get_drive_sync_folder():
+    """Get the currently configured sync folder."""
+    from src.lingua_viva.drive_sync import get_sync_folder_id
+
+    folder_id = get_sync_folder_id()
+    return {"sync_folder_id": folder_id, "configured": bool(folder_id)}
+
+
 @app.post("/api/provider/connect")
 async def provider_connect(payload: dict):
     """
@@ -4548,7 +4780,8 @@ def _build_query_response(result, query_text: str, session_id: str, eval_mode: b
         route="external" if answered_externally else "local",
     )
     append_trace(query_trace)
-    log_event("query_processed_locally", query_text=query_text)
+    # NOTE: log_event("query_processed_locally") is already called in reasoning.py:310.
+    # Removed duplicate call here that was causing every query to appear twice in the privacy log.
     grounding = result.grounding.as_dict() if result.grounding else None
     voice_tone = result.path_record.voice_tone if result.grounding else "plain"
     gir_score = result.path_record.gir_score if result.grounding else 1.0

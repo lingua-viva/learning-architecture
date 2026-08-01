@@ -119,7 +119,7 @@ def test_ollama_circuit_breaker_opens_after_three_timeouts(monkeypatch, tmp_path
 
     for _ in range(3):
         result = run(engine.reason("Help", {}, model="ollama/qwen2.5:7b", system_prompt="Prompt"))
-        assert result.model_used == "none"
+        assert result.error == "timeout"
 
     result = run(engine.reason("Help", {}, model="ollama/qwen2.5:7b", system_prompt="Prompt"))
 

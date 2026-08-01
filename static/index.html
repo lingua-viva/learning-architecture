@@ -240,6 +240,13 @@
     .panel {
       padding: 16px;
     }
+    .panel.flash-success {
+      animation: obs-saved-flash 0.6s ease-out;
+    }
+    @keyframes obs-saved-flash {
+      0% { background-color: #c6f6d5; }
+      100% { background-color: transparent; }
+    }
     .item {
       padding: 12px;
     }
@@ -673,7 +680,7 @@
       grade: "G3",
       unitId: "",
       students: [],
-      selectedStudent: "student-marco",
+      selectedStudent: "",
       chat: [],
       selectedTraceId: ""
     };
@@ -1628,6 +1635,9 @@
         const feedback = result.feedback || {};
         const categories = (feedback.categories_updated || []).map(id => SUPPORT_CATEGORY_LABELS[id] || id).join(", ");
         $("obs-result").innerHTML = `<h3>Saved</h3><div class="source-line"><span class="badge ok">Saved locally. Not uploaded. Not shared.</span><span class="badge">Domain: observation</span></div><p>Observation ${escapeHtml(result.observation.observation_id)} is attached to the local lens.</p><p>${escapeHtml(feedback.message || "Observation saved.")}</p>${categories ? `<p>Updated: ${escapeHtml(categories)}</p>` : ""}<div class="output">${escapeHtml(result.observation.raw_transcript)}</div>`;
+        $("obs-result").scrollIntoView({ behavior: "smooth", block: "nearest" });
+        $("obs-result").classList.add("flash-success");
+        setTimeout(() => $("obs-result").classList.remove("flash-success"), 2000);
         await loadLens("obs-lens", false);
       } catch (error) {
         $("obs-result").innerHTML = `<h3>Not saved</h3><p>${escapeHtml(error.message || "The local save failed. Your text is still in the form.")}</p>`;
@@ -2514,7 +2524,7 @@
         const data = await api("/api/why");
         const traces = data.traces || [];
         return `<div class="list">${traces.length
-          ? traces.map(trace => `<div class="item"><h3>${escapeHtml(trace.classification_domain || "unclassified")} &middot; ${escapeHtml(trace.model_used || "none")}</h3><p>Sources: ${escapeHtml((trace.source_citations || []).join(", ") || "Manuale v1")}</p><p class="voice-hint">No question text is stored, only a hash.</p></div>`).join("")
+          ? traces.map(trace => `<div class="item"><h3>${escapeHtml(trace.classification_domain || "unclassified")} &middot; ${escapeHtml(trace.model_used || "none")}</h3><p>Sources: ${escapeHtml((trace.source_citations || []).join(", ") || "None cited")}</p><p class="voice-hint">No question text is stored, only a hash.</p></div>`).join("")
           : "<p>No traces recorded yet.</p>"}</div>`;
       }, "Could not read the traces."));
       const healthTab = $("gov-tab-health");
@@ -2564,7 +2574,7 @@
             <div class="item">
               <h3>${escapeHtml(trace.classification_domain)} · ${escapeHtml(trace.model_used)} · ${((trace.duration_ms || 0) / 1000).toFixed(1)}s</h3>
               <div class="source-line"><span class="badge ok">${escapeHtml(trace.route)}</span><span class="badge">tokens ${trace.token_count || 0}</span><span class="badge">external ${trace.external_calls || 0}</span></div>
-              <p>Sources: ${escapeHtml((trace.source_citations || []).join(", ") || "Manuale v1")}</p>
+              <p>Sources: ${escapeHtml((trace.source_citations || []).join(", ") || "None cited")}</p>
               <p>Privacy: ${escapeHtml((trace.privacy_events || []).join(", ") || "no events")}</p>
               <p>Trace: ${escapeHtml(trace.trace_id)}</p>
             </div>`).join("") : "<p>No traces recorded yet.</p>"}</div>

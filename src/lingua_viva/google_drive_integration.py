@@ -949,3 +949,88 @@ def upload_paths(
     if manifest_entries:
         _write_export_manifest(manifest_entries)
     return {"uploaded": uploaded, "failed": failed}
+
+
+def upload_text_to_folder(
+    folder_id: str,
+    filename: str,
+    content: str,
+    mime_type: str = "text/markdown",
+    *,
+    settings: DriveSettings | None = None,
+    transport: DriveTransport | None = None,
+) -> dict:
+    """Upload text content directly to a Drive folder (for lens sync).
+
+    If a file with the same name already exists in the folder, it is updated
+    in place (Drive API update vs create).
+    """
+    settings = ensure_configured(settings)
+    if not folder_id.strip():
+        raise DriveConfigError("No folder_id provided for upload.")
+    transport = transport or default_transport()
+    token = _access_token(settings, transport)
+
+    # Check if file already exists in folder
+    existing_id = None
+    try:
+        query = f"name='{filename}' and '{folder_id}' in parents and trashed=false"
+        search_url = f"{DRIVE_API}/files?q={parse.quote(query)}&fields=files(id,name)"
+        req = request.Request(search_url, headers={"Authorization": f"Bearer {token}"})
+        with request.urlopen(req, timeout=20) as response:
+            data = json.loads(response.read())
+            files = data.get("files", [])
+            if files:
+                existing_id = files[0]["id"]
+    except Exception:
+        pass  # If search fails, just create a new file
+
+    body = content.encode("utf-8")
+
+    if existing_id:
+        # Update existing file
+        url = f"https://www.googleapis.com/upload/drive/v3/files/{existing_id}?uploadType=media"
+        req = request.Request(
+            url,
+            data=body,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": mime_type,
+            },
+            method="PATCH",
+        )
+    else:
+        # Create new file (multipart upload)
+        boundary = "---lingua-viva-sync-boundary---"
+        metadata = json.dumps({
+            "name": filename,
+            "parents": [folder_id],
+            "mimeType": mime_type,
+        })
+        multipart = (
+            f"--{boundary}\r\n"
+            f"Content-Type: application/json; charset=UTF-8\r\n\r\n"
+            f"{metadata}\r\n"
+            f"--{boundary}\r\n"
+            f"Content-Type: {mime_type}\r\n\r\n"
+        ).encode("utf-8") + body + f"\r\n--{boundary}--\r\n".encode("utf-8")
+
+        req = request.Request(
+            DRIVE_UPLOAD_API,
+            data=multipart,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": f"multipart/related; boundary={boundary}",
+            },
+            method="POST",
+        )
+
+    with request.urlopen(req, timeout=30) as response:
+        result = json.loads(response.read())
+
+    return {
+        "id": result.get("id", ""),
+        "name": filename,
+        "folder_id": folder_id,
+        "action": "updated" if existing_id else "created",
+    }

@@ -174,7 +174,9 @@ REPO = Path(__file__).resolve().parent.parent
 #   v84 (2026-07-30): teacher decision flywheel complete local audit receipts.
 #   v85 (2026-07-30): cohort lesson-planning backend preview/approval/list routes.
 #   v86 (2026-07-30): cohort lesson-planning complete local audit receipts.
-EXPECTED_VERSION = 86
+#   v89 (2026-08-01): lesson-materials generate endpoint (MVP sprint Spec 3).
+#   v90 (2026-08-01): voice intent router endpoint (MVP sprint Spec 4).
+EXPECTED_VERSION = 90
 
 
 def _html() -> str:

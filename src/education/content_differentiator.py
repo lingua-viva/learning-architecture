@@ -624,7 +624,14 @@ class ContentDifferentiator:
         # resolves the DISPUTED Elena case in the eval truth table).
         if weakest is None:
             return "foundational"
-        if CEFR_ORDER.index(weakest) >= CEFR_ORDER.index("B2"):
+        # Normalize CEFR level to match CEFR_ORDER (case-insensitive lookup)
+        weakest_normalized = next(
+            (level for level in CEFR_ORDER if level.lower() == weakest.lower()),
+            None,
+        )
+        if weakest_normalized is None:
+            return "foundational"
+        if CEFR_ORDER.index(weakest_normalized) >= CEFR_ORDER.index("B2"):
             return "extended"
         return "on_track"
 

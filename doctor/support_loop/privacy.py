@@ -34,8 +34,19 @@ REDACTION_PATTERNS = [
 ]
 
 
+EXCLUDED_DIR_PARTS = {
+    ".venv", "venv", "site-packages", "node_modules", ".git",
+    "__pycache__", ".tox", ".mypy_cache", ".pytest_cache",
+}
+
+
 def matches_private_path(path: Path | str) -> bool:
     normalized = str(path).replace("\\", "/")
+    # Never flag third-party/vendored directories — they contain files
+    # named "private" that are not student data (e.g. numpy test_private.py).
+    parts = set(Path(normalized).parts)
+    if parts & EXCLUDED_DIR_PARTS:
+        return False
     name = Path(normalized).name
     return any(fnmatch.fnmatch(normalized, pattern) or fnmatch.fnmatch(name, pattern) for pattern in PRIVATE_PATH_PATTERNS)
 

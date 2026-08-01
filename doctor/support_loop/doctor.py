@@ -399,7 +399,7 @@ def check_privacy_paths() -> CheckResult:
     expected_exclusions: list[str] = []
     for path in LV_ROOT.rglob("*"):
         rel = path.relative_to(LV_ROOT)
-        if ".lv_support" in rel.parts or "__pycache__" in rel.parts:
+        if ".lv_support" in rel.parts or "__pycache__" in rel.parts or ".venv" in rel.parts or "site-packages" in rel.parts or "node_modules" in rel.parts:
             continue
         if matches_private_path(rel):
             if rel.suffix.lower() == ".docx":

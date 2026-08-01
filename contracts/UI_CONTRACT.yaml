@@ -497,7 +497,18 @@
 #     approval, and listing for local teacher-owned cohort plan records.
 # v86 (2026-07-30): cohort lesson-planning audit hardening — approved
 #     cohort plans carry hashed local evidence ids into complete receipts.
-version: 86
+# v87 (2026-08-01): QA fixes from Chip's testing — remove hardcoded
+#     student-marco default, fix Manuale v1 citation fallback, add save
+#     confirmation scroll+flash, remove duplicate query log_event.
+# v88 (2026-08-01): MVP sprint — Drive auto-sync endpoints, Drive-import
+#     auto-extraction trigger, observation→Drive sync hook.
+# v89 (2026-08-01): MVP sprint Spec 3 — POST /api/lesson-materials/generate:
+#     tier-differentiated student-facing worksheet generation
+#     (SPEC_LV_LESSON_MATERIALS_2026-08-01).
+# v90 (2026-08-01): MVP sprint Spec 4 — POST /api/voice/act: voice intent
+#     router (observation/generate/question) with signal-based classification
+#     (SPEC_LV_VOICE_INTENT_ROUTER_2026-08-01).
+version: 90
 files:
   - static/index.html
   - static/sw.js

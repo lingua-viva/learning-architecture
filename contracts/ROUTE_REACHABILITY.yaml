@@ -392,6 +392,18 @@ reachable_from_ui:
       archives the teacher's copy before replacing — never destroys work.
 
 intentionally_backend_only:
+  - route: "POST /api/google-drive/sync-folder"
+    status: deferred_undecided
+    reason: >-
+      MVP sprint (2026-08-01). Sets the Drive folder for automatic lens sync;
+      UI button will be wired in R2 of the sprint.
+
+  - route: "GET /api/google-drive/sync-folder"
+    status: deferred_undecided
+    reason: >-
+      MVP sprint (2026-08-01). Returns current sync folder config;
+      UI will read this to show sync status badge.
+
   - route: "POST /api/cohort-plans/preview"
     status: deferred_undecided
     reason: >-
@@ -412,6 +424,18 @@ intentionally_backend_only:
       Cohort lesson-planning backend slice (2026-07-30). Lists locally saved
       teacher-owned plans for API/QA verification; UI workbench placement is
       deferred.
+
+  - route: "POST /api/lesson-materials/generate"
+    status: deferred_undecided
+    reason: >-
+      MVP sprint Spec 3 (2026-08-01). Generates tier-differentiated student-facing
+      materials; UI workbench placement deferred to Spec 4.
+
+  - route: "POST /api/voice/act"
+    status: deferred_undecided
+    reason: >-
+      MVP sprint Spec 4 (2026-08-01). Voice intent router — classifies transcripts
+      and executes actions; UI voice companion wire deferred.
 
   - route: "POST /api/students/{student_id}/help-artifact/preview"
     status: deferred_undecided

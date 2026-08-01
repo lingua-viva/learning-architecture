@@ -275,7 +275,7 @@ async def _propose_fields(chunks: list[SourceChunk], target_schema_id: str, hint
 
     engine = ReasoningEngine()
     result = await engine.reason(combined, system_prompt=system_prompt, model=DEFAULT_MODEL)
-    if result.model_used == "none":
+    if result.model_used == "none" or result.error:
         return {}
     text = result.content.strip()
     text = re.sub(r"^```(json)?|```$", "", text, flags=re.MULTILINE).strip()
