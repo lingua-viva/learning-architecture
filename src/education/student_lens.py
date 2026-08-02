@@ -41,7 +41,7 @@ import re
 import sqlite3
 import time
 import uuid
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, asdict, fields as dataclass_fields
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
@@ -112,6 +112,39 @@ VALID_STRATEGY_OUTCOMES = ("worked", "did_not_work", "unknown")
 # buckets inside support_profile. These answer the report-facing ask
 # "Academic Strengths / Personal Strengths" as top-level profile sections.
 VALID_STRENGTH_KINDS = ("academic", "personal")
+
+# Unified evidence ledger (SPEC_LV_EVIDENCE_ETHOS_TRAITS_2026-08-01): a
+# dated, teacher-attributed claim about a student, tied to a target, with
+# provenance. Append-only — soft-delete tombstone only, no UPDATE path.
+# Evidence that can be silently edited isn't evidence.
+VALID_EVIDENCE_KINDS = ("document", "teacher_feedback", "observation_ref")
+VALID_EVIDENCE_TARGET_TYPES = (
+    "support_category",
+    "ethos_trait",
+    "strengths",
+    "background",
+)
+
+# evidence_type values that describe a stored artifact rather than words a
+# teacher typed/spoke — used to derive the ledger `kind` for evidence that
+# arrives through the profile-level ethos path.
+_DOCUMENT_EVIDENCE_TYPES = ("google_drive", "local_file", "report")
+
+# Ledger kind -> profile evidence_type, for evidence arriving through the
+# unified append_evidence() path and mirrored into ethos_profile.
+_EVIDENCE_KIND_TO_TYPE = {
+    "document": "local_file",
+    "teacher_feedback": "teacher_note",
+    "observation_ref": "observation",
+}
+
+# Sources-ledger source_type -> profile evidence_type, for kind=document
+# evidence whose source_ref points at a sources record.
+_SOURCE_TYPE_TO_EVIDENCE_TYPE = {
+    "drive": "google_drive",
+    "local": "local_file",
+    "slack": "slack",
+}
 
 # Only these confidence levels are eligible for student reports — a
 # model_suggested or imported_needs_confirmation item has not been
@@ -579,7 +612,20 @@ def _normalize_ethos_profile_with_warnings(
                 f"ethos_profile trait '{trait_id}' contained non-object "
                 "evidence items; dropped"
             )
-        normalized_traits[trait_id] = {"evidence": kept}
+        normalized = {"evidence": kept}
+        # Per-trait rollups recomputed from the evidence_records ledger
+        # (SPEC_LV_EVIDENCE_ETHOS_TRAITS_2026-08-01) survive normalization;
+        # anything with the wrong shape is dropped, not defaulted — the
+        # recompute is the source of truth, not this normalizer.
+        count = trait_data.get("evidence_count")
+        if isinstance(count, int) and not isinstance(count, bool) and count >= 0:
+            normalized["evidence_count"] = count
+        last_at = trait_data.get("last_evidence_at")
+        if isinstance(last_at, str) or (
+            last_at is None and "last_evidence_at" in trait_data
+        ):
+            normalized["last_evidence_at"] = last_at
+        normalized_traits[trait_id] = normalized
 
     return (
         {
@@ -776,6 +822,7 @@ class StudentLensStore:
                 support_profile TEXT NOT NULL DEFAULT '{}',
                 strengths_profile TEXT NOT NULL DEFAULT '{}',
                 ethos_profile TEXT NOT NULL DEFAULT '{}',
+                background_notes TEXT NOT NULL DEFAULT '',
                 profile_version INTEGER NOT NULL DEFAULT 1,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
@@ -812,6 +859,8 @@ class StudentLensStore:
                 support_entries TEXT NOT NULL DEFAULT '[]',
                 classification_guidance TEXT,
                 teacher_feedback TEXT,
+                origin TEXT NOT NULL DEFAULT 'local',
+                routing_decision_ids TEXT NOT NULL DEFAULT '{}',
                 FOREIGN KEY (student_id) REFERENCES students(student_id)
             );
 
@@ -826,6 +875,25 @@ class StudentLensStore:
                 decided_at TEXT NOT NULL,
                 FOREIGN KEY (student_id) REFERENCES students(student_id)
             );
+
+            CREATE TABLE IF NOT EXISTS evidence_records (
+                evidence_id TEXT PRIMARY KEY,
+                student_id TEXT NOT NULL,
+                teacher_id TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                target_type TEXT NOT NULL,
+                target_id TEXT,
+                summary TEXT NOT NULL,
+                source_ref TEXT,
+                confidence_level TEXT NOT NULL,
+                deleted INTEGER NOT NULL DEFAULT 0,
+                deleted_at TEXT,
+                FOREIGN KEY (student_id) REFERENCES students(student_id)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_evidence_student
+                ON evidence_records(student_id, created_at);
             """
         )
         cursor = self._conn.cursor()
@@ -840,6 +908,10 @@ class StudentLensStore:
                 self._conn.execute(
                     f"ALTER TABLE students ADD COLUMN {col} TEXT NOT NULL DEFAULT '{{}}'"
                 )
+        if "background_notes" not in columns:
+            self._conn.execute(
+                "ALTER TABLE students ADD COLUMN background_notes TEXT NOT NULL DEFAULT ''"
+            )
         cursor.execute("PRAGMA table_info(observations)")
         obs_columns = [row[1] for row in cursor.fetchall()]
         new_obs_cols = (
@@ -862,6 +934,21 @@ class StudentLensStore:
                     )
                 else:
                     self._conn.execute(f"ALTER TABLE observations ADD COLUMN {col} TEXT")
+        # Multi-teacher triangulation (SPEC_LV_MULTI_TEACHER_TRIANGULATION
+        # 2026-08-01): provenance column. Existing rows are by definition
+        # locally authored, so the default is correct for the migration.
+        if "origin" not in obs_columns:
+            self._conn.execute(
+                "ALTER TABLE observations ADD COLUMN origin TEXT NOT NULL DEFAULT 'local'"
+            )
+        # Routing memory (SPEC_LV_ROUTING_MEMORY_LOOP_2026-08-01): decision
+        # ids persisted on the observation row so correction hooks can pair
+        # rows server-side. Ids only — never content. Pre-feature rows keep
+        # '{}' and hooks skip them silently.
+        if "routing_decision_ids" not in obs_columns:
+            self._conn.execute(
+                "ALTER TABLE observations ADD COLUMN routing_decision_ids TEXT NOT NULL DEFAULT '{}'"
+            )
         self._conn.commit()
 
     # ------------------------------------------------------------------
@@ -958,6 +1045,165 @@ class StudentLensStore:
             (json.dumps(avoid_ids or []), _now_iso(), student_id),
         )
         self._conn.commit()
+
+    # Fields a teacher may edit on an existing profile ("where can we add
+    # any background info?" — SPEC_LV_BASE_LENS_SCHOOL_CATEGORIES_2026-08-01).
+    # Everything else (support_profile, CEFR aggregates, RTI history...) is
+    # derived from observations or has its own audited write path. In
+    # particular rti_current_tier is NOT editable here: tier changes must go
+    # through update_rti_tier() so rti_tier_history stays reconstructable
+    # (get_lens_as_of) — a PATCH bypass was caught in the 2026-08-01 review.
+    UPDATABLE_PROFILE_FIELDS = (
+        "campus",
+        "grade_level",
+        "home_languages",
+        "learning_differences",
+        "background_notes",
+    )
+
+    def update_profile(self, student_id: str, fields: dict) -> dict:
+        """Teacher-directed edit of profile background fields. Accepts any
+        subset of UPDATABLE_PROFILE_FIELDS; unknown keys are rejected with
+        ValueError (never silently dropped). Bumps profile_version and
+        updated_at. Returns the updated lens dict."""
+        if not isinstance(fields, dict) or not fields:
+            raise ValueError("fields must be a non-empty dict")
+        unknown = [k for k in fields if k not in self.UPDATABLE_PROFILE_FIELDS]
+        if unknown:
+            raise ValueError(
+                f"Unknown profile field(s) {unknown}. "
+                f"Allowed: {self.UPDATABLE_PROFILE_FIELDS}"
+            )
+        row = self._get_student_row(student_id)
+        if row is None:
+            raise LensNotFoundError(student_id)
+
+        assignments: list[str] = []
+        params: list = []
+        for key, value in fields.items():
+            if key in ("home_languages", "learning_differences"):
+                if not (
+                    isinstance(value, list)
+                    and all(isinstance(item, str) for item in value)
+                ):
+                    raise ValueError(f"{key} must be a list of strings")
+                params.append(json.dumps(value))
+            else:  # campus, grade_level, background_notes — free text
+                if not isinstance(value, str):
+                    raise ValueError(f"{key} must be a string")
+                if len(value) > 10_000:
+                    raise ValueError(f"{key} must be 10000 characters or fewer")
+                params.append(value)
+            assignments.append(f"{key} = ?")
+
+        params.extend([_now_iso(), student_id])
+        self._conn.execute(
+            f"""
+            UPDATE students SET
+                {", ".join(assignments)},
+                profile_version = profile_version + 1,
+                updated_at = ?
+            WHERE student_id = ?
+            """,
+            params,
+        )
+        self._conn.commit()
+        return self.get_lens(student_id)
+
+    def confirm_support_entry(
+        self, student_id: str, category_id: str, bucket: str, entry_id: str
+    ) -> dict:
+        """Teacher confirms a model_suggested support-profile entry (the
+        tap-to-confirm path). Flips confidence to teacher_confirmed in
+        place — the ONLY way a suggestion becomes evidence-grade. Raises
+        ValueError if the entry does not exist."""
+        if category_id not in SUPPORT_CATEGORY_IDS:
+            raise ValueError(
+                f"Unknown category ID '{category_id}'. Allowed: {SUPPORT_CATEGORY_IDS}"
+            )
+        if bucket not in VALID_SUPPORT_BUCKETS:
+            raise ValueError(
+                f"Unknown bucket '{bucket}'. Allowed: {VALID_SUPPORT_BUCKETS}"
+            )
+        row = self._get_student_row(student_id)
+        if row is None:
+            raise LensNotFoundError(student_id)
+
+        sp = self._row_to_lens_dict(row)["support_profile"]
+        target = None
+        for entry in sp["categories"][category_id][bucket]:
+            if entry.get("id") == entry_id:
+                target = entry
+                break
+        if target is None:
+            raise ValueError(
+                f"No entry '{entry_id}' in {category_id}/{bucket} for this student"
+            )
+        target["confidence"] = "teacher_confirmed"
+
+        self._conn.execute(
+            """
+            UPDATE students SET
+                support_profile = ?,
+                profile_version = profile_version + 1,
+                updated_at = ?
+            WHERE student_id = ?
+            """,
+            (json.dumps(sp), _now_iso(), student_id),
+        )
+        self._conn.commit()
+        return sp
+
+    def set_routing_decision_ids(self, observation_id: str, ids: dict) -> None:
+        """Persist routing-memory decision ids on an observation row
+        (SPEC_LV_ROUTING_MEMORY_LOOP_2026-08-01). Ids only — keys are
+        decision types, values are decision-id strings. No-op on empty."""
+        clean = {
+            str(key): str(value)
+            for key, value in (ids or {}).items()
+            if value
+        }
+        if not clean or not observation_id:
+            return
+        self._conn.execute(
+            "UPDATE observations SET routing_decision_ids = ? WHERE observation_id = ?",
+            (json.dumps(clean), observation_id),
+        )
+        self._conn.commit()
+
+    def routing_decision_ids_for_support_entry(
+        self, student_id: str, category_id: str, bucket: str, entry_id: str
+    ) -> dict:
+        """Resolve the decision ids of the observation that fanned out a
+        support entry (correction hooks pair rows server-side, so old
+        clients need send nothing). Empty dict for pre-feature rows."""
+        row = self._get_student_row(student_id)
+        if row is None:
+            return {}
+        sp = self._row_to_lens_dict(row)["support_profile"]
+        entries = sp.get("categories", {}).get(category_id, {}).get(bucket, [])
+        obs_id = next(
+            (
+                entry.get("source_observation_id")
+                for entry in entries
+                if entry.get("id") == entry_id
+            ),
+            None,
+        )
+        if not obs_id:
+            return {}
+        cursor = self._conn.execute(
+            "SELECT routing_decision_ids FROM observations WHERE observation_id = ?",
+            (obs_id,),
+        )
+        result = cursor.fetchone()
+        if result is None:
+            return {}
+        try:
+            ids = json.loads(result[0] or "{}")
+        except (TypeError, ValueError):
+            return {}
+        return ids if isinstance(ids, dict) else {}
 
     def record_rti_decision(self, student_id: str, decision: str, note: str = "") -> None:
         """Record a teacher's confirm/defer decision on an RTI proposal.
@@ -1269,6 +1515,293 @@ class StudentLensStore:
             (student_id,),
         ).fetchall()
         return [r["teacher_id"] for r in rows]
+
+    # ------------------------------------------------------------------
+    # Multi-teacher triangulation (SPEC_LV_MULTI_TEACHER_TRIANGULATION
+    # 2026-08-01): ledger export rows, append-only union import, and
+    # per-colleague removal. Merge rule: known UUID -> skip. Two teachers'
+    # observations are two facts, never a conflict to resolve.
+    # ------------------------------------------------------------------
+
+    def local_observation_rows(self, student_id: str, teacher_id: str) -> list[dict]:
+        """This teacher's locally-authored observation rows for a student,
+        shaped for the shared-Drive ledger (Observation schema fields only —
+        the local `origin` provenance column never travels)."""
+        field_names = {f.name for f in dataclass_fields(Observation)}
+        rows = self._conn.execute(
+            "SELECT * FROM observations WHERE student_id = ? AND teacher_id = ?"
+            " AND origin = 'local' ORDER BY recorded_at ASC",
+            (student_id, teacher_id),
+        ).fetchall()
+        return [
+            {k: v for k, v in self._observation_row_to_dict(r).items() if k in field_names}
+            for r in rows
+        ]
+
+    def local_teacher_ids(self, student_id: Optional[str] = None) -> list[str]:
+        """Teacher ids with locally-authored observations — 'us', as opposed
+        to colleagues whose rows arrived via ledger import."""
+        query = "SELECT DISTINCT teacher_id FROM observations WHERE origin = 'local'"
+        params: tuple = ()
+        if student_id:
+            query += " AND student_id = ?"
+            params = (student_id,)
+        return [r["teacher_id"] for r in self._conn.execute(query, params).fetchall()]
+
+    def import_observation_rows(self, rows: list[dict]) -> dict:
+        """Append-only union merge of colleague ledger rows.
+
+        Per row: validate against the Observation schema, skip unknown
+        students and known UUIDs, insert with origin='imported' and the
+        original teacher_id intact, and fan support entries into the
+        category rollups at imported_verified confidence. Aggregates are
+        recomputed once per affected student at the end, not per row —
+        which also makes partial imports safe (merge is idempotent).
+        """
+        field_names = {f.name for f in dataclass_fields(Observation)}
+        imported = 0
+        skipped = 0
+        affected: set[str] = set()
+        for raw in rows or []:
+            if not isinstance(raw, dict):
+                skipped += 1
+                continue
+            filtered = {k: raw[k] for k in field_names if k in raw}
+            try:
+                obs = Observation(**filtered)
+            except TypeError:
+                skipped += 1
+                continue
+            if obs.validate():
+                skipped += 1
+                continue
+            if self._get_student_row(obs.student_id) is None:
+                skipped += 1
+                continue
+            exists = self._conn.execute(
+                "SELECT 1 FROM observations WHERE observation_id = ?",
+                (obs.observation_id,),
+            ).fetchone()
+            if exists is not None:
+                # Known UUID — never overwrite, never touch local rows.
+                skipped += 1
+                continue
+            self._conn.execute(
+                """
+                INSERT INTO observations (
+                    observation_id, student_id, teacher_id, template_type,
+                    raw_transcript, teacher_edited_transcript, recorded_at,
+                    rti_tier, rti_tier_changed_this_obs, cefr_dimension,
+                    cefr_level_observed, cefr_direction, sel_domain,
+                    sel_valence, urgency_flag, ontology_node, sync_status,
+                    validation_errors, support_category, need_statement,
+                    strength_statement, strategy_statement, strategy_outcome,
+                    evidence_summary, source_type, support_entries,
+                    classification_guidance, teacher_feedback, origin
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'imported')
+                """,
+                (
+                    obs.observation_id,
+                    obs.student_id,
+                    obs.teacher_id,
+                    obs.template_type,
+                    obs.raw_transcript,
+                    obs.teacher_edited_transcript,
+                    obs.recorded_at,
+                    obs.rti_tier,
+                    int(obs.rti_tier_changed_this_obs),
+                    obs.cefr_dimension,
+                    obs.cefr_level_observed,
+                    obs.cefr_direction,
+                    obs.sel_domain,
+                    obs.sel_valence,
+                    int(obs.urgency_flag),
+                    obs.ontology_node,
+                    obs.sync_status,
+                    "[]",
+                    obs.support_category,
+                    obs.need_statement,
+                    obs.strength_statement,
+                    obs.strategy_statement,
+                    obs.strategy_outcome,
+                    obs.evidence_summary,
+                    obs.source_type,
+                    json.dumps(normalize_support_entries(obs.support_entries)),
+                    json.dumps(obs.classification_guidance)
+                    if obs.classification_guidance is not None
+                    else None,
+                    json.dumps(obs.teacher_feedback)
+                    if obs.teacher_feedback is not None
+                    else None,
+                ),
+            )
+            self._fan_out_support(obs, confidence="imported_verified")
+            affected.add(obs.student_id)
+            imported += 1
+        for sid in affected:
+            self._recalculate_aggregates(sid)
+        self._conn.commit()
+        return {"imported": imported, "skipped": skipped}
+
+    def remove_imported(self, student_id: str, teacher_id: str) -> dict:
+        """Delete exactly this colleague's imported rows for this student —
+        the teacher's 'remove colleague data' right. Local rows and other
+        colleagues' rows are untouched; category-rollup entries traced to
+        the removed observations go with them."""
+        removed_ids = {
+            r["observation_id"]
+            for r in self._conn.execute(
+                "SELECT observation_id FROM observations WHERE student_id = ?"
+                " AND teacher_id = ? AND origin = 'imported'",
+                (student_id, teacher_id),
+            ).fetchall()
+        }
+        if not removed_ids:
+            return {"removed": 0}
+        self._conn.execute(
+            "DELETE FROM observations WHERE student_id = ? AND teacher_id = ?"
+            " AND origin = 'imported'",
+            (student_id, teacher_id),
+        )
+        row = self._get_student_row(student_id, include_deleted=True)
+        if row is not None:
+            sp = self._row_to_lens_dict(row)["support_profile"]
+            changed = False
+            for category in (sp.get("categories") or {}).values():
+                for bucket in (*VALID_SUPPORT_BUCKETS, "evidence"):
+                    items = category.get(bucket)
+                    if not isinstance(items, list):
+                        continue
+                    kept = [
+                        item for item in items
+                        if item.get("source_observation_id") not in removed_ids
+                    ]
+                    if len(kept) != len(items):
+                        category[bucket] = kept
+                        changed = True
+            if changed:
+                self._conn.execute(
+                    "UPDATE students SET support_profile = ?,"
+                    " profile_version = profile_version + 1, updated_at = ?"
+                    " WHERE student_id = ?",
+                    (json.dumps(sp), _now_iso(), student_id),
+                )
+        self._recalculate_aggregates(student_id)
+        self._conn.commit()
+        return {"removed": len(removed_ids)}
+
+    def _fan_out_support(self, obs: Observation, confidence: str) -> None:
+        """Category-rollup fan-out for one observation (mirrors
+        append_observation's inline fan-out, at the caller's confidence)."""
+        entries = normalize_support_entries(obs.support_entries)
+        if not entries:
+            entries = support_entry_from_scalar_fields(
+                obs.support_category,
+                obs.need_statement,
+                obs.strength_statement,
+                obs.strategy_statement,
+                obs.strategy_outcome,
+                obs.evidence_summary,
+            )
+        bucket_map = {
+            "need_statement": "needs",
+            "strength_statement": "strengths",
+        }
+        for entry in entries:
+            if entry.get("teacher_confirmed") is False:
+                continue
+            cat_id = entry["support_category"]
+            tags = entry.get("context_tags") or {}
+            refs = [
+                f"context:language:{tags.get('language', 'unknown')}",
+                f"context:setting:{tags.get('setting', 'unknown')}",
+            ]
+            for statement_key, bucket in bucket_map.items():
+                if entry.get(statement_key):
+                    self.add_support_entry(
+                        student_id=obs.student_id,
+                        category_id=cat_id,
+                        bucket=bucket,
+                        text=entry[statement_key],
+                        created_by=obs.teacher_id,
+                        source_observation_id=obs.observation_id,
+                        source_ref_ids=refs,
+                        confidence=confidence,
+                    )
+            if entry.get("strategy_statement"):
+                outcome = entry.get("strategy_outcome")
+                strategy_bucket = {
+                    "worked": "strategies_worked",
+                    "did_not_work": "strategies_not_worked",
+                }.get(outcome)
+                if strategy_bucket:
+                    self.add_support_entry(
+                        student_id=obs.student_id,
+                        category_id=cat_id,
+                        bucket=strategy_bucket,
+                        text=entry["strategy_statement"],
+                        created_by=obs.teacher_id,
+                        source_observation_id=obs.observation_id,
+                        source_ref_ids=refs,
+                        confidence=confidence,
+                    )
+            if entry.get("evidence_summary"):
+                self.add_support_evidence(
+                    student_id=obs.student_id,
+                    category_id=cat_id,
+                    summary=entry["evidence_summary"],
+                    created_by=obs.teacher_id,
+                    evidence_type=obs.source_type or "observation",
+                    source_observation_id=obs.observation_id,
+                    source_ref_ids=refs,
+                )
+
+    def _recalculate_aggregates(self, student_id: str) -> None:
+        """Rebuild history-derived aggregates (CEFR snapshot, trajectory,
+        SEL summary) from the full observation table — imported rows enter
+        naturally. Deliberately does NOT touch rti_current_tier or
+        rti_tier_history: the tier is a local human decision, and a
+        colleague's tier view surfaces as a divergence signal in the
+        triangulation view instead of silently changing local state."""
+        row = self._get_student_row(student_id, include_deleted=True)
+        if row is None:
+            return
+        obs_rows = self._conn.execute(
+            "SELECT * FROM observations WHERE student_id = ? ORDER BY recorded_at DESC",
+            (student_id,),
+        ).fetchall()
+        snapshot: dict = {}
+        for r in obs_rows:
+            dim = r["cefr_dimension"]
+            if dim and r["cefr_level_observed"] and dim not in snapshot:
+                snapshot[dim] = r["cefr_level_observed"]
+        recent = [dict(r) for r in obs_rows[:50]]
+        concerns = sum(1 for o in recent if o["sel_valence"] == "concern")
+        positives = sum(1 for o in recent if o["sel_valence"] == "positive")
+        domains = [o["sel_domain"] for o in recent if o["sel_domain"]]
+        dominant = max(set(domains), key=domains.count) if domains else None
+        last_urgency = next((o["recorded_at"] for o in recent if o["urgency_flag"]), None)
+        self._conn.execute(
+            """
+            UPDATE students SET
+                cefr_snapshot = ?, cefr_trajectory_30d = ?, sel_summary = ?,
+                profile_version = profile_version + 1, updated_at = ?
+            WHERE student_id = ?
+            """,
+            (
+                json.dumps(snapshot),
+                self._compute_cefr_trajectory(student_id),
+                json.dumps({
+                    "recent_concerns": concerns,
+                    "recent_positives": positives,
+                    "dominant_domain": dominant,
+                    "last_urgency_flag": last_urgency,
+                }),
+                _now_iso(),
+                student_id,
+            ),
+        )
+        self._conn.commit()
 
     def evaluate_rti_rules(self, student_id: str) -> list[dict]:
         """Public wrapper: re-evaluate RTI escalation rules A-E against a
@@ -1603,7 +2136,44 @@ class StudentLensStore:
         (src/education/ethos.py). Pass allowed_trait_ids to inject the
         taxonomy explicitly (tests, batch imports); otherwise the active
         taxonomy is loaded from the configured ethos path.
+
+        Dual-write (SPEC_LV_EVIDENCE_ETHOS_TRAITS_2026-08-01): the same
+        item also lands in the append-only evidence_records ledger under
+        the same id, so the unified evidence views and the shipped ethos
+        report/compliance paths can never diverge.
         """
+        profile, _item = self._append_ethos_evidence_item(
+            student_id=student_id,
+            trait_id=trait_id,
+            summary=summary,
+            created_by=created_by,
+            evidence_type=evidence_type,
+            source_observation_id=source_observation_id,
+            source_ref_ids=source_ref_ids,
+            confidence=confidence,
+            allowed_trait_ids=allowed_trait_ids,
+        )
+        return profile
+
+    def _append_ethos_evidence_item(
+        self,
+        *,
+        student_id: str,
+        trait_id: str,
+        summary: str,
+        created_by: str,
+        evidence_type: str = "observation",
+        source_observation_id: Optional[str] = None,
+        source_ref_ids: Optional[list[str]] = None,
+        confidence: str = "teacher_confirmed",
+        allowed_trait_ids: Optional[list[str]] = None,
+        kind: Optional[str] = None,
+        source_ref: Optional[dict] = None,
+    ) -> tuple[dict, dict]:
+        """Core ethos-evidence writer: profile array + ledger row + rollup
+        in one transaction. Returns (profile, item) where item is the
+        appended item — or the pre-existing one on an idempotent
+        double-submit (in which case nothing is written)."""
         if allowed_trait_ids is None:
             from src.education import ethos as ethos_mod
 
@@ -1647,7 +2217,7 @@ class StudentLensStore:
                 existing.get("summary") == summary
                 and existing.get("source_observation_id") == source_observation_id
             ):
-                return profile
+                return profile, existing
         item = {
             "id": str(uuid.uuid4()),
             "summary": summary,
@@ -1659,6 +2229,32 @@ class StudentLensStore:
             "confidence": confidence,
         }
         trait_bucket["evidence"].append(item)
+
+        if kind is None:
+            if source_observation_id:
+                kind = "observation_ref"
+            elif evidence_type in _DOCUMENT_EVIDENCE_TYPES:
+                kind = "document"
+            else:
+                kind = "teacher_feedback"
+        if source_ref is None:
+            if source_observation_id:
+                source_ref = {"observation_id": source_observation_id}
+            elif item["source_ref_ids"]:
+                source_ref = {"source_ref_ids": item["source_ref_ids"]}
+        self._insert_evidence_row(
+            evidence_id=item["id"],
+            student_id=student_id,
+            teacher_id=created_by,
+            created_at=item["created_at"],
+            kind=kind,
+            target_type="ethos_trait",
+            target_id=trait_id,
+            summary=summary,
+            source_ref=source_ref,
+            confidence_level=confidence,
+        )
+        self._recompute_ethos_rollup(student_id, profile)
 
         now = _now_iso()
         self._conn.execute(
@@ -1672,6 +2268,281 @@ class StudentLensStore:
             (json.dumps(profile), now, student_id),
         )
         self._conn.commit()
+        return profile, item
+
+    # ------------------------------------------------------------------
+    # Unified evidence ledger (SPEC_LV_EVIDENCE_ETHOS_TRAITS_2026-08-01)
+    # ------------------------------------------------------------------
+
+    def _insert_evidence_row(
+        self,
+        *,
+        evidence_id: str,
+        student_id: str,
+        teacher_id: str,
+        created_at: str,
+        kind: str,
+        target_type: str,
+        target_id: Optional[str],
+        summary: str,
+        source_ref: Optional[dict],
+        confidence_level: str,
+    ) -> None:
+        self._conn.execute(
+            """
+            INSERT INTO evidence_records (
+                evidence_id, student_id, teacher_id, created_at, kind,
+                target_type, target_id, summary, source_ref,
+                confidence_level, deleted, deleted_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL)
+            """,
+            (
+                evidence_id,
+                student_id,
+                teacher_id,
+                created_at,
+                kind,
+                target_type,
+                target_id,
+                summary,
+                json.dumps(source_ref) if source_ref is not None else None,
+                confidence_level,
+            ),
+        )
+
+    def append_evidence(
+        self,
+        record: dict,
+        allowed_trait_ids: Optional[list[str]] = None,
+    ) -> str:
+        """Append one record to the append-only evidence ledger.
+
+        record keys: student_id, teacher_id, kind, target_type, target_id,
+        summary, source_ref (optional dict), confidence_level (optional,
+        default teacher_confirmed). Returns the evidence_id.
+
+        ethos_trait targets route through the same core writer as
+        add_ethos_evidence, so the profile array, the ledger, and the
+        per-trait rollups stay coherent no matter which door the evidence
+        came in through. Provenance is a pointer (source_ref), never file
+        bytes — content stays where it lives.
+        """
+        if not isinstance(record, dict):
+            raise ValueError("evidence record must be a dictionary")
+        student_id = _validate_non_empty_string(
+            record.get("student_id"), "student_id"
+        )
+        teacher_id = _validate_non_empty_string(
+            record.get("teacher_id"), "teacher_id"
+        )
+        kind = record.get("kind")
+        if kind not in VALID_EVIDENCE_KINDS:
+            raise ValueError(
+                f"Invalid kind '{kind}'. Allowed: {VALID_EVIDENCE_KINDS}"
+            )
+        target_type = record.get("target_type")
+        if target_type not in VALID_EVIDENCE_TARGET_TYPES:
+            raise ValueError(
+                f"Invalid target_type '{target_type}'. "
+                f"Allowed: {VALID_EVIDENCE_TARGET_TYPES}"
+            )
+        target_id = record.get("target_id")
+        summary = record.get("summary")
+        if not (isinstance(summary, str) and summary.strip() and len(summary) <= 2000):
+            raise ValueError("Evidence summary must be non-empty and <= 2000 characters")
+        summary = summary.strip()
+        confidence = record.get("confidence_level", "teacher_confirmed")
+        if confidence not in VALID_CONFIDENCE_VALUES:
+            raise ValueError(
+                f"Invalid confidence '{confidence}'. Allowed: {VALID_CONFIDENCE_VALUES}"
+            )
+        source_ref = record.get("source_ref")
+        if source_ref is not None and not isinstance(source_ref, dict):
+            raise ValueError("source_ref must be an object or null")
+
+        if target_type == "support_category":
+            if target_id not in SUPPORT_CATEGORY_IDS:
+                raise ValueError(
+                    f"Unknown category ID '{target_id}'. Allowed: {SUPPORT_CATEGORY_IDS}"
+                )
+        elif target_type == "strengths":
+            if target_id not in VALID_STRENGTH_KINDS:
+                raise ValueError(
+                    f"Unknown strengths kind '{target_id}'. "
+                    f"Allowed: {VALID_STRENGTH_KINDS}"
+                )
+        elif target_type == "background":
+            if target_id is not None:
+                raise ValueError("background evidence takes no target_id")
+
+        if target_type == "ethos_trait":
+            evidence_type = _EVIDENCE_KIND_TO_TYPE[kind]
+            if kind == "document" and source_ref:
+                evidence_type = _SOURCE_TYPE_TO_EVIDENCE_TYPE.get(
+                    str(source_ref.get("source_type") or ""), evidence_type
+                )
+            source_ref_ids = None
+            if source_ref and source_ref.get("source_record_id"):
+                source_ref_ids = [str(source_ref["source_record_id"])]
+            _profile, item = self._append_ethos_evidence_item(
+                student_id=student_id,
+                trait_id=target_id,
+                summary=summary,
+                created_by=teacher_id,
+                evidence_type=evidence_type,
+                source_observation_id=(
+                    _validate_non_empty_string(
+                        source_ref.get("observation_id"), "observation_id"
+                    )
+                    if source_ref and source_ref.get("observation_id")
+                    else None
+                ),
+                source_ref_ids=source_ref_ids,
+                confidence=confidence,
+                allowed_trait_ids=allowed_trait_ids,
+                kind=kind,
+                source_ref=source_ref,
+            )
+            return item["id"]
+
+        row = self._get_student_row(student_id, include_deleted=False)
+        if row is None:
+            raise LensNotFoundError(student_id)
+
+        evidence_id = str(uuid.uuid4())
+        self._insert_evidence_row(
+            evidence_id=evidence_id,
+            student_id=student_id,
+            teacher_id=teacher_id,
+            created_at=_now_iso(),
+            kind=kind,
+            target_type=target_type,
+            target_id=target_id,
+            summary=summary,
+            source_ref=source_ref,
+            confidence_level=confidence,
+        )
+        self._conn.commit()
+        return evidence_id
+
+    def list_evidence(
+        self,
+        student_id: str,
+        target_type: Optional[str] = None,
+        target_id: Optional[str] = None,
+        include_deleted: bool = False,
+    ) -> list[dict]:
+        """Ledger listing, newest first. source_ref comes back parsed."""
+        row = self._get_student_row(student_id, include_deleted=False)
+        if row is None:
+            raise LensNotFoundError(student_id)
+        query = "SELECT * FROM evidence_records WHERE student_id = ?"
+        params: list = [student_id]
+        if target_type is not None:
+            query += " AND target_type = ?"
+            params.append(target_type)
+        if target_id is not None:
+            query += " AND target_id = ?"
+            params.append(target_id)
+        if not include_deleted:
+            query += " AND deleted = 0"
+        query += " ORDER BY created_at DESC, evidence_id"
+        results = []
+        for r in self._conn.execute(query, params).fetchall():
+            d = dict(r)
+            d["deleted"] = bool(d["deleted"])
+            raw_ref = d.get("source_ref")
+            if raw_ref:
+                try:
+                    d["source_ref"] = json.loads(raw_ref)
+                except (TypeError, ValueError):
+                    d["source_ref"] = None
+            else:
+                d["source_ref"] = None
+            results.append(d)
+        return results
+
+    def soft_delete_evidence(self, evidence_id: str) -> None:
+        """Tombstone a ledger row (append-only: never a hard DELETE, same
+        pattern as the students table). ethos_trait rows also mark the
+        mirrored profile item inactive and refresh the trait rollups, so
+        every view retires the evidence together."""
+        row = self._conn.execute(
+            "SELECT * FROM evidence_records WHERE evidence_id = ?",
+            (evidence_id,),
+        ).fetchone()
+        if row is None:
+            raise ValueError(f"Unknown evidence_id '{evidence_id}'")
+        if row["deleted"]:
+            return
+        now = _now_iso()
+        self._conn.execute(
+            "UPDATE evidence_records SET deleted = 1, deleted_at = ? "
+            "WHERE evidence_id = ?",
+            (now, evidence_id),
+        )
+        if row["target_type"] == "ethos_trait":
+            srow = self._get_student_row(row["student_id"], include_deleted=True)
+            if srow is not None:
+                profile = self._row_to_lens_dict(srow)["ethos_profile"]
+                for trait_data in profile["traits"].values():
+                    for item in trait_data.get("evidence", []):
+                        if item.get("id") == evidence_id:
+                            item["active"] = False
+                self._recompute_ethos_rollup(row["student_id"], profile)
+                self._conn.execute(
+                    """
+                    UPDATE students SET
+                        ethos_profile = ?,
+                        profile_version = profile_version + 1,
+                        updated_at = ?
+                    WHERE student_id = ?
+                    """,
+                    (json.dumps(profile), now, row["student_id"]),
+                )
+        self._conn.commit()
+
+    def _recompute_ethos_rollup(
+        self, student_id: str, profile: Optional[dict] = None
+    ) -> dict:
+        """Recompute per-trait {evidence_count, last_evidence_at} from the
+        evidence_records ledger into ethos_profile — same
+        recompute-on-write pattern as the CEFR/RTI aggregates in
+        append_observation. Verdict at the moment of truth, in the code
+        path that has ground truth; never rebuilt later from a proxy.
+
+        With profile given, mutates it in place and lets the caller
+        persist (single UPDATE per write). Without it, loads, recomputes,
+        persists, and commits."""
+        rows = self._conn.execute(
+            """
+            SELECT target_id, COUNT(*) AS n, MAX(created_at) AS last_at
+            FROM evidence_records
+            WHERE student_id = ? AND target_type = 'ethos_trait' AND deleted = 0
+            GROUP BY target_id
+            """,
+            (student_id,),
+        ).fetchall()
+        persist = profile is None
+        if profile is None:
+            srow = self._get_student_row(student_id, include_deleted=True)
+            if srow is None:
+                raise LensNotFoundError(student_id)
+            profile = self._row_to_lens_dict(srow)["ethos_profile"]
+        for trait_data in profile["traits"].values():
+            trait_data["evidence_count"] = 0
+            trait_data["last_evidence_at"] = None
+        for r in rows:
+            bucket = profile["traits"].setdefault(r["target_id"], {"evidence": []})
+            bucket["evidence_count"] = int(r["n"])
+            bucket["last_evidence_at"] = r["last_at"]
+        if persist:
+            self._conn.execute(
+                "UPDATE students SET ethos_profile = ?, updated_at = ? "
+                "WHERE student_id = ?",
+                (json.dumps(profile), _now_iso(), student_id),
+            )
+            self._conn.commit()
         return profile
 
     def export_ethos_report(
@@ -2013,3 +2884,92 @@ class StudentLensStore:
             )
 
         return escalations
+
+
+DIVERGENCE_WINDOW_DAYS = 30
+
+
+def compute_triangulation(lens: dict) -> dict:
+    """Deterministic multi-teacher convergence signals for one exported lens
+    (SPEC_LV_MULTI_TEACHER_TRIANGULATION_2026-08-01 §3). Counting and date
+    comparison only — no LLM, nothing auto-resolved.
+
+    - colleagues: every contributing teacher, local vs imported, last-seen
+    - categories: corroborated (2+ distinct authors), single_source, none
+    - divergence: opposing CEFR directions (progressing vs regressing) from
+      different teachers within DIVERGENCE_WINDOW_DAYS — surfaced as a
+      "worth a conversation" prompt with both observation ids
+    """
+    observations = lens.get("observations") or []
+    teachers: dict[str, dict] = {}
+    for o in observations:
+        tid = str(o.get("teacher_id") or "")
+        if not tid:
+            continue
+        rec = teachers.setdefault(
+            tid,
+            {"teacher_id": tid, "observation_count": 0, "last_seen": "", "origin": "local"},
+        )
+        rec["observation_count"] += 1
+        recorded = str(o.get("recorded_at") or "")
+        if recorded > rec["last_seen"]:
+            rec["last_seen"] = recorded
+        if o.get("origin") == "imported":
+            rec["origin"] = "imported"
+
+    categories: dict[str, dict] = {}
+    support_categories = (lens.get("support_profile") or {}).get("categories") or {}
+    for cat_id, category in support_categories.items():
+        authors: set[str] = set()
+        for bucket in (*VALID_SUPPORT_BUCKETS, "evidence"):
+            items = category.get(bucket)
+            if not isinstance(items, list):
+                continue
+            for item in items:
+                author = str(item.get("created_by") or "")
+                if author:
+                    authors.add(author)
+        if len(authors) >= 2:
+            status = "corroborated"
+        elif len(authors) == 1:
+            status = "single_source"
+        else:
+            status = "none"
+        categories[cat_id] = {"status": status, "teachers": sorted(authors)}
+
+    directional = []
+    for o in observations:
+        if o.get("cefr_direction") not in ("progressing", "regressing"):
+            continue
+        try:
+            ts = datetime.fromisoformat(str(o.get("recorded_at"))).timestamp()
+        except (TypeError, ValueError):
+            continue
+        directional.append((ts, o))
+    divergence: list[dict] = []
+    window = DIVERGENCE_WINDOW_DAYS * 86400
+    for i, (ts_a, a) in enumerate(directional):
+        for ts_b, b in directional[i + 1:]:
+            if a.get("teacher_id") == b.get("teacher_id"):
+                continue
+            if a.get("cefr_direction") == b.get("cefr_direction"):
+                continue
+            if abs(ts_a - ts_b) > window:
+                continue
+            divergence.append({
+                "observation_ids": [a.get("observation_id"), b.get("observation_id")],
+                "teachers": [str(a.get("teacher_id")), str(b.get("teacher_id"))],
+                "directions": [str(a.get("cefr_direction")), str(b.get("cefr_direction"))],
+            })
+    # Bounded output: the most recent flags are the actionable ones.
+    divergence = divergence[-5:]
+
+    local_ids = sorted(
+        tid for tid, rec in teachers.items() if rec["origin"] == "local"
+    )
+    return {
+        "colleagues": sorted(teachers.values(), key=lambda r: r["teacher_id"]),
+        "local_teacher_ids": local_ids,
+        "categories": categories,
+        "divergence": divergence,
+    }

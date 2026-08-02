@@ -77,7 +77,7 @@ def test_reasoning_provider_config_precedes_default_model(monkeypatch, tmp_path)
 
     used = {}
 
-    async def fake_call(query, system_prompt, model):
+    async def fake_call(query, system_prompt, model, max_tokens=2000):
         used["model"] = model
         return None
 

@@ -271,12 +271,64 @@ reachable_from_ui:
   - route: "GET /api/students/{student_id}/lens"
     call_site: "/api/students/${state.selectedStudent}/lens"
 
+  - route: "PATCH /api/students/{student_id}"
+    call_site: 'method: "PATCH"'
+    note: >-
+      Background/profile inline edit in the Students lens panel
+      (SPEC_LV_BASE_LENS_SCHOOL_CATEGORIES_2026-08-01).
+
+  - route: "POST /api/students/{student_id}/support-entry/confirm"
+    call_site: "/api/students/${state.selectedStudent}/support-entry/confirm"
+    note: "Tap-to-confirm on model_suggested Category Profile entries."
+
+  - route: "GET /api/school-profile"
+    call_site: 'api("/api/school-profile")'
+    note: "Tier 2 school display config (labels + hidden categories)."
+
   - route: "POST /api/students/{student_id}/rti/decision"
     call_site: "/api/students/${state.selectedStudent}/rti/decision"
 
   - route: "PUT /api/students/{student_id}/rti"
     call_site: "/api/students/${state.selectedStudent}/rti"
     note: "Direct support-tier control in the Students lens panel."
+
+  - route: "POST /api/drive/pull-shared"
+    call_site: 'fetch("/api/drive/pull-shared"'
+    note: >-
+      "Pull colleague updates" button in the Students lens panel
+      (SPEC_LV_MULTI_TEACHER_TRIANGULATION_2026-08-01). Merges colleague
+      observation ledgers from the school's shared Drive folder, append-only
+      by UUID.
+
+  - route: "POST /api/students/{student_id}/remove-colleague"
+    call_site: "/api/students/${state.selectedStudent}/remove-colleague"
+    note: >-
+      "Remove this colleague's data" confirm button in the triangulation
+      strip. Deletes imported rows + their fanned-out support entries for
+      one teacher; local rows are never touched.
+
+  - route: "POST /api/students/{student_id}/evidence"
+    call_site: "/api/students/${sid}/evidence"
+    note: >-
+      Unified evidence ledger writes (SPEC_LV_EVIDENCE_ETHOS_TRAITS
+      2026-08-01): "Add as evidence" in the Sources view + quick teacher
+      feedback / ethos-trait forms in the student Evidence panel.
+
+  - route: "GET /api/students/{student_id}/evidence"
+    call_site: "/api/students/${state.selectedStudent}/evidence"
+    note: "Evidence panel in the student lens view, grouped by target."
+
+  - route: "DELETE /api/students/{student_id}/evidence/{evidence_id}"
+    call_site: "/evidence/${item.evidence_id}"
+    note: >-
+      Soft-delete (tombstone) control on evidence rows — append-only
+      ledger, never a hard delete.
+
+  - route: "GET /api/ethos/taxonomy"
+    call_site: 'api("/api/ethos/taxonomy")'
+    note: >-
+      Ethos trait pickers + panel in the student Evidence view. Degrades
+      to available:false — the UI hides ethos surfaces, never errors.
 
   - route: "GET /api/assess/rubric/{unit_id}"
     call_site: "/api/assess/rubric/${"

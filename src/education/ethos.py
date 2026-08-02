@@ -374,6 +374,28 @@ def match_traits(text: str, ethos: dict) -> list[str]:
     return matched
 
 
+def match_trait_terms(text: str, ethos: dict) -> list[dict]:
+    """Like match_traits, but returns which keyword hit:
+    [{"trait_id": ..., "matched_term": ..., "label": ...}], first matching
+    keyword per trait. Same word-boundary matching rules — suggestion
+    signal only, always teacher-reviewable, never auto-confirmed."""
+    lowered = text.lower()
+    matches = []
+    for trait_id, keywords in ethos_signal_keywords(ethos).items():
+        for kw in keywords:
+            if re.search(r"(?<!\w)" + re.escape(kw) + r"(?!\w)", lowered):
+                trait = get_trait(ethos, trait_id) or {}
+                matches.append(
+                    {
+                        "trait_id": trait_id,
+                        "matched_term": kw,
+                        "label": trait.get("label", trait_id),
+                    }
+                )
+                break
+    return matches
+
+
 def format_traits_for_prompt(ethos: dict) -> str:
     """Render the taxonomy as a compact block for a lens system prompt."""
     lines = [f"School ethos taxonomy ({ethos.get('ethos_name', 'unnamed')}):"]

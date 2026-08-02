@@ -512,7 +512,67 @@
 #     through /api/voice/act (single-shot voice commands), transcript toast,
 #     clarification memory, text-field fallback
 #     (SPEC_LV_FRONTEND_VOICE_WIRE_2026-08-01).
-version: 91
+# v92 (2026-08-01): school category profile wiring — Spec 1 of 5
+#     (SPEC_LV_BASE_LENS_SCHOOL_CATEGORIES_2026-08-01). src/web.py: PATCH
+#     /api/students/{student_id} (profile edit incl. background_notes, Olga's
+#     ask), POST /api/students/{student_id}/support-entry/confirm (flip
+#     model_suggested → teacher_confirmed), GET /api/school-profile (Tier 2
+#     configurable category labels/visibility); /api/observe/classify and
+#     /api/voice/act gain additive category_suggestions (signal-based,
+#     deterministic — survives LLM degradation). Suggestions below the 0.5
+#     threshold land in open_questions as model_suggested, never in a
+#     category bucket. static/index.html: Category Profile panel in the
+#     student lens (per-category needs/strengths/strategies trialed ✓✗/open
+#     questions, tap-to-confirm badges, Academic + Personal Strengths,
+#     background editor).
+# v93 (2026-08-01): voice student detection v2 — Spec 4 of 5
+#     (SPEC_LV_VOICE_STUDENT_DETECTION_V2_2026-08-01). src/web.py:
+#     /api/voice/act accepts optional context_student_id (frontend-held
+#     last-mentioned student); pronoun-precedence rule resolves "he also…"
+#     follow-ups; additive response fields match_quality, resolved_student,
+#     candidates (ambiguous fuzzy asks "Did you mean Marco or Marko?");
+#     student_detect routing rows carry outcome enum
+#     exact|fuzzy|context|ambiguous|none. static/index.html:
+#     voiceLastStudent memory (120s, cleared on view switch/clarify),
+#     context_student_id in the voice/act payload, resolved-name echo toast
+#     for fuzzy/context resolutions.
+# v94 (2026-08-01): multi-teacher triangulation — Spec 3
+#     (SPEC_LV_MULTI_TEACHER_TRIANGULATION_2026-08-01, operator ruling: full
+#     display names from Tier 2 config, never in filenames/Drive artifacts).
+#     src/web.py: GET /api/students/{student_id}/lens gains additive
+#     triangulation payload (colleagues + author_display, corroborated/
+#     single_source categories, divergence prompts) and fires a throttled
+#     background ledger pull; POST /api/drive/pull-shared (manual merge of
+#     colleague ledgers from the school's shared Drive folder, append-only
+#     by UUID); POST /api/students/{student_id}/remove-colleague (surgical
+#     removal of one colleague's imported rows). static/index.html:
+#     Colleague observations strip ("Pull colleague updates" button,
+#     per-colleague counts + remove-with-confirm), author badges on category
+#     entries ("you" vs colleague display name, quiet until a colleague
+#     contributes), corroborated ×N chips, divergence rendered as "worth a
+#     conversation" — never auto-resolved.
+# v95 (2026-08-01): evidence + ethos traits — Spec 2
+#     (SPEC_LV_EVIDENCE_ETHOS_TRAITS_2026-08-01, operator ruling: adapt to
+#     the shipped ethos layer — trait list stays in ethos.yaml, one unified
+#     append-only evidence_records ledger, add_ethos_evidence bridged to it).
+#     src/web.py: POST/GET /api/students/{student_id}/evidence (append +
+#     grouped listing), DELETE .../evidence/{evidence_id} (soft-delete
+#     tombstone, never hard delete), GET /api/ethos/taxonomy (degrades to
+#     available:false); /api/observe/classify and /api/voice/act gain
+#     additive ethos_suggestions (deterministic word-boundary trait
+#     matches, teacher-reviewable only); /api/parents/recommendation
+#     accepts include_evidence_summaries (default false) — report-grade
+#     evidence only, entering the draft BEFORE _strip_parent_output +
+#     check_publication_safety (gate order sacred). static/index.html:
+#     Evidence panel in the student lens (grouped ledger rows, quick
+#     teacher-feedback form with category + ethos trait picker, ethos
+#     rollup chips, Remove = soft-delete), "Add as evidence" per source
+#     ledger record (provenance pointer, never file bytes), Parents
+#     "Include evidence summaries" checkbox.
+version: 96
+# v96 (2026-08-01): latency optimization — voice/act uses qwen2.5:3b + 256
+#     max tokens for responsive voice answers; max_tokens param plumbed
+#     through Pipeline.run() and ReasoningEngine.reason().
 files:
   - static/index.html
   - static/sw.js

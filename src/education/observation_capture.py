@@ -30,6 +30,7 @@ slice — see BUILD_JOURNAL.md scope decision.
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 from typing import Optional
@@ -38,6 +39,104 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from ontology.engine import OntologyEngine, ClassificationResult  # noqa: E402
 from src.education.student_lens import Observation, StudentLensStore  # noqa: E402
+
+
+# ---------------------------------------------------------------------------
+# Support-category suggestion (SPEC_LV_BASE_LENS_SCHOOL_CATEGORIES_2026-08-01)
+#
+# Deterministic keyword/regex signals per category — same mechanics as
+# voice_intent.py's OBSERVATION_SIGNALS: (pattern, weight) summed per
+# category. No LLM. Suggestions are NEVER silently written into a category
+# bucket: below CATEGORY_SUGGESTION_THRESHOLD the obligatory-routing rule
+# sends the entry to open_questions as model_suggested instead of guessing.
+# ---------------------------------------------------------------------------
+
+CATEGORY_SUGGESTION_THRESHOLD = 0.5  # matches voice_intent.WRITE_INTENT_THRESHOLD
+
+CATEGORY_SIGNALS: dict[str, list[tuple[str, float]]] = {
+    "learning_and_cognition": [
+        (r"\b(understand|understood|comprehension|concept|grasp(ed)?)\b", 0.4),
+        (r"\b(remember(ed|s)?|recall(ed)?|retain(ed)?|memory)\b", 0.4),
+        (r"\b(confus(ed|ing)|lost the thread|mixed up|couldn'?t follow)\b", 0.4),
+        (r"\b(problem[- ]solving|reasoning|abstract)\b", 0.3),
+    ],
+    "communication_and_language": [
+        (r"\b(vocabulary|word[- ]finding|find(ing)? (the )?words?)\b", 0.4),
+        (r"\b(pronunciation|articulat(e|ed|ion)|stutter(ed|ing)?)\b", 0.4),
+        (r"\b(express (himself|herself|themselves|ideas)|verbal(ly)?)\b", 0.4),
+        (r"\b(communicat(e|ed|ion|ing))\b", 0.3),
+        (r"\b(gestur(e|ed|es|ing)|nonverbal|non-verbal)\b", 0.3),
+    ],
+    "executive_functioning": [
+        (r"\b(stay(ing)? on task|on[- ]task|off[- ]task)\b", 0.5),
+        (r"\b(focus(ed|ing)?|distract(ed|ion|ible)?|attention)\b", 0.4),
+        (r"\b(finish(ed|ing)?|complet(e|ed|ing)) (the |a |his |her |their )?(task|work|assignment|activity)\b", 0.4),
+        (r"\b(organiz(e|ed|ation|ing)|plan(ned|ning)|time management)\b", 0.4),
+        (r"\b(forgot (his|her|their) (materials|book|homework)|transition(s|ing)?)\b", 0.3),
+        (r"\b(impulsiv(e|ity)|started before (the )?instructions)\b", 0.3),
+    ],
+    "social_skills": [
+        (r"\b(friend(s|ship)?|peer(s)?|classmate(s)?)\b", 0.3),
+        (r"\b(shar(e|ed|ing)|tak(e|ing) turns|turn[- ]taking|took turns)\b", 0.4),
+        (r"\b(group work|in (the )?group|cooperat(e|ed|ion|ive)|collaborat(e|ed|ion|ive))\b", 0.3),
+        (r"\b(conflict|argu(ed|ment|ing)|teas(ed|ing)|excluded)\b", 0.4),
+        (r"\b(social(ly)?|interact(s|ed|ion|ing)?)\b", 0.3),
+    ],
+    "emotional_regulation": [
+        (r"\b(upset|cry(ing)?|cried|tears|meltdown|tantrum|outburst)\b", 0.5),
+        (r"\b(frustrat(ed|ion)|angry|anger|furious)\b", 0.4),
+        (r"\b(calm(ed)? (down|himself|herself|themselves)|self[- ]regulat(e|ed|ion))\b", 0.4),
+        (r"\b(anxious|anxiety|worried|overwhelmed|shut(s)? down)\b", 0.4),
+    ],
+    "physical_sensory_needs": [
+        (r"\b(nois(e|y)|loud|headphones|ear (defenders|muffs))\b", 0.4),
+        (r"\b(sensory|fidget(s|ed|ing)?|seating|wobble (stool|cushion))\b", 0.4),
+        (r"\b(handwriting|pencil grip|fine motor|gross motor|motor skills)\b", 0.4),
+        (r"\b(tired|fatigue(d)?|vision|glasses|hearing aid)\b", 0.3),
+        (r"\b(light(ing)? (bother|hurt)|covers (his|her|their) ears)\b", 0.4),
+    ],
+    "attendance_and_engagement": [
+        (r"\b(absent|absence(s)?|missed (school|class|the lesson)|didn'?t (come|show))\b", 0.5),
+        (r"\b(late|tardy|arriv(ed|ing) late)\b", 0.4),
+        (r"\b(disengag(ed|ement)|not engag(ed|ing)|stopped participating|withdrawn from class)\b", 0.4),
+        (r"\b(refus(es|ed|ing) to (come|attend|join))\b", 0.4),
+    ],
+    "advanced_enrichment": [
+        (r"\b(finish(ed|es)? (early|first|quickly))\b", 0.4),
+        (r"\b(too easy|bored|not challenged|needs? (a |more )?challenge)\b", 0.5),
+        (r"\b(advanced|ahead of|beyond (the )?(class|level)|gifted)\b", 0.4),
+        (r"\b(extension|enrichment)\b", 0.4),
+    ],
+}
+
+
+def suggest_support_categories(transcript: str) -> list[dict]:
+    """Score a transcript against every support category's signal list.
+
+    Returns [{"category_id", "confidence", "matched_signals"}, ...] sorted
+    by confidence (desc), zero-score categories omitted, confidence capped
+    at 1.0. Purely advisory — callers decide what (if anything) to write,
+    gated by CATEGORY_SUGGESTION_THRESHOLD.
+    """
+    lowered = str(transcript or "").lower()
+    suggestions = []
+    for category_id, signals in CATEGORY_SIGNALS.items():
+        total = 0.0
+        matched: list[str] = []
+        for pattern, weight in signals:
+            if re.search(pattern, lowered):
+                total += weight
+                matched.append(pattern)
+        if total > 0:
+            suggestions.append(
+                {
+                    "category_id": category_id,
+                    "confidence": round(min(1.0, total), 2),
+                    "matched_signals": matched,
+                }
+            )
+    suggestions.sort(key=lambda item: item["confidence"], reverse=True)
+    return suggestions
 
 
 class ExternalRoutingBlockedError(PermissionError):
@@ -157,6 +256,12 @@ class ObservationCapturePipeline:
         result["ethos_trait_suggestions"] = self._suggest_ethos_traits(
             text_for_classification
         )
+        result["category_suggestions"] = suggest_support_categories(
+            text_for_classification
+        )
+        result["strategy_outcome_parsed"] = self._autofile_strategy_outcome(
+            observation, result["category_suggestions"]
+        )
         result["classification"] = {
             "riu_id": classification.riu_id,
             "name": classification.name,
@@ -171,6 +276,66 @@ class ObservationCapturePipeline:
         }
         result["governance_note"] = governance_note
         return result
+
+    def _autofile_strategy_outcome(
+        self, observation: Observation, suggestions: list[dict]
+    ) -> dict:
+        """Place a narrated strategy outcome ("tried X and it helped") into
+        the support profile as model_suggested — never teacher_confirmed.
+
+        Obligatory-routing rule: the category bucket write only happens when
+        the top category suggestion clears CATEGORY_SUGGESTION_THRESHOLD.
+        Below threshold the entry lands in that category's open_questions
+        instead — low confidence gates the write; it never guesses. With no
+        category signal at all there is nothing to hang the entry on, so
+        nothing is written (the parse still returns in the response for the
+        teacher to act on).
+
+        Skipped entirely when the teacher already supplied explicit support
+        entries or a strategy statement — that data flows through the
+        teacher_confirmed form path and must not be double-written.
+        """
+        from src.lingua_viva.voice_intent import parse_strategy_outcome
+
+        parsed = parse_strategy_outcome(
+            observation.teacher_edited_transcript or observation.raw_transcript
+        )
+        parsed["autofiled"] = None
+        if parsed["outcome"] is None or not parsed["strategy_statement"]:
+            return parsed
+        if observation.support_entries or observation.strategy_statement:
+            return parsed
+        if not suggestions:
+            return parsed
+
+        top = suggestions[0]
+        if top["confidence"] >= CATEGORY_SUGGESTION_THRESHOLD:
+            bucket = (
+                "strategies_worked"
+                if parsed["outcome"] == "worked"
+                else "strategies_not_worked"
+            )
+            text = parsed["strategy_statement"]
+        else:
+            bucket = "open_questions"
+            outcome_label = (
+                "worked" if parsed["outcome"] == "worked" else "did not work"
+            )
+            text = (
+                f'Strategy "{parsed["strategy_statement"]}" reported as '
+                f"{outcome_label} — category unconfirmed"
+            )
+        self.store.add_support_entry(
+            student_id=observation.student_id,
+            category_id=top["category_id"],
+            bucket=bucket,
+            text=text,
+            created_by=observation.teacher_id,
+            source_observation_id=observation.observation_id,
+            confidence="model_suggested",
+        )
+        parsed["autofiled"] = {"category_id": top["category_id"], "bucket": bucket}
+        return parsed
 
     def _suggest_ethos_traits(self, text: str) -> list[dict]:
         """Deterministic (keyword-based, no LLM) school-ethos trait

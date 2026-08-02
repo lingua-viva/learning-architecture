@@ -31,7 +31,7 @@ class FakeEngine:
         self.model_used = model_used
         self.calls: list[dict] = []
 
-    async def reason(self, query, context=None, model=None, default_model=None, system_prompt=None, local_only=False):
+    async def reason(self, query, context=None, model=None, default_model=None, system_prompt=None, local_only=False, max_tokens=2000):
         self.calls.append({"query": query, "system_prompt": system_prompt})
         return ReasonResult(content=self.content, confidence=0.8, model_used=self.model_used)
 

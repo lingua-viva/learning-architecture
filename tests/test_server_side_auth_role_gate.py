@@ -184,7 +184,7 @@ def test_parent_recommendation_forces_header_teacher_id(monkeypatch, tmp_path):
     monkeypatch.setenv("LV_STUDENT_DB_PATH", str(tmp_path / "students.db"))
     seen: dict[str, str] = {}
 
-    def fake_generate(self, student_id, teacher_id):
+    def fake_generate(self, student_id, teacher_id, **kwargs):
         seen["teacher_id"] = teacher_id
         return SimpleNamespace(
             subject_line="Progress update",

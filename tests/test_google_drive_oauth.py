@@ -217,7 +217,11 @@ def test_flow_times_out(client_env):
     assert result["flow_pending"] is True  # was pending at return time
 
 
-def test_start_signin_without_client_config_raises():
+def test_start_signin_without_client_config_raises(monkeypatch, tmp_path):
+    # Isolate lv_home(): on a machine with a real connected OAuth client,
+    # ~/.lingua-viva/config/oauth_client.json exists and load_client_config()
+    # would find it (hermeticity gap found 2026-08-01).
+    monkeypatch.setenv("LV_CONFIG_HOME", str(tmp_path / "lv-home"))
     with pytest.raises(DriveConfigError):
         oauth.start_signin(transport=FakeTokenTransport(), opener=lambda url: None)
 
@@ -242,7 +246,9 @@ def test_client_config_falls_back_to_lv_home_file(monkeypatch, tmp_path):
     }
 
 
-def test_client_config_missing_returns_none_and_status_reflects_it():
+def test_client_config_missing_returns_none_and_status_reflects_it(monkeypatch, tmp_path):
+    # Same lv_home() isolation as test_start_signin_without_client_config_raises.
+    monkeypatch.setenv("LV_CONFIG_HOME", str(tmp_path / "lv-home"))
     assert oauth.load_client_config() is None
     status = oauth.auth_status()
     assert status["can_signin"] is False

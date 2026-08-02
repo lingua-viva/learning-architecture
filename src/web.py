@@ -2623,18 +2623,110 @@ async def voice_act(request: Request, payload: dict):
     roster = await asyncio.to_thread(_with_student_store, load_roster)
     classification = classify_intent(transcript, roster)
 
+    # Routing memory (SPEC_LV_ROUTING_MEMORY_LOOP_2026-08-01): record the
+    # intent decision — content-free (signal keys + ids only), append-only,
+    # fire-and-forget. Recording never changes routing; a failed append
+    # never surfaces to the teacher.
+    from src.lingua_viva.routing_memory import record_decision
+
+    intent_decision_id = await asyncio.to_thread(
+        record_decision,
+        "intent",
+        classification.intent,
+        classification.confidence,
+        classification.matched_signals,
+        {"student_id": classification.student_id} if classification.student_id else None,
+    )
+
     if classification.intent == "observation":
-        if classification.needs_clarification:
+        # Student detection v2 (SPEC_LV_VOICE_STUDENT_DETECTION_V2): the
+        # classifier resolved exact/fuzzy/ambiguous; conversational context
+        # (frontend-held last-mentioned student) may resolve a pronoun
+        # follow-up — but only via the deterministic pronoun-precedence
+        # rule, never on ambiguity, and always spoken-confirmed by name.
+        from src.lingua_viva.voice_intent import (
+            FUZZY_NAME_CUTOFF,
+            context_takes_precedence,
+        )
+
+        student_id = classification.student_id
+        student_name = classification.student_name
+        match_quality = classification.match_quality
+
+        context_student_id = str(payload.get("context_student_id") or "")
+        context_student = None
+        if context_student_id:
+            # Unknown ids are ignored, not an error — the frontend memory
+            # may outlive a roster edit.
+            context_student = next(
+                (s for s in roster if str(s.get("student_id") or "") == context_student_id),
+                None,
+            )
+        resolved_by_context = False
+        if (
+            context_student is not None
+            and match_quality != "ambiguous"
+            and context_takes_precedence(transcript, classification.matched_token)
+        ):
+            student_id = str(context_student.get("student_id") or "")
+            student_name = str(context_student.get("display_name") or "")
+            match_quality = "context"
+            resolved_by_context = True
+
+        # Detection decision row — outcome enum per spec:
+        # exact | fuzzy | context | ambiguous | none. Mechanism metadata
+        # rides in signals_matched (content-free); ids only in subject_ref.
+        if match_quality == "ambiguous":
+            detect_outcome, detect_confidence, detect_signals = "ambiguous", 0.0, [
+                f"fuzzy:cutoff={FUZZY_NAME_CUTOFF}"]
+        elif resolved_by_context:
+            detect_outcome, detect_confidence, detect_signals = "context", 0.9, [
+                "context:pronoun"]
+        elif match_quality == "fuzzy":
+            detect_outcome, detect_confidence, detect_signals = "fuzzy", FUZZY_NAME_CUTOFF, [
+                f"fuzzy:cutoff={FUZZY_NAME_CUTOFF}"]
+        elif student_id:
+            detect_outcome, detect_confidence, detect_signals = "exact", 1.0, []
+        else:
+            detect_outcome, detect_confidence, detect_signals = "none", 0.0, []
+        detect_decision_id = await asyncio.to_thread(
+            record_decision,
+            "student_detect",
+            detect_outcome,
+            detect_confidence,
+            detect_signals,
+            {"student_id": student_id} if student_id else None,
+        )
+
+        if student_id is None or not student_id:
+            if match_quality == "ambiguous" and classification.candidates:
+                first_names = [
+                    str(c.get("display_name") or "").split()[0]
+                    for c in classification.candidates
+                    if c.get("display_name")
+                ]
+                spoken = f"Did you mean {' or '.join(first_names)}?"
+            else:
+                spoken = (
+                    "I heard an observation but I'm not sure which student. "
+                    "Can you say their name?"
+                )
             return {
                 "intent": "observation",
                 "action_taken": "needs_clarification",
-                "spoken_confirmation": (
-                    "I heard an observation but I'm not sure which student. "
-                    "Can you say their name?"
-                ),
+                "spoken_confirmation": spoken,
                 "tone_prefix": "",
                 "needs_clarification": True,
                 "transcript": transcript,
+                # Additive: candidate set for ambiguous fuzzy hits.
+                "match_quality": match_quality,
+                "candidates": classification.candidates,
+                # Additive: lets the clarification-resolution flow append
+                # a resolution correction referencing these decisions.
+                "routing_decision_ids": {
+                    "intent": intent_decision_id,
+                    "student_detect": detect_decision_id,
+                },
             }
 
         ctx = classification.observation_context
@@ -2644,7 +2736,7 @@ async def voice_act(request: Request, payload: dict):
 
             pipeline = ObservationCapturePipeline(store=store)
             return pipeline.capture(
-                student_id=classification.student_id,
+                student_id=student_id,
                 teacher_id=teacher_id,
                 raw_transcript=transcript,
                 template_type="cefr",
@@ -2656,20 +2748,77 @@ async def voice_act(request: Request, payload: dict):
         result = await asyncio.to_thread(_with_student_store, capture)
         result["local_only"] = True
 
+        # Category-suggestion decision: one row per suggestion SET (top
+        # suggestion + confidence), keyed to the saved observation so a
+        # later confirm/recategorize can pair a correction to it.
+        observation_id = str((result.get("observation") or {}).get("observation_id") or "")
+        suggestions = result.get("category_suggestions") or []
+        top = suggestions[0] if suggestions else {}
+        category_decision_id = await asyncio.to_thread(
+            record_decision,
+            "category_suggest",
+            str(top.get("category_id") or "none"),
+            float(top.get("confidence") or 0.0),
+            list(top.get("matched_signals") or []),
+            {"observation_id": observation_id, "student_id": student_id},
+        )
+
+        # Persist the ids on the observation row so correction hooks can
+        # pair rows server-side after any reload. Fire-and-forget: the
+        # observation is already saved — instrumentation never fails it.
+        try:
+            def _persist_ids(store):
+                store.set_routing_decision_ids(
+                    observation_id,
+                    {
+                        "intent": intent_decision_id,
+                        "student_detect": detect_decision_id,
+                        "category_suggest": category_decision_id,
+                    },
+                )
+
+            await asyncio.to_thread(_with_student_store, _persist_ids)
+        except Exception:
+            pass
+
         from src.lingua_viva.drive_sync import trigger_sync
 
-        trigger_sync(classification.student_id)
+        trigger_sync(student_id)
 
         # First name only in spoken text (privacy rule: never speak a full
         # student name — /api/voice/tts enforces this too, belt and braces).
-        first_name = (classification.student_name or "").split()[0] if classification.student_name else "the student"
+        # Every non-exact resolution names the student so a misresolution
+        # is audible immediately; the exact-path string is unchanged.
+        first_name = (student_name or "").split()[0] if student_name else "the student"
+        if match_quality == "context":
+            spoken_confirmation = f"Still {first_name} — noted."
+        elif match_quality == "fuzzy":
+            spoken_confirmation = f"Got it — {first_name}. Saved."
+        else:
+            spoken_confirmation = f"Got it. Observation saved for {first_name}."
         return {
             "intent": "observation",
             "action_taken": "saved",
             "result": result,
-            "spoken_confirmation": f"Got it. Observation saved for {first_name}.",
+            "category_suggestions": result.get("category_suggestions", []),
+            # Additive (SPEC_LV_EVIDENCE_ETHOS_TRAITS 2026-08-01): which
+            # ethos traits the transcript matched and on what term —
+            # teacher-reviewable suggestion only, degrades to [].
+            "ethos_suggestions": _ethos_suggestions_for(transcript),
+            "spoken_confirmation": spoken_confirmation,
             "tone_prefix": "Confirmed. ",
             "gir_score": 1.0,
+            # Additive (detection v2): how the student resolved, and who —
+            # the frontend stores this as its last-mentioned-student memory.
+            "match_quality": match_quality,
+            "resolved_student": {"student_id": student_id, "display_name": student_name},
+            # Additive: correction hooks (template edit, category confirm,
+            # student re-assign) reference these ids when they land.
+            "routing_decision_ids": {
+                "intent": intent_decision_id,
+                "student_detect": detect_decision_id,
+                "category_suggest": category_decision_id,
+            },
         }
 
     if classification.intent == "generate":
@@ -2699,8 +2848,11 @@ async def voice_act(request: Request, payload: dict):
         from src.lingua_viva.app import run_teacher_query
 
         result = await asyncio.wait_for(
-            run_teacher_query(transcript, intent=None, session_id=session_id, eval_mode=False),
-            timeout=float(payload.get("timeout_seconds") or 25),
+            run_teacher_query(
+                transcript, intent=None, session_id=session_id, eval_mode=False,
+                explicit_model="ollama/qwen2.5:3b", max_tokens=256,
+            ),
+            timeout=float(payload.get("timeout_seconds") or 60),
         )
         response = _build_query_response(result, transcript, session_id, False)
     except asyncio.TimeoutError:
@@ -3057,6 +3209,37 @@ async def observe_capture(request: Request, payload: dict):
         raise
     result["local_only"] = True
 
+    # Routing memory (SPEC_LV_ROUTING_MEMORY_LOOP_2026-08-01): record the
+    # category-suggestion decision for this saved observation — one row per
+    # suggestion set (top suggestion + confidence), ids only, fire-and-forget.
+    from src.lingua_viva.routing_memory import record_decision
+
+    _obs_id = str((result.get("observation") or {}).get("observation_id") or "")
+    _suggestions = result.get("category_suggestions") or []
+    _top = _suggestions[0] if _suggestions else {}
+    _category_decision_id = await asyncio.to_thread(
+        record_decision,
+        "category_suggest",
+        str(_top.get("category_id") or "none"),
+        float(_top.get("confidence") or 0.0),
+        list(_top.get("matched_signals") or []),
+        {"observation_id": _obs_id, "student_id": student_id},
+    )
+    # Additive: the category confirm/recategorize hooks reference this id.
+    result["routing_decision_ids"] = {"category_suggest": _category_decision_id}
+
+    # Persist on the observation row so correction hooks pair rows
+    # server-side after any reload. Fire-and-forget.
+    try:
+        def _persist_ids(store):
+            store.set_routing_decision_ids(
+                _obs_id, {"category_suggest": _category_decision_id}
+            )
+
+        await asyncio.to_thread(_with_student_store, _persist_ids)
+    except Exception:
+        pass
+
     # Trigger async lens sync to Drive (fire-and-forget)
     from src.lingua_viva.drive_sync import trigger_sync
     trigger_sync(student_id)
@@ -3281,6 +3464,11 @@ async def observe_classify(payload: dict):
         if degraded
         else _parse_observation_proposal(result.content)
     )
+    # Deterministic category proposals (SPEC_LV_BASE_LENS_SCHOOL_CATEGORIES
+    # 2026-08-01) — signal-based, no LLM, so they survive model degradation.
+    # Additive field; existing response shape unchanged.
+    from src.education.observation_capture import suggest_support_categories
+
     return {
         "proposal": proposal,
         "model_used": "none" if degraded else result.model_used,
@@ -3289,9 +3477,26 @@ async def observe_classify(payload: dict):
             for key, value in proposal.items()
             if key not in ("classification_guidance", "teacher_feedback")
         ),
+        "category_suggestions": suggest_support_categories(transcript),
+        # Deterministic ethos-trait proposals (SPEC_LV_EVIDENCE_ETHOS_TRAITS
+        # 2026-08-01) — same additive pattern as category_suggestions; a
+        # broken/missing taxonomy degrades to [] and never breaks classify.
+        "ethos_suggestions": _ethos_suggestions_for(transcript),
         "writes_made": 0,
         "teacher_confirmation_required": True,
     }
+
+
+def _ethos_suggestions_for(text: str) -> list[dict]:
+    """Deterministic word-boundary ethos-trait matches for a transcript.
+    Suggestion signal only — teacher-reviewable, never auto-confirmed
+    evidence. Degrades to [] when the taxonomy is unavailable/broken."""
+    try:
+        from src.education import ethos as ethos_mod
+
+        return ethos_mod.match_trait_terms(text, ethos_mod.load_ethos())
+    except Exception:
+        return []
 
 
 @app.get("/api/students")
@@ -3338,6 +3543,320 @@ async def create_student(payload: dict):
         return {"student_id": student_id, "display_name": display_name}
 
     return await asyncio.to_thread(_with_student_store, do_create)
+
+
+@app.get("/api/school-profile")
+async def school_profile():
+    """Tier 2 school display config: category labels + hidden categories.
+    IDs are immutable and never come from config — labels/visibility only."""
+    from src.lingua_viva.config import read_school_profile
+
+    return read_school_profile()
+
+
+@app.patch("/api/students/{student_id}")
+async def update_student_profile(student_id: str, payload: dict):
+    """Teacher edits background/profile fields on an existing student lens
+    ("where can we add any background info?" — SPEC_LV_BASE_LENS_SCHOOL_
+    CATEGORIES_2026-08-01). Accepts any subset of the store's
+    UPDATABLE_PROFILE_FIELDS; unknown fields are a 400, never dropped."""
+    from src.education.student_lens import LensNotFoundError
+    from src.lingua_viva.privacy_log import log_event
+
+    if not isinstance(payload, dict) or not payload:
+        return JSONResponse({"error": "At least one field is required"}, status_code=400)
+
+    def do_update(store):
+        return store.update_profile(student_id, payload)
+
+    try:
+        lens = await asyncio.to_thread(_with_student_store, do_update)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    except LensNotFoundError:
+        return JSONResponse(
+            {"error": f"Student '{student_id}' not found."}, status_code=404
+        )
+    # Privacy event carries the student_id hash only — never a name.
+    await asyncio.to_thread(log_event, "profile_updated", query_text=student_id)
+    return {
+        "status": "updated",
+        "student_id": student_id,
+        "profile_version": lens["profile_version"],
+        "updated_fields": sorted(payload.keys()),
+    }
+
+
+@app.post("/api/students/{student_id}/support-entry/confirm")
+async def confirm_support_entry(student_id: str, payload: dict):
+    """Tap-to-confirm: flip a model_suggested support-profile entry to
+    teacher_confirmed. The only path from suggestion to evidence-grade."""
+    from src.education.student_lens import LensNotFoundError
+    from src.lingua_viva.privacy_log import log_event
+
+    category_id = str(payload.get("category_id") or "").strip()
+    bucket = str(payload.get("bucket") or "").strip()
+    entry_id = str(payload.get("entry_id") or "").strip()
+    if not (category_id and bucket and entry_id):
+        return JSONResponse(
+            {"error": "category_id, bucket, and entry_id are required"},
+            status_code=400,
+        )
+
+    def do_confirm(store):
+        return store.confirm_support_entry(student_id, category_id, bucket, entry_id)
+
+    try:
+        await asyncio.to_thread(_with_student_store, do_confirm)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    except LensNotFoundError:
+        return JSONResponse(
+            {"error": f"Student '{student_id}' not found."}, status_code=404
+        )
+    await asyncio.to_thread(log_event, "support_entry_confirmed", query_text=student_id)
+
+    # Routing memory (SPEC_LV_ROUTING_MEMORY_LOOP_2026-08-01): a confirm-tap
+    # is ground truth that the category suggestion was RIGHT — append a
+    # positive correction row. The decision id resolves server-side from
+    # the entry's source observation (persisted at capture time); a client
+    # -supplied id wins if present. Pre-feature observations resolve to
+    # nothing and skip silently.
+    routing_decision_id = str(payload.get("routing_decision_id") or "").strip()
+    if not routing_decision_id:
+        try:
+            def _lookup_ids(store):
+                return store.routing_decision_ids_for_support_entry(
+                    student_id, category_id, bucket, entry_id
+                )
+
+            _ids = await asyncio.to_thread(_with_student_store, _lookup_ids)
+            routing_decision_id = str(_ids.get("category_suggest") or "").strip()
+        except Exception:
+            routing_decision_id = ""
+    if routing_decision_id:
+        from src.lingua_viva.routing_memory import record_correction
+
+        await asyncio.to_thread(
+            record_correction,
+            routing_decision_id,
+            {
+                "type": "category_suggest",
+                "positive": True,
+                "category_id": category_id,
+                "source": "support_entry_confirm",
+            },
+        )
+
+    return {
+        "status": "confirmed",
+        "student_id": student_id,
+        "category_id": category_id,
+        "bucket": bucket,
+        "entry_id": entry_id,
+    }
+
+
+@app.post("/api/students/{student_id}/evidence")
+async def add_student_evidence(request: Request, student_id: str, payload: dict):
+    """Append one record to the unified evidence ledger
+    (SPEC_LV_EVIDENCE_ETHOS_TRAITS_2026-08-01). Append-only: corrections
+    are new records, removal is soft-delete. Provenance is a pointer
+    (source_ref), never file bytes — content stays where it lives."""
+    from src.education.ethos import EthosValidationError
+    from src.education.student_lens import LensNotFoundError
+    from src.lingua_viva.access_roles import effective_teacher_id
+    from src.lingua_viva.privacy_log import log_event
+
+    if not isinstance(payload, dict):
+        return JSONResponse({"error": "payload must be an object"}, status_code=400)
+    teacher_id = effective_teacher_id(
+        request, str(payload.get("teacher_id") or "local-teacher")
+    )
+    kind = str(payload.get("kind") or "").strip()
+    source_ref = (
+        payload.get("source_ref")
+        if isinstance(payload.get("source_ref"), dict)
+        else None
+    )
+
+    # kind=document must point at a real sources-ledger record: resolve it
+    # through the same read path /api/sources/records uses (never HTTP to
+    # ourselves), reject bogus pointers, and store an enriched ref built
+    # from ledger ground truth rather than trusting client-supplied fields.
+    if kind == "document":
+        source_record_id = str(
+            (source_ref or {}).get("source_record_id") or ""
+        ).strip()
+        if not source_record_id:
+            return JSONResponse(
+                {"error": "document evidence requires source_ref.source_record_id"},
+                status_code=400,
+            )
+        from src.lingua_viva.sources.ledger import read_records
+
+        records = await asyncio.to_thread(read_records, None, None, None)
+        match = next(
+            (
+                r
+                for r in records
+                if r.get("source_record_id") == source_record_id
+            ),
+            None,
+        )
+        if match is None:
+            return JSONResponse(
+                {"error": f"Unknown source_record_id '{source_record_id}'"},
+                status_code=400,
+            )
+        source_ref = {
+            "source_record_id": source_record_id,
+            "source_type": match.get("source_type"),
+            "title": match.get("title"),
+            "uri": match.get("uri"),
+        }
+
+    record = {
+        "student_id": student_id,
+        "teacher_id": teacher_id,
+        "kind": kind,
+        "target_type": payload.get("target_type"),
+        "target_id": payload.get("target_id"),
+        "summary": payload.get("summary"),
+        "source_ref": source_ref,
+        "confidence_level": payload.get("confidence_level", "teacher_confirmed"),
+    }
+
+    def do_append(store):
+        return store.append_evidence(record)
+
+    try:
+        evidence_id = await asyncio.to_thread(_with_student_store, do_append)
+    except LensNotFoundError:
+        return JSONResponse(
+            {"error": f"Student '{student_id}' not found."}, status_code=404
+        )
+    except (ValueError, EthosValidationError) as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    # Privacy event carries ids only — never a name or the summary text.
+    await asyncio.to_thread(log_event, "evidence_recorded", query_text=student_id)
+    return {
+        "status": "recorded",
+        "student_id": student_id,
+        "evidence_id": evidence_id,
+    }
+
+
+@app.get("/api/students/{student_id}/evidence")
+async def list_student_evidence(
+    student_id: str,
+    target_type: str | None = None,
+    target_id: str | None = None,
+    include_deleted: bool = False,
+):
+    """Evidence ledger for one student, newest first, grouped by target so
+    the lens view can render per-category / per-trait sections directly."""
+    from src.education.student_lens import (
+        VALID_EVIDENCE_TARGET_TYPES,
+        LensNotFoundError,
+    )
+
+    if target_type is not None and target_type not in VALID_EVIDENCE_TARGET_TYPES:
+        return JSONResponse(
+            {
+                "error": (
+                    f"Invalid target_type '{target_type}'. "
+                    f"Allowed: {VALID_EVIDENCE_TARGET_TYPES}"
+                )
+            },
+            status_code=400,
+        )
+
+    def do_list(store):
+        return store.list_evidence(
+            student_id,
+            target_type=target_type,
+            target_id=target_id,
+            include_deleted=include_deleted,
+        )
+
+    try:
+        items = await asyncio.to_thread(_with_student_store, do_list)
+    except LensNotFoundError:
+        return JSONResponse(
+            {"error": f"Student '{student_id}' not found."}, status_code=404
+        )
+    by_target: dict = {}
+    for item in items:
+        bucket = by_target.setdefault(item["target_type"], {})
+        bucket.setdefault(item["target_id"] or "", []).append(item)
+    return {
+        "student_id": student_id,
+        "evidence": items,
+        "by_target": by_target,
+        "total": len(items),
+    }
+
+
+@app.delete("/api/students/{student_id}/evidence/{evidence_id}")
+async def delete_student_evidence(student_id: str, evidence_id: str):
+    """Soft-delete (tombstone) one evidence record. Never a hard DELETE:
+    the ledger is append-only, same pattern as the students table. ethos
+    rows also retire the mirrored profile item and refresh rollups."""
+    from src.education.student_lens import LensNotFoundError
+    from src.lingua_viva.privacy_log import log_event
+
+    def do_delete(store):
+        # Scope the delete to this student's ledger so a URL with a
+        # mismatched student_id can never tombstone someone else's row.
+        rows = store.list_evidence(student_id, include_deleted=True)
+        if not any(r["evidence_id"] == evidence_id for r in rows):
+            raise ValueError(f"Unknown evidence_id '{evidence_id}'")
+        store.soft_delete_evidence(evidence_id)
+
+    try:
+        await asyncio.to_thread(_with_student_store, do_delete)
+    except LensNotFoundError:
+        return JSONResponse(
+            {"error": f"Student '{student_id}' not found."}, status_code=404
+        )
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=404)
+    await asyncio.to_thread(log_event, "evidence_deleted", query_text=student_id)
+    return {
+        "status": "deleted",
+        "student_id": student_id,
+        "evidence_id": evidence_id,
+    }
+
+
+@app.get("/api/ethos/taxonomy")
+async def ethos_taxonomy():
+    """School ethos taxonomy for the frontend (trait pickers + ethos
+    panel). Degrades to available:false on a broken/unreadable taxonomy —
+    the UI hides ethos surfaces rather than erroring (hard rule 4)."""
+    def load():
+        from src.education import ethos as ethos_mod
+
+        active = ethos_mod.load_ethos()
+        return {
+            "available": True,
+            "ethos_name": active.get("ethos_name"),
+            "traits": [
+                {
+                    "id": trait.get("id"),
+                    "label": trait.get("label"),
+                    "group": trait.get("group"),
+                    "descriptor": trait.get("descriptor"),
+                }
+                for trait in active.get("traits", [])
+            ],
+        }
+
+    try:
+        return await asyncio.to_thread(load)
+    except Exception:
+        return {"available": False, "ethos_name": None, "traits": []}
 
 
 @app.get("/api/extraction/sources")
@@ -3628,12 +4147,35 @@ async def student_lens(student_id: str):
                 "available_decisions": ["Confirm", "Defer"],
             }
         ] + store.evaluate_rti_rules(student_id)
+        # Multi-teacher triangulation (operator ruling 2026-08-01): deterministic
+        # convergence/divergence signals over local + imported observations.
+        # Display names come from Tier 2 school config only — never from ledger
+        # filenames or any Drive artifact. Unknown ids fall back to the raw id.
+        from src.education.student_lens import compute_triangulation
+        from src.lingua_viva.config import read_school_profile
+
+        triangulation = compute_triangulation(lens)
+        display_names = read_school_profile().get("teacher_display_names") or {}
+        for colleague in triangulation.get("colleagues", []):
+            teacher_id = colleague.get("teacher_id") or ""
+            colleague["author_display"] = display_names.get(teacher_id, teacher_id)
+        lens["triangulation"] = triangulation
         return lens
 
     try:
-        return await asyncio.to_thread(_with_student_store, get_lens)
+        lens = await asyncio.to_thread(_with_student_store, get_lens)
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=404)
+
+    # Fire-and-forget throttled background pull of colleague ledgers so the
+    # lens view drifts toward fresh without ever blocking on Drive.
+    try:
+        from src.lingua_viva.drive_sync import trigger_pull
+
+        trigger_pull(student_id)
+    except Exception:
+        pass
+    return lens
 
 
 @app.post("/api/students/{student_id}/rti/decision")
@@ -4061,7 +4603,11 @@ async def parent_recommendation(request: Request, payload: dict):
         except Exception:
             target_student_id = "student-nora"
             lens = store.get_lens(target_student_id)
-        draft = generator.generate_draft(target_student_id, teacher_id)
+        draft = generator.generate_draft(
+            target_student_id,
+            teacher_id,
+            include_evidence_summaries=bool(payload.get("include_evidence_summaries")),
+        )
         names = [lens.get("display_name") or ""]
         extra = str(payload.get("focus") or "").strip()
         body = draft.body
@@ -4696,6 +5242,36 @@ async def get_drive_sync_folder():
 
     folder_id = get_sync_folder_id()
     return {"sync_folder_id": folder_id, "configured": bool(folder_id)}
+
+
+@app.post("/api/drive/pull-shared")
+async def drive_pull_shared(payload: dict):
+    """Manually pull colleague observation ledgers from the school's shared
+    Drive folder and merge them (append-only, by UUID) into local lenses.
+    Counts come back in the response; the privacy log gets generic events only."""
+    from src.lingua_viva.drive_sync import pull_shared_ledgers
+
+    student_id = str(payload.get("student_id") or "").strip() or None
+    result = await asyncio.to_thread(pull_shared_ledgers, student_id)
+    return result
+
+
+@app.post("/api/students/{student_id}/remove-colleague")
+async def remove_colleague_data(student_id: str, payload: dict):
+    """Remove one colleague's imported observations (and their fanned-out
+    support entries) from a local lens. Local rows are never touched."""
+    teacher_id = str(payload.get("teacher_id") or "").strip()
+    if not teacher_id:
+        return JSONResponse({"error": "teacher_id is required"}, status_code=400)
+
+    def do_remove(store):
+        return store.remove_imported(student_id, teacher_id)
+
+    try:
+        result = await asyncio.to_thread(_with_student_store, do_remove)
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=404)
+    return {"status": "removed", "student_id": student_id, "teacher_id": teacher_id, **result}
 
 
 @app.post("/api/provider/connect")

@@ -217,7 +217,34 @@ def build_report(signals_file: Path = DEFAULT_SIGNALS_FILE,
         "aging_candidates": candidates["aging"],
         "candidates_unavailable": candidates["unavailable"],
         "firewall_count": _count_ndjson_lines(firewall_file),
+        "routing": _routing_summary(),
     }
+
+
+def _routing_summary() -> dict:
+    """Routing-memory rollup (SPEC_LV_ROUTING_MEMORY_LOOP_2026-08-01).
+
+    Informational ONLY — like the firewall count, it never enters
+    has_absolute_warn, the baseline summary, or delta/exit semantics.
+    The full report (per-signal precision, proposals) lives in `lv distill`.
+    """
+    try:
+        from src.lingua_viva.improvement_audit import build_routing_report
+        from src.lingua_viva.routing_memory import read_memory
+
+        rows, skipped = read_memory()
+        routing = build_routing_report(rows, skipped)
+        return {
+            "decisions": sum(t["volume"] for t in routing["per_type"].values()),
+            "corrections": sum(t["corrected"] for t in routing["per_type"].values()),
+            "collapse_flags": len(routing["collapse_flags"]),
+            "proposals": len(routing["proposals"]),
+            "skipped_rows": skipped,
+            "unavailable": "",
+        }
+    except Exception as exc:  # fail-visible, never fail-loud in an audit
+        return {"decisions": 0, "corrections": 0, "collapse_flags": 0,
+                "proposals": 0, "skipped_rows": 0, "unavailable": str(exc)}
 
 
 def has_absolute_warn(report: dict) -> bool:
@@ -377,6 +404,15 @@ def _print_human(report: dict, delta: dict | None, exit_code: int,
         print(f"[4] Aging candidates (open, >={AGING_HIT_THRESHOLD} hits): "
               + (", ".join(f"{c['id']} x{c['hits']}" for c in aging[:8]) or "none"))
     print(f"[i] Firewall records: {report['firewall_count']} (informational, never gates)")
+    routing = _as_dict(report.get("routing"))
+    if routing.get("unavailable"):
+        print("[i] Routing memory: unavailable (informational, never gates)")
+    else:
+        print(f"[i] Routing memory: {routing.get('decisions', 0)} decisions,"
+              f" {routing.get('corrections', 0)} corrections,"
+              f" {routing.get('collapse_flags', 0)} collapse flags,"
+              f" {routing.get('proposals', 0)} proposals"
+              " (informational, never gates — full report: lv distill)")
 
     verdict = "WARN" if absolute_warn else "OK"
     print(f"VERDICT: {verdict}")

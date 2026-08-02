@@ -59,7 +59,7 @@ def captured_calls(monkeypatch):
     """Capture what would have been sent, without making a network call."""
     calls: list[dict] = []
 
-    async def fake_call_model(self, query, system_prompt, model):
+    async def fake_call_model(self, query, system_prompt, model, max_tokens=2000):
         calls.append({"model": model, "query": query})
         return ReasonResult(content="ok", confidence=0.8, model_used=model)
 
@@ -194,7 +194,7 @@ def captured_native_calls(monkeypatch):
 
     calls: list[dict] = []
 
-    async def fake_call_model(self, query, system_prompt, model):
+    async def fake_call_model(self, query, system_prompt, model, max_tokens=2000):
         calls.append({"model": model, "query": query})
         return native.ReasonResult(content="ok", confidence=0.8, model_used=model)
 

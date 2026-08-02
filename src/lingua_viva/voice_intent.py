@@ -16,7 +16,9 @@ which is read-only and safe.
 
 from __future__ import annotations
 
+import difflib
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -46,6 +48,19 @@ QUESTION_SIGNALS = [
 
 WRITE_INTENT_THRESHOLD = 0.5
 
+# Student detection v2 (SPEC_LV_VOICE_STUDENT_DETECTION_V2_2026-08-01):
+# fuzzy matching for STT garbling ("Marko" -> Marco). Threshold-gated, no
+# guessing: a unique close match >= cutoff resolves (and is spoken back by
+# name so a misresolution is audible); two candidates within cutoff ask.
+# First names of <= 3 chars stay exact-only — fuzzy on "Al"/"Bo" is noise.
+FUZZY_NAME_CUTOFF = 0.8
+FUZZY_MIN_NAME_LEN = 4
+
+# Third-person references that let conversational context resolve a
+# follow-up observation ("he also asked for help") to the last-mentioned
+# student. Deterministic regex — never inferred.
+CONTEXT_PRONOUN_RE = re.compile(r"\b(he|she|they)\b", re.IGNORECASE)
+
 # Generic references that mark an observation about an unnamed student —
 # enough to classify, not enough to save (safety rule: never guess).
 GENERIC_STUDENT_REFERENCE = r"\b(he|she|they|the student|the learner|this student|one student)\b"
@@ -66,6 +81,33 @@ class IntentClassification:
     observation_context: dict = field(default_factory=dict)
     generation_context: dict = field(default_factory=dict)
     matched_signals: list[str] = field(default_factory=list)
+    # Detection v2 (additive): how the student was matched, which transcript
+    # token matched (for the pronoun-precedence rule), and the candidate set
+    # when a fuzzy token is ambiguous between two roster names.
+    match_quality: Optional[str] = None      # "exact" | "fuzzy" | "ambiguous" | None
+    matched_token: Optional[str] = None
+    candidates: list[dict] = field(default_factory=list)  # [{student_id, display_name}]
+
+
+@dataclass
+class StudentDetection:
+    """Full detection outcome — internal to voice_intent + the voice/act
+    handler. The public detect_student() tuple is a projection of this."""
+    student_id: Optional[str] = None
+    display_name: Optional[str] = None
+    match_quality: Optional[str] = None      # "exact" | "fuzzy" | "ambiguous" | None
+    matched_token: Optional[str] = None      # transcript token that matched (lowercase)
+    candidates: list[dict] = field(default_factory=list)
+
+
+def _fold_accents(text: str) -> str:
+    """NFKD accent-fold for fuzzy name comparison only ("josé" -> "jose").
+    Never applied on the exact-match paths — those stay byte-identical."""
+    return "".join(
+        char
+        for char in unicodedata.normalize("NFKD", text)
+        if not unicodedata.combining(char)
+    )
 
 
 def _score(transcript_lower: str, signals: list[tuple[str, float]]) -> tuple[float, list[str]]:
@@ -78,13 +120,17 @@ def _score(transcript_lower: str, signals: list[tuple[str, float]]) -> tuple[flo
     return total, matched
 
 
-def detect_student(transcript: str, roster: list[dict]) -> tuple[Optional[str], Optional[str]]:
+def detect_student_detailed(transcript: str, roster: list[dict]) -> StudentDetection:
     """Find which roster student the transcript refers to.
 
-    Returns (student_id, display_name). Matches full display name first,
-    then first name as a whole word (>2 chars, to avoid initials matching
-    everywhere). No pronoun guessing — an unmatched observation asks for
-    clarification instead.
+    Exact pass first (unchanged from v1): full display name substring, then
+    first name as a whole word (>2 chars, to avoid initials matching
+    everywhere). Only when exact finds nothing does the fuzzy pass run:
+    difflib close-match per transcript token (possessives stripped) against
+    roster first names of >= FUZZY_MIN_NAME_LEN chars, at
+    FUZZY_NAME_CUTOFF. A unique hit resolves as "fuzzy"; two roster names
+    within cutoff of the same token is "ambiguous" and must ask. No pronoun
+    guessing here — conversational context is the caller's concern.
     """
     transcript_lower = transcript.lower()
     for student in roster:
@@ -92,11 +138,111 @@ def detect_student(transcript: str, roster: list[dict]) -> tuple[Optional[str], 
         if not display_name:
             continue
         if display_name.lower() in transcript_lower:
-            return student.get("student_id"), display_name
+            return StudentDetection(
+                student_id=student.get("student_id"),
+                display_name=display_name,
+                match_quality="exact",
+                matched_token=display_name.lower(),
+            )
         first_name = display_name.split()[0].lower()
         if len(first_name) > 2 and re.search(rf"\b{re.escape(first_name)}\b", transcript_lower):
-            return student.get("student_id"), display_name
-    return None, None
+            return StudentDetection(
+                student_id=student.get("student_id"),
+                display_name=display_name,
+                match_quality="exact",
+                matched_token=first_name,
+            )
+
+    # Fuzzy pass. First-name lookup: short names are exact-only by design.
+    # Keys are accent-FOLDED ("josé" -> "jose") because Whisper routinely
+    # drops accents on international rosters and difflib treats é != e —
+    # folding is confined to this fuzzy pass; exact paths above are
+    # untouched. Two roster names folding to the same key ride the existing
+    # shared-first-name list -> ambiguous, never a silent pick.
+    first_names: dict[str, list[dict]] = {}
+    for student in roster:
+        display_name = str(student.get("display_name") or "")
+        if not display_name:
+            continue
+        first_name = _fold_accents(display_name.split()[0].lower())
+        if len(first_name) >= FUZZY_MIN_NAME_LEN:
+            first_names.setdefault(first_name, []).append(student)
+    if not first_names:
+        return StudentDetection()
+
+    # Possessive stripping: "marco's" -> "marco" (STT renders both).
+    # Tokenizer accepts unicode letters ([^\W\d_] under re.UNICODE) so
+    # accented transcript tokens ("José") reach the fold instead of being
+    # split apart by an ascii-only character class.
+    tokens = [
+        token[:-2] if token.endswith("'s") else token
+        for token in re.findall(r"[^\W\d_]+(?:'s)?", transcript_lower)
+    ]
+    for token in tokens:
+        if len(token) < FUZZY_MIN_NAME_LEN:
+            continue
+        hits = difflib.get_close_matches(
+            _fold_accents(token), list(first_names.keys()), n=2,
+            cutoff=FUZZY_NAME_CUTOFF)
+        if not hits:
+            continue
+        matched_students = [s for name in hits for s in first_names[name]]
+        if len(matched_students) == 1:
+            student = matched_students[0]
+            return StudentDetection(
+                student_id=student.get("student_id"),
+                display_name=str(student.get("display_name") or ""),
+                match_quality="fuzzy",
+                matched_token=token,
+            )
+        # Two roster names both within cutoff (Marco/Marko, or a shared
+        # first name) — never pick; the caller asks with both candidates.
+        return StudentDetection(
+            match_quality="ambiguous",
+            matched_token=token,
+            candidates=[
+                {
+                    "student_id": str(s.get("student_id") or ""),
+                    "display_name": str(s.get("display_name") or ""),
+                }
+                for s in matched_students
+            ],
+        )
+    return StudentDetection()
+
+
+def detect_student(
+    transcript: str, roster: list[dict]
+) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    """Tuple projection of detect_student_detailed for internal callers:
+    (student_id, display_name, match_quality). Ambiguity projects to
+    (None, None, "ambiguous") — the detailed form carries the candidates."""
+    detection = detect_student_detailed(transcript, roster)
+    return detection.student_id, detection.display_name, detection.match_quality
+
+
+def context_takes_precedence(transcript: str, matched_token: Optional[str]) -> bool:
+    """Should the conversational-context student win over the detection?
+
+    The subtlest rule in detection v2 (spec test 5): "he also helped Nora"
+    — the pronoun is the subject, so a fresh context student (Marco) keeps
+    attribution; Nora appearing as object must not steal it. Conversely
+    "Nora struggled today" has no pronoun before the name, so Nora wins.
+
+    True when a third-person pronoun appears in the transcript BEFORE the
+    first detected roster-name token — or when a pronoun appears and no
+    name was detected at all. False when there is no pronoun: a nameless,
+    pronounless observation must never silently attach to context.
+    """
+    pronoun = CONTEXT_PRONOUN_RE.search(transcript)
+    if not pronoun:
+        return False
+    if not matched_token:
+        return True
+    name = re.search(rf"\b{re.escape(matched_token)}", transcript, re.IGNORECASE)
+    if not name:
+        return True
+    return pronoun.start() < name.start()
 
 
 def parse_observation_context(transcript: str) -> dict:
@@ -141,6 +287,57 @@ def parse_observation_context(transcript: str) -> dict:
         context["direction"] = "secure"
 
     return context
+
+
+# Strategy-outcome parsing (SPEC_LV_BASE_LENS_SCHOOL_CATEGORIES_2026-08-01):
+# "Strategies trialed — successful or not" narrated naturally. not_worked
+# markers are checked FIRST because "didn't work" contains "work".
+STRATEGY_ATTEMPT_RE = re.compile(
+    r"\b(?:tried|trialed|trialled|we tried|i tried)\s+(.+)$", re.IGNORECASE
+)
+STRATEGY_NOT_WORKED_RE = re.compile(
+    r"\b(?:didn'?t help|did not help|didn'?t work|did not work|no difference|"
+    r"still struggl\w*|shut(?:s)? down|got worse|refused|didn'?t stick|"
+    r"made (?:it|things) worse|didn'?t click)\b",
+    re.IGNORECASE,
+)
+STRATEGY_WORKED_RE = re.compile(
+    r"\b(?:worked|helped|clicked|made a difference|went well|succeeded|"
+    r"really working|big improvement)\b",
+    re.IGNORECASE,
+)
+# Where the strategy statement ends and the outcome clause begins.
+STRATEGY_CLAUSE_SPLIT_RE = re.compile(
+    r"\s*(?:\band it\b|\band (?:he|she|they)\b|\bbut\b|\bwhich\b|,|—|;).*$",
+    re.IGNORECASE,
+)
+
+
+def parse_strategy_outcome(transcript: str) -> dict:
+    """Extract a trialed strategy and its narrated outcome.
+
+    Returns {"strategy_statement": str|None, "outcome": "worked"|"not_worked"|None}.
+    Both are None when no "tried X" clause is present; outcome is None when a
+    strategy was mentioned but the transcript never states how it went — the
+    caller must not guess an outcome bucket in that case.
+    """
+    text = str(transcript or "").strip()
+    match = STRATEGY_ATTEMPT_RE.search(text)
+    if not match:
+        return {"strategy_statement": None, "outcome": None}
+
+    rest = match.group(1)
+    outcome: Optional[str] = None
+    if STRATEGY_NOT_WORKED_RE.search(rest):
+        outcome = "not_worked"
+    elif STRATEGY_WORKED_RE.search(rest):
+        outcome = "worked"
+
+    statement = STRATEGY_CLAUSE_SPLIT_RE.sub("", rest).strip(" .!?,;:")
+    return {
+        "strategy_statement": statement or None,
+        "outcome": outcome if statement else None,
+    }
 
 
 def parse_generation_context(transcript: str) -> dict:
@@ -191,9 +388,12 @@ def classify_intent(transcript: str, roster: list[dict]) -> IntentClassification
     is_question_shaped = bool(re.match(QUESTION_SIGNALS[0][0], lowered)) or lowered.endswith("?")
 
     if obs_score >= WRITE_INTENT_THRESHOLD and not is_question_shaped:
-        student_id, student_name = detect_student(transcript, roster)
+        detection = detect_student_detailed(transcript, roster)
         has_generic_reference = bool(re.search(GENERIC_STUDENT_REFERENCE, lowered))
-        if student_id is None and not has_generic_reference:
+        # An ambiguous fuzzy hit IS a student reference — the teacher named
+        # someone; we just can't pick between two candidates without asking.
+        if (detection.student_id is None and not has_generic_reference
+                and detection.match_quality != "ambiguous"):
             # Behavior verbs but no student at all — not enough to act on.
             return IntentClassification(
                 intent="question",
@@ -203,11 +403,14 @@ def classify_intent(transcript: str, roster: list[dict]) -> IntentClassification
         return IntentClassification(
             intent="observation",
             confidence=min(1.0, obs_score),
-            student_id=student_id,
-            student_name=student_name,
-            needs_clarification=student_id is None,
+            student_id=detection.student_id,
+            student_name=detection.display_name,
+            needs_clarification=detection.student_id is None,
             observation_context=parse_observation_context(transcript),
             matched_signals=obs_matched,
+            match_quality=detection.match_quality,
+            matched_token=detection.matched_token,
+            candidates=detection.candidates,
         )
 
     if gen_score >= WRITE_INTENT_THRESHOLD and not is_question_shaped:

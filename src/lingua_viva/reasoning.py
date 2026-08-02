@@ -38,6 +38,7 @@ class ReasoningEngine:
         default_model: Optional[str] = None,
         system_prompt: Optional[str] = None,
         local_only: bool = False,
+        max_tokens: int = 2000,
     ) -> ReasonResult:
         """`local_only` is set by Pipeline.run() when the entry gate detected
         student/family data in this query.
@@ -124,7 +125,7 @@ class ReasoningEngine:
                 filemap_context = build_filemap_context(query_domain, local_only=True)
                 if filemap_context:
                     prompt = f"{system_prompt}\n\nLocal curriculum file locations:\n{filemap_context}"
-            result = await self._call_model(query, prompt, resolved_model)
+            result = await self._call_model(query, prompt, resolved_model, max_tokens=max_tokens)
             if result:
                 self._append_trace(query, context, result, start)
                 return result
@@ -145,7 +146,7 @@ class ReasoningEngine:
             self._cached_model = config.detect_model()
         return self._cached_model
 
-    async def _call_model(self, query: str, system_prompt: str, model: str) -> Optional[ReasonResult]:
+    async def _call_model(self, query: str, system_prompt: str, model: str, max_tokens: int = 2000) -> Optional[ReasonResult]:
         if self._is_external_model(model):
             from src.lingua_viva.exit_gates import ExitRequest, check_exit
 
@@ -170,7 +171,7 @@ class ReasoningEngine:
                 {"role": "user", "content": query},
             ],
             "temperature": 0.3,
-            "max_tokens": 2000,
+            "max_tokens": max_tokens,
         }).encode("utf-8")
         req = request.Request(
             url,

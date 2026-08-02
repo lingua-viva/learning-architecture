@@ -317,6 +317,149 @@ def audit_proxy_to_live(entries: list[dict]) -> list[dict]:
     return sorted(transitions.values(), key=lambda t: t["defect_class"])
 
 
+# --- [5] Routing-memory report (SPEC_LV_ROUTING_MEMORY_LOOP_2026-08-01) ---
+#
+# Consumption half of src/lingua_viva/routing_memory.py — the part the
+# routing-loop doc says everyone skips ("nothing reads and acts on them").
+# Reports and proposals ONLY: no threshold or signal list changes here or
+# anywhere downstream; the operator disposes.
+
+ROUTING_COLLAPSE_INTENT_SHARE = 0.90   # >90% one intent -> blind-spot flag
+ROUTING_COLLAPSE_MIN_VOLUME = 10       # collapse needs a real window first
+ROUTING_CATEGORY_CORRECTED_FLOOR = 50  # category-corrected obs before "never fires" means anything
+ROUTING_PROPOSAL_MIN_FIRED = 5         # a signal must fire this often before
+ROUTING_PROPOSAL_MIN_RATE = 0.5        # ... a >=50% correction rate proposes review
+
+
+def _mean(values: list[float]) -> Optional[float]:
+    return round(sum(values) / len(values), 3) if values else None
+
+
+def build_routing_report(rows: list[dict], skipped: int = 0) -> dict:
+    """Aggregate routing-memory rows into correction rates, per-signal
+    precision proxies, collapse flags, and ranked human-readable proposals.
+
+    Corrections with positive=True are confirmations (the suggestion was
+    right) — they count toward volume, never toward correction_rate.
+    Fitness = teacher correction, not "no error".
+    """
+    from src.lingua_viva.routing_memory import is_correction
+
+    corrections_by_id: dict[str, list[dict]] = {}
+    for row in rows:
+        if is_correction(row):
+            corrections_by_id.setdefault(
+                str(row.get("decision_id") or ""), []).append(row["corrected"])
+
+    per_type: dict[str, dict] = {}
+    per_signal: dict[tuple[str, str], dict] = {}
+    intent_outcomes: dict[str, int] = {}
+    category_outcomes: set[str] = set()
+    category_corrected_obs = 0
+
+    for d in rows:
+        if is_correction(d):
+            continue
+        dtype = str(d.get("decision") or "unknown")
+        outcome = str(d.get("outcome") or "")
+        try:
+            conf = float(d.get("confidence") or 0.0)
+        except (TypeError, ValueError):
+            conf = 0.0
+        paired = corrections_by_id.get(str(d.get("decision_id") or ""), [])
+        negatives = [c for c in paired if c.get("positive") is not True]
+        confirmations = [c for c in paired if c.get("positive") is True]
+
+        t = per_type.setdefault(dtype, {
+            "volume": 0, "corrected": 0, "confirmed": 0,
+            "_conf_corrected": [], "_conf_uncorrected": [],
+        })
+        t["volume"] += 1
+        if negatives:
+            t["corrected"] += 1
+            t["_conf_corrected"].append(conf)
+        else:
+            t["_conf_uncorrected"].append(conf)
+        if confirmations:
+            t["confirmed"] += 1
+
+        for key in d.get("signals_matched") or []:
+            s = per_signal.setdefault((dtype, str(key)), {
+                "decision": dtype, "signal": str(key), "fired": 0, "corrected": 0,
+            })
+            s["fired"] += 1
+            if negatives:
+                s["corrected"] += 1
+
+        if dtype == "intent":
+            intent_outcomes[outcome] = intent_outcomes.get(outcome, 0) + 1
+        elif dtype == "category_suggest":
+            if outcome:
+                category_outcomes.add(outcome)
+            if negatives:
+                category_corrected_obs += 1
+
+    for t in per_type.values():
+        t["correction_rate"] = round(t["corrected"] / t["volume"], 3) if t["volume"] else 0.0
+        t["confidence_corrected"] = _mean(t.pop("_conf_corrected"))
+        t["confidence_uncorrected"] = _mean(t.pop("_conf_uncorrected"))
+
+    signals = []
+    for s in per_signal.values():
+        s["precision_gap"] = round(s["corrected"] / s["fired"], 3) if s["fired"] else 0.0
+        signals.append(s)
+    signals.sort(key=lambda s: (-s["corrected"], -s["precision_gap"], s["decision"], s["signal"]))
+
+    flags: list[dict] = []
+    intent_total = sum(intent_outcomes.values())
+    if intent_total >= ROUTING_COLLAPSE_MIN_VOLUME:
+        top_intent, top_n = max(intent_outcomes.items(), key=lambda kv: kv[1])
+        if top_n / intent_total > ROUTING_COLLAPSE_INTENT_SHARE:
+            flags.append({
+                "type": "intent_collapse", "outcome": top_intent,
+                "share": round(top_n / intent_total, 3), "volume": intent_total,
+            })
+    if category_corrected_obs >= ROUTING_CATEGORY_CORRECTED_FLOOR:
+        try:
+            from src.education.observation_capture import CATEGORY_SIGNALS
+            for cat in sorted(set(CATEGORY_SIGNALS) - category_outcomes):
+                flags.append({
+                    "type": "category_never_fires", "category_id": cat,
+                    "category_corrected_observations": category_corrected_obs,
+                })
+        except Exception:  # shipped list unavailable — report without the flag
+            pass
+
+    proposals: list[str] = []
+    for f in flags:
+        if f["type"] == "intent_collapse":
+            proposals.append(
+                f"intent routing collapsed: {f['share']:.0%} of {f['volume']} decisions"
+                f" landed on '{f['outcome']}' — the other signal lists have a blind"
+                " spot (coverage gap, not a weight problem)")
+        else:
+            proposals.append(
+                f"category '{f['category_id']}' never fired across"
+                f" {f['category_corrected_observations']} category-corrected"
+                " observations — its signal list may not match how teachers talk")
+    for s in signals:
+        if (s["fired"] >= ROUTING_PROPOSAL_MIN_FIRED
+                and s["precision_gap"] >= ROUTING_PROPOSAL_MIN_RATE):
+            proposals.append(
+                f"signal {s['signal']!r} ({s['decision']}): fired {s['fired']}x,"
+                f" corrected {s['corrected']}x ({s['precision_gap']:.0%}) — review"
+                " this line in the shipped signal list")
+
+    return {
+        "total_rows": len(rows),
+        "skipped_rows": skipped,
+        "per_type": dict(sorted(per_type.items())),
+        "per_signal": signals,
+        "collapse_flags": flags,
+        "proposals": proposals,
+    }
+
+
 # --- Report assembly / longitudinal ---
 
 def build_audit_report(
@@ -333,6 +476,8 @@ def build_audit_report(
     clusters = distill_gap_signals(read_gap_signals())
     active, retired = reconcile_with_candidates(clusters, candidates)
     revision_entries = read_revision_log()
+    from src.lingua_viva.routing_memory import read_memory
+    routing_rows, routing_skipped = read_memory()
     report = {
         "generated_at": datetime.now(tz=timezone.utc).isoformat(timespec="seconds"),
         "active_clusters": active,
@@ -342,6 +487,7 @@ def build_audit_report(
         ),
         "defect_concentration": audit_defect_concentration(revision_entries),
         "proxy_to_live": audit_proxy_to_live(revision_entries),
+        "routing": build_routing_report(routing_rows, routing_skipped),
     }
     return report
 
@@ -364,6 +510,11 @@ def summary_record(report: dict) -> dict:
         "revision_entries": conc["total"],
         "distinct_defect_classes": conc["distinct_classes"],
         "proxy_to_live_transitions": len(report["proxy_to_live"]),
+        "routing_decisions": sum(
+            t["volume"] for t in report.get("routing", {}).get("per_type", {}).values()),
+        "routing_corrections": sum(
+            t["corrected"] for t in report.get("routing", {}).get("per_type", {}).values()),
+        "routing_collapse_flags": len(report.get("routing", {}).get("collapse_flags", [])),
     }
 
 
@@ -389,6 +540,9 @@ def compute_delta(prev: dict, cur: dict) -> list[str]:
         ("needs_review", "candidates needing review"),
         ("proxy_to_live_transitions", "proxy->live transitions"),
         ("distinct_defect_classes", "distinct defect classes"),
+        ("routing_decisions", "routing decisions"),
+        ("routing_corrections", "routing corrections"),
+        ("routing_collapse_flags", "routing collapse flags"),
     ):
         a, b = prev.get(key), cur.get(key)
         if a is None or b is None or a == b:
@@ -474,5 +628,39 @@ def format_report(report: dict) -> str:
         out("  none yet — defect classes are still found by manual sweeps only")
     for t in report["proxy_to_live"]:
         out(f"  {t['defect_class']}: {t['proxy']} -> {t['live']} ({t['transitioned_at']})")
+
+    routing = report.get("routing") or {}
+    out("")
+    out("[6] ROUTING DECISIONS (append-only memory — reports and proposals only;")
+    out("    no threshold or signal list is ever adjusted by this section)")
+    if not routing.get("per_type"):
+        out("  no routing memory on record")
+    else:
+        for dtype, t in routing["per_type"].items():
+            conf_c = ("-" if t["confidence_corrected"] is None
+                      else f"{t['confidence_corrected']:.2f}")
+            conf_u = ("-" if t["confidence_uncorrected"] is None
+                      else f"{t['confidence_uncorrected']:.2f}")
+            out(f"  {dtype:<16} volume={t['volume']:>4}"
+                f" corrected={t['corrected']:>3} ({t['correction_rate']:.0%})"
+                f" confirmed={t['confirmed']:>3}"
+                f"  conf corrected/uncorrected={conf_c}/{conf_u}")
+        offenders = [s for s in routing["per_signal"] if s["corrected"]]
+        if offenders:
+            out("  worst signals (precision gap = share of firings later corrected):")
+            for s in offenders[:8]:
+                out(f"    {s['signal']:<44} ({s['decision']})"
+                    f" fired={s['fired']:>3} corrected={s['corrected']:>3}"
+                    f" ({s['precision_gap']:.0%})")
+        if routing.get("collapse_flags"):
+            out("  collapse flags:")
+            for f in routing["collapse_flags"]:
+                out(f"    {f}")
+        if routing.get("proposals"):
+            out("  proposals (the system proposes, the operator disposes):")
+            for p in routing["proposals"]:
+                out(f"    - {p}")
+        if routing.get("skipped_rows"):
+            out(f"  skipped rows: {routing['skipped_rows']} (unknown schema/malformed)")
 
     return "\n".join(lines)

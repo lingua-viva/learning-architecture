@@ -32,12 +32,13 @@ WEB_PY = REPO / "src" / "web.py"
 MANIFEST = REPO / "contracts" / "ROUTE_REACHABILITY.yaml"
 
 ROUTE_RE = re.compile(
-    r'@app\.(get|post|put|delete|websocket)\(\s*"([^"]+)"'
+    r'@app\.(get|post|put|patch|delete|websocket)\(\s*"([^"]+)"'
 )
 METHOD_LABEL = {
     "get": "GET",
     "post": "POST",
     "put": "PUT",
+    "patch": "PATCH",
     "delete": "DELETE",
     "websocket": "WS",
 }

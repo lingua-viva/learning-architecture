@@ -68,7 +68,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from src.education.content_differentiator import CEFR_ORDER, _check_trauma_safety
-from src.education.student_lens import StudentLensStore
+from src.education.student_lens import REPORT_GRADE_CONFIDENCE, StudentLensStore
 from src.education.trend_analysis import TrendAnalyzer
 
 VALID_TEMPLATES = ("progress", "concern", "activity_ideas")
@@ -135,6 +135,7 @@ class ParentReportGenerator:
         student_id: str,
         teacher_id: str,
         template_type: str = "progress",
+        include_evidence_summaries: bool = False,
     ) -> ParentReportDraft:
         if template_type not in VALID_TEMPLATES:
             raise ValueError(f"template_type must be one of {VALID_TEMPLATES}")
@@ -169,6 +170,31 @@ class ParentReportGenerator:
 
         if trend.sel_positive_count > 0:
             body_parts.append(f"{name} has brought care and attention to class moments this month.")
+
+        # Evidence summaries (SPEC_LV_EVIDENCE_ETHOS_TRAITS_2026-08-01):
+        # report-grade ledger evidence only (teacher_confirmed /
+        # imported_verified — never model_suggested), newest first, capped
+        # at 3 per (target_type, target_id). Gate order is sacred: these
+        # sentences join body_parts HERE, before _check_trauma_safety below
+        # and before the endpoint's _strip_parent_output +
+        # check_publication_safety — evidence text passes every gate the
+        # generated prose passes.
+        if include_evidence_summaries:
+            per_target: dict = {}
+            picked = []
+            for item in self.store.list_evidence(student_id):
+                if item.get("confidence_level") not in REPORT_GRADE_CONFIDENCE:
+                    continue
+                key = (item.get("target_type"), item.get("target_id"))
+                if per_target.get(key, 0) >= 3:
+                    continue
+                per_target[key] = per_target.get(key, 0) + 1
+                picked.append(item)
+            if picked:
+                body_parts.append("A few moments from our classroom records:")
+                for item in picked:
+                    summary = str(item.get("summary") or "").strip().rstrip(".")
+                    body_parts.append(f"{summary}.")
 
         if not activities:
             activities.append(_GENERAL_ACTIVITY)

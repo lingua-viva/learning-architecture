@@ -23,6 +23,7 @@ venv/
 .mc_session
 memory/data/firewall_log.ndjson
 memory/data/gap_signals.ndjson
+memory/data/routing_memory_v1.ndjson
 memory/data/gap_audit_summaries.ndjson
 memory/data/paths.ndjson
 memory/data/traces.ndjson

@@ -44,7 +44,7 @@ def _write_provider_config(tmp_path, provider, model):
 async def _recording_reason(engine, monkeypatch, **kwargs):
     seen = {}
 
-    async def fake_call_model(query, system_prompt, model):
+    async def fake_call_model(query, system_prompt, model, max_tokens=2000):
         seen["model"] = model
         return ReasonResult(content="ok", confidence=1.0, model_used=model)
 

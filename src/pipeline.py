@@ -275,6 +275,7 @@ class ReasoningEngine:
         default_model: Optional[str] = None,
         system_prompt: Optional[str] = None,
         local_only: bool = False,
+        max_tokens: int = 2000,
     ) -> ReasonResult:
         """
         Model reasoning. Resolution order (Gap 5a, SPEC_ONE_CLICK_LOCAL_APP
@@ -357,7 +358,7 @@ class ReasoningEngine:
             resolved_model = fallback
 
         if system_prompt:
-            result = await self._call_model(query, system_prompt, resolved_model)
+            result = await self._call_model(query, system_prompt, resolved_model, max_tokens=max_tokens)
             if result:
                 return result
 
@@ -440,6 +441,7 @@ class ReasoningEngine:
         query: str,
         system_prompt: str,
         model: str,
+        max_tokens: int = 2000,
     ) -> Optional[ReasonResult]:
         """
         Call a model via OpenAI-compatible API.
@@ -460,7 +462,7 @@ class ReasoningEngine:
                 {"role": "user", "content": query},
             ],
             "temperature": 0.3,
-            "max_tokens": 2000,
+            "max_tokens": max_tokens,
         }).encode("utf-8")
 
         req_headers = {"Content-Type": "application/json", **headers}
@@ -588,6 +590,7 @@ class Pipeline:
         session_id: Optional[str] = None,
         eval_mode: bool = False,
         explicit_model: Optional[str] = None,
+        max_tokens: int = 2000,
     ) -> PipelineResult:
         """
         Execute the 8-step governed pipeline.
@@ -891,6 +894,7 @@ class Pipeline:
                 default_model=classification.default_model,
                 system_prompt=system_prompt,
                 local_only=entry_gate_blocked_external,
+                max_tokens=max_tokens,
             )
         steps_executed.append("REASON")
 

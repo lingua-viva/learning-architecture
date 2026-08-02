@@ -383,7 +383,10 @@ def test_import_route_rejects_empty_and_non_string_file_ids(monkeypatch, tmp_pat
 # --- In-app Google sign-in routes (SPEC_LV_DRIVE_SELF_SERVICE_AUTH §A) ----
 
 
-def test_auth_start_route_503_without_client_config():
+def test_auth_start_route_503_without_client_config(monkeypatch, tmp_path):
+    # Isolate lv_home() — a machine with a real connected OAuth client has
+    # ~/.lingua-viva/config/oauth_client.json (hermeticity gap, 2026-08-01).
+    monkeypatch.setenv("LV_CONFIG_HOME", str(tmp_path / "lv-home"))
     response = client.post("/api/google-drive/auth/start")
     assert response.status_code == 503
     assert "client configuration" in response.json()["error"]

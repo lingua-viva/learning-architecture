@@ -382,7 +382,7 @@ def _distill(args) -> int:
         print(format_report(report))
         if prev:
             print("")
-            print("[6] DELTA vs previous distill run")
+            print("[7] DELTA vs previous distill run")
             for line in compute_delta(prev, summary_record(report)) or ["no change"]:
                 print(f"  {line}")
 

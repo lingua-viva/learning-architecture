@@ -712,7 +712,8 @@
       students: [],
       selectedStudent: "",
       chat: [],
-      selectedTraceId: ""
+      selectedTraceId: "",
+      schoolProfile: null
     };
 
     const voiceRuntime = {
@@ -1064,6 +1065,20 @@
     let voiceActPending = null;
     const VOICE_ACT_PENDING_MS = 120000;
 
+    // Conversational context (student detection v2): who was just
+    // successfully mentioned — lets "he also asked for help" attribute a
+    // follow-up to the same student without re-saying the name. Sibling of
+    // voiceActPending (same 120s window); the backend still requires an
+    // explicit pronoun before it uses this, and always speaks the name back.
+    let voiceLastStudent = null;
+
+    function voiceContextStudentId() {
+      if (voiceLastStudent && Date.now() - voiceLastStudent.at < VOICE_ACT_PENDING_MS) {
+        return voiceLastStudent.student_id;
+      }
+      return null;
+    }
+
     function showVoiceTranscript(text) {
       const el = $("voice-transcript");
       if (!el) return;
@@ -1097,10 +1112,15 @@
       voiceRuntime.busy = true;
       let result;
       try {
+        const contextStudentId = voiceContextStudentId();
         const response = await fetch("/api/voice/act", {
           method: "POST",
           headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({transcript, timeout_seconds: 60})
+          body: JSON.stringify({
+            transcript,
+            timeout_seconds: 60,
+            ...(contextStudentId ? {context_student_id: contextStudentId} : {})
+          })
         });
         result = await response.json();
         if (!response.ok) throw new Error(result.error || `voice act failed: ${response.status}`);
@@ -1114,9 +1134,26 @@
       if (result.intent === "observation") {
         if (result.needs_clarification) {
           voiceActPending = {transcript, at: Date.now()};
+          // Attribution is genuinely unknown here — stale context must not
+          // linger into whatever the teacher says next.
+          voiceLastStudent = null;
           updateVoiceCompanion("clarify", "Which student?");
           voiceRuntime.speak(result.spoken_confirmation || "Which student was that?");
           return;
+        }
+        const resolved = result.resolved_student;
+        if (resolved && resolved.student_id) {
+          voiceLastStudent = {
+            student_id: resolved.student_id,
+            display_name: resolved.display_name || "",
+            at: Date.now()
+          };
+        }
+        if ((result.match_quality === "fuzzy" || result.match_quality === "context") && resolved) {
+          // Echo the resolved name so a misresolution is visible as well
+          // as audible: `"Marko helped…" → Marco`.
+          const firstName = String(resolved.display_name || "").split(" ")[0];
+          if (firstName) showVoiceTranscript(`"${transcript}" → ${firstName}`);
         }
         updateVoiceCompanion("success", "Saved");
         voiceRuntime.speak(result.spoken_confirmation || "Saved.", result.tone_prefix || "");
@@ -1268,6 +1305,9 @@
 
     function switchView(view) {
       state.view = view;
+      // View changes end the conversational thread — clear the
+      // last-mentioned-student memory (detection v2 rule).
+      voiceLastStudent = null;
       renderShell();
       return renderView();
     }
@@ -1855,9 +1895,19 @@
     }
 
     async function loadLens(targetId = "lens", showDecisionControls = true) {
+      await ensureSchoolProfile();
       const lens = await api(`/api/students/${state.selectedStudent}/lens`);
+      // Multi-teacher triangulation (operator ruling 2026-08-01): full display
+      // names in the UI, "you" for the local teacher. Stored on state so the
+      // category/entry renderers below can badge authors.
+      state.triangulation = lens.triangulation || null;
       const observations = (lens.observations || []).slice(-3).reverse();
-      const supportHtml = renderSupportProfileSummary(lens.support_profile || {});
+      // Students detail view gets the full IEP-style Category Profile panel
+      // (SPEC_LV_BASE_LENS_SCHOOL_CATEGORIES_2026-08-01); the compact
+      // summary stays for the Observe side panel.
+      const supportHtml = showDecisionControls
+        ? renderCategoryProfile(lens)
+        : renderSupportProfileSummary(lens.support_profile || {});
       const warnings = lens.support_profile_warnings || [];
       const warningsHtml = warnings.length
         ? `<div class="source-line" style="margin-top:6px;"><span class="badge warn">Support Profile Warning: ${escapeHtml(warnings.join("; "))}</span></div>`
@@ -1881,13 +1931,19 @@
         <p>CEFR trajectory: <strong>${escapeHtml(lens.cefr_trajectory_30d)}</strong> · support tier <strong>${lens.rti_current_tier}</strong></p>
         ${decisionControls}
         <h3 style="margin-top:16px;">Recent observations</h3>
-        <div class="list">${observations.length ? observations.map(o => `<div class="item"><p>${escapeHtml(o.raw_transcript)}</p><span class="badge">${escapeHtml(o.cefr_level_observed || "not tagged")}</span></div>`).join("") : "<p>No observations yet.</p>"}</div>
-        <h3 style="margin-top:16px;">Support profile</h3>
+        <div class="list">${observations.length ? observations.map(o => `<div class="item"><p>${escapeHtml(o.raw_transcript)}</p><span class="badge">${escapeHtml(o.cefr_level_observed || "not tagged")}</span>${o.origin === "imported" ? ` <span class="badge">${escapeHtml(authorDisplayName(o.teacher_id || ""))}</span>` : ""}</div>`).join("") : "<p>No observations yet.</p>"}</div>
+        ${showDecisionControls ? renderTriangulationSection(state.triangulation) : ""}
+        <h3 style="margin-top:16px;">${showDecisionControls ? "Category Profile" : "Support profile"}</h3>
         ${warningsHtml}
         ${supportHtml}
+        ${showDecisionControls ? renderBackgroundSection(lens) : ""}
+        ${showDecisionControls ? '<div id="evidence-panel" style="margin-top:16px;"></div>' : ""}
         <h3 style="margin-top:16px;">Grouping</h3>
         <p>Avoid-pairing notes: ${escapeHtml((lens.avoid_pairing_with || []).join(", ") || "none")}</p>`;
       if (!showDecisionControls) return;
+      wireCategoryProfile(targetId);
+      wireTriangulation(targetId, showDecisionControls);
+      renderEvidencePanel(lens);
       async function handleRtiDecision(decision) {
         const res = await fetch(`/api/students/${state.selectedStudent}/rti/decision`, {
           method: "POST", headers: {"Content-Type": "application/json"},
@@ -1968,6 +2024,231 @@
         html += `<div style="margin-top:12px;"><h4 style="margin:0 0 6px 0;font-size:0.9em;color:var(--muted);">Advanced / Enrichment (Separate from Intervention Tier)</h4><div class="list">${enrichmentRow}</div></div>`;
       }
       return html;
+    }
+
+    // --- Category Profile panel (SPEC_LV_BASE_LENS_SCHOOL_CATEGORIES_2026-08-01) ---
+    // The school's IEP-style view: 7 categories + strengths, populated by
+    // teacher feedback. Labels come from the Tier 2 school profile config;
+    // category IDs are immutable and never come from config.
+
+    async function ensureSchoolProfile() {
+      if (state.schoolProfile) return;
+      try {
+        state.schoolProfile = await api("/api/school-profile");
+      } catch {
+        state.schoolProfile = {category_labels: {}, hidden_categories: ["advanced_enrichment"]};
+      }
+    }
+
+    function categoryLabel(id) {
+      const labels = (state.schoolProfile || {}).category_labels || {};
+      return labels[id] || SUPPORT_CATEGORY_LABELS[id] || id;
+    }
+
+    function confidenceBadge(entry, catId, bucket) {
+      const confidence = entry.confidence || "teacher_confirmed";
+      if (confidence === "model_suggested") {
+        return `<button type="button" class="badge warn" style="cursor:pointer;" data-confirm-entry data-cat="${escapeHtml(catId)}" data-bucket="${escapeHtml(bucket)}" data-entry="${escapeHtml(entry.id || "")}" title="Model-suggested. Tap to confirm as teacher-verified.">suggested — tap to confirm</button>`;
+      }
+      if (confidence === "imported_needs_confirmation") {
+        return `<button type="button" class="badge warn" style="cursor:pointer;" data-confirm-entry data-cat="${escapeHtml(catId)}" data-bucket="${escapeHtml(bucket)}" data-entry="${escapeHtml(entry.id || "")}" title="Imported. Tap to confirm as teacher-verified.">imported — tap to confirm</button>`;
+      }
+      const labels = {teacher_confirmed: "teacher confirmed", imported_verified: "imported verified"};
+      return `<span class="badge ok">${escapeHtml(labels[confidence] || confidence)}</span>`;
+    }
+
+    function categoryEntryList(entries, catId, bucket, prefix = "") {
+      return (entries || []).map(entry => `<div class="source-line" style="margin-top:4px;">${prefix}${escapeHtml(entry.text || "")} ${confidenceBadge(entry, catId, bucket)}${authorBadge(entry)}</div>`).join("");
+    }
+
+    function renderCategorySection(catId, category) {
+      const needs = category.needs || [];
+      const strengths = category.strengths || [];
+      const worked = category.strategies_worked || [];
+      const notWorked = category.strategies_not_worked || [];
+      const evidence = category.evidence || [];
+      const openQuestions = category.open_questions || [];
+      const total = needs.length + strengths.length + worked.length + notWorked.length + evidence.length + openQuestions.length;
+      const body = total === 0 ? `<p class="voice-hint" style="margin:4px 0 0;">No entries yet — populated by teacher feedback.</p>` : `
+        ${needs.length ? `<p style="margin:6px 0 0;"><strong>Needs</strong></p>${categoryEntryList(needs, catId, "needs")}` : ""}
+        ${strengths.length ? `<p style="margin:6px 0 0;"><strong>Strengths</strong></p>${categoryEntryList(strengths, catId, "strengths")}` : ""}
+        ${(worked.length || notWorked.length) ? `<p style="margin:6px 0 0;"><strong>Strategies trialed</strong></p>${categoryEntryList(worked, catId, "strategies_worked", '<span class="badge ok">&#10003;</span> ')}${categoryEntryList(notWorked, catId, "strategies_not_worked", '<span class="badge warn">&#10007;</span> ')}` : ""}
+        ${openQuestions.length ? `<p style="margin:6px 0 0;"><strong>Open questions</strong></p>${categoryEntryList(openQuestions, catId, "open_questions")}` : ""}
+        ${evidence.length ? `<div class="source-line" style="margin-top:6px;"><span class="badge">${evidence.length} evidence item${evidence.length === 1 ? "" : "s"}</span></div>` : ""}`;
+      return `<div class="item"><strong>${escapeHtml(categoryLabel(catId))}</strong>${triangulationChip(catId)}${body}</div>`;
+    }
+
+    function renderStrengthEntries(items) {
+      if (!items || !items.length) return `<p class="voice-hint" style="margin:4px 0 0;">None recorded yet.</p>`;
+      return items.map(item => `<div class="source-line" style="margin-top:4px;">${escapeHtml(item.text || "")} <span class="badge ok">${escapeHtml(item.confidence || "teacher confirmed")}</span></div>`).join("");
+    }
+
+    function renderCategoryProfile(lens) {
+      const categories = (lens.support_profile || {}).categories || {};
+      const hidden = (state.schoolProfile || {}).hidden_categories || ["advanced_enrichment"];
+      const visibleRows = [];
+      const hiddenRows = [];
+      SUPPORT_CATEGORIES.forEach(([id]) => {
+        const row = renderCategorySection(id, categories[id] || {});
+        (hidden.includes(id) ? hiddenRows : visibleRows).push(row);
+      });
+      const strengthsProfile = lens.strengths_profile || {};
+      return `
+        <div class="list">${visibleRows.join("")}</div>
+        ${hiddenRows.length ? `<details style="margin-top:8px;"><summary class="voice-hint" style="cursor:pointer;">More categories</summary><div class="list" style="margin-top:6px;">${hiddenRows.join("")}</div></details>` : ""}
+        <h3 style="margin-top:16px;">Academic Strengths</h3>
+        ${renderStrengthEntries(strengthsProfile.academic_strengths)}
+        <h3 style="margin-top:16px;">Personal Strengths</h3>
+        ${renderStrengthEntries(strengthsProfile.personal_strengths)}`;
+    }
+
+    // --- Multi-teacher triangulation (SPEC_LV_MULTI_TEACHER_TRIANGULATION_2026-08-01) ---
+    // Deterministic signals only. Divergence is a conversation prompt — the
+    // system never auto-resolves disagreement between teachers.
+
+    function authorDisplayName(teacherId) {
+      const tri = state.triangulation || {};
+      if ((tri.local_teacher_ids || []).includes(teacherId)) return "you";
+      const colleague = (tri.colleagues || []).find(c => c.teacher_id === teacherId);
+      if (colleague && colleague.author_display) return colleague.author_display;
+      const names = (state.schoolProfile || {}).teacher_display_names || {};
+      return names[teacherId] || teacherId || "unknown";
+    }
+
+    function hasImportedColleagues() {
+      const tri = state.triangulation || {};
+      return (tri.colleagues || []).some(c => c.origin === "imported");
+    }
+
+    function authorBadge(entry) {
+      // Only badge authors once a colleague has actually contributed —
+      // a single-teacher lens stays visually quiet.
+      if (!hasImportedColleagues()) return "";
+      const author = entry.created_by || "";
+      if (!author) return "";
+      return ` <span class="badge">${escapeHtml(authorDisplayName(author))}</span>`;
+    }
+
+    function triangulationChip(catId) {
+      const tri = state.triangulation || {};
+      const cat = (tri.categories || {})[catId];
+      if (!cat || cat.status !== "corroborated") return "";
+      const names = (cat.teachers || []).map(authorDisplayName).join(", ");
+      return ` <span class="badge ok" title="Noted independently by: ${escapeHtml(names)}">corroborated &#215;${(cat.teachers || []).length}</span>`;
+    }
+
+    function renderTriangulationSection(tri) {
+      if (!tri) return "";
+      const colleagues = (tri.colleagues || []).filter(c => c.origin === "imported");
+      const divergence = tri.divergence || [];
+      const colleagueRows = colleagues.map(c => `<div class="item"><strong>${escapeHtml(c.author_display || c.teacher_id)}</strong>
+        <div class="source-line"><span class="badge">${c.observation_count} observation${c.observation_count === 1 ? "" : "s"}</span> <span class="badge">last: ${escapeHtml((c.last_seen || "").slice(0, 10) || "unknown")}</span></div>
+        <button type="button" data-remove-colleague="${escapeHtml(c.teacher_id)}" style="margin-top:6px;">Remove this colleague's data</button>
+      </div>`).join("");
+      const divergenceRows = divergence.map(d => `<div class="item"><span class="badge warn">worth a conversation</span>
+        <p style="margin:6px 0 0;">${escapeHtml((d.teachers || []).map(authorDisplayName).join(" and "))} are seeing different directions (${escapeHtml((d.directions || []).join(" vs "))}) within the last 30 days. Nothing is auto-resolved — this is a prompt to talk.</p>
+      </div>`).join("");
+      return `
+        <h3 style="margin-top:16px;">Colleague observations</h3>
+        <div class="row"><button type="button" id="pull-shared">Pull colleague updates</button><span id="pull-shared-status" aria-live="polite"></span></div>
+        ${colleagues.length ? `<div class="list" style="margin-top:6px;">${colleagueRows}</div>` : `<p class="voice-hint" style="margin:6px 0 0;">No colleague observations imported yet. Updates arrive through the school's shared Drive folder.</p>`}
+        ${divergenceRows ? `<div class="list" style="margin-top:6px;">${divergenceRows}</div>` : ""}`;
+    }
+
+    function wireTriangulation(targetId, showDecisionControls) {
+      const container = $(targetId);
+      if (!container) return;
+      const pullButton = container.querySelector("#pull-shared");
+      if (pullButton) pullButton.addEventListener("click", async () => {
+        pullButton.disabled = true;
+        const status = container.querySelector("#pull-shared-status");
+        if (status) status.textContent = "Checking the shared folder\u2026";
+        try {
+          const res = await fetch("/api/drive/pull-shared", {
+            method: "POST", headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({student_id: state.selectedStudent})
+          });
+          const data = await res.json();
+          if (res.ok) {
+            if (status) status.textContent = `${data.imported || 0} new observation${data.imported === 1 ? "" : "s"} imported (${data.files_seen || 0} ledger file${data.files_seen === 1 ? "" : "s"} checked).`;
+            if (data.imported) { await loadLens(targetId, showDecisionControls); return; }
+          } else if (status) {
+            status.textContent = data.error || "Could not check the shared folder.";
+          }
+        } catch {
+          if (status) status.textContent = "Network error.";
+        }
+        pullButton.disabled = false;
+      });
+      container.querySelectorAll("[data-remove-colleague]").forEach(button => button.addEventListener("click", async () => {
+        const teacherId = button.dataset.removeColleague;
+        const name = authorDisplayName(teacherId);
+        if (!window.confirm(`Remove ${name}'s observations from this lens on this machine? Their own copy is untouched, and pulling again will re-import them.`)) return;
+        button.disabled = true;
+        try {
+          const res = await fetch(`/api/students/${state.selectedStudent}/remove-colleague`, {
+            method: "POST", headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({teacher_id: teacherId})
+          });
+          if (res.ok) { await loadLens(targetId, showDecisionControls); return; }
+        } catch {}
+        button.disabled = false;
+      }));
+    }
+
+    function renderBackgroundSection(lens) {
+      return `
+        <h3 style="margin-top:16px;">Background</h3>
+        <div id="bg-display">
+          <p style="margin:4px 0 0;">${lens.background_notes ? escapeHtml(lens.background_notes) : '<span class="voice-hint">No background notes yet.</span>'}</p>
+          <button type="button" id="bg-edit" style="margin-top:6px;">Edit background</button>
+        </div>
+        <div id="bg-editor" style="display:none;">
+          <textarea id="bg-textarea" placeholder="Family context, prior schooling, languages at home — stays on this machine.">${escapeHtml(lens.background_notes || "")}</textarea>
+          <div class="row" style="margin-top:6px;">
+            <button type="button" class="primary" id="bg-save">Save</button>
+            <button type="button" id="bg-cancel">Cancel</button>
+            <span id="bg-status" aria-live="polite"></span>
+          </div>
+        </div>`;
+    }
+
+    function wireCategoryProfile(targetId) {
+      const container = $(targetId);
+      if (!container) return;
+      container.querySelectorAll("[data-confirm-entry]").forEach(button => button.addEventListener("click", async () => {
+        button.disabled = true;
+        try {
+          const res = await fetch(`/api/students/${state.selectedStudent}/support-entry/confirm`, {
+            method: "POST", headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({category_id: button.dataset.cat, bucket: button.dataset.bucket, entry_id: button.dataset.entry})
+          });
+          if (res.ok) { await loadLens(targetId, true); }
+          else { button.disabled = false; button.textContent = "confirm failed — retry"; }
+        } catch { button.disabled = false; button.textContent = "network error — retry"; }
+      }));
+      const editButton = $("bg-edit");
+      if (!editButton) return;
+      editButton.addEventListener("click", () => {
+        $("bg-display").style.display = "none";
+        $("bg-editor").style.display = "block";
+      });
+      $("bg-cancel").addEventListener("click", () => {
+        $("bg-editor").style.display = "none";
+        $("bg-display").style.display = "block";
+      });
+      $("bg-save").addEventListener("click", async () => {
+        $("bg-status").textContent = "Saving...";
+        try {
+          const res = await fetch(`/api/students/${state.selectedStudent}`, {
+            method: "PATCH", headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({background_notes: $("bg-textarea").value})
+          });
+          const data = await res.json();
+          if (res.ok) { await loadLens(targetId, true); }
+          else { $("bg-status").textContent = data.error || "Save failed."; }
+        } catch { $("bg-status").textContent = "Network error."; }
+      });
     }
 
     async function renderAssess() {
@@ -2198,13 +2479,144 @@
       }));
     }
 
+    // --- Evidence + Ethos (SPEC_LV_EVIDENCE_ETHOS_TRAITS_2026-08-01) --------
+    // Unified append-only evidence ledger: documents from Sources + direct
+    // teacher feedback, attached against support categories / ethos traits /
+    // strengths / background. Ethos surfaces hide themselves when the
+    // taxonomy is unavailable (hard rule 4) — never an error state.
+
+    const EVIDENCE_KIND_LABELS = {
+      document: "Document",
+      teacher_feedback: "Teacher feedback",
+      observation_ref: "Observation"
+    };
+    const REPORT_GRADE = ["teacher_confirmed", "imported_verified"];
+
+    async function ensureEthosTaxonomy() {
+      if (state.ethosTaxonomy) return state.ethosTaxonomy;
+      try {
+        state.ethosTaxonomy = await api("/api/ethos/taxonomy");
+      } catch {
+        state.ethosTaxonomy = {available: false, ethos_name: null, traits: []};
+      }
+      return state.ethosTaxonomy;
+    }
+
+    async function submitEvidence(sid, payload) {
+      return api(`/api/students/${sid}/evidence`, {
+        method: "POST", body: JSON.stringify(payload)
+      });
+    }
+
+    function evidenceTargetLabel(item) {
+      if (item.target_type === "support_category") return SUPPORT_CATEGORY_LABELS[item.target_id] || item.target_id;
+      if (item.target_type === "ethos_trait") {
+        const trait = ((state.ethosTaxonomy || {}).traits || []).find(t => t.id === item.target_id);
+        return `Ethos: ${trait ? trait.label : item.target_id}`;
+      }
+      if (item.target_type === "strengths") return `Strength: ${item.target_id}`;
+      return "Background";
+    }
+
+    function evidenceTargetOptions() {
+      const categories = SUPPORT_CATEGORIES.map(([id, label]) =>
+        `<option value="support_category:${id}">${escapeHtml(label)}</option>`);
+      const taxonomy = state.ethosTaxonomy || {available: false, traits: []};
+      const traits = taxonomy.available
+        ? (taxonomy.traits || []).map(trait =>
+            `<option value="ethos_trait:${escapeHtml(trait.id)}">Ethos: ${escapeHtml(trait.label)}</option>`)
+        : [];
+      return categories.concat(traits).join("");
+    }
+
+    function renderEthosRollups(lens) {
+      const taxonomy = state.ethosTaxonomy || {available: false, traits: []};
+      if (!taxonomy.available) return "";
+      const profileTraits = ((lens.ethos_profile || {}).traits) || {};
+      const chips = (taxonomy.traits || []).map(trait => {
+        const data = profileTraits[trait.id] || {};
+        const count = data.evidence_count || (data.evidence || []).filter(e => e.active !== false).length || 0;
+        return `<span class="badge ${count ? "ok" : ""}" title="${escapeHtml(trait.descriptor || "")}">${escapeHtml(trait.label)} · ${count}</span>`;
+      }).join(" ");
+      return `
+        <div class="source-line" style="margin-top:8px;">
+          <span class="badge">${escapeHtml(taxonomy.ethos_name || "School ethos")}</span>
+        </div>
+        <div class="source-line" style="margin-top:6px;">${chips}</div>`;
+    }
+
+    async function renderEvidencePanel(lens) {
+      const host = $("evidence-panel");
+      if (!host) return;
+      await ensureEthosTaxonomy();
+      let data;
+      try {
+        data = await api(`/api/students/${state.selectedStudent}/evidence`);
+      } catch (error) {
+        host.innerHTML = `<h3>Evidence</h3><p class="voice-hint">Could not read the evidence ledger: ${escapeHtml(error.message || "unknown error")}</p>`;
+        return;
+      }
+      const items = data.evidence || [];
+      const rows = items.map(item => `
+        <div class="item">
+          <div class="source-line">
+            <span class="badge">${escapeHtml(EVIDENCE_KIND_LABELS[item.kind] || item.kind)}</span>
+            <span class="badge">${escapeHtml(evidenceTargetLabel(item))}</span>
+            <span class="badge ${REPORT_GRADE.includes(item.confidence_level) ? "ok" : "warn"}">${escapeHtml(item.confidence_level)}</span>
+          </div>
+          <p>${escapeHtml(item.summary)}</p>
+          ${item.source_ref && item.source_ref.title ? `<p class="voice-hint">Source: ${escapeHtml(item.source_ref.title)}</p>` : ""}
+          <button type="button" class="evidence-delete" data-evidence-id="${escapeHtml(item.evidence_id)}">Remove</button>
+        </div>`).join("");
+      host.innerHTML = `
+        <h3>Evidence</h3>
+        ${renderEthosRollups(lens)}
+        <div class="row" style="margin-top:8px;">
+          <select id="evidence-target">${evidenceTargetOptions()}</select>
+          <input id="evidence-summary" placeholder="What did you see? (teacher feedback)">
+          <button type="button" id="evidence-add">Add evidence</button>
+          <span id="evidence-status" aria-live="polite"></span>
+        </div>
+        <div class="list" style="margin-top:10px;">${rows || `<p class="voice-hint">No evidence recorded yet. Add teacher feedback above, or attach a document from Sources.</p>`}</div>`;
+      $("evidence-add").addEventListener("click", async () => {
+        const summary = $("evidence-summary").value.trim();
+        if (!summary) { $("evidence-status").textContent = "Write what you saw first."; return; }
+        const [targetType, targetId] = $("evidence-target").value.split(":");
+        try {
+          await submitEvidence(state.selectedStudent, {
+            kind: "teacher_feedback",
+            target_type: targetType,
+            target_id: targetId,
+            summary,
+            confidence_level: "teacher_confirmed"
+          });
+          $("evidence-status").textContent = "Saved.";
+          await loadLens("lens", true);
+        } catch (error) {
+          $("evidence-status").textContent = error.message || "Failed.";
+        }
+      });
+      host.querySelectorAll(".evidence-delete").forEach(button => {
+        button.addEventListener("click", async () => {
+          const item = items.find(entry => entry.evidence_id === button.dataset.evidenceId);
+          if (!item) return;
+          try {
+            await api(`/api/students/${state.selectedStudent}/evidence/${item.evidence_id}`, {method: "DELETE"});
+            await loadLens("lens", true);
+          } catch (error) {
+            $("evidence-status").textContent = error.message || "Failed.";
+          }
+        });
+      });
+    }
+
     async function renderParents() {
       setTitle("Parents", "parent-safe draft");
       await ensureStudents();
       $("content").innerHTML = `
         <div class="view-head"><div><h2>Parent Recommendation</h2><p>Draft a warm, parent-safe note for teacher review.</p></div><span class="badge warn">Review before sending. No AI attribution in final message.</span></div>
         <div class="grid two">
-          <div class="panel"><label>Student<select id="parent-student">${studentOptions()}</select></label><label style="display:block;margin-top:12px;">Home support focus<input id="parent-focus" value="creative quiet workspace"></label><button id="draft-parent" class="primary" type="button" style="margin-top:12px;">Draft Recommendation</button></div>
+          <div class="panel"><label>Student<select id="parent-student">${studentOptions()}</select></label><label style="display:block;margin-top:12px;">Home support focus<input id="parent-focus" value="creative quiet workspace"></label><label style="display:block;margin-top:12px;"><input type="checkbox" id="parent-include-evidence"> Include evidence summaries (teacher-confirmed only; same safety review as the rest of the draft)</label><button id="draft-parent" class="primary" type="button" style="margin-top:12px;">Draft Recommendation</button></div>
           <div id="parent-output" class="panel"><p>Drafts appear here for editing before sending.</p></div>
         </div>`;
       $("draft-parent").addEventListener("click", draftParent);
@@ -2213,7 +2625,11 @@
     async function draftParent() {
       const data = await api("/api/parents/recommendation", {
         method: "POST",
-        body: JSON.stringify({student_id: $("parent-student").value, focus: $("parent-focus").value})
+        body: JSON.stringify({
+          student_id: $("parent-student").value,
+          focus: $("parent-focus").value,
+          include_evidence_summaries: $("parent-include-evidence").checked
+        })
       });
       // Gap 1: publication-safety warnings render ABOVE the draft with a red
       // border, not as a dismissible toast. The draft is still shown — a
@@ -3427,6 +3843,13 @@
       try {
         const data = await api("/api/sources/records?limit=12");
         const observations = await api("/api/sources/observations?limit=5").catch(() => ({observations: []}));
+        // "Add as evidence" (SPEC_LV_EVIDENCE_ETHOS_TRAITS_2026-08-01):
+        // attach a ledger document to a student against a category or ethos
+        // trait. Stores a provenance pointer only — never file bytes.
+        await ensureStudents();
+        await ensureEthosTaxonomy();
+        const studentPicker = state.students.map(student =>
+          `<option value="${student.student_id}">${escapeHtml(student.display_name)}</option>`).join("");
         const rows = (data.records || []).map(record => `
           <details class="item">
             <summary><strong>${escapeHtml(record.title || record.record_id)}</strong></summary>
@@ -3436,6 +3859,12 @@
               <span class="badge ${record.student_data ? "risk" : "ok"}">${record.student_data ? "student data local-only" : "model context allowed"}</span>
             </div>
             <p>${escapeHtml(record.summary || record.uri || "")}</p>
+            <div class="row" style="margin-top:8px;">
+              <select data-evidence-student>${studentPicker}</select>
+              <select data-evidence-target>${evidenceTargetOptions()}</select>
+              <button type="button" data-add-evidence="${escapeHtml(record.source_record_id || "")}">Add as evidence</button>
+              <span data-evidence-status aria-live="polite"></span>
+            </div>
           </details>`).join("");
         host.innerHTML = `
           <details>
@@ -3443,6 +3872,28 @@
             <div class="list" style="margin-top:10px;">${rows || `<p class="voice-hint">No durable source records yet.</p>`}</div>
             ${(observations.observations || []).length ? `<p class="voice-hint">${observations.observations.length} recent ledger observation(s).</p>` : ""}
           </details>`;
+        host.querySelectorAll("[data-add-evidence]").forEach(button => {
+          button.addEventListener("click", async () => {
+            const row = button.closest(".row");
+            const status = row.querySelector("[data-evidence-status]");
+            const record = (data.records || []).find(entry => entry.source_record_id === button.dataset.addEvidence);
+            if (!record) { status.textContent = "Record not found."; return; }
+            const [targetType, targetId] = row.querySelector("[data-evidence-target]").value.split(":");
+            try {
+              await submitEvidence(row.querySelector("[data-evidence-student]").value, {
+                kind: "document",
+                target_type: targetType,
+                target_id: targetId,
+                summary: (record.summary || record.title || "Attached document.").slice(0, 2000),
+                source_ref: {source_record_id: record.source_record_id},
+                confidence_level: "teacher_confirmed"
+              });
+              status.textContent = "Added as evidence.";
+            } catch (error) {
+              status.textContent = error.message || "Failed.";
+            }
+          });
+        });
       } catch (error) {
         host.innerHTML = `<p class="voice-hint">Could not read source ledger.</p>`;
       }

@@ -6,6 +6,8 @@ async def run_teacher_query(
     intent: str | None = None,
     session_id: str | None = None,
     eval_mode: bool = False,
+    explicit_model: str | None = None,
+    max_tokens: int = 2000,
 ):
     """Temporary Phase 2 bridge from the web app to Lingua Viva reasoning.
 
@@ -29,4 +31,6 @@ async def run_teacher_query(
         intent=intent,
         session_id=session_id,
         eval_mode=eval_mode,
+        explicit_model=explicit_model,
+        max_tokens=max_tokens,
     )

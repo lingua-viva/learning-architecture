@@ -80,6 +80,12 @@ def _hermetic_lv_state(monkeypatch, tmp_path):
     # Request-outcome event log (MC-lessons §5).
     monkeypatch.setenv("LV_REQUEST_LOG_PATH", str(state_home / "request_events.ndjson"))
 
+    # Routing memory (SPEC_LV_ROUTING_MEMORY_LOOP_2026-08-01): voice/act and
+    # observe/capture append decision rows — without this override every
+    # endpoint test would dirty the local memory/data/routing_memory_v1.ndjson
+    # (gitignored, but real teacher decision rows must never mix with test rows).
+    monkeypatch.setenv("LV_ROUTING_MEMORY_PATH", str(state_home / "routing_memory_v1.ndjson"))
+
     # extraction_sources' demo-file fallback (web.py) writes into
     # lv_home()/imports/ when no sources exist — under tests that was the
     # operator's REAL ~/.lingua-viva/imports/ (found in the 2026-07-27 Drive

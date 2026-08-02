@@ -54,6 +54,63 @@ def provider_config_path() -> Path:
     return config_home() / "config" / "providers.json"
 
 
+# Tier 2 school-configurable display (SPEC_LV_BASE_LENS_SCHOOL_CATEGORIES
+# 2026-08-01): labels and visibility only. Category IDs are immutable —
+# they are the schema contract existing SQLite lenses depend on, so they
+# are never read from config (manifest-is-the-contract principle).
+DEFAULT_SCHOOL_PROFILE = {
+    "category_labels": {},
+    "hidden_categories": ["advanced_enrichment"],
+    # Multi-teacher triangulation (operator ruling 2026-08-01): colleague
+    # teacher_ids render as full display names in the UI. The names live
+    # here in Tier 2 config only — never in ledger filenames or any Drive
+    # artifact. Unknown ids fall back to the raw teacher_id.
+    "teacher_display_names": {},
+}
+
+
+def school_profile_path() -> Path:
+    return config_home() / "config" / "school_profile.json"
+
+
+def read_school_profile() -> dict:
+    """Load per-school display config. Never raises: a missing, unreadable,
+    or malformed file degrades to shipped defaults — a broken config file
+    must not break the student lens view."""
+    default = {
+        "category_labels": dict(DEFAULT_SCHOOL_PROFILE["category_labels"]),
+        "hidden_categories": list(DEFAULT_SCHOOL_PROFILE["hidden_categories"]),
+        "teacher_display_names": dict(DEFAULT_SCHOOL_PROFILE["teacher_display_names"]),
+    }
+    try:
+        with school_profile_path().open(encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return default
+    if not isinstance(data, dict):
+        return default
+    labels = data.get("category_labels")
+    if isinstance(labels, dict):
+        default["category_labels"] = {
+            str(key): str(value)
+            for key, value in labels.items()
+            if isinstance(key, str) and isinstance(value, str)
+        }
+    hidden = data.get("hidden_categories")
+    if isinstance(hidden, list):
+        default["hidden_categories"] = [
+            item for item in hidden if isinstance(item, str)
+        ]
+    names = data.get("teacher_display_names")
+    if isinstance(names, dict):
+        default["teacher_display_names"] = {
+            str(key): str(value)
+            for key, value in names.items()
+            if isinstance(key, str) and isinstance(value, str)
+        }
+    return default
+
+
 def read_provider_config() -> Optional[dict]:
     try:
         with provider_config_path().open(encoding="utf-8") as handle:

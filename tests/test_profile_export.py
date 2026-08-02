@@ -35,6 +35,7 @@ def _deterministic_reasoning(monkeypatch):
         default_model: str | None = None,
         system_prompt: str | None = None,
         local_only: bool = False,
+        max_tokens: int = 2000,
     ) -> ReasonResult:
         return ReasonResult(
             content="[Local reasoning for export smoke test]",

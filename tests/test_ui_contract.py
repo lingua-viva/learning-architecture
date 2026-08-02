@@ -177,7 +177,13 @@ REPO = Path(__file__).resolve().parent.parent
 #   v89 (2026-08-01): lesson-materials generate endpoint (MVP sprint Spec 3).
 #   v90 (2026-08-01): voice intent router endpoint (MVP sprint Spec 4).
 #   v91 (2026-08-01): frontend voice wire — mic routes through /api/voice/act.
-EXPECTED_VERSION = 91
+#   v92 (2026-08-01): school category profile wiring (MVP sprint Spec 1).
+#   v93 (2026-08-01): voice student detection v2 — fuzzy names + context.
+#   v94 (2026-08-01): multi-teacher triangulation — colleague ledgers + UI.
+#   v95 (2026-08-01): evidence + ethos traits — unified evidence ledger
+#     endpoints, ethos taxonomy + suggestions, evidence-in-parent-draft
+#     behind the safety gates, Evidence panel + Sources add-as-evidence.
+EXPECTED_VERSION = 96
 
 
 def _html() -> str:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -614,6 +615,74 @@ def list_files(
         pass
     next_token = data.get("nextPageToken")
     return {"files": files, "next_page_token": next_token if isinstance(next_token, str) else None}
+
+
+def list_folder_files(
+    folder_id: str,
+    *,
+    settings: DriveSettings | None = None,
+    transport: DriveTransport | None = None,
+) -> list[dict[str, Any]]:
+    """Lean folder listing for sync plumbing (ledger pull): id + name only,
+    no source-ledger side effects — ledger files are transport artifacts,
+    not teacher sources. Same auth/error patterns as list_files."""
+    folder_id = (folder_id or "").strip()
+    if not BARE_FOLDER_ID.match(folder_id):
+        raise ValueError("That folder ID does not look valid.")
+    settings = ensure_configured(settings)
+    transport = transport or default_transport()
+    token = _access_token(settings, transport)
+    params = {
+        "fields": "nextPageToken,files(id,name)",
+        "pageSize": "100",
+        "q": f"trashed = false and '{folder_id}' in parents",
+    }
+    files: list[dict[str, Any]] = []
+    page_token = ""
+    while True:
+        if page_token:
+            params["pageToken"] = page_token
+        url = f"{DRIVE_API}/files?{parse.urlencode(params)}"
+        try:
+            data = transport.get_json(url, token)
+        except (error.HTTPError, error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+            raise DriveAuthError("Google Drive list failed.") from exc
+        if not isinstance(data, dict):
+            raise DriveAuthError("Google Drive list failed.")
+        raw_files = data.get("files")
+        if isinstance(raw_files, list):
+            files.extend(
+                {"id": str(item.get("id") or ""), "name": str(item.get("name") or "")}
+                for item in raw_files
+                if isinstance(item, dict) and item.get("id")
+            )
+        page_token = data.get("nextPageToken") if isinstance(data.get("nextPageToken"), str) else ""
+        if not page_token:
+            break
+    return files
+
+
+def download_file_text(
+    file_id: str,
+    *,
+    settings: DriveSettings | None = None,
+    transport: DriveTransport | None = None,
+) -> str:
+    """Download one Drive file's content as UTF-8 text (bounded read)."""
+    file_id = (file_id or "").strip()
+    if not file_id:
+        raise ValueError("file_id is required.")
+    settings = ensure_configured(settings)
+    transport = transport or default_transport()
+    token = _access_token(settings, transport)
+    url = f"{DRIVE_API}/files/{parse.quote(file_id, safe='')}?alt=media"
+    try:
+        content = transport.get_bytes(url, token)
+    except (error.HTTPError, error.URLError, TimeoutError, OSError) as exc:
+        raise DriveAuthError("Google Drive download failed.") from exc
+    if len(content) > MAX_IMPORT_BYTES:
+        raise DriveFileTooLarge(str(len(content)))
+    return content.decode("utf-8", errors="replace")
 
 
 def _safe_filename(name: str, suffix: str) -> str:
