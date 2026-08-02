@@ -2758,8 +2758,8 @@ async def voice_act(request: Request, payload: dict):
             record_decision,
             "category_suggest",
             str(top.get("category_id") or "none"),
-            float(top.get("confidence") or 0.0),
-            list(top.get("matched_signals") or []),
+            top.get("confidence") or 0.0,
+            top.get("matched_signals"),
             {"observation_id": observation_id, "student_id": student_id},
         )
 
@@ -3221,8 +3221,8 @@ async def observe_capture(request: Request, payload: dict):
         record_decision,
         "category_suggest",
         str(_top.get("category_id") or "none"),
-        float(_top.get("confidence") or 0.0),
-        list(_top.get("matched_signals") or []),
+        _top.get("confidence") or 0.0,
+        _top.get("matched_signals"),
         {"observation_id": _obs_id, "student_id": student_id},
     )
     # Additive: the category confirm/recategorize hooks reference this id.
@@ -3552,6 +3552,111 @@ async def school_profile():
     from src.lingua_viva.config import read_school_profile
 
     return read_school_profile()
+
+
+@app.post("/api/school-profile")
+async def update_school_profile(payload: dict):
+    """Teacher identity + colleague display names (teacher-identity P1,
+    2026-08-02). Accepts a subset of {own_teacher_id, teacher_display_names};
+    category labels/visibility stay file-managed and are never writable here.
+
+    Setting own_teacher_id backfills existing locally-authored rows from the
+    previous effective identity (usually the un-provisioned "local-teacher"
+    sentinel) via rename_local_teacher, so ledger exports and triangulation
+    authorship immediately carry the real id."""
+    from src.lingua_viva.config import (
+        UNPROVISIONED_TEACHER_ID,
+        own_teacher_id,
+        read_school_profile,
+        school_profile_path,
+    )
+    from src.lingua_viva.privacy_log import log_event
+
+    if not isinstance(payload, dict) or not payload:
+        return JSONResponse({"error": "At least one field is required"}, status_code=400)
+    unknown = set(payload) - {"own_teacher_id", "teacher_display_names"}
+    if unknown:
+        return JSONResponse(
+            {"error": f"Unknown fields: {sorted(unknown)}"}, status_code=400
+        )
+
+    new_id: Optional[str] = None
+    if "own_teacher_id" in payload:
+        raw_id = payload["own_teacher_id"]
+        if not isinstance(raw_id, str):
+            return JSONResponse(
+                {"error": "own_teacher_id must be a string"}, status_code=400
+            )
+        new_id = raw_id.strip()
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", new_id):
+            return JSONResponse(
+                {
+                    "error": "Teacher ID must be 1-64 characters: letters, "
+                    "digits, '-' or '_' (no spaces or accents)."
+                },
+                status_code=400,
+            )
+        if new_id == UNPROVISIONED_TEACHER_ID:
+            return JSONResponse(
+                {
+                    "error": f"'{UNPROVISIONED_TEACHER_ID}' is reserved for "
+                    "un-provisioned machines — choose your own ID."
+                },
+                status_code=400,
+            )
+
+    display_names: Optional[dict] = None
+    if "teacher_display_names" in payload:
+        raw_names = payload["teacher_display_names"]
+        if not isinstance(raw_names, dict) or not all(
+            isinstance(key, str) and isinstance(value, str)
+            for key, value in raw_names.items()
+        ):
+            return JSONResponse(
+                {"error": "teacher_display_names must map teacher IDs to names"},
+                status_code=400,
+            )
+        display_names = {
+            key.strip(): value.strip()
+            for key, value in raw_names.items()
+            if key.strip() and value.strip()
+        }
+
+    # The previous effective identity — what existing local rows are
+    # attributed as — must be captured BEFORE the config write, because it
+    # is the rename source for the backfill below.
+    previous_id = own_teacher_id() or UNPROVISIONED_TEACHER_ID
+
+    path = school_profile_path()
+    try:
+        existing = json.loads(path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        existing = {}
+    if not isinstance(existing, dict):
+        existing = {}
+    if new_id is not None:
+        existing["own_teacher_id"] = new_id
+    if display_names is not None:
+        existing["teacher_display_names"] = display_names
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(".json.tmp")
+    tmp_path.write_text(
+        json.dumps(existing, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+    os.replace(tmp_path, path)
+
+    renamed = 0
+    if new_id and new_id != previous_id:
+
+        def do_rename(store):
+            return store.rename_local_teacher(previous_id, new_id)
+
+        result = await asyncio.to_thread(_with_student_store, do_rename)
+        renamed = int(result.get("renamed", 0))
+        if renamed:
+            log_event("teacher_identity_backfill")
+
+    return {"status": "saved", "renamed": renamed, **read_school_profile()}
 
 
 @app.patch("/api/students/{student_id}")

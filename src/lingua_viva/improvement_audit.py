@@ -356,10 +356,12 @@ def build_routing_report(rows: list[dict], skipped: int = 0) -> dict:
     intent_outcomes: dict[str, int] = {}
     category_outcomes: set[str] = set()
     category_corrected_obs = 0
+    decision_ids_seen: set[str] = set()
 
     for d in rows:
         if is_correction(d):
             continue
+        decision_ids_seen.add(str(d.get("decision_id") or ""))
         dtype = str(d.get("decision") or "unknown")
         outcome = str(d.get("outcome") or "")
         try:
@@ -450,9 +452,17 @@ def build_routing_report(rows: list[dict], skipped: int = 0) -> dict:
                 f" corrected {s['corrected']}x ({s['precision_gap']:.0%}) — review"
                 " this line in the shipped signal list")
 
+    # Corrections referencing no known decision row (harmless by design —
+    # record_decision returns an id even when its append fails — but a
+    # rising count means a hook is threading the wrong id).
+    dangling = sum(
+        len(v) for k, v in corrections_by_id.items()
+        if k not in decision_ids_seen)
+
     return {
         "total_rows": len(rows),
         "skipped_rows": skipped,
+        "dangling_corrections": dangling,
         "per_type": dict(sorted(per_type.items())),
         "per_signal": signals,
         "collapse_flags": flags,
@@ -662,5 +672,8 @@ def format_report(report: dict) -> str:
                 out(f"    - {p}")
         if routing.get("skipped_rows"):
             out(f"  skipped rows: {routing['skipped_rows']} (unknown schema/malformed)")
+        if routing.get("dangling_corrections"):
+            out(f"  dangling corrections: {routing['dangling_corrections']}"
+                " (reference no recorded decision — check hook id threading)")
 
     return "\n".join(lines)

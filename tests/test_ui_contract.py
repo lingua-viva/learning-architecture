@@ -183,7 +183,12 @@ REPO = Path(__file__).resolve().parent.parent
 #   v95 (2026-08-01): evidence + ethos traits — unified evidence ledger
 #     endpoints, ethos taxonomy + suggestions, evidence-in-parent-draft
 #     behind the safety gates, Evidence panel + Sources add-as-evidence.
-EXPECTED_VERSION = 96
+#   v96 (2026-08-01): voice latency — qwen2.5:3b + 256 max tokens on voice/act.
+#   v97 (2026-08-02): teacher identity provisioning — POST /api/school-profile,
+#     Settings identity panel, un-provisioned nudge, sentinel ledger guards.
+#   v98 (2026-08-02): routing-memory hardening — raw values into
+#     record_decision at category_suggest emission sites (no route/UI change).
+EXPECTED_VERSION = 98
 
 
 def _html() -> str:

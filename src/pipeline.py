@@ -404,16 +404,20 @@ class ReasoningEngine:
         import json
         from urllib import request, error
 
-        # Preferred local models for reasoning/synthesis (best first)
+        # Preferred local models for reasoning/synthesis (best first).
+        # qwen3:* demoted to last resort (2026-08-02): thinking models with no
+        # think suppression on LV's OpenAI-compat path — they hit the 60s
+        # REASON timeout with 0 tokens on CPU (see trace ledger 2026-08-02).
+        # Keep in sync with LOCAL_MODEL_PREFERENCE in lingua_viva/config.py.
         LOCAL_PREFERENCE = [
-            "qwen3:14b",
-            "qwen3:8b",
             "phi4:14b",
             "qwen2.5:14b",
             "llama3.1:8b",
             "qwen2.5:7b",
             "mistral:7b",
             "qwen2.5:3b",
+            "qwen3:14b",
+            "qwen3:8b",
         ]
         # Cloud fallback (still via Ollama, but data leaves machine)
         CLOUD_FALLBACK = "kimi-k2.7-code:cloud"

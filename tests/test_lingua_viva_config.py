@@ -4,7 +4,14 @@ from src.lingua_viva import config
 
 
 def test_detect_model_picks_best_installed_model():
-    assert config.detect_model(["qwen2.5:7b", "qwen3:8b"]) == "ollama/qwen3:8b"
+    # qwen3:* are thinking models demoted to last resort (2026-08-02): with no
+    # think suppression on the OpenAI-compat reasoning path they hit the 60s
+    # REASON timeout with 0 tokens on CPU-only hardware.
+    assert config.detect_model(["qwen2.5:7b", "qwen3:8b"]) == "ollama/qwen2.5:7b"
+
+
+def test_detect_model_qwen3_is_last_resort_not_excluded():
+    assert config.detect_model(["qwen3:8b"]) == "ollama/qwen3:8b"
 
 
 def test_detect_model_falls_back_to_cloud_when_ollama_has_no_preferred_models():

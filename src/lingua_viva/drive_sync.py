@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from src.lingua_viva.config import lv_home
+from src.lingua_viva.config import UNPROVISIONED_TEACHER_ID, lv_home
 
 logger = logging.getLogger(__name__)
 
@@ -165,9 +165,16 @@ async def sync_lens_to_drive(student_id: str) -> bool:
             lens_data = store.export_lens(student_id)
             if not lens_data:
                 return False
+            # Un-provisioned identity guard (teacher-identity P1, 2026-08-02):
+            # every fresh install authors rows as "local-teacher", so two
+            # machines exporting under that id would produce the SAME ledger
+            # filename and silently overwrite each other in Drive. Ledgers
+            # for the sentinel id are never exported — the markdown lens
+            # still syncs, and Settings → Teacher identity unlocks sharing.
             ledgers = {
                 teacher_id: build_ledger_ndjson(store, student_id, teacher_id)
                 for teacher_id in store.local_teacher_ids(student_id)
+                if teacher_id != UNPROVISIONED_TEACHER_ID
             }
         finally:
             store.close()
@@ -277,7 +284,17 @@ def pull_shared_ledgers(student_id: Optional[str] = None) -> dict:
                         )
                         result["errors"] += 1
                         continue
-                    if str(header.get("teacher_id") or "") in own_teacher_ids:
+                    header_teacher = str(header.get("teacher_id") or "")
+                    # Never import a ledger authored under the un-provisioned
+                    # sentinel: it is un-attributable (any number of machines
+                    # share that id), and importing it would misattribute a
+                    # colleague's rows as one ambiguous author. Such ledgers
+                    # can only exist as stale artifacts from builds that
+                    # pre-date the identity guard.
+                    if header_teacher == UNPROVISIONED_TEACHER_ID:
+                        result["skipped"] += 1
+                        continue
+                    if header_teacher in own_teacher_ids:
                         continue
                     if student_id and str(header.get("student_id") or "") != student_id:
                         continue

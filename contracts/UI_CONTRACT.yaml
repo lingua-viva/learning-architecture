@@ -569,10 +569,26 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 96
+version: 98
+# v98 (2026-08-02): routing-memory hardening loop (SPEC_LV_ROUTING_MEMORY_
+#     LOOP_2026-08-01). src/web.py: category_suggest emission call sites
+#     pass raw suggestion values into record_decision (endpoint-level
+#     float()/list() coercion removed — a malformed suggestion dict could
+#     500 a teacher-facing save before fire-and-forget protection applied;
+#     record_decision now coerces internally). No routes, fields, or UI
+#     changed.
 # v96 (2026-08-01): latency optimization — voice/act uses qwen2.5:3b + 256
 #     max tokens for responsive voice answers; max_tokens param plumbed
 #     through Pipeline.run() and ReasoningEngine.reason().
+# v97 (2026-08-02): teacher identity provisioning (teacher-identity P1).
+#     src/web.py: POST /api/school-profile — own_teacher_id (validated,
+#     "local-teacher" reserved) + teacher_display_names; setting an id
+#     backfills earlier local rows via rename_local_teacher and reports the
+#     renamed count. static/index.html: Settings "Teacher identity" panel
+#     (id input + colleague display-names JSON, save invalidates cached
+#     schoolProfile/triangulation), un-provisioned nudge in the lens
+#     triangulation section. Ledger export/pull now skip the un-provisioned
+#     sentinel (drive_sync guards, config own_teacher_id seam).
 files:
   - static/index.html
   - static/sw.js

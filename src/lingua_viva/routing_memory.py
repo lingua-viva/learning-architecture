@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import time
 import uuid
@@ -72,6 +73,25 @@ def routing_memory_path() -> Path:
         str(REPO_ROOT / "memory" / "data" / "routing_memory_v1.ndjson")))
 
 
+# Content-free guard: every string this module persists is an enum, an id,
+# or a signal-list key — a short single token. Anything with whitespace or
+# beyond this length is, by definition, not one of those (it is most likely
+# free text that must never land in the file).
+_MAX_TOKEN_LEN = 80
+_INVALID_TOKEN = "invalid_token"
+
+
+def _safe_token(value) -> str:
+    token = str(value or "")
+    if not token:
+        return ""
+    if len(token) > _MAX_TOKEN_LEN or any(ch.isspace() for ch in token):
+        logger.warning(
+            "routing memory: non-token value dropped (len=%d)", len(token))
+        return _INVALID_TOKEN
+    return token
+
+
 def _append(row: dict) -> bool:
     """Append one row, swallowing every failure (fire-and-forget).
 
@@ -101,29 +121,41 @@ def record_decision(
 
     The id is returned even when the append fails — a dangling correction
     is harmless, while raising here would break a teacher-facing response.
+    The whole body is fire-and-forget: malformed arguments (wrong types,
+    non-iterables) are swallowed and logged, never raised to the caller.
     """
     decision_id = uuid.uuid4().hex
     try:
-        confidence_f = round(float(confidence), 4)
-    except (TypeError, ValueError):
-        confidence_f = 0.0
-    row = {
-        "ts": time.time(),
-        "schema": SCHEMA,
-        "decision_id": decision_id,
-        "trace_id": str(trace_id or ""),
-        "decision": str(decision),
-        "outcome": str(outcome),
-        "confidence": confidence_f,
-        "signals_matched": [str(s) for s in (signals_matched or [])],
-        "subject_ref": {
-            k: str(v)
-            for k, v in (subject_ref or {}).items()
-            if k in SUBJECT_REF_KEYS and v
-        },
-        "corrected": None,
-    }
-    _append({k: v for k, v in row.items() if k in ALLOWED_KEYS})
+        if decision not in DECISION_TYPES:
+            logger.warning(
+                "routing memory: unknown decision type %r dropped", decision)
+            return decision_id
+        try:
+            confidence_f = round(float(confidence), 4)
+        except (TypeError, ValueError):
+            confidence_f = 0.0
+        if not math.isfinite(confidence_f):
+            confidence_f = 0.0
+        row = {
+            "ts": time.time(),
+            "schema": SCHEMA,
+            "decision_id": decision_id,
+            "trace_id": _safe_token(trace_id),
+            "decision": decision,
+            "outcome": _safe_token(outcome),
+            "confidence": confidence_f,
+            "signals_matched": [_safe_token(s) for s in (signals_matched or [])],
+            "subject_ref": {
+                k: _safe_token(v)
+                for k, v in (subject_ref or {}).items()
+                if k in SUBJECT_REF_KEYS and v
+            },
+            "corrected": None,
+        }
+        _append({k: v for k, v in row.items() if k in ALLOWED_KEYS})
+    except Exception:
+        logger.warning(
+            "routing memory record_decision failed (ignored)", exc_info=True)
     return decision_id
 
 
@@ -132,21 +164,33 @@ def record_correction(decision_id: str, corrected: dict) -> None:
 
     Never rewrites the decision row. Unknown keys in `corrected` are
     dropped defensively; values are coerced to bool/str (ids and enums
-    only — free text has no representable shape here).
+    only — free text has no representable shape here). A payload with no
+    surviving keys is NOT appended: an empty `corrected` dict would read
+    as a negative correction downstream and inflate correction rates.
+    Fire-and-forget: never raises to the caller.
     """
-    if not decision_id:
-        return
-    clean: dict = {}
-    for key, value in (corrected or {}).items():
-        if key not in CORRECTED_KEYS or value is None:
-            continue
-        clean[key] = value if isinstance(value, bool) else str(value)
-    _append({
-        "ts": time.time(),
-        "schema": SCHEMA,
-        "decision_id": str(decision_id),
-        "corrected": clean,
-    })
+    try:
+        if not decision_id:
+            return
+        clean: dict = {}
+        for key, value in (corrected or {}).items():
+            if key not in CORRECTED_KEYS or value is None:
+                continue
+            clean[key] = value if isinstance(value, bool) else _safe_token(value)
+        if not clean:
+            logger.warning(
+                "routing memory: empty correction payload dropped (id=%s)",
+                decision_id)
+            return
+        _append({
+            "ts": time.time(),
+            "schema": SCHEMA,
+            "decision_id": _safe_token(decision_id),
+            "corrected": clean,
+        })
+    except Exception:
+        logger.warning(
+            "routing memory record_correction failed (ignored)", exc_info=True)
 
 
 def read_memory() -> tuple[list[dict], int]:

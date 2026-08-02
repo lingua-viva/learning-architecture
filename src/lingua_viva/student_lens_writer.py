@@ -25,6 +25,13 @@ def write_student_lens(
     hint: Optional[dict] = None,
     store: Optional[StudentLensStore] = None,
 ) -> dict:
+    # Teacher-identity seam (P1, 2026-08-02): callers that don't pass a
+    # teacher_id (e.g. the Drive auto-import extraction path) inherit the
+    # machine's configured identity instead of re-creating sentinel-attributed
+    # entries after the provisioning backfill. Explicit non-default ids win.
+    from src.lingua_viva.access_roles import configured_teacher_id
+
+    teacher_id = configured_teacher_id(teacher_id) or teacher_id
     hint = hint or {}
     close_store_on_exit = False
     if store is None:

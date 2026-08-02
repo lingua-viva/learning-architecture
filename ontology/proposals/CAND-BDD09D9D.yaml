@@ -1,7 +1,7 @@
 candidate_id: CAND-BDD09D9D
 status: ENRICHED
 created_at: 1784000578.7279212
-updated_at: 1785443407.736066
+updated_at: 1785688706.0205684
 original_query: This is confidential — can you pull together Amina's language profile
   across the last three terms?
 query_hash: c11897dd7d8074e7
@@ -45,7 +45,7 @@ domain: core
 perplexity_findings: []
 knowledge_refs: []
 path_records: []
-hit_count: 55
+hit_count: 78
 avg_confidence: 0.0
 resolution: null
 evaluation_notes: ''

@@ -2148,8 +2148,14 @@
       const divergenceRows = divergence.map(d => `<div class="item"><span class="badge warn">worth a conversation</span>
         <p style="margin:6px 0 0;">${escapeHtml((d.teachers || []).map(authorDisplayName).join(" and "))} are seeing different directions (${escapeHtml((d.directions || []).join(" vs "))}) within the last 30 days. Nothing is auto-resolved — this is a prompt to talk.</p>
       </div>`).join("");
+      // Un-provisioned nudge (teacher-identity P1, 2026-08-02): without a
+      // configured teacher ID this machine's ledgers never reach the shared
+      // folder, so say so instead of failing silently.
+      const ownId = (state.schoolProfile || {}).own_teacher_id || "";
+      const provisionNudge = ownId ? "" : `<p class="voice-hint" style="margin:6px 0 0;">Your own observations aren't shared with colleagues yet — set your teacher ID in Settings first.</p>`;
       return `
         <h3 style="margin-top:16px;">Colleague observations</h3>
+        ${provisionNudge}
         <div class="row"><button type="button" id="pull-shared">Pull colleague updates</button><span id="pull-shared-status" aria-live="polite"></span></div>
         ${colleagues.length ? `<div class="list" style="margin-top:6px;">${colleagueRows}</div>` : `<p class="voice-hint" style="margin:6px 0 0;">No colleague observations imported yet. Updates arrive through the school's shared Drive folder.</p>`}
         ${divergenceRows ? `<div class="list" style="margin-top:6px;">${divergenceRows}</div>` : ""}`;
@@ -3302,6 +3308,28 @@
           <div class="panel"><h3>Local app port</h3><input value="8787"><p>Desktop shell loads http://127.0.0.1:8787.</p></div>
         </div>
         <div class="panel" style="margin-top:14px;">
+          <div class="view-head">
+            <div><h3>Teacher identity</h3><p>Who observations from this machine are recorded as. Required before your observations can be shared with colleagues through the school's Drive folder.</p></div>
+            <span id="teacher-identity-badge" class="badge">checking...</span>
+          </div>
+          <div class="form-grid">
+            <label style="display:flex;flex-direction:column;gap:4px;">
+              <span>Your teacher ID</span>
+              <input id="teacher-own-id" type="text" placeholder="e.g. claudia-cf">
+              <span class="voice-hint">Letters, digits, '-' and '_' only. This ID appears in shared ledger filenames, so pick something that isn't a student's name.</span>
+            </label>
+            <label style="display:flex;flex-direction:column;gap:4px;">
+              <span>Colleague display names</span>
+              <textarea id="teacher-display-names" rows="3" placeholder='{"marco-r": "Marco Rossi"}'></textarea>
+              <span class="voice-hint">Which colleague ID shows as which name, as JSON. Stays on this machine — never in shared files.</span>
+            </label>
+          </div>
+          <div class="row" style="margin-top:12px;">
+            <button id="teacher-identity-save" class="primary" type="button">Save identity</button>
+            <span id="teacher-identity-status" class="voice-hint" aria-live="polite"></span>
+          </div>
+        </div>
+        <div class="panel" style="margin-top:14px;">
           <div class="view-head"><div><h3>Cloud Provider</h3><p>Optional — connect a cloud model for faster answers on non-sensitive queries. Sensitive data always stays local.</p></div></div>
           <div id="provider-connect-area">
             <div class="form-grid">
@@ -3364,9 +3392,95 @@
         </div>`;
       await renderScheduleControls(overview);
       renderProviderControls();
+      await renderTeacherIdentityControls();
       await renderIntegrationsControls();
       await renderExtractionControls();
       await renderUpdateControls();
+    }
+
+    // --- Teacher identity (teacher-identity P1, 2026-08-02) ----------------
+    // Saving an ID backfills earlier "local-teacher" rows server-side, so a
+    // machine provisioned late still exports and triangulates correctly.
+
+    function teacherIdentityBadge(ownIdValue) {
+      const badge = $("teacher-identity-badge");
+      if (!badge) return;
+      badge.classList.remove("ok", "warn");
+      if (ownIdValue) {
+        badge.classList.add("ok");
+        badge.textContent = ownIdValue;
+      } else {
+        badge.classList.add("warn");
+        badge.textContent = "not set — observations stay on this machine";
+      }
+    }
+
+    async function renderTeacherIdentityControls() {
+      let profile = {};
+      let loaded = false;
+      try { profile = await api("/api/school-profile"); loaded = true; } catch {}
+      const idInput = $("teacher-own-id");
+      const namesInput = $("teacher-display-names");
+      if (idInput) idInput.value = profile.own_teacher_id || "";
+      if (namesInput) {
+        const names = profile.teacher_display_names || {};
+        namesInput.value = Object.keys(names).length ? JSON.stringify(names, null, 2) : "";
+        namesInput.dataset.loaded = loaded ? "1" : "";
+      }
+      teacherIdentityBadge(profile.own_teacher_id || "");
+      const saveButton = $("teacher-identity-save");
+      if (!saveButton) return;
+      saveButton.addEventListener("click", async () => {
+        const status = $("teacher-identity-status");
+        const payload = {};
+        const ownId = (idInput ? idInput.value : "").trim();
+        if (ownId) payload.own_teacher_id = ownId;
+        const rawNames = (namesInput ? namesInput.value : "").trim();
+        if (rawNames) {
+          let parsed;
+          try { parsed = JSON.parse(rawNames); } catch {
+            if (status) status.textContent = 'Display names must be valid JSON, like {"marco-r": "Marco Rossi"}.';
+            return;
+          }
+          if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)
+              || !Object.values(parsed).every(v => typeof v === "string")) {
+            if (status) status.textContent = "Display names must map teacher IDs to name strings.";
+            return;
+          }
+          payload.teacher_display_names = parsed;
+        } else if (namesInput && namesInput.dataset.loaded === "1") {
+          // Field was populated from disk and deliberately cleared.
+          payload.teacher_display_names = {};
+        }
+        if (!Object.keys(payload).length) {
+          if (status) status.textContent = "Enter your teacher ID first.";
+          return;
+        }
+        saveButton.disabled = true;
+        if (status) status.textContent = "Saving\u2026";
+        try {
+          const res = await fetch("/api/school-profile", {
+            method: "POST", headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(payload)
+          });
+          const data = await res.json();
+          if (res.ok) {
+            state.schoolProfile = null;
+            state.triangulation = null;
+            teacherIdentityBadge(data.own_teacher_id || "");
+            if (status) {
+              status.textContent = data.renamed
+                ? `Saved. ${data.renamed} earlier observation${data.renamed === 1 ? "" : "s"} now attributed to ${data.own_teacher_id}.`
+                : "Saved.";
+            }
+          } else if (status) {
+            status.textContent = data.error || "Could not save.";
+          }
+        } catch {
+          if (status) status.textContent = "Network error.";
+        }
+        saveButton.disabled = false;
+      });
     }
 
     // --- Integrations: Slack ops assistant + Google Drive ------------------

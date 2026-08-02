@@ -285,6 +285,13 @@ reachable_from_ui:
     call_site: 'api("/api/school-profile")'
     note: "Tier 2 school display config (labels + hidden categories)."
 
+  - route: "POST /api/school-profile"
+    call_site: 'fetch("/api/school-profile"'
+    note: >-
+      Teacher identity + colleague display names (Settings). Setting
+      own_teacher_id backfills earlier local-teacher rows (teacher-identity
+      P1, 2026-08-02).
+
   - route: "POST /api/students/{student_id}/rti/decision"
     call_site: "/api/students/${state.selectedStudent}/rti/decision"
 

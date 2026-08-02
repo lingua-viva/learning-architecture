@@ -103,15 +103,35 @@ def require_role(request, allowed_roles: set[str]) -> Optional[JSONResponse]:
     return None
 
 
+def configured_teacher_id(payload_teacher_id: str = "") -> str:
+    """Resolve a caller-supplied teacher id against the machine's configured
+    identity. An explicit non-default id wins (co-teachers sharing one
+    machine can still attribute to themselves); the un-provisioned default
+    and the empty string resolve to the configured id when one is set."""
+    from src.lingua_viva.config import UNPROVISIONED_TEACHER_ID, own_teacher_id
+
+    supplied = (payload_teacher_id or "").strip()
+    if supplied and supplied != UNPROVISIONED_TEACHER_ID:
+        return supplied
+    return own_teacher_id() or supplied
+
+
 def effective_teacher_id(request, payload_teacher_id: str = "") -> str:
     """Return the effective teacher_id, preventing impersonation.
 
-    In 'off' mode, returns whatever the caller provided.
+    In 'off' mode, returns the caller's id — except that the pervasive
+    "local-teacher" default (and an empty id) resolves through the machine's
+    configured identity (Settings → Teacher identity). This is the single
+    seam that makes all of web.py's `or "local-teacher"` fallbacks inherit
+    the configured id without touching each call site — the teacher-identity
+    P1 (2026-08-02): with every machine writing as "local-teacher",
+    multi-machine triangulation ledgers overwrote each other in Drive and
+    were skipped as "own" on pull.
     In 'local_header' mode, a teacher/co_teacher can only use their own id.
     Coordinator/admin may specify any teacher_id.
     """
     if auth_mode() == "off":
-        return payload_teacher_id
+        return configured_teacher_id(payload_teacher_id)
     ctx = access_context_from_request(request)
     if ctx.role_level >= ROLE_HIERARCHY["coordinator"]:
         return payload_teacher_id or ctx.teacher_id

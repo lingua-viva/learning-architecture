@@ -504,3 +504,115 @@ def test_confirm_endpoint_pairs_correction_server_side(monkeypatch, tmp_path):
     assert corrections[0]["decision_id"] == decision_id
     assert corrections[0]["corrected"]["positive"] is True
     assert corrections[0]["corrected"]["source"] == "support_entry_confirm"
+
+
+# ---------------------------------------------------------------------------
+# Hardening loop (2026-08-02): fire-and-forget completeness, content-free
+# token guard, empty-correction drop, dangling counts, concurrency
+# ---------------------------------------------------------------------------
+
+def test_record_decision_never_raises_on_garbage_args(monkeypatch, tmp_path):
+    path = _mem(monkeypatch, tmp_path)
+    # Non-iterable signals, non-dict subject_ref: swallowed, id still returned.
+    did = record_decision("intent", "observation", 0.5, signals_matched=42)
+    assert isinstance(did, str) and did
+    did2 = record_decision("intent", "observation", 0.5, subject_ref="not-a-dict")
+    assert isinstance(did2, str) and did2
+    # Whatever DID land must still be valid rows.
+    for row in _rows(path):
+        assert row["schema"] == SCHEMA
+
+
+def test_unknown_decision_type_is_dropped_not_recorded(monkeypatch, tmp_path):
+    path = _mem(monkeypatch, tmp_path)
+    did = record_decision("free text transcript here", "observation", 0.5)
+    assert isinstance(did, str) and did  # id still returned (fire-and-forget)
+    assert _rows(path) == []
+
+
+def test_non_finite_confidence_clamped_to_zero(monkeypatch, tmp_path):
+    path = _mem(monkeypatch, tmp_path)
+    record_decision("intent", "observation", float("nan"))
+    record_decision("intent", "observation", float("inf"))
+    rows = _rows(path)  # json.loads would choke on bare NaN in strict parsers
+    assert [r["confidence"] for r in rows] == [0.0, 0.0]
+    assert "NaN" not in path.read_text() and "Infinity" not in path.read_text()
+
+
+def test_token_guard_blocks_free_text_in_every_string_field(monkeypatch, tmp_path):
+    path = _mem(monkeypatch, tmp_path)
+    leak = "Marco struggled with the past tense today"
+    record_decision(
+        "intent", leak, 0.5,
+        signals_matched=[leak, "ok_sig"],
+        subject_ref={"student_id": leak},
+        trace_id=leak,
+    )
+    record_correction("d" * 200, {"type": "intent", "to": leak})
+    record_correction("abc123", {"type": "intent", "to": leak})
+    text = path.read_text()
+    assert "Marco" not in text and "past tense" not in text
+    rows = _rows(path)
+    assert rows[0]["outcome"] == "invalid_token"
+    assert rows[0]["signals_matched"] == ["invalid_token", "ok_sig"]
+    assert rows[0]["subject_ref"]["student_id"] == "invalid_token"
+    assert rows[0]["trace_id"] == "invalid_token"
+
+
+def test_empty_correction_payload_is_not_appended(monkeypatch, tmp_path):
+    path = _mem(monkeypatch, tmp_path)
+    decision_id = record_decision("intent", "observation", 0.5)
+    record_correction(decision_id, {"unknown_key": "x", "another": 1})
+    record_correction(decision_id, {})
+    record_correction(decision_id, None)
+    rows = _rows(path)
+    assert len(rows) == 1  # only the decision row
+    # And the report must show zero corrections (empty dicts used to read
+    # as NEGATIVE corrections and inflate correction_rate).
+    report = build_routing_report(*read_memory())
+    assert report["per_type"]["intent"]["corrected"] == 0
+
+
+def test_dangling_corrections_counted_in_report(monkeypatch, tmp_path):
+    _mem(monkeypatch, tmp_path)
+    decision_id = record_decision("intent", "observation", 0.5)
+    record_correction(decision_id, {"type": "intent", "to": "question"})
+    record_correction("no-such-decision", {"type": "intent", "to": "question"})
+    report = build_routing_report(*read_memory())
+    assert report["dangling_corrections"] == 1
+    assert report["per_type"]["intent"]["corrected"] == 1
+    rendered = format_report(
+        build_audit_report(classify_fn=lambda q: ("none", 0.0), candidates=[]))
+    assert "dangling corrections: 1" in rendered
+
+
+def test_negative_and_positive_corrections_on_same_decision(monkeypatch, tmp_path):
+    _mem(monkeypatch, tmp_path)
+    decision_id = record_decision("category_suggest", "cat_a", 0.5)
+    record_correction(decision_id, {
+        "type": "category_suggest", "positive": True, "category_id": "cat_a"})
+    record_correction(decision_id, {
+        "type": "category_suggest", "category_id": "cat_b",
+        "source": "recategorize"})
+    t = build_routing_report(*read_memory())["per_type"]["category_suggest"]
+    assert t["volume"] == 1 and t["corrected"] == 1 and t["confirmed"] == 1
+
+
+def test_concurrent_appends_produce_only_valid_rows(monkeypatch, tmp_path):
+    import concurrent.futures
+
+    path = _mem(monkeypatch, tmp_path)
+
+    def burst(n: int) -> None:
+        for i in range(25):
+            record_decision("intent", f"outcome_{n}_{i}", 0.5,
+                            signals_matched=[f"sig_{n}"])
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(burst, range(8)))
+
+    rows, skipped = read_memory()
+    assert skipped == 0
+    assert len(rows) == 200
+    assert all(r["schema"] == SCHEMA for r in rows)
+    assert _rows(path) == rows  # every line independently parseable

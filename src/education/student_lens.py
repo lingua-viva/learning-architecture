@@ -1690,6 +1690,81 @@ class StudentLensStore:
         self._conn.commit()
         return {"removed": len(removed_ids)}
 
+    def rename_local_teacher(self, old_id: str, new_id: str) -> dict:
+        """Backfill for teacher-identity provisioning (P1, 2026-08-02):
+        re-attribute locally-authored rows from old_id — typically the
+        un-provisioned "local-teacher" sentinel every pre-identity write
+        defaulted to — to the newly configured id, so triangulation
+        authorship and future ledger exports carry the real identity.
+
+        Surgical by construction: only origin='local' observations are
+        renamed, and profile entries are skipped when their
+        source_observation_id traces to an imported row, so a colleague's
+        attribution can never be rewritten."""
+        old_id = _validate_non_empty_string(old_id, "old_id")
+        new_id = _validate_non_empty_string(new_id, "new_id")
+        if old_id == new_id:
+            return {"renamed": 0}
+        imported_ids = {
+            r["observation_id"]
+            for r in self._conn.execute(
+                "SELECT observation_id FROM observations WHERE origin = 'imported'"
+            ).fetchall()
+        }
+        cursor = self._conn.execute(
+            "UPDATE observations SET teacher_id = ?"
+            " WHERE teacher_id = ? AND origin = 'local'",
+            (new_id, old_id),
+        )
+        renamed = cursor.rowcount if cursor.rowcount and cursor.rowcount > 0 else 0
+        # evidence_records rows are only ever written by local teacher
+        # actions (imports fan out into the support_profile JSON instead),
+        # so a flat rename is safe here.
+        self._conn.execute(
+            "UPDATE evidence_records SET teacher_id = ? WHERE teacher_id = ?",
+            (new_id, old_id),
+        )
+        student_rows = self._conn.execute("SELECT student_id FROM students").fetchall()
+        for srow in student_rows:
+            student_id = srow["student_id"]
+            row = self._get_student_row(student_id, include_deleted=True)
+            if row is None:
+                continue
+            lens = self._row_to_lens_dict(row)
+            sp = lens["support_profile"]
+            changed = False
+            for category in (sp.get("categories") or {}).values():
+                for bucket in (*VALID_SUPPORT_BUCKETS, "evidence"):
+                    items = category.get(bucket)
+                    if not isinstance(items, list):
+                        continue
+                    for item in items:
+                        if (
+                            isinstance(item, dict)
+                            and item.get("created_by") == old_id
+                            and item.get("source_observation_id") not in imported_ids
+                        ):
+                            item["created_by"] = new_id
+                            changed = True
+            strengths = lens["strengths_profile"]
+            for key in ("academic_strengths", "personal_strengths"):
+                for item in strengths.get(key) or []:
+                    if isinstance(item, dict) and item.get("created_by") == old_id:
+                        item["created_by"] = new_id
+                        changed = True
+            if strengths.get("last_reviewed_by") == old_id:
+                strengths["last_reviewed_by"] = new_id
+                changed = True
+            if changed:
+                self._conn.execute(
+                    "UPDATE students SET support_profile = ?, strengths_profile = ?,"
+                    " profile_version = profile_version + 1, updated_at = ?"
+                    " WHERE student_id = ?",
+                    (json.dumps(sp), json.dumps(strengths), _now_iso(), student_id),
+                )
+        self._conn.commit()
+        return {"renamed": renamed}
+
     def _fan_out_support(self, obs: Observation, confidence: str) -> None:
         """Category-rollup fan-out for one observation (mirrors
         append_observation's inline fan-out, at the caller's confidence)."""

@@ -7,15 +7,21 @@ from typing import Optional
 from urllib import error, request
 
 
+# qwen3:* demoted to last resort (2026-08-02): they are thinking models, and
+# LV's reasoning path uses the OpenAI-compatible endpoint with no think
+# suppression — on CPU-only hardware they burn the whole 60s budget emitting
+# <think> tokens. Trace ledger evidence: 3 traces on 2026-08-02 at ~60,073ms
+# with qwen3:8b and token_count=0 (the teacher got a timeout, not an answer).
+# Keep in sync with LOCAL_PREFERENCE in src/pipeline.py.
 LOCAL_MODEL_PREFERENCE = [
-    "qwen3:14b",
-    "qwen3:8b",
     "phi4:14b",
     "qwen2.5:14b",
     "llama3.1:8b",
     "qwen2.5:7b",
     "mistral:7b",
     "qwen2.5:3b",
+    "qwen3:14b",
+    "qwen3:8b",
 ]
 CLOUD_FALLBACK = "kimi-k2.7-code:cloud"
 
@@ -66,7 +72,25 @@ DEFAULT_SCHOOL_PROFILE = {
     # here in Tier 2 config only — never in ledger filenames or any Drive
     # artifact. Unknown ids fall back to the raw teacher_id.
     "teacher_display_names": {},
+    # This machine's teacher identity (operator ruling 2026-08-02, teacher-
+    # identity P1): empty means un-provisioned, and every write falls back to
+    # UNPROVISIONED_TEACHER_ID. Triangulation across machines requires each
+    # machine to set a distinct id here (Settings → Teacher identity) —
+    # ledgers authored under the un-provisioned default are never exported
+    # to or imported from the shared folder, so two fresh installs can never
+    # silently overwrite or misattribute each other's observations.
+    "own_teacher_id": "",
 }
+
+# Reserved sentinel for a machine that has not set its teacher identity.
+# Pre-dates the identity config (every web.py write path defaulted to it),
+# so existing rows are backfilled by rename_local_teacher when an id is set.
+UNPROVISIONED_TEACHER_ID = "local-teacher"
+
+
+def own_teacher_id() -> str:
+    """This machine's configured teacher id, or "" when un-provisioned."""
+    return read_school_profile().get("own_teacher_id") or ""
 
 
 def school_profile_path() -> Path:
@@ -81,6 +105,7 @@ def read_school_profile() -> dict:
         "category_labels": dict(DEFAULT_SCHOOL_PROFILE["category_labels"]),
         "hidden_categories": list(DEFAULT_SCHOOL_PROFILE["hidden_categories"]),
         "teacher_display_names": dict(DEFAULT_SCHOOL_PROFILE["teacher_display_names"]),
+        "own_teacher_id": str(DEFAULT_SCHOOL_PROFILE["own_teacher_id"]),
     }
     try:
         with school_profile_path().open(encoding="utf-8") as handle:
@@ -108,6 +133,12 @@ def read_school_profile() -> dict:
             for key, value in names.items()
             if isinstance(key, str) and isinstance(value, str)
         }
+    own = data.get("own_teacher_id")
+    if isinstance(own, str):
+        own = own.strip()
+        # A hand-edited file claiming the reserved sentinel stays
+        # un-provisioned — the sentinel is never a real identity.
+        default["own_teacher_id"] = "" if own == UNPROVISIONED_TEACHER_ID else own
     return default
 
 

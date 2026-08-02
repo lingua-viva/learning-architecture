@@ -261,15 +261,34 @@ def _scan_directory(
     return entries, sorted(set(student_zones))
 
 
+# In-memory cache for load_map, keyed on (path, mtime_ns, size). Preventive
+# port of MC's LATENCY_REGRESSION_FIX 2026-08-02: MC's uncached yaml.safe_load
+# of a grown file_map.yaml (2.5MB) added a flat ~6s to every query. LV's map
+# is small today but uses the identical load-per-query pattern and grows with
+# every scanned root.
+_filemap_cache: dict = {}  # keys: "map", "path", "mtime_ns", "size"
+
+
 def load_map() -> FileMap:
     path = storage_path()
     if not path.exists():
         return FileMap()
     try:
+        stat = path.stat()
+    except OSError:
+        return FileMap()
+    if (
+        _filemap_cache.get("map") is not None
+        and _filemap_cache.get("path") == str(path)
+        and _filemap_cache.get("mtime_ns") == stat.st_mtime_ns
+        and _filemap_cache.get("size") == stat.st_size
+    ):
+        return _filemap_cache["map"]
+    try:
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     except (OSError, yaml.YAMLError):
         return FileMap()
-    return FileMap(
+    result = FileMap(
         roots=[ScanRoot(**item) for item in data.get("roots", [])],
         entries=[FileMapEntry(**item) for item in data.get("entries", [])],
         exclusions=[_path_from_storage(str(item)) for item in data.get("exclusions", [])],
@@ -288,6 +307,11 @@ def load_map() -> FileMap:
         ],
         version=int(data.get("version", 1)),
     )
+    _filemap_cache["map"] = result
+    _filemap_cache["path"] = str(path)
+    _filemap_cache["mtime_ns"] = stat.st_mtime_ns
+    _filemap_cache["size"] = stat.st_size
+    return result
 
 
 def save_map(file_map: FileMap) -> None:
@@ -313,9 +337,11 @@ def save_map(file_map: FileMap) -> None:
         entry["path"] = display_path(entry["path"])
     path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
     os.chmod(path, 0o600)
+    _filemap_cache.clear()
 
 
 def clear_map() -> None:
+    _filemap_cache.clear()
     try:
         storage_path().unlink()
     except FileNotFoundError:

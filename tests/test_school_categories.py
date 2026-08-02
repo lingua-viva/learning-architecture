@@ -487,8 +487,14 @@ def test_school_profile_endpoint(monkeypatch, tmp_path):
         body = res.json()
         # IDs are immutable — the endpoint only ever ships labels/visibility
         # (+ teacher display names, SPEC_LV_MULTI_TEACHER_TRIANGULATION
-        # 2026-08-01 operator ruling: names live in Tier 2 config only).
-        assert set(body.keys()) == {"category_labels", "hidden_categories", "teacher_display_names"}
+        # 2026-08-01 operator ruling: names live in Tier 2 config only;
+        # + own_teacher_id, teacher-identity P1 2026-08-02).
+        assert set(body.keys()) == {
+            "category_labels",
+            "hidden_categories",
+            "teacher_display_names",
+            "own_teacher_id",
+        }
 
 
 # ---------------------------------------------------------------------------
