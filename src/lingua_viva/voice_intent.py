@@ -27,6 +27,7 @@ from typing import Optional
 OBSERVATION_SIGNALS = [
     (r"\b(he|she|they|the student|the learner)\s+\w+ed\b", 0.4),
     (r"\b(helped|read|wrote|said|showed|struggled|completed|participated|used|demonstrated|spoke|asked|answered)\b", 0.3),
+    (r"\b(is|are|was|were)\s+(beginning|starting|trying|learning|improving|struggling|showing)\b", 0.3),
     (r"\b(during|while|in class|this morning|today|at recess|in group|in reading|in math)\b", 0.2),
     (r"\b(i (noticed|observed|saw|heard))\b", 0.5),
     (r"\b(observation|note for)\b", 0.6),
@@ -380,6 +381,17 @@ def classify_intent(transcript: str, roster: list[dict]) -> IntentClassification
 
     obs_score, obs_matched = _score(lowered, OBSERVATION_SIGNALS)
     gen_score, gen_matched = _score(lowered, GENERATION_SIGNALS)
+
+    # Boost: if a known student name appears alongside any observation verb,
+    # this is almost certainly an observation ("Nora used full sentences").
+    # The base signals only catch pronouns + verbs, not Name + verbs.
+    roster_names_lower = [
+        str(s.get("display_name", "")).lower() for s in roster if s.get("display_name")
+    ]
+    has_roster_name = any(name and name in lowered for name in roster_names_lower)
+    if has_roster_name and obs_score > 0:
+        obs_score += 0.3
+        obs_matched.append("roster_name_with_verb_boost")
     question_score, question_matched = _score(lowered, QUESTION_SIGNALS)
 
     # A leading question word means the transcript is asking ABOUT behavior,
