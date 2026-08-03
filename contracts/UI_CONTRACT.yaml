@@ -569,7 +569,23 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 98
+version: 99
+# v99 (2026-08-02): QA blast-radius fixes (REPORT_LV_QA_BLAST_RADIUS_
+#     2026-08-02, BUG-2..BUG-8 + Class 2/3). static/index.html: global
+#     toast (#lv-toast) + api() network/HTTP error surfacing, observe form
+#     clears on student switch + after save (BUG-4), observation type
+#     marked required with needs-choice highlight (BUG-5), generate-intent
+#     redirect pre-fills Prepare topic (BUG-6), Archive-student button in
+#     the lens (BUG-8, soft delete via DELETE /api/students/{id}),
+#     rti/decision + remove-colleague + profile-export fetch error
+#     handling (Class 2). src/web.py: observe/capture rejects missing
+#     type / cefr fields with 400 instead of inventing defaults, model
+#     warm-up on startup + 60s query timeout + honest timeout message,
+#     generate-intent gate on /api/query + /api/query/stream, archive
+#     endpoint; voice/act saves a plain literacy note when speech carried
+#     no CEFR skill+level evidence (BUG-5 sibling — parse_observation_
+#     context no longer seeds speaking/A1+/progressing unconditionally).
+#     voice_stt: ffmpeg-binary gate removed (PyAV decodes).
 # v98 (2026-08-02): routing-memory hardening loop (SPEC_LV_ROUTING_MEMORY_
 #     LOOP_2026-08-01). src/web.py: category_suggest emission call sites
 #     pass raw suggestion values into record_decision (endpoint-level

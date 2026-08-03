@@ -247,6 +247,16 @@ def test_observation_context_direction():
     assert confident["direction"] == "secure"
 
 
+def test_observation_context_is_evidence_only_no_invented_defaults():
+    """BUG-5 sibling (2026-08-02): parse_observation_context used to seed
+    speaking/A1+/progressing unconditionally — invented clinical data the
+    voice save path wrote into cefr_level_observed. No signal, no key."""
+    context = parse_observation_context("I noticed Marco was kind to the new student today")
+    assert "cefr_dimension" not in context
+    assert "cefr_level_hint" not in context
+    assert "direction" not in context
+
+
 def test_generation_context_parsing():
     context = parse_generation_context("worksheet for daily routines")
     assert context.get("material_type") == "worksheet"
@@ -322,6 +332,32 @@ def test_endpoint_observation_saved_first_name_only(monkeypatch, tmp_path):
         # Privacy: spoken text carries first name only, never the full name.
         assert "Marco" in body["spoken_confirmation"]
         assert "Bianchi" not in body["spoken_confirmation"]
+
+
+def test_endpoint_observation_without_cefr_evidence_saves_plain_note(monkeypatch, tmp_path):
+    """BUG-5 sibling (2026-08-02): a spoken observation with no CEFR signal
+    must not be saved as cefr/speaking/A1+ — it becomes a plain literacy
+    note with no invented level that adaptive cohort tiers could consume."""
+    _isolate(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        student_id = _create_observed_student(client, "Marco Bianchi")
+
+        response = client.post(
+            "/api/voice/act",
+            json={
+                "teacher_id": "teacher-a",
+                "transcript": "I noticed Marco was kind to the new student today",
+            },
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["action_taken"] == "saved"
+        observation = body["result"]["observation"]
+        assert observation["student_id"] == student_id
+        assert observation["template_type"] == "literacy"
+        assert not observation.get("cefr_level_observed")
+        assert not observation.get("cefr_dimension")
 
 
 def test_endpoint_observation_needs_clarification(monkeypatch, tmp_path):

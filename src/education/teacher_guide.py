@@ -172,8 +172,8 @@ class TeacherGuide:
         lines = [
             f"# Teacher Guide: {self.lesson_title}",
             "",
-            f"Content pack: `{self.pack_id}`",
-            "",
+            # pack_id stays backend-only (traces/debug) — internal hashes
+            # never render to teachers (BUG-7, 2026-08-02).
             "## Class Breakdown",
             "",
         ]

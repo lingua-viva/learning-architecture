@@ -46,6 +46,9 @@ def test_observe_students_parents_and_reflect_endpoints(monkeypatch, tmp_path):
     obs = client.post("/api/observe/capture", json={
         "student_id": student_id,
         "transcript": "Self-corrected passato prossimo in context",
+        "template_type": "cefr",
+        "cefr_dimension": "speaking",
+        "cefr_level_observed": "A2",
     })
     assert obs.status_code == 200
     assert obs.json()["local_only"] is True

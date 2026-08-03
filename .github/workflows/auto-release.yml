@@ -83,12 +83,31 @@ jobs:
         env:
           NEXT_TAG: ${{ steps.tag.outputs.tag }}
 
+      # Class-3 fix (QA blast radius, 2026-08-02): desktop/package.json sat
+      # frozen at an old version while tags advanced, so the app's About/
+      # in-app version disagreed with the release it shipped in. Keep the
+      # package version locked to the computed tag; desktop-release.yml
+      # hard-gates on the match.
+      - name: Sync desktop/package.json version to tag
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          path = Path("desktop/package.json")
+          version = os.environ["NEXT_TAG"].removeprefix("desktop-v")
+          data = json.loads(path.read_text(encoding="utf-8"))
+          data["version"] = version
+          path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+          PY
+        env:
+          NEXT_TAG: ${{ steps.tag.outputs.tag }}
+
       - name: Commit site pin
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if ! git diff --quiet docs/index.html; then
-            git add docs/index.html
+          if ! git diff --quiet docs/index.html desktop/package.json; then
+            git add docs/index.html desktop/package.json
             git commit -m "chore(release): pin ${{ steps.tag.outputs.tag }}"
             git push origin main
           fi

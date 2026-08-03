@@ -56,12 +56,12 @@ def _health(args: argparse.Namespace) -> int:
         return _full_health(args)
     status = provider_status()
     if args.json:
-        import shutil
+        from src.lingua_viva.voice_stt import stt_dependencies_available
 
         status["voice"] = {
-            "ffmpeg": bool(shutil.which("ffmpeg")),
+            "decoder": "pyav",
             "faster_whisper_installed": _faster_whisper_installed(),
-            "local_stt": bool(shutil.which("ffmpeg") and _faster_whisper_installed()),
+            "local_stt": stt_dependencies_available(),
         }
         _print_json(status)
     else:

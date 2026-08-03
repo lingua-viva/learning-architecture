@@ -277,6 +277,13 @@ reachable_from_ui:
       Background/profile inline edit in the Students lens panel
       (SPEC_LV_BASE_LENS_SCHOOL_CATEGORIES_2026-08-01).
 
+  - route: "DELETE /api/students/{student_id}"
+    call_site: 'method: "DELETE"'
+    note: >-
+      Archive-student button in the lens (BUG-8, QA blast radius
+      2026-08-02). Soft delete — roster hides the student, observations
+      are retained; hard purge is deliberately not exposed over HTTP.
+
   - route: "POST /api/students/{student_id}/support-entry/confirm"
     call_site: "/api/students/${state.selectedStudent}/support-entry/confirm"
     note: "Tap-to-confirm on model_suggested Category Profile entries."

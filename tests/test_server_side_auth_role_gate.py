@@ -167,6 +167,9 @@ def test_observe_capture_forces_header_teacher_id(monkeypatch, tmp_path):
         "student_id": student_id,
         "teacher_id": "t-ben",
         "transcript": transcript,
+        "template_type": "cefr",
+        "cefr_dimension": "speaking",
+        "cefr_level_observed": "A2",
     })
     assert resp.status_code == 200
 

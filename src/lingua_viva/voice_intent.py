@@ -248,10 +248,15 @@ def context_takes_precedence(transcript: str, matched_token: Optional[str]) -> b
 
 def parse_observation_context(transcript: str) -> dict:
     """Best-effort extraction of CEFR dimension / level / direction hints
-    from natural observation speech. Defaults are the same safe defaults
-    the observation capture form uses."""
+    from natural observation speech.
+
+    Evidence-only (BUG-5 sibling fix, 2026-08-02): keys are set ONLY when
+    the transcript actually matched a signal. This used to seed
+    speaking/A1+/progressing unconditionally — invented clinical data that
+    the voice save path wrote straight into cefr_level_observed and that
+    adaptive/cohort planning then consumed as if a teacher had judged it."""
     lowered = transcript.lower()
-    context = {"cefr_dimension": "speaking", "cefr_level_hint": "A1+", "direction": "progressing"}
+    context: dict = {}
 
     dimension_keywords = {
         "reading": ["read", "reading", "book", "text", "page", "passage"],

@@ -36,7 +36,9 @@ def test_ask_prevents_overlapping_voice_queries_and_does_not_speak_errors():
 
 
 def test_observe_requires_human_review_before_save():
-    assert '<option value="">Choose after review</option>' in HTML
+    # BUG-5 (2026-08-02): placeholder renamed to make "required" explicit —
+    # still an empty value, so a human choice is still forced before save.
+    assert '<option value="">Choose a type (required)</option>' in HTML
     assert 'if (!templateType)' in HTML
     assert 'templateType === "cefr"' in HTML
     assert '$("obs-urgency").checked = false;' in HTML

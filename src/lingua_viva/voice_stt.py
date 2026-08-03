@@ -1,10 +1,26 @@
 from __future__ import annotations
 
-import shutil
 import tempfile
 import threading
 from abc import ABC, abstractmethod
 from pathlib import Path
+
+
+def stt_dependencies_available() -> bool:
+    """True when local STT can actually run.
+
+    faster-whisper decodes audio through PyAV (`av`), which bundles the
+    FFmpeg shared libraries as a pip wheel — no `ffmpeg` binary on PATH is
+    ever invoked (BUG-2, 2026-08-02: the old `shutil.which("ffmpeg")` gate
+    was a false requirement that disabled voice on every clean install).
+    """
+    try:
+        import av  # noqa: F401
+        import faster_whisper  # noqa: F401
+
+        return True
+    except Exception:
+        return False
 
 
 class STTProvider(ABC):
@@ -17,8 +33,10 @@ class WhisperLocalProvider(STTProvider):
     """Local faster-whisper STT. Audio stays on this computer."""
 
     def __init__(self, model_size: str = "tiny") -> None:
-        if not shutil.which("ffmpeg"):
-            raise RuntimeError("ffmpeg is required for local voice transcription.")
+        if not stt_dependencies_available():
+            raise RuntimeError(
+                "faster-whisper (with PyAV) is required for local voice transcription."
+            )
         self.model_size = model_size
         self._model = None
         self._lock = threading.Lock()

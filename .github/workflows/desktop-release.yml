@@ -31,6 +31,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Class-3 gate (2026-08-02): the tag version and desktop/package.json
+      # must agree, or the app reports a version that doesn't match the
+      # release it shipped in. auto-release.yml syncs the version before
+      # tagging; this catches manual tags cut from a stale checkout.
+      - name: Tag / package.json version match
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#desktop-v}"
+          PKG_VERSION="$(node -p "require('./desktop/package.json').version")"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag version ($TAG_VERSION) != desktop/package.json version ($PKG_VERSION). Sync desktop/package.json before tagging."
+            exit 1
+          fi
+          echo "✓ version match: $TAG_VERSION"
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

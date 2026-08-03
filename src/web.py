@@ -1580,6 +1580,59 @@ async def _startup_filemap_autoscan():
 app.router.add_event_handler("startup", _startup_filemap_autoscan)
 
 
+async def _startup_model_warmup():
+    """Warm the local model so the first question doesn't cold-start (BUG-3,
+    REPORT_LV_QA_BLAST_RADIUS_2026-08-02).
+
+    Ollama loads a model into memory on first inference — 10-20s on teacher
+    hardware — which pushed the first query of every session past the query
+    timeout with a misleading error. A single 1-token generate at startup
+    absorbs that load time while the teacher is still looking at the Home
+    view. Daemon thread, never awaited, never raises; skipped under
+    pytest/LV_AGENT so tests and agent runs don't spin up Ollama.
+    """
+    import threading
+
+    if os.environ.get("LV_AGENT", "").strip() in {"1", "true", "yes", "on"}:
+        return
+    if "pytest" in sys.modules:
+        return
+
+    def _warm() -> None:
+        try:
+            from urllib import request as _request
+
+            from src.lingua_viva import config as lv_config
+
+            model = lv_config.detect_model().split("/", 1)[-1]
+            payload = json.dumps(
+                {
+                    "model": model,
+                    "prompt": "hi",
+                    "stream": False,
+                    "options": {"num_predict": 1},
+                    # Hold the model in memory well past Ollama's 5-minute
+                    # default so mid-session questions don't cold-start either.
+                    "keep_alive": "60m",
+                }
+            ).encode("utf-8")
+            req = _request.Request(
+                "http://localhost:11434/api/generate",
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with _request.urlopen(req, timeout=120):
+                pass
+        except Exception:
+            pass  # a failed warm-up must never take the app down
+
+    threading.Thread(target=_warm, daemon=True, name="lv-model-warmup").start()
+
+
+app.router.add_event_handler("startup", _startup_model_warmup)
+
+
 def _safe_unit(unit_id: str | None = None, grade: str | None = None) -> dict:
     from src.lingua_viva.curriculum import CurriculumService
 
@@ -2554,19 +2607,17 @@ async def governance_verify_pack(payload: dict):
 
 @app.get("/api/voice/probe")
 async def voice_probe():
-    import shutil
+    # BUG-2 (2026-08-02): decode goes through PyAV's bundled FFmpeg libs —
+    # an `ffmpeg` binary on PATH was never actually used, so it must not
+    # gate availability.
+    from src.lingua_viva.voice_stt import stt_dependencies_available
 
-    try:
-        import faster_whisper  # noqa: F401
-
-        stt_available = True
-    except Exception:
-        stt_available = False
+    stt_available = stt_dependencies_available()
     return {
         "stt": {
-            "available": bool(stt_available and shutil.which("ffmpeg")),
+            "available": stt_available,
             "provider": "faster-whisper",
-            "ffmpeg": bool(shutil.which("ffmpeg")),
+            "decoder": "pyav",
             "local_only": True,
         },
         "tts": {
@@ -2731,18 +2782,35 @@ async def voice_act(request: Request, payload: dict):
 
         ctx = classification.observation_context
 
+        # BUG-5 sibling fix (2026-08-02): only save as a CEFR observation
+        # when the speech actually carried both a skill and a level signal
+        # (parse_observation_context is evidence-only now). Anything else
+        # is saved as a plain literacy note — never invented cefr/speaking/
+        # A1+ clinical data, which cascaded into adaptive cohort tiers.
+        # Same "never guess" precedent as the Slack bot's default note type.
+        cefr_dimension = ctx.get("cefr_dimension")
+        cefr_level = ctx.get("cefr_level_hint")
+        has_cefr_evidence = bool(cefr_dimension and cefr_level)
+
         def capture(store):
             from src.education.observation_capture import ObservationCapturePipeline
 
             pipeline = ObservationCapturePipeline(store=store)
+            if has_cefr_evidence:
+                return pipeline.capture(
+                    student_id=student_id,
+                    teacher_id=teacher_id,
+                    raw_transcript=transcript,
+                    template_type="cefr",
+                    cefr_dimension=str(cefr_dimension),
+                    cefr_level_observed=str(cefr_level),
+                    cefr_direction=str(ctx.get("direction")) if ctx.get("direction") else None,
+                )
             return pipeline.capture(
                 student_id=student_id,
                 teacher_id=teacher_id,
                 raw_transcript=transcript,
-                template_type="cefr",
-                cefr_dimension=str(ctx.get("cefr_dimension") or "speaking"),
-                cefr_level_observed=str(ctx.get("cefr_level_hint") or "A1+"),
-                cefr_direction=str(ctx.get("direction") or "progressing"),
+                template_type="literacy",
             )
 
         result = await asyncio.to_thread(_with_student_store, capture)
@@ -3173,16 +3241,39 @@ async def observe_capture(request: Request, payload: dict):
     if not transcript:
         return JSONResponse({"error": "Observation text is required."}, status_code=400)
 
+    # BUG-5 (REPORT_LV_QA_BLAST_RADIUS_2026-08-02): this endpoint used to
+    # invent cefr/speaking/A1/progressing when fields were omitted — a save
+    # without a type silently became a real CEFR data point and cascaded
+    # into cohort-plan tiers. Never guess clinical tags; reject instead.
+    template_type = str(payload.get("template_type") or "").strip()
+    if not template_type:
+        return JSONResponse(
+            {"error": "Choose an observation type before saving. Nothing was saved."},
+            status_code=400,
+        )
+    cefr_dimension = str(payload.get("cefr_dimension") or "").strip() or None
+    cefr_level_observed = str(payload.get("cefr_level_observed") or "").strip() or None
+    if template_type == "cefr" and (not cefr_dimension or not cefr_level_observed):
+        return JSONResponse(
+            {
+                "error": (
+                    "A CEFR observation needs both a skill and an observed "
+                    "level. Nothing was saved."
+                )
+            },
+            status_code=400,
+        )
+
     def capture(store):
         pipeline = ObservationCapturePipeline(store=store)
         return pipeline.capture(
             student_id=student_id,
             teacher_id=teacher_id,
             raw_transcript=transcript,
-            template_type=str(payload.get("template_type") or "cefr"),
-            cefr_dimension=str(payload.get("cefr_dimension") or "speaking"),
-            cefr_level_observed=str(payload.get("cefr_level_observed") or "A1"),
-            cefr_direction=str(payload.get("cefr_direction") or "progressing"),
+            template_type=template_type,
+            cefr_dimension=cefr_dimension,
+            cefr_level_observed=cefr_level_observed,
+            cefr_direction=str(payload.get("cefr_direction") or "").strip() or None,
             sel_domain=payload.get("sel_domain"),
             sel_valence=payload.get("sel_valence"),
             urgency_flag=bool(payload.get("urgency_flag", False)),
@@ -3543,6 +3634,30 @@ async def create_student(payload: dict):
         return {"student_id": student_id, "display_name": display_name}
 
     return await asyncio.to_thread(_with_student_store, do_create)
+
+
+@app.delete("/api/students/{student_id}")
+async def archive_student(student_id: str):
+    """Archive (soft-delete) a student lens (BUG-8, QA 2026-08-02).
+
+    Tombstone only: the student disappears from rosters, grouping, and
+    recommendation queries (list_lenses filters deleted=0), but their
+    observation history is retained for audit/records-retention. Hard purge
+    is deliberately NOT exposed over HTTP — it stays an explicit store-level
+    operator action.
+    """
+    from src.education.student_lens import LensNotFoundError
+
+    def do_archive(store):
+        store.delete_lens(student_id, hard=False)
+
+    try:
+        await asyncio.to_thread(_with_student_store, do_archive)
+    except LensNotFoundError:
+        return JSONResponse(
+            {"error": f"Student '{student_id}' not found."}, status_code=404
+        )
+    return {"status": "archived", "student_id": student_id, "observations_retained": True}
 
 
 @app.get("/api/school-profile")
@@ -5419,10 +5534,59 @@ async def provider_disconnect():
     return {"status": "disconnected"}
 
 
+def _generate_intent_gate(query_text: str) -> dict | None:
+    """Route material-creation requests away from the chat pipeline (BUG-6,
+    REPORT_LV_QA_BLAST_RADIUS_2026-08-02).
+
+    "Create a worksheet about food" typed into Ask used to fall through to
+    the generic reasoning pipeline — 59s, hallucinated Italian, GIR 0.0.
+    The voice path already had this gate; typed queries get the same one:
+    classify with the shared intent router, and when it is a confident
+    generate intent, return a structured redirect instead of free-running
+    the LLM. Never raises — any failure means "no gate", not "no answer".
+    """
+    try:
+        from src.lingua_viva.voice_intent import classify_intent
+
+        classification = classify_intent(query_text, roster=[])
+        if classification.intent != "generate":
+            return None
+        gen_ctx = classification.generation_context or {}
+        material = str(gen_ctx.get("material_type") or "materials")
+        if material != "materials":
+            material = f"an {material}" if material[0].lower() in "aeiou" else f"a {material}"
+        topic = str(gen_ctx.get("topic") or "").strip()
+        about = f" about {topic}" if topic else ""
+        content = (
+            f"It sounds like you want to create {material}{about}. "
+            "I don't generate materials from chat — the Prepare view builds "
+            "them properly tiered for your class. Open Prepare, pick the "
+            "grade and unit, and press Generate."
+            + (f" I've noted the topic \u201c{topic}\u201d for you." if topic else "")
+        )
+        return {
+            "type": "result",
+            "intent": "generate",
+            "action_taken": "ready_to_generate",
+            "generation_context": gen_ctx,
+            "result": {"content": content},
+            "route": "local",
+            "model_used": "intent-router",
+            "duration_ms": 0,
+            "gir_score": 1.0,
+            "timestamp": time.time(),
+        }
+    except Exception:
+        return None
+
+
 def _query_timeout_error() -> dict:
     return {
         "type": "error",
-        "error": "Local reasoning timed out. Check Ollama, then try again.",
+        "error": (
+            "That took longer than expected — the local AI model may still be "
+            "loading. Wait a few seconds and ask again."
+        ),
         "timeout": True,
         "timestamp": time.time(),
     }
@@ -5531,10 +5695,16 @@ async def query_endpoint(payload: dict):
         "timestamp": time.time(),
     })
 
+    # BUG-6: material-creation requests never free-run the chat pipeline.
+    redirect = _generate_intent_gate(query_text)
+    if redirect is not None:
+        await broadcaster.broadcast(redirect)
+        return redirect
+
     try:
         from src.lingua_viva.app import run_teacher_query
 
-        timeout_seconds = float(payload.get("timeout_seconds") or 25)
+        timeout_seconds = float(payload.get("timeout_seconds") or 60)
         result = await asyncio.wait_for(
             run_teacher_query(
                 query_text,
@@ -5587,6 +5757,14 @@ async def query_stream_endpoint(payload: dict):
             "timestamp": time.time(),
         })
         yield _sse("query_received", {"type": "query_received", "timestamp": time.time()})
+
+        # BUG-6: material-creation requests never free-run the chat pipeline.
+        redirect = _generate_intent_gate(query_text)
+        if redirect is not None:
+            await broadcaster.broadcast(redirect)
+            yield _sse("result", redirect)
+            return
+
         yield _sse("status", {
             "type": "status",
             "stage": "thinking",
@@ -5597,7 +5775,7 @@ async def query_stream_endpoint(payload: dict):
         try:
             from src.lingua_viva.app import run_teacher_query
 
-            timeout_seconds = float(payload.get("timeout_seconds") or 25)
+            timeout_seconds = float(payload.get("timeout_seconds") or 60)
             result = await asyncio.wait_for(
                 run_teacher_query(
                     query_text,

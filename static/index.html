@@ -636,9 +636,45 @@
         display: none;
       }
     }
+    /* BUG-5: required observation type — visible before the teacher types */
+    .required-mark {
+      color: #c0392b;
+      font-size: 0.78em;
+      font-weight: 600;
+    }
+    select.needs-choice {
+      border-color: #c0392b;
+      box-shadow: 0 0 0 1px rgba(192, 57, 43, 0.35);
+    }
+    /* Class 2 (QA 2026-08-02): no request failure is ever silent */
+    #lv-toast {
+      position: fixed;
+      left: 50%;
+      bottom: 26px;
+      transform: translateX(-50%);
+      max-width: min(92vw, 560px);
+      padding: 12px 18px;
+      border-radius: 10px;
+      background: #2c3e50;
+      color: #fff;
+      font-size: 0.92rem;
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+      z-index: 4000;
+    }
+    #lv-toast.visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #lv-toast.error {
+      background: #7c2d2d;
+    }
   </style>
 </head>
 <body>
+  <div id="lv-toast" role="status" aria-live="polite"></div>
   <div class="app">
     <aside class="sidebar">
       <button class="brand" id="brand-home" type="button">
@@ -1280,14 +1316,41 @@
     ];
     const SUPPORT_CATEGORY_LABELS = Object.fromEntries(SUPPORT_CATEGORIES);
 
+    // Class 2 (QA 2026-08-02): a failed request must always produce visible
+    // feedback, even when a caller swallows the thrown error. The P0 that
+    // motivated this: observation saves returned 500 and the UI showed
+    // nothing at all.
+    let toastTimer = null;
+    function showToast(message, kind = "error") {
+      const toast = $("lv-toast");
+      if (!toast) return;
+      toast.textContent = message;
+      toast.className = `visible ${kind === "error" ? "error" : ""}`.trim();
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => { toast.className = ""; }, 6000);
+    }
+
     async function api(path, options = {}) {
-      const response = await fetch(path, {
-        headers: {"Content-Type": "application/json", ...(options.headers || {})},
-        ...options
-      });
-      const data = await response.json();
+      let response;
+      try {
+        response = await fetch(path, {
+          headers: {"Content-Type": "application/json", ...(options.headers || {})},
+          ...options
+        });
+      } catch (networkError) {
+        showToast("Could not reach the local app service. Is it still running?");
+        throw networkError;
+      }
+      let data;
+      try {
+        data = await response.json();
+      } catch {
+        data = {};
+      }
       if (!response.ok) {
-        const error = new Error(data.error || `Request failed: ${response.status}`);
+        const message = data.error || `Request failed: ${response.status}`;
+        showToast(message);
+        const error = new Error(message);
         if (data.code) error.code = data.code;
         throw error;
       }
@@ -1492,13 +1555,16 @@
           <div class="form-grid">
             <label>Grade<select id="prep-grade">${overview.grade_bands.map(g => `<option ${g.grade === state.grade ? "selected" : ""}>${g.grade}</option>`).join("")}</select></label>
             <label>Unit<select id="prep-unit"></select></label>
-            <label class="full">Topic<input id="prep-topic" value="" placeholder="Optional focus for today's lesson"></label>
+            <label class="full">Topic<input id="prep-topic" value="${escapeHtml(state.pendingPrepTopic || "")}" placeholder="Optional focus for today's lesson"></label>
           </div>
           <button id="generate-activity" class="primary" type="button">Generate Activity</button>
           <div id="prepare-privacy-preview" class="source-line" style="margin-top:10px;"></div>
         </div>
         <div id="activity-output" class="grid three" style="margin-top:14px;"></div>
         <div id="differentiated-groups" class="panel" style="margin-top:14px;"><h3>Differentiated Groups</h3><p>Loading tier assignments...</p></div>`;
+      // BUG-6: a "create a worksheet about X" typed into Ask lands here with
+      // the topic already carried over — one-shot, then cleared.
+      state.pendingPrepTopic = null;
       $("prep-grade").addEventListener("change", async event => {
         state.grade = event.target.value;
         await populateUnitSelect("prep-unit");
@@ -1594,7 +1660,7 @@
             <textarea id="obs-text" placeholder="A learner self-corrected passato prossimo, used essere correctly in context"></textarea>
             <div class="row" style="margin-top:10px;"><button id="suggest-observation" type="button">Suggest fields</button><span id="obs-suggest-status" class="voice-hint" aria-live="polite">Nothing is saved until you review and press Save.</span></div>
             <div class="form-grid" style="margin-top:12px;">
-              <label>Observation type<select id="obs-template"><option value="">Choose after review</option><option value="cefr">CEFR skill</option><option value="literacy">Literacy</option><option value="sel_incident">SEL concern</option><option value="sel_positive">SEL positive</option><option value="rti_flag">Support flag</option></select></label>
+              <label>Observation type <span class="required-mark" title="Required before saving">* required</span><select id="obs-template" class="needs-choice"><option value="">Choose a type (required)</option><option value="cefr">CEFR skill</option><option value="literacy">Literacy</option><option value="sel_incident">SEL concern</option><option value="sel_positive">SEL positive</option><option value="rti_flag">Support flag</option></select></label>
               <label>CEFR skill<select id="obs-dim"><option value="">Not tagged</option><option>speaking</option><option>listening</option><option>reading</option><option>writing</option></select></label>
               <label>Observed level<select id="obs-level"><option value="">Not tagged</option><option>A1</option><option>A1+</option><option>A2</option><option>A2+</option><option>B1</option><option>B1+</option><option>B2</option><option>C1</option><option>C2</option></select></label>
               <label>Direction<select id="obs-direction"><option value="">Not stated</option><option>progressing</option><option>plateaued</option><option>regressing</option><option>mixed</option></select></label>
@@ -1621,12 +1687,33 @@
       $("add-support-entry").addEventListener("click", () => addSupportEntry());
       $("obs-student").addEventListener("change", event => {
         state.selectedStudent = event.target.value;
+        // BUG-4 (QA 2026-08-02): switching students must clear the form —
+        // otherwise the previous student's note and tags silently save
+        // under the newly selected student.
+        clearObserveForm();
         loadLens("obs-lens", false);
+      });
+      // BUG-5: the type dropdown is visually required until chosen.
+      $("obs-template").addEventListener("change", event => {
+        event.target.classList.toggle("needs-choice", !event.target.value);
       });
       $("save-observation").addEventListener("click", saveObservation);
       state.selectedStudent = $("obs-student").value;
       renderSupportEntries([]);
       await loadLens("obs-lens", false);
+    }
+
+    function clearObserveForm() {
+      ["obs-text", "obs-template", "obs-dim", "obs-level", "obs-direction", "obs-sel-domain", "obs-sel-valence"].forEach(id => {
+        if ($(id)) $(id).value = "";
+      });
+      if ($("obs-urgency")) $("obs-urgency").checked = false;
+      if ($("obs-urgency-suggestion")) {
+        $("obs-urgency-suggestion").textContent = "teacher must affirm";
+        $("obs-urgency-suggestion").className = "badge";
+      }
+      if ($("obs-template")) $("obs-template").classList.add("needs-choice");
+      renderSupportEntries([]);
     }
 
     async function suggestObservation() {
@@ -1771,7 +1858,9 @@
         return;
       }
       if (!templateType) {
-        $("obs-result").innerHTML = "<h3>Review needed</h3><p>Choose an observation type before saving.</p>";
+        $("obs-result").innerHTML = "<h3>Review needed</h3><p>Choose an observation type before saving. Nothing was saved.</p>";
+        $("obs-template").classList.add("needs-choice");
+        $("obs-template").focus();
         return;
       }
       if (templateType === "cefr" && (!$("obs-dim").value || !$("obs-level").value)) {
@@ -1799,10 +1888,17 @@
         });
         const feedback = result.feedback || {};
         const categories = (feedback.categories_updated || []).map(id => SUPPORT_CATEGORY_LABELS[id] || id).join(", ");
-        $("obs-result").innerHTML = `<h3>Saved</h3><div class="source-line"><span class="badge ok">Saved locally. Not uploaded. Not shared.</span><span class="badge">Domain: observation</span></div><p>Observation ${escapeHtml(result.observation.observation_id)} is attached to the local lens.</p><p>${escapeHtml(feedback.message || "Observation saved.")}</p>${categories ? `<p>Updated: ${escapeHtml(categories)}</p>` : ""}<div class="output">${escapeHtml(result.observation.raw_transcript)}</div>`;
+        // BUG-5: confirm exactly what was recorded so a wrong type/level/
+        // student is visible immediately, before it cascades downstream.
+        const studentSelect = $("obs-student");
+        const studentName = studentSelect.options[studentSelect.selectedIndex]?.text || studentSelect.value;
+        const typeLabel = $("obs-template").options[$("obs-template").selectedIndex]?.text || templateType;
+        const cefrBits = templateType === "cefr" ? ` · ${$("obs-dim").value} · ${$("obs-level").value}` : "";
+        $("obs-result").innerHTML = `<h3>Saved</h3><div class="source-line"><span class="badge ok">Saved locally. Not uploaded. Not shared.</span><span class="badge">Domain: observation</span></div><p><strong>Recorded for ${escapeHtml(studentName)}</strong> — ${escapeHtml(typeLabel)}${escapeHtml(cefrBits)}</p><p>Observation ${escapeHtml(result.observation.observation_id)} is attached to the local lens.</p><p>${escapeHtml(feedback.message || "Observation saved.")}</p>${categories ? `<p>Updated: ${escapeHtml(categories)}</p>` : ""}<div class="output">${escapeHtml(result.observation.raw_transcript)}</div>`;
         $("obs-result").scrollIntoView({ behavior: "smooth", block: "nearest" });
         $("obs-result").classList.add("flash-success");
         setTimeout(() => $("obs-result").classList.remove("flash-success"), 2000);
+        clearObserveForm();
         await loadLens("obs-lens", false);
       } catch (error) {
         $("obs-result").innerHTML = `<h3>Not saved</h3><p>${escapeHtml(error.message || "The local save failed. Your text is still in the form.")}</p>`;
@@ -1939,19 +2035,37 @@
         ${showDecisionControls ? renderBackgroundSection(lens) : ""}
         ${showDecisionControls ? '<div id="evidence-panel" style="margin-top:16px;"></div>' : ""}
         <h3 style="margin-top:16px;">Grouping</h3>
-        <p>Avoid-pairing notes: ${escapeHtml((lens.avoid_pairing_with || []).join(", ") || "none")}</p>`;
+        <p>Avoid-pairing notes: ${escapeHtml((lens.avoid_pairing_with || []).join(", ") || "none")}</p>
+        ${showDecisionControls ? `<div class="row" style="margin-top:16px;"><button type="button" id="archive-student">Archive student</button><span id="archive-student-status" class="voice-hint" aria-live="polite">Removes them from rosters and recommendations. Observations are kept.</span></div>` : ""}`;
       if (!showDecisionControls) return;
+      $("archive-student").addEventListener("click", async () => {
+        if (!window.confirm(`Archive ${lens.display_name}? They disappear from your roster, grouping, and recommendations. Their observation history is kept for records.`)) return;
+        $("archive-student").disabled = true;
+        try {
+          await api(`/api/students/${state.selectedStudent}`, {method: "DELETE"});
+          showToast(`${lens.display_name} archived.`, "info");
+          state.students = null;
+          state.selectedStudent = null;
+          await renderStudents();
+        } catch {
+          $("archive-student").disabled = false;
+        }
+      });
       wireCategoryProfile(targetId);
       wireTriangulation(targetId, showDecisionControls);
       renderEvidencePanel(lens);
       async function handleRtiDecision(decision) {
-        const res = await fetch(`/api/students/${state.selectedStudent}/rti/decision`, {
-          method: "POST", headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({decision})
-        });
-        const data = await res.json();
-        if (res.ok) { $("rti-decision-status").textContent = "Recorded."; }
-        else { $("rti-decision-status").textContent = data.error || "Failed."; }
+        try {
+          const res = await fetch(`/api/students/${state.selectedStudent}/rti/decision`, {
+            method: "POST", headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({decision})
+          });
+          const data = await res.json();
+          if (res.ok) { $("rti-decision-status").textContent = "Recorded."; }
+          else { $("rti-decision-status").textContent = data.error || "Failed."; }
+        } catch {
+          $("rti-decision-status").textContent = "Network error.";
+        }
       }
       $("rti-confirm").addEventListener("click", () => handleRtiDecision("confirm"));
       $("rti-defer").addEventListener("click", () => handleRtiDecision("defer"));
@@ -2197,7 +2311,11 @@
             body: JSON.stringify({teacher_id: teacherId})
           });
           if (res.ok) { await loadLens(targetId, showDecisionControls); return; }
-        } catch {}
+          const data = await res.json().catch(() => ({}));
+          showToast(data.error || "Could not remove the colleague's observations.");
+        } catch {
+          showToast("Network error — the colleague's observations were not removed.");
+        }
         button.disabled = false;
       }));
     }
@@ -2460,6 +2578,11 @@
         });
       } else {
         appendLinguaVivaMessage(data);
+        // BUG-6: server redirected a material-creation request — carry the
+        // parsed topic into the Prepare view for the teacher.
+        if (data.intent === "generate" && data.generation_context) {
+          state.pendingPrepTopic = data.generation_context.topic || "";
+        }
       }
       voiceRuntime.busy = false;
       renderAsk();
@@ -3195,7 +3318,17 @@
         <div id="teaching-style" class="panel" style="margin-top:14px;"><h3>My Teaching Style</h3><p>Loading...</p></div>`;
       await renderTeachingStyle();
       $("export-profile").addEventListener("click", async () => {
-        const response = await fetch("/api/profile/export");
+        let response;
+        try {
+          response = await fetch("/api/profile/export");
+        } catch {
+          showToast("Network error — the export did not run.");
+          return;
+        }
+        if (!response.ok) {
+          showToast(`Export failed (${response.status}).`);
+          return;
+        }
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
