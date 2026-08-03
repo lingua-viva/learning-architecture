@@ -1,0 +1,42 @@
+{
+  "schema_version": "docpipe.v1",
+  "vault_id": "vault-fixture-20260804",
+  "created_at": "2026-08-04T07:30:00Z",
+  "updated_at": "2026-08-04T08:12:00Z",
+  "sources": {
+    "SRC-LESSON-MARCO-NORA": {
+      "source_id": "SRC-LESSON-MARCO-NORA",
+      "source_path": "sources/SRC-LESSON-MARCO-NORA/source.json",
+      "origin": "local",
+      "sha256": "ae6290e316944dc131683aa62f303008b727804c6c58199606212839ce3e3c8e"
+    },
+    "SRC-WORK-NORA-ROSSI": {
+      "source_id": "SRC-WORK-NORA-ROSSI",
+      "source_path": "sources/SRC-WORK-NORA-ROSSI/source.json",
+      "origin": "local",
+      "sha256": "6e827541ea8f312844e9dcd45e58889485103a736520aebb1e2ab21a1943add2"
+    }
+  },
+  "extractions": {
+    "SRC-LESSON-MARCO-NORA": {
+      "source_id": "SRC-LESSON-MARCO-NORA",
+      "extraction_path": "extracted/SRC-LESSON-MARCO-NORA.json"
+    },
+    "SRC-WORK-NORA-ROSSI": {
+      "source_id": "SRC-WORK-NORA-ROSSI",
+      "extraction_path": "extracted/SRC-WORK-NORA-ROSSI.json"
+    }
+  },
+  "lenses": {
+    "student-nora-rossi": {
+      "student_id": "student-nora-rossi",
+      "lens_path": "lenses/student-nora-rossi/lens.json",
+      "display_name": "Nora Rossi"
+    }
+  },
+  "sync": {
+    "queue_path": "sync/queue.json",
+    "pending_count": 0
+  }
+}
+

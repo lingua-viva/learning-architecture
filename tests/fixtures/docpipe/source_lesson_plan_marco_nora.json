@@ -1,0 +1,15 @@
+{
+  "schema_version": "docpipe.source.v1",
+  "source_id": "SRC-LESSON-MARCO-NORA",
+  "origin": "local",
+  "drive_file_id": null,
+  "path": "tests/fixtures/docpipe/lesson_plan_marco_nora.md",
+  "sha256": "ae6290e316944dc131683aa62f303008b727804c6c58199606212839ce3e3c8e",
+  "imported_at": "2026-08-04T07:30:00Z",
+  "mime": "text/markdown",
+  "owner": "teacher:federica",
+  "original_filename": "lesson_plan_marco_nora.md",
+  "original_ext": ".md",
+  "byte_size": 782
+}
+

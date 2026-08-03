@@ -1,0 +1,15 @@
+{
+  "schema_version": "docpipe.source.v1",
+  "source_id": "SRC-WORK-NORA-ROSSI",
+  "origin": "local",
+  "drive_file_id": null,
+  "path": "tests/fixtures/docpipe/student_work_nora_rossi.md",
+  "sha256": "6e827541ea8f312844e9dcd45e58889485103a736520aebb1e2ab21a1943add2",
+  "imported_at": "2026-08-04T07:32:00Z",
+  "mime": "text/markdown",
+  "owner": "teacher:federica",
+  "original_filename": "student_work_nora_rossi.md",
+  "original_ext": ".md",
+  "byte_size": 425
+}
+

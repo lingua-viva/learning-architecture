@@ -1,0 +1,74 @@
+{
+  "schema_version": "docpipe.extraction.v1",
+  "source_id": "SRC-WORK-NORA-ROSSI",
+  "source_sha256": "6e827541ea8f312844e9dcd45e58889485103a736520aebb1e2ab21a1943add2",
+  "extracted_at": "2026-08-04T07:36:00Z",
+  "extractor": {
+    "name": "docpipe.fixture",
+    "version": "1.0",
+    "model": null
+  },
+  "mime": "text/markdown",
+  "language": "en",
+  "normalized_text": "# Student Work Sample - Nora Rossi\n\nTask: Personal response to identity poem\nDate: 2026-08-04\n\nNora writes that repetition makes the speaker sound determined. She selects a relevant quotation and explains that the repeated phrase creates emphasis.\n\nTeacher note: Strong academic vocabulary and careful inference. Next step is to organize the final paragraph with a clearer topic sentence before adding the second quotation.\n\n",
+  "spans": [
+    {
+      "span_id": "SPN-0001",
+      "char_start": 0,
+      "char_end": 34,
+      "text": "# Student Work Sample - Nora Rossi"
+    },
+    {
+      "span_id": "SPN-0002",
+      "char_start": 36,
+      "char_end": 93,
+      "text": "Task: Personal response to identity poem\nDate: 2026-08-04"
+    },
+    {
+      "span_id": "SPN-0003",
+      "char_start": 95,
+      "char_end": 247,
+      "text": "Nora writes that repetition makes the speaker sound determined. She selects a relevant quotation and explains that the repeated phrase creates emphasis."
+    },
+    {
+      "span_id": "SPN-0004",
+      "char_start": 249,
+      "char_end": 423,
+      "text": "Teacher note: Strong academic vocabulary and careful inference. Next step is to organize the final paragraph with a clearer topic sentence before adding the second quotation."
+    }
+  ],
+  "structure": {
+    "title": "Student Work Sample - Nora Rossi",
+    "document_type": "student_work_sample",
+    "sections": [
+      {
+        "section_id": "task",
+        "heading": "Task",
+        "span_ids": ["SPN-0002"]
+      },
+      {
+        "section_id": "student-response",
+        "heading": "Student response",
+        "span_ids": ["SPN-0003"]
+      },
+      {
+        "section_id": "teacher-note",
+        "heading": "Teacher note",
+        "span_ids": ["SPN-0004"]
+      }
+    ],
+    "students_detected": [
+      {
+        "student_id": "student-nora-rossi",
+        "display_name": "Nora Rossi",
+        "confidence": 0.99,
+        "span_ids": ["SPN-0001", "SPN-0003"]
+      }
+    ],
+    "curriculum": {
+      "task": "Personal response to identity poem"
+    }
+  },
+  "warnings": []
+}
+

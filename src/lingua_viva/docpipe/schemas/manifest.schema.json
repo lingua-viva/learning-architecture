@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lingua-viva.local/docpipe/manifest.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "vault_id",
+    "created_at",
+    "updated_at",
+    "sources",
+    "extractions",
+    "lenses",
+    "sync"
+  ],
+  "properties": {
+    "schema_version": { "const": "docpipe.v1" },
+    "vault_id": { "type": "string", "minLength": 1 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "sources": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source_id", "source_path", "origin", "sha256"],
+        "properties": {
+          "source_id": { "type": "string", "pattern": "^SRC-[A-Za-z0-9_-]+$" },
+          "source_path": { "type": "string", "minLength": 1 },
+          "origin": { "enum": ["drive", "local"] },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+        }
+      }
+    },
+    "extractions": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source_id", "extraction_path"],
+        "properties": {
+          "source_id": { "type": "string", "pattern": "^SRC-[A-Za-z0-9_-]+$" },
+          "extraction_path": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "lenses": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["student_id", "lens_path", "display_name"],
+        "properties": {
+          "student_id": { "type": "string", "minLength": 1 },
+          "lens_path": { "type": "string", "minLength": 1 },
+          "display_name": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "sync": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["queue_path", "pending_count"],
+      "properties": {
+        "queue_path": { "type": "string", "minLength": 1 },
+        "pending_count": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}
+

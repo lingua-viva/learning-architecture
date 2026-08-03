@@ -1,0 +1,100 @@
+{
+  "schema_version": "docpipe.extraction.v1",
+  "source_id": "SRC-LESSON-MARCO-NORA",
+  "source_sha256": "ae6290e316944dc131683aa62f303008b727804c6c58199606212839ce3e3c8e",
+  "extracted_at": "2026-08-04T07:35:00Z",
+  "extractor": {
+    "name": "docpipe.fixture",
+    "version": "1.0",
+    "model": null
+  },
+  "mime": "text/markdown",
+  "language": "en",
+  "normalized_text": "# MYP5 Italian Literature - Identity and Voice\n\nClass: MYP5 Italian B\nDate: 2026-08-04\nUnit: Poetry and personal narrative\n\nLearning goal: Students compare how poets use imagery and repetition to develop voice, then draft a short personal response in Italian.\n\nWarm-up: Students annotate two short stanzas and mark one image that connects to identity.\n\nMain activity: In pairs, students discuss the speaker's point of view and prepare a three-sentence explanation using evidence from the poem.\n\nDifferentiation notes: Marco Bianchi benefits from a two-step visual checklist before writing. Nora Rossi can extend the task by adding a second quotation and explaining nuance.\n\nExit ticket: Students submit one claim, one quotation, and one reflection on how language shapes identity.\n\n",
+  "spans": [
+    {
+      "span_id": "SPN-0001",
+      "char_start": 0,
+      "char_end": 46,
+      "text": "# MYP5 Italian Literature - Identity and Voice"
+    },
+    {
+      "span_id": "SPN-0002",
+      "char_start": 48,
+      "char_end": 122,
+      "text": "Class: MYP5 Italian B\nDate: 2026-08-04\nUnit: Poetry and personal narrative"
+    },
+    {
+      "span_id": "SPN-0003",
+      "char_start": 124,
+      "char_end": 259,
+      "text": "Learning goal: Students compare how poets use imagery and repetition to develop voice, then draft a short personal response in Italian."
+    },
+    {
+      "span_id": "SPN-0004",
+      "char_start": 261,
+      "char_end": 351,
+      "text": "Warm-up: Students annotate two short stanzas and mark one image that connects to identity."
+    },
+    {
+      "span_id": "SPN-0005",
+      "char_start": 353,
+      "char_end": 493,
+      "text": "Main activity: In pairs, students discuss the speaker's point of view and prepare a three-sentence explanation using evidence from the poem."
+    },
+    {
+      "span_id": "SPN-0006",
+      "char_start": 495,
+      "char_end": 672,
+      "text": "Differentiation notes: Marco Bianchi benefits from a two-step visual checklist before writing. Nora Rossi can extend the task by adding a second quotation and explaining nuance."
+    },
+    {
+      "span_id": "SPN-0007",
+      "char_start": 674,
+      "char_end": 780,
+      "text": "Exit ticket: Students submit one claim, one quotation, and one reflection on how language shapes identity."
+    }
+  ],
+  "structure": {
+    "title": "MYP5 Italian Literature - Identity and Voice",
+    "document_type": "lesson_plan",
+    "sections": [
+      {
+        "section_id": "lesson-meta",
+        "heading": "Class, date, unit",
+        "span_ids": ["SPN-0002"]
+      },
+      {
+        "section_id": "lesson-flow",
+        "heading": "Lesson flow",
+        "span_ids": ["SPN-0003", "SPN-0004", "SPN-0005", "SPN-0007"]
+      },
+      {
+        "section_id": "differentiation",
+        "heading": "Differentiation notes",
+        "span_ids": ["SPN-0006"]
+      }
+    ],
+    "students_detected": [
+      {
+        "student_id": "student-marco-bianchi",
+        "display_name": "Marco Bianchi",
+        "confidence": 0.99,
+        "span_ids": ["SPN-0006"]
+      },
+      {
+        "student_id": "student-nora-rossi",
+        "display_name": "Nora Rossi",
+        "confidence": 0.99,
+        "span_ids": ["SPN-0006"]
+      }
+    ],
+    "curriculum": {
+      "grade": "MYP5",
+      "subject": "Italian B",
+      "unit": "Poetry and personal narrative"
+    }
+  },
+  "warnings": []
+}
+

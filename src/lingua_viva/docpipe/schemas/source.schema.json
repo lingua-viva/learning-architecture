@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lingua-viva.local/docpipe/source.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "source_id",
+    "origin",
+    "drive_file_id",
+    "path",
+    "sha256",
+    "imported_at",
+    "mime",
+    "owner",
+    "original_filename",
+    "original_ext",
+    "byte_size"
+  ],
+  "properties": {
+    "schema_version": { "const": "docpipe.source.v1" },
+    "source_id": { "type": "string", "pattern": "^SRC-[A-Za-z0-9_-]+$" },
+    "origin": { "enum": ["drive", "local"] },
+    "drive_file_id": { "type": ["string", "null"] },
+    "path": { "type": "string", "minLength": 1 },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "imported_at": { "type": "string", "format": "date-time" },
+    "mime": { "type": "string", "minLength": 1 },
+    "owner": { "type": "string", "minLength": 1 },
+    "original_filename": { "type": "string", "minLength": 1 },
+    "original_ext": { "type": "string", "pattern": "^\\.[A-Za-z0-9]+$" },
+    "byte_size": { "type": "integer", "minimum": 0 }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "origin": { "const": "drive" } }, "required": ["origin"] },
+      "then": { "properties": { "drive_file_id": { "type": "string", "minLength": 1 } } }
+    },
+    {
+      "if": { "properties": { "origin": { "const": "local" } }, "required": ["origin"] },
+      "then": { "properties": { "drive_file_id": { "type": "null" } } }
+    }
+  ]
+}
+

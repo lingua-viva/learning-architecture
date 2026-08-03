@@ -1,0 +1,26 @@
+{
+  "schema_version": "docpipe.observation.v1",
+  "obs_id": "OBS-NORA-20260804-01",
+  "student_id": "student-nora-rossi",
+  "created_at": "2026-08-04T08:10:00Z",
+  "created_by": "teacher:olga",
+  "raw_transcript": "For Nora Rossi, personal strength today: she encouraged Marco to explain his idea before giving her answer. Strategy trialed: sentence starter card helped her organize the second quotation.",
+  "teacher_edited_text": "Nora encouraged Marco to explain his idea before giving her answer. Sentence starter card helped her organize the second quotation.",
+  "claims": [
+    {
+      "field_id": "personal_strengths",
+      "value": "Encouraged Marco to explain his idea before giving her answer.",
+      "confidence": 0.92
+    },
+    {
+      "field_id": "strategies_trialed",
+      "value": {
+        "strategy": "Sentence starter card",
+        "outcome": "worked",
+        "evidence": "Helped Nora organize the second quotation."
+      },
+      "confidence": 0.88
+    }
+  ]
+}
+

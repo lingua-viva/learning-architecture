@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lingua-viva.local/docpipe/lens.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "student_id",
+    "display_name",
+    "created_at",
+    "updated_at",
+    "profile",
+    "metadata"
+  ],
+  "properties": {
+    "schema_version": { "const": "docpipe.lens.v1" },
+    "student_id": { "type": "string", "minLength": 1 },
+    "display_name": { "type": "string", "minLength": 1 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "learning_and_cognition",
+        "communication_and_language",
+        "executive_functioning",
+        "social_skills",
+        "emotional_regulation",
+        "physical_sensory_needs",
+        "attendance_and_engagement",
+        "strategies_trialed",
+        "academic_strengths",
+        "personal_strengths"
+      ],
+      "properties": {
+        "learning_and_cognition": { "$ref": "common.schema.json#/$defs/profile_field" },
+        "communication_and_language": { "$ref": "common.schema.json#/$defs/profile_field" },
+        "executive_functioning": { "$ref": "common.schema.json#/$defs/profile_field" },
+        "social_skills": { "$ref": "common.schema.json#/$defs/profile_field" },
+        "emotional_regulation": { "$ref": "common.schema.json#/$defs/profile_field" },
+        "physical_sensory_needs": { "$ref": "common.schema.json#/$defs/profile_field" },
+        "attendance_and_engagement": { "$ref": "common.schema.json#/$defs/profile_field" },
+        "strategies_trialed": { "$ref": "common.schema.json#/$defs/profile_field" },
+        "academic_strengths": { "$ref": "common.schema.json#/$defs/profile_field" },
+        "personal_strengths": { "$ref": "common.schema.json#/$defs/profile_field" }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["source_ids", "observation_ids"],
+      "properties": {
+        "source_ids": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^SRC-[A-Za-z0-9_-]+$" }
+        },
+        "observation_ids": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^OBS-[A-Za-z0-9_-]+$" }
+        }
+      }
+    }
+  }
+}
+

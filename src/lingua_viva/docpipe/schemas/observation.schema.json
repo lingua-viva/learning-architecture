@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lingua-viva.local/docpipe/observation.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "obs_id",
+    "student_id",
+    "created_at",
+    "created_by",
+    "raw_transcript",
+    "teacher_edited_text",
+    "claims"
+  ],
+  "properties": {
+    "schema_version": { "const": "docpipe.observation.v1" },
+    "obs_id": { "type": "string", "pattern": "^OBS-[A-Za-z0-9_-]+$" },
+    "student_id": { "type": "string", "minLength": 1 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "created_by": { "type": "string", "minLength": 1 },
+    "raw_transcript": { "type": "string", "minLength": 1 },
+    "teacher_edited_text": { "type": "string", "minLength": 1 },
+    "claims": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["field_id", "value", "confidence"],
+        "properties": {
+          "field_id": {
+            "enum": [
+              "learning_and_cognition",
+              "communication_and_language",
+              "executive_functioning",
+              "social_skills",
+              "emotional_regulation",
+              "physical_sensory_needs",
+              "attendance_and_engagement",
+              "strategies_trialed",
+              "academic_strengths",
+              "personal_strengths"
+            ]
+          },
+          "value": {
+            "oneOf": [
+              { "type": "string", "minLength": 1 },
+              { "type": "array", "minItems": 1 },
+              { "type": "object", "minProperties": 1 }
+            ]
+          },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+        }
+      }
+    }
+  }
+}
+

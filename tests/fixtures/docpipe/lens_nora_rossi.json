@@ -1,0 +1,122 @@
+{
+  "schema_version": "docpipe.lens.v1",
+  "student_id": "student-nora-rossi",
+  "display_name": "Nora Rossi",
+  "created_at": "2026-08-04T07:40:00Z",
+  "updated_at": "2026-08-04T08:12:00Z",
+  "profile": {
+    "learning_and_cognition": {
+      "value": null,
+      "evidence": []
+    },
+    "communication_and_language": {
+      "value": "Uses relevant quotations and explains how repetition creates emphasis.",
+      "evidence": [
+        {
+          "source_ref": {
+            "type": "DOCUMENT",
+            "source_id": "SRC-WORK-NORA-ROSSI",
+            "path": "extracted/SRC-WORK-NORA-ROSSI.json"
+          },
+          "span_id": "SPN-0003",
+          "confidence": 0.91,
+          "added_at": "2026-08-04T07:40:00Z",
+          "added_by": "teacher:federica"
+        }
+      ]
+    },
+    "executive_functioning": {
+      "value": "Next step is to organize the final paragraph with a clearer topic sentence before adding the second quotation.",
+      "evidence": [
+        {
+          "source_ref": {
+            "type": "DOCUMENT",
+            "source_id": "SRC-WORK-NORA-ROSSI",
+            "path": "extracted/SRC-WORK-NORA-ROSSI.json"
+          },
+          "span_id": "SPN-0004",
+          "confidence": 0.86,
+          "added_at": "2026-08-04T07:40:00Z",
+          "added_by": "teacher:federica"
+        }
+      ]
+    },
+    "social_skills": {
+      "value": null,
+      "evidence": []
+    },
+    "emotional_regulation": {
+      "value": null,
+      "evidence": []
+    },
+    "physical_sensory_needs": {
+      "value": null,
+      "evidence": []
+    },
+    "attendance_and_engagement": {
+      "value": null,
+      "evidence": []
+    },
+    "strategies_trialed": {
+      "value": [
+        {
+          "strategy": "Sentence starter card",
+          "outcome": "worked",
+          "summary": "Helped Nora organize the second quotation."
+        }
+      ],
+      "evidence": [
+        {
+          "source_ref": {
+            "type": "OBSERVATION",
+            "obs_id": "OBS-NORA-20260804-01",
+            "path": "lenses/student-nora-rossi/observations/OBS-NORA-20260804-01.json"
+          },
+          "obs_id": "OBS-NORA-20260804-01",
+          "confidence": 0.88,
+          "added_at": "2026-08-04T08:12:00Z",
+          "added_by": "teacher:olga"
+        }
+      ]
+    },
+    "academic_strengths": {
+      "value": "Strong academic vocabulary and careful inference.",
+      "evidence": [
+        {
+          "source_ref": {
+            "type": "DOCUMENT",
+            "source_id": "SRC-WORK-NORA-ROSSI",
+            "path": "extracted/SRC-WORK-NORA-ROSSI.json"
+          },
+          "span_id": "SPN-0004",
+          "confidence": 0.93,
+          "added_at": "2026-08-04T07:40:00Z",
+          "added_by": "teacher:federica"
+        }
+      ]
+    },
+    "personal_strengths": {
+      "value": "Encouraged Marco to explain his idea before giving her answer.",
+      "evidence": [
+        {
+          "source_ref": {
+            "type": "OBSERVATION",
+            "obs_id": "OBS-NORA-20260804-01",
+            "path": "lenses/student-nora-rossi/observations/OBS-NORA-20260804-01.json"
+          },
+          "obs_id": "OBS-NORA-20260804-01",
+          "confidence": 0.92,
+          "added_at": "2026-08-04T08:12:00Z",
+          "added_by": "teacher:olga"
+        }
+      ]
+    }
+  },
+  "metadata": {
+    "source_ids": ["SRC-LESSON-MARCO-NORA", "SRC-WORK-NORA-ROSSI"],
+    "observation_ids": ["OBS-NORA-20260804-01"],
+    "cefr": {},
+    "rti": {}
+  }
+}
+
