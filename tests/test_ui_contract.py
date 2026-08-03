@@ -193,7 +193,9 @@ REPO = Path(__file__).resolve().parent.parent
 #   v101 (2026-08-04): HF1 frontend hotfixes (Chip QA 0.2.32) — F2
 #     renderAnswerSafety gate for text + voice, F1b guaranteed mic release,
 #     F5 student placeholder + refusals, §8.2 voice companion hidden.
-EXPECTED_VERSION = 101
+#   v102 (2026-08-04): relock only — v101 hashes were CRLF-contaminated
+#     (Windows autocrlf checkout); recomputed from LF-canonical bytes.
+EXPECTED_VERSION = 102
 
 
 def _html() -> str:

@@ -569,7 +569,16 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 101
+version: 102
+# v102 (2026-08-04): relock only — no file content change. v101's hashes
+#     were computed from a Windows checkout with core.autocrlf=true (CRLF
+#     worktree bytes), so CI's LF checkout failed the auto-release test
+#     gate on all three protected files (fail-fast reported index.html
+#     only). Worktree normalized to LF (canonical, matches the committed
+#     blobs), autocrlf=false set repo-locally, hashes recomputed —
+#     sw.js/web.py returned to their exact v100 values, index.html now
+#     carries its true LF hash. Lock hashes must always be computed from
+#     LF bytes.
 # v101 (2026-08-04): HF1 frontend hotfixes (Chip QA 0.2.32,
 #     PROMPT_PAIR_HF1_FRONTEND_HOTFIX_2026-08-04). static/index.html only.
 #     F2/FM-B: renderAnswerSafety(meta) is the single safety gate for both
