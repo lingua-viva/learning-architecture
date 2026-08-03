@@ -11,7 +11,10 @@ def test_observe_classify_returns_validated_proposal(monkeypatch):
     async def fake_reason(self, query, **kwargs):
         assert query == "The learner now speaks at B1 and has improved this month."
         assert "template_type" in kwargs["system_prompt"]
-        assert kwargs["model"].startswith("ollama/")
+        # detect_model() is None when Ollama is unreachable (CI) — the engine
+        # then resolves internally behind the provably-local gate. Either way
+        # the classify route must never hand an external model string here.
+        assert kwargs["model"] is None or kwargs["model"].startswith("ollama/")
         return ReasonResult(
             content=(
                 '{"template_type":"cefr","cefr_dimension":"speaking",'
