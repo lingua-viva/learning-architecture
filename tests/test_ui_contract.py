@@ -190,7 +190,10 @@ REPO = Path(__file__).resolve().parent.parent
 #     record_decision at category_suggest emission sites (no route/UI change).
 #   v100 (2026-08-03): Claudia QA fixes — voice/probe wired into every mic
 #     surface (P0-1), success save toast before form clear (P2-1).
-EXPECTED_VERSION = 100
+#   v101 (2026-08-04): HF1 frontend hotfixes (Chip QA 0.2.32) — F2
+#     renderAnswerSafety gate for text + voice, F1b guaranteed mic release,
+#     F5 student placeholder + refusals, §8.2 voice companion hidden.
+EXPECTED_VERSION = 101
 
 
 def _html() -> str:

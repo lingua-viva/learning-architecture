@@ -569,7 +569,24 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 100
+version: 101
+# v101 (2026-08-04): HF1 frontend hotfixes (Chip QA 0.2.32,
+#     PROMPT_PAIR_HF1_FRONTEND_HOTFIX_2026-08-04). static/index.html only.
+#     F2/FM-B: renderAnswerSafety(meta) is the single safety gate for both
+#     the chat bubble and every voiceRuntime.speak/speakQueue call — GIR
+#     < 0.5 or fabricated_identifiers prepends a visible red warning
+#     (.answer-safety) + fabricated-ID list into the rendered message and
+#     the speech prefix, and turns the GIR badge "badge warn". F1b/FM-D:
+#     guaranteed mic release — visibilitychange(hidden) + beforeunload call
+#     cleanupCapture(), and captureLocalStt sets a 30s maxCaptureTimer hard
+#     cap (cleared on normal stop). F5/FM-F: studentOptions() starts on a
+#     disabled "Choose a student…" placeholder, ensureStudents() no longer
+#     auto-selects the first roster entry, save/suggest/parent-draft refuse
+#     with an inline message when no student is chosen, loadLens renders an
+#     empty state instead of fetching /api/students//lens. §8.2 operator
+#     ruling: body.voice-hidden hides the global voice companion (+its
+#     reserved gutter) for day one — /api/voice/act untouched; Observe/Ask
+#     hint copy no longer points at the hidden companion mic.
 # v100 (2026-08-03): Claudia QA fixes (FIX_BRIEF_CLAUDIA_QA_2026-08-03).
 #     static/index.html only. P0-1: /api/voice/probe wired into the UI —
 #     voiceRuntime.probeStt()/applySttAvailability() gate captureLocalStt

@@ -204,6 +204,15 @@
       background: var(--risk);
       font-weight: 600;
     }
+    .answer-safety {
+      color: var(--risk);
+      font-weight: 600;
+      margin: 4px 0 6px;
+    }
+    /* HF1 §8.2: day-one switch — companion panel gone, no reserved gutter. */
+    body.voice-hidden .app { padding-right: 0; }
+    body.voice-hidden .voice-companion,
+    body.voice-hidden .voice-transcript { display: none; }
     .content {
       padding: 22px 24px 32px;
       max-width: 1180px;
@@ -695,7 +704,10 @@
     }
   </style>
 </head>
-<body>
+<!-- HF1 / build brief §8.2 (operator ruling): the global voice companion is
+     hidden for day one. The backend /api/voice/act endpoint stays; only this
+     UI entry point is off. Remove voice-hidden from <body> to restore it. -->
+<body class="voice-hidden">
   <div id="lv-toast" role="status" aria-live="polite"></div>
   <div class="app">
     <aside class="sidebar">
@@ -796,11 +808,14 @@
       audioContext: null,
       analyser: null,
       silenceCheck: null,
+      maxCaptureTimer: null,
       audioChunks: [],
       stateTargetId: "",
       stopCapture() {
         clearInterval(this.silenceCheck);
         this.silenceCheck = null;
+        clearTimeout(this.maxCaptureTimer);
+        this.maxCaptureTimer = null;
         if (this.mediaRecorder && this.mediaRecorder.state !== "inactive") {
           try { this.mediaRecorder.stop(); } catch (error) { /* already stopped */ }
         }
@@ -808,6 +823,8 @@
       cleanupCapture() {
         clearInterval(this.silenceCheck);
         this.silenceCheck = null;
+        clearTimeout(this.maxCaptureTimer);
+        this.maxCaptureTimer = null;
         if (this.audioContext) {
           try { this.audioContext.close(); } catch (error) { /* already closed */ }
         }
@@ -820,6 +837,10 @@
         this.mediaStream = null;
         this.audioChunks = [];
         this.listening = false;
+        document.querySelectorAll(".is-listening").forEach(el => {
+          el.classList.remove("is-listening");
+          el.setAttribute("aria-pressed", "false");
+        });
       },
       // P0-1 (Claudia QA 2026-08-03): the server tells us whether local
       // transcription actually works (/api/voice/probe). null = not yet
@@ -860,7 +881,7 @@
         if (micStatus) {
           micStatus.textContent = unavailable
             ? this.sttUnavailableText
-            : "Use the voice companion mic or type below.";
+            : "Type your observation below.";
           micStatus.classList.toggle("warn", unavailable);
         }
       },
@@ -970,6 +991,9 @@
           }
         };
         this.mediaRecorder.start();
+        // F1b: hard cap — the silence interval above is throttleable in a
+        // hidden tab, so a recording must never be able to outlive this.
+        this.maxCaptureTimer = setTimeout(() => this.stopCapture(), 30000);
       },
       remoteAudio: null,
       speechQueue: [],
@@ -1137,6 +1161,15 @@
       }
     };
 
+    // F1b (Chip QA 0.2.32): guaranteed mic hardware release. The normal stop
+    // path depends on a throttleable setInterval; these listeners plus the
+    // 30s cap in captureLocalStt are defense-in-depth — any one of them
+    // alone releases the microphone.
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") voiceRuntime.cleanupCapture();
+    });
+    window.addEventListener("beforeunload", () => voiceRuntime.cleanupCapture());
+
     function updateVoiceCompanion(mode = "idle", label = "") {
       const panel = $("voice-companion");
       const stateLabel = $("vc-state");
@@ -1278,7 +1311,7 @@
         // P2-1: visual twin of the spoken confirmation — voice saves clear
         // no form, but the teacher may have the volume down.
         showSaveToast(`observation for ${(resolved && resolved.display_name) || "your student"}`);
-        voiceRuntime.speak(result.spoken_confirmation || "Saved.", result.tone_prefix || "");
+        voiceRuntime.speak(result.spoken_confirmation || "Saved.", renderAnswerSafety(result).speechPrefix);
         if (state.view === "observe") {
           try { await loadLens("obs-lens", false); } catch (error) { /* view refresh only */ }
         }
@@ -1310,7 +1343,9 @@
       const reply = state.chat[state.chat.length - 1];
       if (reply && !reply.isError) {
         updateVoiceCompanion("speaking", "Speaking");
-        voiceRuntime.speak(reply.text, result.tone_prefix || "");
+        // F2/FM-B: speech goes through the same safety gate as the bubble.
+        const safety = renderAnswerSafety({...(reply.meta || {}), tone_prefix: (reply.meta && reply.meta.tone_prefix) || result.tone_prefix || ""});
+        voiceRuntime.speak(reply.text, safety.speechPrefix);
       } else {
         updateVoiceCompanion("error", "Could not answer");
         setTimeout(() => updateVoiceCompanion("idle", "Ready"), 4000);
@@ -1518,7 +1553,9 @@
     async function ensureStudents() {
       const data = await api("/api/students");
       state.students = data.students || [];
-      if (!state.selectedStudent && state.students[0]) state.selectedStudent = state.students[0].student_id;
+      // F5 (Chip QA 0.2.32): never auto-select a student. A record target
+      // must be an explicit teacher choice — the placeholder in
+      // studentOptions() holds the empty state.
       return state.students;
     }
 
@@ -1758,7 +1795,7 @@
         <div class="grid two">
           <div class="panel">
             <label>Student<select id="obs-student">${studentOptions()}</select></label>
-            <div class="row" style="margin:14px 0;"><span id="mic-status" class="badge" aria-live="polite">Use the voice companion mic or type below.</span></div>
+            <div class="row" style="margin:14px 0;"><span id="mic-status" class="badge" aria-live="polite">Type your observation below.</span></div>
             <textarea id="obs-text" placeholder="A learner self-corrected passato prossimo, used essere correctly in context"></textarea>
             <div class="row" style="margin-top:10px;"><button id="suggest-observation" type="button">Suggest fields</button><span id="obs-suggest-status" class="voice-hint" aria-live="polite">Nothing is saved until you review and press Save.</span></div>
             <div class="form-grid" style="margin-top:12px;">
@@ -1820,6 +1857,10 @@
 
     async function suggestObservation() {
       const transcript = $("obs-text").value.trim();
+      if (!$("obs-student").value) {
+        $("obs-suggest-status").textContent = "Choose a student first.";
+        return;
+      }
       if (!transcript) {
         $("obs-suggest-status").textContent = "Type or record an observation first.";
         return;
@@ -1955,6 +1996,13 @@
     async function saveObservation() {
       const transcript = $("obs-text").value.trim();
       const templateType = $("obs-template").value;
+      // F5: same refusal pattern as the observation-type requirement — a
+      // save with no explicit student choice never reaches the backend.
+      if (!$("obs-student").value) {
+        $("obs-result").innerHTML = "<h3>Review needed</h3><p>Choose a student before saving. Nothing was saved.</p>";
+        $("obs-student").focus();
+        return;
+      }
       if (!transcript) {
         $("obs-result").innerHTML = "<h3>Not saved</h3><p>Add an observation first.</p>";
         return;
@@ -2096,6 +2144,13 @@
     }
 
     async function loadLens(targetId = "lens", showDecisionControls = true) {
+      // F5: with no auto-selected student the lens panel is an empty state,
+      // not a failed fetch against /api/students//lens.
+      if (!state.selectedStudent) {
+        const host = $(targetId);
+        if (host) host.innerHTML = "<h3>Choose a student</h3><p>Select a student to see their lens here.</p>";
+        return;
+      }
       await ensureSchoolProfile();
       const lens = await api(`/api/students/${state.selectedStudent}/lens`);
       // Multi-teacher triangulation (operator ruling 2026-08-01): full display
@@ -2511,11 +2566,34 @@
         <div class="view-head"><div><h2>Ask Lingua Viva</h2><p>Free-form teacher questions route through the governed local app runtime.</p></div><span class="badge ok">governance route</span></div>
         <div class="panel">
           <div id="chat-log" class="chat-log">${state.chat.map(renderMessage).join("")}</div>
-          <div id="ask-voice-status" class="voice-hint" aria-live="polite" style="margin-top:12px;">Use the voice companion mic, or type below.</div>
+          <div id="ask-voice-status" class="voice-hint" aria-live="polite" style="margin-top:12px;">Type your question below.</div>
           <form id="ask-form" class="row" style="margin-top:12px;"><input id="ask-input" placeholder="How do I scaffold articles for mixed-level Grade 3?"><button class="primary" type="submit">Send</button></form>
         </div>`;
       $("ask-form").addEventListener("submit", askQuestion);
       attachWhyLinks();
+    }
+
+    // F2 (Chip QA 0.2.32) / FM-B: ONE safety gate consumed by BOTH the text
+    // renderer and the voice path, so the two channels can never diverge.
+    // GIR < 0.5 or any fabricated identifier means the teacher must see the
+    // warning wherever the answer lands — bubble and speech alike.
+    function renderAnswerSafety(meta) {
+      const gir = (meta && meta.grounding && meta.grounding.gir) || {};
+      const fabricated = Array.isArray(gir.fabricated_identifiers) ? gir.fabricated_identifiers : [];
+      const unsafe = Number(gir.score ?? 1) < 0.5 || fabricated.length > 0;
+      const tonePrefix = String((meta && meta.tone_prefix) || "").trim();
+      const warningText = tonePrefix || "⚠️ I could not verify this against real records.";
+      const fabricatedText = fabricated.length
+        ? ` These identifiers do not match any real record: ${fabricated.join(", ")}.`
+        : "";
+      return {
+        unsafe,
+        girBadgeClass: unsafe ? "badge warn" : "badge",
+        warningHtml: unsafe
+          ? `<p class="answer-safety"><span class="badge warn">unverified</span> ${escapeHtml(warningText + fabricatedText)}</p>`
+          : "",
+        speechPrefix: unsafe ? `${warningText}${fabricatedText} ` : (tonePrefix ? tonePrefix : "")
+      };
     }
 
     function renderMessage(message) {
@@ -2537,11 +2615,12 @@
       const sourceBadges = sources.length
         ? sources.map(source => `<span class="badge">${escapeHtml(source)}</span>`).join("")
         : '<span class="badge">no sources recorded</span>';
+      const safety = renderAnswerSafety(message.meta || {});
       const grounding = message.meta && message.meta.grounding
-        ? `<span class="badge">tier ${escapeHtml(message.meta.grounding.tier_used || "none")}</span><span class="badge">GIR ${Number(message.meta.grounding.gir?.score ?? 1).toFixed(2)}</span>`
+        ? `<span class="badge">tier ${escapeHtml(message.meta.grounding.tier_used || "none")}</span><span class="${safety.girBadgeClass}">GIR ${Number(message.meta.grounding.gir?.score ?? 1).toFixed(2)}</span>`
         : "";
       const meta = message.meta ? `<div class="source-line">${routeBadge}<span class="badge">${escapeHtml(message.meta.model_used || "model unavailable")}</span><span class="badge">${((message.meta.duration_ms || 0) / 1000).toFixed(1)}s</span>${grounding}${sourceBadges}<button type="button" data-why="${escapeHtml(message.meta.trace_id || "")}">Why?</button></div>` : "";
-      return `<div class="message ${message.role === "teacher" ? "user" : ""}"><strong>${message.role}</strong><p>${escapeHtml(message.text)}</p>${meta}</div>`;
+      return `<div class="message ${message.role === "teacher" ? "user" : ""}"><strong>${message.role}</strong>${safety.warningHtml}<p>${escapeHtml(message.text)}</p>${meta}</div>`;
     }
 
     async function askQuestion(event) {
@@ -2620,7 +2699,9 @@
             if (!speechStarted) {
               speechStarted = true;
               updateVoiceCompanion("speaking", "Speaking");
-              voiceRuntime.speakQueue([sentence], data.tone_prefix || "");
+              // F2/FM-B: per-sentence events carry no grounding yet, but the
+              // prefix still flows through the shared safety gate.
+              voiceRuntime.speakQueue([sentence], renderAnswerSafety(data).speechPrefix);
             } else {
               voiceRuntime.speakQueue([sentence], "");
             }
@@ -2694,7 +2775,8 @@
       if (fromVoice && !data.error) {
         const reply = state.chat[state.chat.length - 1];
         updateVoiceCompanion("speaking", "Speaking");
-        voiceRuntime.speak(reply.text, data.tone_prefix || "");
+        // F2/FM-B: speech goes through the same safety gate as the bubble.
+        voiceRuntime.speak(reply.text, renderAnswerSafety(reply.meta || {tone_prefix: data.tone_prefix}).speechPrefix);
       } else if (fromVoice && data.error) {
         const status = voiceRuntime.get("ask-voice-status");
         if (status) status.textContent = "I could not answer aloud. The error is shown above.";
@@ -2857,6 +2939,12 @@
     }
 
     async function draftParent() {
+      // F5/FM-F: the parent-note select shares studentOptions(), so it can
+      // now be empty — refuse instead of drafting about nobody in particular.
+      if (!$("parent-student").value) {
+        $("parent-output").innerHTML = "<h3>Choose a student</h3><p>Select who this note is about before drafting.</p>";
+        return;
+      }
       const data = await api("/api/parents/recommendation", {
         method: "POST",
         body: JSON.stringify({
@@ -5889,7 +5977,10 @@
     }
 
     function studentOptions() {
-      return state.students.map(student => `<option value="${student.student_id}" ${student.student_id === state.selectedStudent ? "selected" : ""}>${escapeHtml(student.display_name)}</option>`).join("");
+      // F5/FM-F: a select that determines WHO a record is written about
+      // starts on a disabled placeholder, never on the first roster entry.
+      const placeholder = `<option value="" disabled ${state.selectedStudent ? "" : "selected"}>Choose a student…</option>`;
+      return placeholder + state.students.map(student => `<option value="${student.student_id}" ${student.student_id === state.selectedStudent ? "selected" : ""}>${escapeHtml(student.display_name)}</option>`).join("");
     }
 
     // Quick capture (Ctrl/Cmd+K) — MC-lessons §7. Claudia's core loop is
