@@ -1,4 +1,5 @@
 from pathlib import Path
+import importlib
 import json
 import sys
 from types import SimpleNamespace
@@ -94,3 +95,14 @@ def test_privacy_risk_path_detection(tmp_path, monkeypatch):
     monkeypatch.setattr(doctor, "LV_ROOT", tmp_path)
     check = doctor.check_privacy_paths()
     assert check.status == "private_risk"
+
+
+def test_support_loop_state_dir_uses_user_state_home_not_package_tree(tmp_path, monkeypatch):
+    monkeypatch.setenv("LV_STATE_HOME", str(tmp_path / "state-home"))
+    import support_loop.paths as paths
+
+    paths = importlib.reload(paths)
+
+    assert paths.STATE_DIR == tmp_path / "state-home" / ".lv_support"
+    assert str(paths.LV_ROOT) not in str(paths.STATE_DIR)
+    assert paths.BUNDLE_DIR.parent == paths.STATE_DIR

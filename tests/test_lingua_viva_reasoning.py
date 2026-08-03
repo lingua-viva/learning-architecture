@@ -2,7 +2,7 @@ import asyncio
 import json
 
 from src.lingua_viva import config
-from src.lingua_viva.reasoning import ReasoningEngine
+from src.lingua_viva.reasoning import ReasonResult, ReasoningEngine
 
 
 def run(coro):
@@ -61,11 +61,13 @@ def test_reasoning_falls_back_without_model(monkeypatch, tmp_path):
 
     result = run(ReasoningEngine().reason("Help", {"riu_id": "lv-test"}, system_prompt="Prompt"))
 
-    assert result.model_used == "none"
-    # P1-2 (Claudia QA 2026-08-03): the fallback is a teacher-facing setup
-    # message, not a bracketed developer placeholder with the RIU id.
+    assert result.model_used == "ollama/qwen2.5:3b"
+    assert result.error == "model_unreachable"
+    # HF2 (2026-08-04): a configured local model that cannot be reached is
+    # not the same as a missing installation. Say what failed.
     assert not result.content.startswith("[")
-    assert "Ollama" in result.content
+    assert "I tried to reach ollama/qwen2.5:3b" in result.content
+    assert "install Ollama" not in result.content
 
 
 def test_reasoning_provider_config_precedes_default_model(monkeypatch, tmp_path):
@@ -111,6 +113,7 @@ def test_endpoint_uses_saved_provider_key(monkeypatch, tmp_path):
 def test_ollama_circuit_breaker_opens_after_three_timeouts(monkeypatch, tmp_path):
     reset_breaker()
     monkeypatch.setenv("LV_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setattr(config, "ollama_reachable", lambda: False)
     calls = {"count": 0}
 
     def timeout(*args, **kwargs):
@@ -126,6 +129,44 @@ def test_ollama_circuit_breaker_opens_after_three_timeouts(monkeypatch, tmp_path
 
     result = run(engine.reason("Help", {}, model="ollama/qwen2.5:7b", system_prompt="Prompt"))
 
-    assert "Ollama appears to be down" in result.content
+    assert "I tried to reach ollama/qwen2.5:7b" in result.content
+    assert result.error == "ollama_unreachable"
     assert calls["count"] == 3
     reset_breaker()
+
+
+def test_fresh_reasoning_engine_does_not_inherit_stale_ollama_breaker(monkeypatch, tmp_path):
+    reset_breaker()
+    monkeypatch.setenv("LV_CONFIG_HOME", str(tmp_path))
+    ReasoningEngine._ollama_failures = 3
+    ReasoningEngine._ollama_breaker_open_until = 9999999999.0
+
+    async def ok_call(self, query, system_prompt, model, max_tokens=2000):
+        return ReasonResult(content="Use a counting game.", confidence=0.75, model_used=model, tokens_used=3)
+
+    monkeypatch.setattr(ReasoningEngine, "_call_model", ok_call)
+
+    result = run(ReasoningEngine().reason("What are three Italian number games?", {}, model="ollama/qwen2.5:7b", system_prompt="Prompt"))
+
+    assert result.content == "Use a counting game."
+    assert result.model_used == "ollama/qwen2.5:7b"
+
+
+def test_open_breaker_rechecks_ollama_before_refusing(monkeypatch, tmp_path):
+    reset_breaker()
+    monkeypatch.setenv("LV_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setattr(config, "ollama_reachable", lambda: True)
+    engine = ReasoningEngine()
+    engine._ollama_failures = 3
+    engine._ollama_breaker_open_until = 9999999999.0
+
+    async def ok_call(query, system_prompt, model, max_tokens=2000):
+        return ReasonResult(content="Ollama recovered.", confidence=0.75, model_used=model, tokens_used=3)
+
+    monkeypatch.setattr(engine, "_call_model", ok_call)
+
+    result = run(engine.reason("What are three Italian number games?", {}, model="ollama/qwen2.5:7b", system_prompt="Prompt"))
+
+    assert result.content == "Ollama recovered."
+    assert engine._ollama_failures == 0
+    assert engine._ollama_breaker_open_until == 0.0

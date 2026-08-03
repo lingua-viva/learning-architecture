@@ -11,6 +11,7 @@ import pytest
 from src.lingua_viva.messages import (
     DEFAULT_LOCAL_MODEL,
     local_only_no_model_message,
+    model_unreachable_message,
     no_model_message,
 )
 from src.lingua_viva.reasoning import ReasoningEngine
@@ -28,6 +29,15 @@ def test_messages_are_speakable_and_actionable():
 
 def test_local_only_message_explains_why_external_is_closed():
     assert "student or family information" in local_only_no_model_message()
+
+
+def test_model_unreachable_message_does_not_claim_install_missing():
+    message = model_unreachable_message("ollama/qwen2.5:7b", "connection refused")
+
+    assert "I tried to reach ollama/qwen2.5:7b" in message
+    assert "connection refused" in message
+    assert "install Ollama" not in message
+    assert "[" not in message and "]" not in message
 
 
 @pytest.mark.asyncio

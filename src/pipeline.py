@@ -48,6 +48,7 @@ from src.lingua_viva.model_gate import (
     is_external_model,
     is_provably_local_model,
 )
+from src.lingua_viva.messages import model_unreachable_message
 
 
 @dataclass
@@ -123,6 +124,16 @@ class ReasonResult:
     confidence: float
     model_used: str
     tokens_used: int = 0
+    error: str = ""
+    error_detail: str = ""
+
+
+def _connection_reason(exc: BaseException) -> str:
+    reason = getattr(exc, "reason", None)
+    if reason:
+        return str(reason)
+    text = str(exc).strip()
+    return text[:160] if text else "the connection failed"
 
 
 @dataclass
@@ -262,6 +273,10 @@ class ReasoningEngine:
     """
 
     _is_external_model = staticmethod(is_external_model)
+
+    # DUPLICATE: the real web path injects src.lingua_viva.reasoning.ReasoningEngine.
+    # This legacy copy remains for direct Pipeline tests; keep degraded-state
+    # wording synchronized until the duplicate can be removed safely.
 
     async def reason(
         self,
@@ -464,8 +479,17 @@ class ReasoningEngine:
                     model_used=model,
                     tokens_used=tokens,
                 )
-        except (error.URLError, ConnectionError, TimeoutError, KeyError):
-            return None  # Provider unreachable — fallback to placeholder
+        except (error.URLError, ConnectionError, TimeoutError) as exc:
+            return ReasonResult(
+                content=model_unreachable_message(model, _connection_reason(exc)),
+                confidence=0.0,
+                model_used=model,
+                tokens_used=0,
+                error="model_unreachable",
+                error_detail=f"{type(exc).__name__}: {str(exc)[:200]}",
+            )
+        except KeyError:
+            return None
 
     @staticmethod
     def _resolve_endpoint(model: str) -> tuple:

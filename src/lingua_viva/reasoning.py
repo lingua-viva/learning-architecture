@@ -10,7 +10,7 @@ from urllib import error, request
 
 from . import config
 from .filemap import build_filemap_context, infer_education_domain
-from .messages import local_only_no_model_message, no_model_message
+from .messages import local_only_no_model_message, model_unreachable_message, no_model_message
 from .model_gate import exit_destination, is_external_model, is_provably_local_model
 from .privacy_log import log_event
 from .traces import append_trace, new_trace
@@ -26,11 +26,23 @@ class ReasonResult:
     error_detail: str = ""
 
 
+def _connection_reason(exc: BaseException) -> str:
+    reason = getattr(exc, "reason", None)
+    if reason:
+        return str(reason)
+    text = str(exc).strip()
+    return text[:160] if text else "the connection failed"
+
+
 class ReasoningEngine:
     """Thin Lingua Viva reasoning client for local-first model calls."""
 
     _ollama_failures = 0
     _ollama_breaker_open_until = 0.0
+
+    def __init__(self) -> None:
+        self._ollama_failures = 0
+        self._ollama_breaker_open_until = 0.0
 
     async def reason(
         self,
@@ -124,9 +136,11 @@ class ReasoningEngine:
             if not self._is_external_model(resolved_model):
                 if self._ollama_breaker_open(resolved_model):
                     result = ReasonResult(
-                        content="Ollama appears to be down - check if it's running, then try again.",
+                        content=model_unreachable_message(resolved_model, "the previous attempts failed and Ollama is not reachable yet"),
                         confidence=0.0,
                         model_used=resolved_model,
+                        error="ollama_unreachable",
+                        error_detail="circuit_breaker_open",
                     )
                     self._append_trace(query, context, result, start)
                     return result
@@ -220,7 +234,18 @@ class ReasoningEngine:
                 error="timeout",
                 error_detail=f"The model took longer than {timeout_seconds:.0f}s to respond. Try a smaller model or a simpler question.",
             )
-        except (error.URLError, ConnectionError, OSError, json.JSONDecodeError):
+        except (error.URLError, ConnectionError, OSError) as exc:
+            if self._is_ollama_model(model):
+                self._record_ollama_failure()
+            return ReasonResult(
+                content=model_unreachable_message(model, _connection_reason(exc)),
+                confidence=0.0,
+                model_used=model,
+                tokens_used=0,
+                error="model_unreachable",
+                error_detail=f"{type(exc).__name__}: {str(exc)[:200]}",
+            )
+        except json.JSONDecodeError:
             if self._is_ollama_model(model):
                 self._record_ollama_failure()
             return None
@@ -283,20 +308,22 @@ class ReasoningEngine:
         candidate = (model or "").lower()
         return candidate.startswith("ollama/") or ("/" not in candidate)
 
-    @classmethod
-    def _ollama_breaker_open(cls, model: str) -> bool:
-        return cls._is_ollama_model(model) and time.time() < cls._ollama_breaker_open_until
+    def _ollama_breaker_open(self, model: str) -> bool:
+        if not self._is_ollama_model(model) or time.time() >= self._ollama_breaker_open_until:
+            return False
+        if config.ollama_reachable():
+            self._reset_ollama_failures()
+            return False
+        return True
 
-    @classmethod
-    def _record_ollama_failure(cls) -> None:
-        cls._ollama_failures += 1
-        if cls._ollama_failures >= 3:
-            cls._ollama_breaker_open_until = time.time() + 30
+    def _record_ollama_failure(self) -> None:
+        self._ollama_failures += 1
+        if self._ollama_failures >= 3:
+            self._ollama_breaker_open_until = time.time() + 30
 
-    @classmethod
-    def _reset_ollama_failures(cls) -> None:
-        cls._ollama_failures = 0
-        cls._ollama_breaker_open_until = 0.0
+    def _reset_ollama_failures(self) -> None:
+        self._ollama_failures = 0
+        self._ollama_breaker_open_until = 0.0
 
     def _append_trace(self, query: str, context: dict, result: ReasonResult, start: float) -> None:
         try:

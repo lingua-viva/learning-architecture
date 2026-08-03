@@ -41,3 +41,14 @@ def local_only_no_model_message() -> str:
         f"ollama.com, then open Terminal and run: ollama pull "
         f"{DEFAULT_LOCAL_MODEL} — then restart Lingua Viva."
     )
+
+
+def model_unreachable_message(model: str, reason: str = "connection failed") -> str:
+    """What the teacher sees/hears when a configured local model exists but
+    cannot be reached right now. Do not imply installation is missing."""
+    model_name = model or f"ollama/{DEFAULT_LOCAL_MODEL}"
+    return (
+        f"I tried to reach {model_name}, but {reason}. Ollama may still be "
+        "starting, loading the model, or temporarily unreachable. Check that "
+        "Ollama is running, then try again."
+    )
