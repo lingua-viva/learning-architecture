@@ -1,0 +1,18 @@
+{
+  "created": "2026-08-03",
+  "synthetic": true,
+  "purpose": "Teacher-readiness test packet for Lingua Viva — 39 checks in 7 priority-ordered rounds, run by Claudia on her own machine",
+  "tester": "Claudia (repo owner)",
+  "app_source": "linguaviva.art (fresh download each session)",
+  "expected_app_version": "desktop-v0.2.30 or later",
+  "report_destination": "lingua-viva/learning-architecture qa/ folder (this repo)",
+  "files": [
+    "START_HERE_CLAUDIA.md",
+    "QA_TESTING_PLAN.md",
+    "HARNESS_PROMPT.md",
+    "MANIFEST.json",
+    "documents/G3_family_relationships_unit.pdf",
+    "documents/student_record_marco_bianchi.md",
+    "documents/student_record_nora_rossi.md"
+  ]
+}
