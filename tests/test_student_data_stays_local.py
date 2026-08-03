@@ -28,6 +28,7 @@ import pytest
 
 import src.pipeline as pipeline_module
 from src.pipeline import Pipeline, ReasoningEngine, ReasonResult
+from src.lingua_viva.model_gate import clear_model_gate_cache
 
 STUDENT_QUERY = "Marco Rossi is struggling with reading, his IEP says he needs extra support"
 NEUTRAL_QUERY = "What are good warm up activities for a beginner Italian class?"
@@ -50,7 +51,9 @@ def cloud_provider(tmp_path, monkeypatch):
     monkeypatch.setenv("LV_CONFIG_HOME", str(tmp_path))
     monkeypatch.setenv("LV_PRIVACY_LOG_PATH", str(tmp_path / "privacy.ndjson"))
     monkeypatch.setenv("LV_TRACE_PATH", str(tmp_path / "traces.ndjson"))
+    monkeypatch.setenv("LV_LOCAL_MODEL_ALLOWLIST", "qwen2.5:3b,llama3.1:8b")
     monkeypatch.delenv("LV_REASON_MODEL", raising=False)
+    clear_model_gate_cache()
     return tmp_path
 
 
@@ -129,6 +132,8 @@ def test_local_only_overrides_even_an_explicit_model_override(cloud_provider, ca
 
 def test_fails_closed_when_no_local_model_can_be_resolved(cloud_provider, captured_calls, monkeypatch):
     engine = ReasoningEngine()
+    monkeypatch.delenv("LV_LOCAL_MODEL_ALLOWLIST", raising=False)
+    clear_model_gate_cache()
     monkeypatch.setattr(engine, "_resolve_best_model", lambda: "openai/gpt-4o")
 
     result = asyncio.run(
@@ -143,6 +148,31 @@ def test_fails_closed_when_no_local_model_can_be_resolved(cloud_provider, captur
     assert captured_calls == [], "nothing may be sent when no local model exists"
     assert result.model_used == "none:local_only"
     assert "on this computer" in result.content
+
+
+def test_local_looking_unreachable_model_fails_closed(cloud_provider, captured_calls, monkeypatch):
+    engine = ReasoningEngine()
+    monkeypatch.delenv("LV_LOCAL_MODEL_ALLOWLIST", raising=False)
+    clear_model_gate_cache()
+    monkeypatch.setattr(
+        "src.lingua_viva.model_gate.config.list_ollama_models",
+        lambda: [],
+    )
+    clear_model_gate_cache()
+
+    result = asyncio.run(
+        engine.reason(
+            query=STUDENT_QUERY,
+            context={},
+            model="ollama/qwen2.5:3b",
+            system_prompt="prompt",
+            local_only=True,
+        )
+    )
+
+    assert captured_calls == []
+    assert result.model_used == "none:local_only"
+    assert "No local model is available" in result.content
 
 
 def test_local_only_is_recorded_as_a_privacy_event(cloud_provider, captured_calls, monkeypatch):
@@ -164,6 +194,8 @@ def test_local_only_is_recorded_as_a_privacy_event(cloud_provider, captured_call
         ("openai/gpt-4o", True),
         ("groq/llama-3.1-70b", True),
         ("mistral/mistral-large", True),
+        ("anthropic/claude-3.5", True),
+        ("deepseek/deepseek-chat", True),
         # Ollama ':cloud' tags go through the local daemon but execute on
         # Ollama's servers — localhost in _resolve_endpoint() does not make
         # them local.

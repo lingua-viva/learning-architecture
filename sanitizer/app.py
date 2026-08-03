@@ -148,6 +148,7 @@ def sanitize(
     boundary: Optional[str] = None,
     block_signals: Optional[List[str]] = None,
     namespace: str = "default",
+    trace_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Sanitize text. Returns result with deterministic token substitution.
 
@@ -223,15 +224,16 @@ def sanitize(
     }
 
     # Log to firewall
-    _log_firewall(text, result)
+    _log_firewall(text, result, trace_id=trace_id)
 
     return result
 
 
-def _log_firewall(original_text: str, result: Dict[str, Any]) -> None:
+def _log_firewall(original_text: str, result: Dict[str, Any], trace_id: Optional[str] = None) -> None:
     """Append to firewall log (NDJSON)."""
     entry = {
         "timestamp": datetime.now().isoformat(),
+        "trace_id": trace_id or result.get("trace_id") or "",
         "blocked": result["blocked"],
         "redaction_count": len(result["redactions"]),
         "redaction_types": list({r["type"] for r in result["redactions"]}),
@@ -266,6 +268,7 @@ def create_app():
         boundary: Optional[str] = None
         block_signals: Optional[List[str]] = None
         namespace: str = "default"
+        trace_id: Optional[str] = None
 
     @app.get("/health")
     def health():
@@ -274,7 +277,8 @@ def create_app():
     @app.post("/sanitize/fast")
     def sanitize_fast(req: SanitizeRequest):
         result = sanitize(req.text, context=req.context, boundary=req.boundary,
-                         block_signals=req.block_signals, namespace=req.namespace)
+                         block_signals=req.block_signals, namespace=req.namespace,
+                         trace_id=req.trace_id)
         return JSONResponse(content=result)
 
     @app.post("/sanitize/deep")

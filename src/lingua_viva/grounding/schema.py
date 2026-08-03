@@ -66,7 +66,10 @@ class GIR:
     total_claims: int = 0
     unsupported_claims: int = 0
     uncertainty_claims: int = 0
-    method: str = "claim_support_v1_heuristic"
+    method: str = "claim_support_v2_linkage"
+    fabricated_identifiers: list[str] = field(default_factory=list)
+    v1_score: float | None = None
+    v1_delta: float | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)

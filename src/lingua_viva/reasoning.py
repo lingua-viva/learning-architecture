@@ -11,6 +11,7 @@ from urllib import error, request
 from . import config
 from .filemap import build_filemap_context, infer_education_domain
 from .messages import local_only_no_model_message, no_model_message
+from .model_gate import exit_destination, is_external_model, is_provably_local_model
 from .privacy_log import log_event
 from .traces import append_trace, new_trace
 
@@ -63,7 +64,10 @@ class ReasoningEngine:
             or self._resolve_best_model()
         )
 
-        if local_only and self._is_external_model(resolved_model):
+        if local_only and (
+            self._is_external_model(resolved_model)
+            or not is_provably_local_model(resolved_model)
+        ):
             try:
                 from src.lingua_viva.exit_gates import ExitRequest, check_exit
 
@@ -86,7 +90,7 @@ class ReasoningEngine:
                         os.environ.get("LV_REASON_MODEL"),
                         self._resolve_best_model(),
                     )
-                    if candidate and not self._is_external_model(candidate)
+                    if candidate and is_provably_local_model(candidate)
                 ),
                 None,
             )
@@ -105,6 +109,15 @@ class ReasoningEngine:
                 self._append_trace(query, context, result, start)
                 return result
             resolved_model = fallback
+
+        if not resolved_model:
+            result = ReasonResult(
+                content=no_model_message(),
+                confidence=0.0,
+                model_used="none",
+            )
+            self._append_trace(query, context, result, start)
+            return result
 
         if system_prompt:
             prompt = system_prompt
@@ -141,7 +154,7 @@ class ReasoningEngine:
     def _resolve_provider_model(self) -> Optional[str]:
         return config.resolve_provider_model()
 
-    def _resolve_best_model(self) -> str:
+    def _resolve_best_model(self) -> str | None:
         if not hasattr(self, "_cached_model"):
             self._cached_model = config.detect_model()
         return self._cached_model
@@ -234,31 +247,11 @@ class ReasoningEngine:
             return "https://api.mistral.ai/v1/chat/completions", {"Authorization": f"Bearer {key}"}
         return "http://localhost:11434/v1/chat/completions", {}
 
-    @staticmethod
-    def _is_external_model(model: str) -> bool:
-        """True when the call leaves this machine.
-
-        Ollama ":cloud" tags are dispatched through the local daemon but
-        execute on Ollama's servers, so a localhost endpoint does not make
-        them local. config.detect_model() falls back to a ":cloud" model when
-        no preferred local model is installed, which is exactly the case a
-        student-data query must not be answered by.
-        """
-        candidate = (model or "").lower()
-        return candidate.startswith(("openai/", "groq/", "mistral/")) or ":cloud" in candidate
+    _is_external_model = staticmethod(is_external_model)
 
     @staticmethod
     def _exit_destination(model: str) -> str:
-        candidate = (model or "").lower()
-        if candidate.startswith("openai/"):
-            return "openai"
-        if candidate.startswith("groq/"):
-            return "groq"
-        if candidate.startswith("mistral/"):
-            return "mistral"
-        if ":cloud" in candidate:
-            return "ollama:cloud"
-        return "local"
+        return exit_destination(model)
 
     @staticmethod
     def _known_student_names() -> list[str]:
@@ -288,7 +281,7 @@ class ReasoningEngine:
         dispatched via the local daemon, so it belongs to the breaker even
         though _is_external_model() counts it as leaving the machine."""
         candidate = (model or "").lower()
-        return not candidate.startswith(("openai/", "groq/", "mistral/"))
+        return candidate.startswith("ollama/") or ("/" not in candidate)
 
     @classmethod
     def _ollama_breaker_open(cls, model: str) -> bool:

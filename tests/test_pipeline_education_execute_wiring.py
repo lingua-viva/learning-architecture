@@ -41,13 +41,19 @@ class RecordingGateway:
 
 
 class RecordingReasoning:
-    def __init__(self, response_content="wrapper intro"):
+    def __init__(self, response_content="wrapper intro", confidence=0.8, model_used="fake-model"):
         self.call_count = 0
         self.response_content = response_content
+        self.confidence = confidence
+        self.model_used = model_used
 
     async def reason(self, query, context, model=None, default_model=None, system_prompt=None, local_only=False, max_tokens=2000):
         self.call_count += 1
-        return ReasonResult(content=self.response_content, confidence=0.8, model_used="fake-model")
+        return ReasonResult(
+            content=self.response_content,
+            confidence=self.confidence,
+            model_used=self.model_used,
+        )
 
 
 class StubExecutor:
@@ -108,6 +114,28 @@ def test_ok_status_wraps_and_appends_verbatim_markdown_unaltered():
     assert reasoning.call_count == 1
     assert "Here's the grouping for tomorrow." in result.synthesis.content
     # The module's markdown must appear byte-for-byte, not re-derived.
+    assert markdown in result.synthesis.content
+
+
+def test_ok_status_does_not_append_after_no_model_message():
+    reasoning = RecordingReasoning(
+        response_content="I need a local AI model to answer questions about your students.",
+        confidence=0.0,
+        model_used="none:local_only",
+    )
+    markdown = "# Teacher Guide\n\n- Group A: Marco, Nora"
+    executor = StubExecutor(ExecutionResult("LV-TCH-002", "ok", markdown))
+    pipeline = Pipeline(reasoning=reasoning, education_executor=executor)
+
+    result = asyncio.run(pipeline.run(
+        "group my students for tomorrow flexible grouping",
+        eval_mode=True,
+    ))
+
+    assert reasoning.call_count == 1
+    assert result.synthesis.model_used == "none:deterministic_only"
+    assert "Generated without an AI model from roster data" in result.synthesis.content
+    assert "I need a local AI model" not in result.synthesis.content
     assert markdown in result.synthesis.content
 
 

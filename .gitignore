@@ -33,6 +33,7 @@ scratch/onboarding/
 
 # Lingua Viva support loop runtime state
 .lv_support/
+.lv_teacher_readiness/
 
 # pytest scan-root fixture (filemap auto-scan tests)
 .pytest-scan-home/

@@ -68,6 +68,7 @@ def sanitize_text(
     context: str = "general",
     block_signals: Optional[List[str]] = None,
     namespace: str = "default",
+    trace_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Sanitize text through the unified service.
 
@@ -83,6 +84,7 @@ def sanitize_text(
             "context": context,
             "block_signals": block_signals if block_signals is not None else [],
             "namespace": namespace,
+            "trace_id": trace_id,
         }).encode()
 
         req = Request(
@@ -105,7 +107,13 @@ def sanitize_text(
             # Dev mode fallback: direct import
             try:
                 from sanitizer.app import sanitize
-                return sanitize(text, context=context, block_signals=block_signals, namespace=namespace)
+                return sanitize(
+                    text,
+                    context=context,
+                    block_signals=block_signals,
+                    namespace=namespace,
+                    trace_id=trace_id,
+                )
             except ImportError:
                 pass
 

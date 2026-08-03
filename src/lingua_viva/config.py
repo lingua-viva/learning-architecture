@@ -189,11 +189,11 @@ def list_ollama_models(timeout: int = 5) -> list[str]:
     return [name for name in names if isinstance(name, str)]
 
 
-def detect_model(installed_models: list[str] | None = None) -> str:
+def detect_model(installed_models: list[str] | None = None) -> str | None:
     try:
         installed = set(installed_models if installed_models is not None else list_ollama_models())
     except (error.URLError, ConnectionError, TimeoutError, OSError, json.JSONDecodeError):
-        return "ollama/qwen2.5:3b"
+        return None
     for model in LOCAL_MODEL_PREFERENCE:
         if model in installed:
             return f"ollama/{model}"

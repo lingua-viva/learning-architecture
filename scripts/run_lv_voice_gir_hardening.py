@@ -129,6 +129,9 @@ def _extract_fields(data: dict) -> dict:
         "classification_confidence": classification.get("confidence"),
         "gir_score": data.get("gir_score") or gir.get("score"),
         "gir_method": data.get("gir_method") or gir.get("method") or "",
+        "gir_v1_score": gir.get("v1_score"),
+        "gir_v1_delta": gir.get("v1_delta"),
+        "fabricated_identifiers": gir.get("fabricated_identifiers") or [],
         "voice_tone": data.get("voice_tone") or "",
         "tone_prefix": data.get("tone_prefix") or "",
         "grounding_tier_used": grounding.get("tier_used") or "",
@@ -264,6 +267,8 @@ def classify_verdict(ev: dict) -> str:
             issues.append("overconfident_low_gir")
         if gir < 0.8 and not prefix:
             issues.append("missing_hedge_prefix")
+    if ev.get("fabricated_identifiers") and tone == "plain":
+        issues.append("fabricated_identifier_plain_tone")
 
     if ev.get("tts_result") == "privacy_refusal" and ev["bucket"] != "student_support":
         issues.append("unexpected_privacy_block")
@@ -339,6 +344,18 @@ def main():
         print("\nERRORS:")
         for r in errors:
             print(f"  #{r['scenario_id']} ({r['bucket']}): {r.get('error') or r['verdict']}")
+
+    deltas = [
+        float(r["gir_v1_delta"])
+        for r in results
+        if isinstance(r.get("gir_v1_delta"), (int, float))
+    ]
+    if deltas:
+        print("\nGIR v1 -> v2 shadow delta:")
+        print(f"  count: {len(deltas)}")
+        print(f"  avg:   {sum(deltas) / len(deltas):.4f}")
+        print(f"  min:   {min(deltas):.4f}")
+        print(f"  max:   {max(deltas):.4f}")
 
     client.close()
 

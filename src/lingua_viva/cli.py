@@ -98,6 +98,15 @@ def _serve(args: argparse.Namespace) -> int:
 
 
 def _eval(args: argparse.Namespace) -> int:
+    if args.eval_command == "teacher-readiness":
+        from src.lingua_viva.teacher_readiness import print_summary, run_teacher_readiness
+
+        report = run_teacher_readiness()
+        if args.json:
+            _print_json(report.as_dict())
+        else:
+            print(print_summary(report))
+        return 0
     if args.eval_command != "golden":
         return 1
     from ontology.engine import OntologyEngine
@@ -488,6 +497,8 @@ def build_parser() -> argparse.ArgumentParser:
     golden = eval_sub.add_parser("golden", help="Run the education golden classification suite")
     golden.add_argument("path", nargs="?", default="tests/golden_education_v1.yaml")
     golden.add_argument("--json", action="store_true")
+    teacher_readiness = eval_sub.add_parser("teacher-readiness", help="Run teacher-readiness persona route harness")
+    teacher_readiness.add_argument("--json", action="store_true")
 
     audit = sub.add_parser(
         "audit",

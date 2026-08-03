@@ -309,6 +309,12 @@ export async function installPythonDeps(pythonCmd: string, repoRoot: string): Pr
     "pdfplumber==0.11.9",
     "sqlite-vec==0.1.9",
     "faster-whisper==1.1.1",
+    // P0 (Chip 0.2.31 regression, 2026-08-04): faster-whisper imports
+    // requests through its model-download path. It arrived transitively via
+    // huggingface-hub until that stack moved to httpx, leaving voice probes
+    // false on fresh teacher machines. Keep it explicit until the build-time
+    // lockfile fully closes transitive drift.
+    "requests>=2.28",
     // P0-1 (Claudia QA 2026-08-03): av + ctranslate2 are TRANSITIVE deps of
     // faster-whisper. Left implicit, pip's resolution failed silently on a
     // teacher machine (--quiet swallowed the error) and every voice feature
@@ -390,7 +396,7 @@ export type DepVerification = {
 
 const SERVER_IMPORTS = [
   "yaml", "fastapi", "starlette", "uvicorn", "httpx",
-  "websockets", "pdfplumber", "sqlite_vec", "multipart",
+  "websockets", "pdfplumber", "sqlite_vec", "requests", "multipart",
 ];
 const VOICE_IMPORTS = ["av", "ctranslate2", "faster_whisper"];
 

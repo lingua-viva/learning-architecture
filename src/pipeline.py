@@ -43,6 +43,11 @@ from src.context_builder import ContextBuilder
 from lenses import LensEngine
 from ontology.proposals.candidate import CandidateStore
 from ontology.learned_weights import LearnedWeights
+from src.lingua_viva.model_gate import (
+    exit_destination,
+    is_external_model,
+    is_provably_local_model,
+)
 
 
 @dataclass
@@ -256,16 +261,7 @@ class ReasoningEngine:
     on a known map with all available evidence.
     """
 
-    # Model strings whose call leaves this machine. Ollama ":cloud" tags go
-    # through the local daemon but execute on Ollama's servers, so they are
-    # external for privacy purposes even though _resolve_endpoint() sends
-    # them to localhost.
-    EXTERNAL_MODEL_PREFIXES = ("openai/", "groq/", "mistral/")
-
-    @classmethod
-    def _is_external_model(cls, model: Optional[str]) -> bool:
-        candidate = (model or "").lower()
-        return candidate.startswith(cls.EXTERNAL_MODEL_PREFIXES) or ":cloud" in candidate
+    _is_external_model = staticmethod(is_external_model)
 
     async def reason(
         self,
@@ -323,7 +319,10 @@ class ReasoningEngine:
             or self._resolve_best_model()
         )
 
-        if local_only and self._is_external_model(resolved_model):
+        if local_only and (
+            self._is_external_model(resolved_model)
+            or not is_provably_local_model(resolved_model)
+        ):
             fallback = next(
                 (
                     candidate
@@ -332,7 +331,7 @@ class ReasoningEngine:
                         os.environ.get("LV_REASON_MODEL"),
                         self._resolve_best_model(),
                     )
-                    if candidate and not self._is_external_model(candidate)
+                    if candidate and is_provably_local_model(candidate)
                 ),
                 None,
             )
@@ -353,6 +352,15 @@ class ReasoningEngine:
                     model_used="none:local_only",
                 )
             resolved_model = fallback
+
+        if not resolved_model:
+            from src.lingua_viva.messages import no_model_message
+
+            return ReasonResult(
+                content=no_model_message(),
+                confidence=0.0,
+                model_used="none",
+            )
 
         if system_prompt:
             result = await self._call_model(query, system_prompt, resolved_model, max_tokens=max_tokens)
@@ -395,52 +403,23 @@ class ReasoningEngine:
             return f"{default_provider}/{model_name}"
         return None
 
-    def _resolve_best_model(self) -> str:
+    def _resolve_best_model(self) -> Optional[str]:
         """Auto-detect best available model. Prefer local, then cloud."""
         if not hasattr(self, "_cached_model"):
             self._cached_model = self._detect_model()
         return self._cached_model
 
-    def _detect_model(self) -> str:
-        """Query Ollama for installed models, pick the best for reasoning."""
-        import json
-        from urllib import request, error
+    def _detect_model(self) -> Optional[str]:
+        """Query Ollama for installed models, pick the best for reasoning.
 
-        # Preferred local models for reasoning/synthesis (best first).
-        # qwen3:* demoted to last resort (2026-08-02): thinking models with no
-        # think suppression on LV's OpenAI-compat path — they hit the 60s
-        # REASON timeout with 0 tokens on CPU (see trace ledger 2026-08-02).
-        # Keep in sync with LOCAL_MODEL_PREFERENCE in lingua_viva/config.py.
-        LOCAL_PREFERENCE = [
-            "phi4:14b",
-            "qwen2.5:14b",
-            "llama3.1:8b",
-            "qwen2.5:7b",
-            "mistral:7b",
-            "qwen2.5:3b",
-            "qwen3:14b",
-            "qwen3:8b",
-        ]
-        # Cloud fallback (still via Ollama, but data leaves machine)
-        CLOUD_FALLBACK = "kimi-k2.7-code:cloud"
+        Delegates to config.detect_model() — the single source of truth for
+        LOCAL_MODEL_PREFERENCE ordering and the None-on-unreachable contract
+        (2026-08-04 unification: this method previously carried a parallel
+        copy of the preference list that could drift).
+        """
+        from src.lingua_viva import config as lv_config
 
-        try:
-            req = request.Request("http://localhost:11434/api/tags", method="GET")
-            with request.urlopen(req, timeout=5) as resp:
-                data = json.loads(resp.read())
-                installed = {m["name"] for m in data.get("models", [])}
-
-            # Pick the best local model that's actually installed
-            for model in LOCAL_PREFERENCE:
-                if model in installed:
-                    return f"ollama/{model}"
-
-            # No preferred local model found — try cloud
-            return f"ollama/{CLOUD_FALLBACK}"
-
-        except (error.URLError, ConnectionError, TimeoutError):
-            # Ollama not running at all
-            return "ollama/qwen2.5:3b"  # Will fail gracefully in _call_model
+        return lv_config.detect_model()
 
     async def _call_model(
         self,
@@ -509,6 +488,10 @@ class ReasoningEngine:
         else:
             # Default: Ollama (handles both local and :cloud models)
             return "http://localhost:11434/v1/chat/completions", {}
+
+    @staticmethod
+    def _exit_destination(model: Optional[str]) -> str:
+        return exit_destination(model)
 
 
 class SynthesisEngine:
@@ -886,12 +869,23 @@ class Pipeline:
                 system_prompt=wrapper_system_prompt,
                 local_only=entry_gate_blocked_external,
             )
-            local_result = ReasonResult(
-                content=f"{wrapper_result.content}\n\n{execution_result.markdown}",
-                confidence=wrapper_result.confidence,
-                model_used=wrapper_result.model_used,
-                tokens_used=wrapper_result.tokens_used,
-            )
+            if wrapper_result.model_used in ("none", "none:local_only") or wrapper_result.confidence <= 0:
+                local_result = ReasonResult(
+                    content=(
+                        "**Generated without an AI model from roster data - review carefully.**\n\n"
+                        f"{execution_result.markdown}"
+                    ),
+                    confidence=0.25,
+                    model_used="none:deterministic_only",
+                    tokens_used=wrapper_result.tokens_used,
+                )
+            else:
+                local_result = ReasonResult(
+                    content=f"{wrapper_result.content}\n\n{execution_result.markdown}",
+                    confidence=wrapper_result.confidence,
+                    model_used=wrapper_result.model_used,
+                    tokens_used=wrapper_result.tokens_used,
+                )
         else:
             local_result = await self.reasoning.reason(
                 query=user_message,
