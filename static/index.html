@@ -485,6 +485,14 @@
     .voice-companion.is-listening .vc-mic {
       box-shadow: 0 0 0 8px rgba(118, 211, 255, .18);
     }
+    /* P0-1 (Claudia QA 2026-08-03): when the server says STT is not
+       available, every mic surface must show it — not just fail on tap. */
+    .vc-mic.is-unavailable {
+      background: #5a6b66;
+      border-color: #5a6b66;
+      color: #c9d6d1;
+      opacity: .7;
+    }
     .voice-companion.is-processing .vc-mic {
       background: #eebe5c;
       border-color: #eebe5c;
@@ -671,6 +679,20 @@
     #lv-toast.error {
       background: #7c2d2d;
     }
+    /* P2-1 (Claudia QA 2026-08-03): a successful save must be unmissable.
+       The old 0.6s green flash faded while clearObserveForm() emptied the
+       form — teachers read "form cleared" as "nothing happened" and saved
+       twice. Success toasts sit at the TOP of the viewport and stay 6s. */
+    #lv-toast.success {
+      bottom: auto;
+      top: 16px;
+      background: #276749;
+      font-weight: 600;
+      animation: lv-toast-slide-in 0.3s ease-out;
+    }
+    @keyframes lv-toast-slide-in {
+      from { transform: translateX(-50%) translateY(-20px); opacity: 0; }
+    }
   </style>
 </head>
 <body>
@@ -799,6 +821,49 @@
         this.audioChunks = [];
         this.listening = false;
       },
+      // P0-1 (Claudia QA 2026-08-03): the server tells us whether local
+      // transcription actually works (/api/voice/probe). null = not yet
+      // known (never block on a transient probe failure), false = the
+      // packaged Python is missing voice components. Every mic flow —
+      // companion, Ask, Observe, and anything added later — funnels
+      // through captureLocalStt, so the gate lives here, and
+      // applySttAvailability() repaints every visible mic surface.
+      sttAvailable: null,
+      sttUnavailableText: "Voice input isn't set up on this computer yet. You can type everything instead. Restart Lingua Viva to retry voice setup.",
+      async probeStt() {
+        try {
+          const response = await fetch("/api/voice/probe");
+          const data = await response.json();
+          this.sttAvailable = Boolean(data?.stt?.available);
+        } catch {
+          this.sttAvailable = null; // unknown — do not disable the mic on a hiccup
+        }
+        this.applySttAvailability();
+        return this.sttAvailable;
+      },
+      applySttAvailability() {
+        const unavailable = this.sttAvailable === false;
+        const mic = this.get("vc-mic");
+        if (mic) {
+          mic.classList.toggle("is-unavailable", unavailable);
+          const label = unavailable ? "Voice input unavailable — tap for details" : "Start voice input";
+          mic.setAttribute("aria-label", label);
+          mic.title = label;
+        }
+        const vcState = this.get("vc-state");
+        if (vcState && unavailable && !this.listening && !this.busy) {
+          vcState.textContent = "Voice unavailable — type instead";
+        }
+        // Observe view badge (re-created on every render, so renderView
+        // re-applies this after each navigation).
+        const micStatus = this.get("mic-status");
+        if (micStatus) {
+          micStatus.textContent = unavailable
+            ? this.sttUnavailableText
+            : "Use the voice companion mic or type below.";
+          micStatus.classList.toggle("warn", unavailable);
+        }
+      },
       async captureLocalStt({statusId, micId, inputId, onTranscript}) {
         if (this.busy) return;
         if (this.listening && this.mediaRecorder) {
@@ -808,6 +873,15 @@
         this.stateTargetId = statusId;
         const status = this.get(statusId);
         const mic = this.get(micId);
+        if (this.sttAvailable === false) {
+          if (status) status.textContent = this.sttUnavailableText;
+          updateVoiceCompanion("error", "Voice unavailable");
+          // Re-probe in the background: if the teacher (or Retry setup)
+          // just installed the voice components, the mic recovers without
+          // an app restart.
+          this.probeStt();
+          return;
+        }
         if (!navigator.mediaDevices || !window.MediaRecorder) {
           if (status) status.textContent = "Voice input is unavailable. You can still type.";
           return;
@@ -869,6 +943,15 @@
           try {
             const response = await fetch("/api/voice/stt", {method: "POST", body: blob});
             const data = await response.json();
+            if (data && data.available === false) {
+              // Server says the voice components are missing — flip every
+              // mic surface, don't show "faster-whisper is not installed".
+              this.sttAvailable = false;
+              this.applySttAvailability();
+              if (status) status.textContent = this.sttUnavailableText;
+              updateVoiceCompanion("error", "Voice unavailable");
+              return;
+            }
             if (!response.ok) throw new Error(data.error || "transcription failed");
             const transcript = String(data.transcript || "").trim();
             const input = this.get(inputId);
@@ -1072,7 +1155,7 @@
           mode === "error" ? "Try again" :
           mode === "success" ? "Done" :
           mode === "clarify" ? "Which student?" :
-          "Ready"
+          (voiceRuntime.sttAvailable === false ? "Voice unavailable — type instead" : "Ready")
         );
       }
       if (mic) {
@@ -1192,6 +1275,9 @@
           if (firstName) showVoiceTranscript(`"${transcript}" → ${firstName}`);
         }
         updateVoiceCompanion("success", "Saved");
+        // P2-1: visual twin of the spoken confirmation — voice saves clear
+        // no form, but the teacher may have the volume down.
+        showSaveToast(`observation for ${(resolved && resolved.display_name) || "your student"}`);
         voiceRuntime.speak(result.spoken_confirmation || "Saved.", result.tone_prefix || "");
         if (state.view === "observe") {
           try { await loadLens("obs-lens", false); } catch (error) { /* view refresh only */ }
@@ -1251,6 +1337,9 @@
       });
       mic.addEventListener("click", toggleVoiceCompanion);
       updateVoiceCompanion("idle", "Ready");
+      // P0-1: ask the server whether transcription actually works before
+      // the teacher's first tap — every mic surface repaints from this.
+      voiceRuntime.probeStt();
     }
 
     /*
@@ -1325,9 +1414,19 @@
       const toast = $("lv-toast");
       if (!toast) return;
       toast.textContent = message;
-      toast.className = `visible ${kind === "error" ? "error" : ""}`.trim();
+      const variant = kind === "error" ? "error" : kind === "success" ? "success" : "";
+      toast.className = `visible ${variant}`.trim();
       clearTimeout(toastTimer);
       toastTimer = setTimeout(() => { toast.className = ""; }, 6000);
+    }
+
+    // P2-1 (Claudia QA 2026-08-03): shared save confirmation for every
+    // surface that clears its form on success (Observe form, voice-act).
+    // The inline detail panels stay — they show WHAT was saved — but this
+    // is the signal that a save happened at all.
+    function showSaveToast(detail) {
+      const when = new Date().toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
+      showToast(`✓ Saved — ${detail} · ${when}`, "success");
     }
 
     async function api(path, options = {}) {
@@ -1455,6 +1554,9 @@
       } catch (error) {
         $("content").innerHTML = `<div class="panel"><h2>Could not load this view</h2><p>${escapeHtml(error.message)}</p></div>`;
       }
+      // Views re-create their mic status badges (e.g. Observe's
+      // #mic-status), so repaint STT availability after every render.
+      voiceRuntime.applySttAvailability();
     }
 
     async function renderHome() {
@@ -1898,6 +2000,9 @@
         $("obs-result").scrollIntoView({ behavior: "smooth", block: "nearest" });
         $("obs-result").classList.add("flash-success");
         setTimeout(() => $("obs-result").classList.remove("flash-success"), 2000);
+        // P2-1: the toast fires BEFORE the form clears so "form emptied"
+        // can never be the only visible outcome of a save.
+        showSaveToast(`observation for ${studentName}`);
         clearObserveForm();
         await loadLens("obs-lens", false);
       } catch (error) {

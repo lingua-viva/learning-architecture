@@ -10,6 +10,7 @@ from urllib import error, request
 
 from . import config
 from .filemap import build_filemap_context, infer_education_domain
+from .messages import local_only_no_model_message, no_model_message
 from .privacy_log import log_event
 from .traces import append_trace, new_trace
 
@@ -95,12 +96,7 @@ class ReasoningEngine:
                 pass
             if fallback is None:
                 result = ReasonResult(
-                    content=(
-                        "This question mentions student or family information, so it "
-                        "can only be answered by a model running on this computer. No "
-                        "local model is available right now — start Ollama, or remove "
-                        "the student details and ask again."
-                    ),
+                    content=local_only_no_model_message(),
                     confidence=0.0,
                     model_used="none:local_only",
                 )
@@ -130,9 +126,13 @@ class ReasoningEngine:
                 self._append_trace(query, context, result, start)
                 return result
 
+        # P1-2 (Claudia QA 2026-08-03): this used to be a bracketed developer
+        # placeholder that the UI rendered and the voice path read aloud.
+        # Speak an actionable setup message instead; model_used="none" is the
+        # signal every downstream degradation check keys on — keep it.
         result = ReasonResult(
-            content=f"[Local reasoning for {context.get('riu_id', 'lingua-viva')} - no model available]",
-            confidence=0.7,
+            content=no_model_message(),
+            confidence=0.0,
             model_used="none",
         )
         self._append_trace(query, context, result, start)

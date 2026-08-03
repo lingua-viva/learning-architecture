@@ -241,7 +241,15 @@ def classify_verdict(ev: dict) -> str:
     answer_lower = answer_preview.lower()
     if not answer_preview:
         return "NO_ANSWER"
-    if "no model available" in answer_lower or "ollama appears to be down" in answer_lower:
+    # Degraded-state phrasings: legacy placeholder ("no model available"),
+    # breaker message, and the teacher-facing setup messages from
+    # src/lingua_viva/messages.py (P1-2 fix).
+    if (
+        "no model available" in answer_lower
+        or "ollama appears to be down" in answer_lower
+        or "i need a local ai model" in answer_lower
+        or "no local model is available" in answer_lower
+    ):
         return "BLOCKED"
 
     gir = ev.get("gir_score")

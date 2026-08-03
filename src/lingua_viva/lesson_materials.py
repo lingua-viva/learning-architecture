@@ -33,6 +33,7 @@ from src.education.content_differentiator import (
     _cefr_shift,
 )
 from src.education.help_artifacts import _validate_safe_text
+from src.lingua_viva.messages import no_model_message
 
 SYSTEM_PROMPT = (
     "You are a curriculum materials writer for an international school. You produce "
@@ -208,10 +209,10 @@ async def _generate_tier_material(
     model_used = str(getattr(result, "model_used", "") or "")
     error = str(getattr(result, "error", "") or "")
     if error or model_used.startswith("none") or content.startswith("[Local reasoning"):
-        raise ValueError(
-            f"generation_failed:{tier}: no model produced content "
-            f"(model_used={model_used or 'unknown'}). Start Ollama and retry."
-        )
+        # P1-2 (Claudia QA 2026-08-03): the detail string is shown to the
+        # teacher via the 422 response — use the shared setup message
+        # instead of assuming she knows what Ollama is.
+        raise ValueError(f"generation_failed:{tier}: {no_model_message()}")
 
     parsed = _parse_material_response(content, tier, lesson)
     note = TIER_PROFILES[tier]["teacher_note"]

@@ -62,7 +62,10 @@ def test_reasoning_falls_back_without_model(monkeypatch, tmp_path):
     result = run(ReasoningEngine().reason("Help", {"riu_id": "lv-test"}, system_prompt="Prompt"))
 
     assert result.model_used == "none"
-    assert "lv-test" in result.content
+    # P1-2 (Claudia QA 2026-08-03): the fallback is a teacher-facing setup
+    # message, not a bracketed developer placeholder with the RIU id.
+    assert not result.content.startswith("[")
+    assert "Ollama" in result.content
 
 
 def test_reasoning_provider_config_precedes_default_model(monkeypatch, tmp_path):

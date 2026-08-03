@@ -278,6 +278,24 @@
       els.actionArea.classList.add('fade-in');
     }
 
+    // Persistent, accumulating warnings — step detail lines get overwritten
+    // as the flow advances; these do not (P0-1/P1-1, Claudia QA 2026-08-03).
+    function addWarning(text) {
+      let box = document.getElementById('setup-warnings');
+      if (!box) {
+        box = document.createElement('div');
+        box.id = 'setup-warnings';
+        box.style.cssText = 'margin-top:14px;padding:10px 14px;border-radius:8px;' +
+          'background:#fffaf0;border:1px solid #ed8936;color:#7b341e;' +
+          'font-size:13px;text-align:left;';
+        document.querySelector('.steps').after(box);
+      }
+      const line = document.createElement('div');
+      line.textContent = '⚠ ' + text;
+      line.style.marginTop = box.childElementCount ? '6px' : '0';
+      box.appendChild(line);
+    }
+
     // Listen for IPC from main process
     if (window.lvDesktop && window.lvDesktop.onSetupProgress) {
       window.lvDesktop.onSetupProgress(handleProgress);
@@ -468,6 +486,37 @@
               Retry setup
             </button>
           `);
+          break;
+
+        // Model pull states (P1-1, Claudia QA 2026-08-03) — rendered on the
+        // Ollama step; warnings also land in the persistent notice area so
+        // they survive later step updates.
+        case 'model':
+          setStep(els.ollamaStep, 'active');
+          setIcon(els.ollamaStep, '⟳');
+          els.ollamaDetail.textContent = detail || 'Preparing the local AI model...';
+          break;
+
+        case 'model_ok':
+          setStep(els.ollamaStep, 'done');
+          setIcon(els.ollamaStep, '✓');
+          els.ollamaDetail.textContent = detail || 'Local AI model ready.';
+          break;
+
+        case 'model_warn':
+          setStep(els.ollamaStep, 'needs-action');
+          setIcon(els.ollamaStep, '!');
+          els.ollamaDetail.textContent = detail || 'The AI model could not be downloaded.';
+          addWarning(detail || 'The AI model could not be downloaded. Restart the app to retry.');
+          break;
+
+        // Dependency verification warnings (P0-1, Claudia QA 2026-08-03)
+        case 'deps_warn':
+          addWarning(detail || 'Some components did not install.');
+          break;
+
+        case 'voice_warn':
+          addWarning(detail || 'Voice components could not be installed — voice input will be unavailable.');
           break;
 
         case 'loading':

@@ -89,12 +89,62 @@ export async function checkOllama(): Promise<BootstrapCheck> {
   return execFileText("ollama", ["--version"], 5000);
 }
 
+async function ollamaHasModel(model: string): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
+    const resp = await fetch("http://127.0.0.1:11434/api/tags", { signal: controller.signal });
+    clearTimeout(timer);
+    if (!resp.ok) return false;
+    const body = await resp.json() as { models?: Array<{ name?: string }> };
+    return (body.models || []).some((m) => {
+      const name = m.name || "";
+      // "qwen2.5:3b" matches exactly; a tagless request matches any tag of it.
+      return name === model || name === `${model}:latest`
+        || (!model.includes(":") && name.split(":")[0] === model);
+    });
+  } catch {
+    return false;
+  }
+}
+
 export async function ensureOllamaModel(model = DEFAULT_MODEL): Promise<BootstrapCheck> {
+  // P1-1 (Claudia QA 2026-08-03): this used to be a 120s CLI pull, called
+  // fire-and-forget. A ~2GB model on school wifi takes far longer than 120s,
+  // so the pull timed out silently and the teacher ended up with no model and
+  // a cryptic placeholder on every question. Now: generous timeout, verified
+  // outcome (the model must actually be in /api/tags afterwards), and an HTTP
+  // fallback for the daemon-running-without-CLI case checkOllama supports.
   const available = await checkOllama();
   if (!available.ok) {
     return { ok: false, detail: "Ollama is not installed or not on PATH." };
   }
-  return execFileText("ollama", ["pull", model], 120000);
+  if (await ollamaHasModel(model)) {
+    return { ok: true, detail: `Model ${model} already available.` };
+  }
+
+  const cliResult = await execFileText("ollama", ["pull", model], 1800000); // 30 min
+  if (!cliResult.ok) {
+    // CLI missing or failed — try the daemon's HTTP pull endpoint.
+    try {
+      const resp = await fetch("http://127.0.0.1:11434/api/pull", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: model, stream: false }),
+      });
+      if (!resp.ok) {
+        return { ok: false, detail: `Model pull failed (CLI: ${cliResult.detail}; HTTP: ${resp.status}).` };
+      }
+    } catch (err) {
+      return { ok: false, detail: `Model pull failed: ${cliResult.detail || String(err)}` };
+    }
+  }
+
+  // Trust nothing: verify the model is actually there now.
+  if (await ollamaHasModel(model)) {
+    return { ok: true, detail: `Model ${model} ready.` };
+  }
+  return { ok: false, detail: `Model ${model} still not available after pull.` };
 }
 
 // --- File download with redirect following ---
@@ -259,6 +309,15 @@ export async function installPythonDeps(pythonCmd: string, repoRoot: string): Pr
     "pdfplumber==0.11.9",
     "sqlite-vec==0.1.9",
     "faster-whisper==1.1.1",
+    // P0-1 (Claudia QA 2026-08-03): av + ctranslate2 are TRANSITIVE deps of
+    // faster-whisper. Left implicit, pip's resolution failed silently on a
+    // teacher machine (--quiet swallowed the error) and every voice feature
+    // died with "stt available: false". Listed explicitly so a failure is a
+    // failure of a named dep, and verified after install (verifyPythonDeps).
+    // Ranges, not exact pins: both ship platform-specific compiled wheels and
+    // the compatible exact version differs per OS/arch/Python.
+    "av>=11.0",
+    "ctranslate2>=4.0,<5",
     "python-multipart==0.0.27",
   ];
   // Strategy: try multiple pip invocations in order of preference.
@@ -310,6 +369,61 @@ export async function installPythonDeps(pythonCmd: string, repoRoot: string): Pr
     };
     tryNext();
   });
+}
+
+// --- Post-install dependency verification (P0-1, Claudia QA 2026-08-03) ---
+//
+// pip runs with --quiet and installPythonDeps resolves even when every attempt
+// failed ("server will show the real import error") — but voice deps are NOT
+// server deps: the backend boots fine without them and the mic just silently
+// does nothing. The only honest check is importing each package in the same
+// Python that will run the server. Two tiers:
+//   server: backend cannot start without these — surface loudly.
+//   voice:  backend runs, but every voice feature is dead — surface as a
+//           voice-specific warning so the wizard can say so in plain words.
+
+export type DepVerification = {
+  ok: boolean;
+  missingServer: string[];
+  missingVoice: string[];
+};
+
+const SERVER_IMPORTS = [
+  "yaml", "fastapi", "starlette", "uvicorn", "httpx",
+  "websockets", "pdfplumber", "sqlite_vec", "multipart",
+];
+const VOICE_IMPORTS = ["av", "ctranslate2", "faster_whisper"];
+
+export async function verifyPythonDeps(pythonCmd: string): Promise<DepVerification> {
+  // One subprocess, one report: try each import independently so we can name
+  // exactly what is missing instead of stopping at the first failure.
+  const probe = [
+    "import importlib, json",
+    `mods = ${JSON.stringify([...SERVER_IMPORTS, ...VOICE_IMPORTS])}`,
+    "missing = []",
+    "for m in mods:",
+    "    try:",
+    "        importlib.import_module(m)",
+    "    except Exception:",
+    "        missing.append(m)",
+    "print(json.dumps(missing))",
+  ].join("\n");
+  const args = pythonCmd === "py" ? ["-3", "-c", probe] : ["-c", probe];
+  const result = await execFileText(pythonCmd, args, 30000);
+  if (!result.ok) {
+    // Could not even run Python — treat everything as unverified/missing.
+    return { ok: false, missingServer: [...SERVER_IMPORTS], missingVoice: [...VOICE_IMPORTS] };
+  }
+  let missing: string[] = [];
+  try {
+    const parsed = JSON.parse(result.detail.trim().split("\n").pop() || "[]");
+    if (Array.isArray(parsed)) missing = parsed.filter((m): m is string => typeof m === "string");
+  } catch {
+    return { ok: false, missingServer: [...SERVER_IMPORTS], missingVoice: [...VOICE_IMPORTS] };
+  }
+  const missingServer = missing.filter((m) => SERVER_IMPORTS.includes(m));
+  const missingVoice = missing.filter((m) => VOICE_IMPORTS.includes(m));
+  return { ok: missing.length === 0, missingServer, missingVoice };
 }
 
 // --- Backend health probe ---

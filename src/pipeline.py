@@ -345,13 +345,10 @@ class ReasoningEngine:
             if fallback is None:
                 # Fail closed: no local model available and the data may not
                 # leave. Say so instead of quietly answering from the cloud.
+                from src.lingua_viva.messages import local_only_no_model_message
+
                 return ReasonResult(
-                    content=(
-                        "This question mentions student or family information, so it "
-                        "can only be answered by a model running on this computer. No "
-                        "local model is available right now — start Ollama, or remove "
-                        "the student details and ask again."
-                    ),
+                    content=local_only_no_model_message(),
                     confidence=0.0,
                     model_used="none:local_only",
                 )
@@ -362,10 +359,15 @@ class ReasoningEngine:
             if result:
                 return result
 
-        # Fallback: structured placeholder
+        # P1-2 (Claudia QA 2026-08-03): was a bracketed developer placeholder
+        # that got rendered — and spoken by TTS — verbatim. Both reasoning
+        # engines now share one actionable message; model_used="none" stays
+        # as the degradation signal downstream checks rely on.
+        from src.lingua_viva.messages import no_model_message
+
         return ReasonResult(
-            content=f"[Local reasoning for {context.get('riu_id', 'unknown')} — no model available]",
-            confidence=0.7,
+            content=no_model_message(),
+            confidence=0.0,
             model_used="none",
         )
 

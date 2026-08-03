@@ -569,7 +569,17 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 99
+version: 100
+# v100 (2026-08-03): Claudia QA fixes (FIX_BRIEF_CLAUDIA_QA_2026-08-03).
+#     static/index.html only. P0-1: /api/voice/probe wired into the UI —
+#     voiceRuntime.probeStt()/applySttAvailability() gate captureLocalStt
+#     (the chokepoint every mic flow uses) and repaint #vc-mic, #vc-state,
+#     and Observe's #mic-status on startup + every renderView; /api/voice/
+#     stt available:false responses flip availability instead of showing
+#     "faster-whisper is not installed". P2-1: #lv-toast success variant
+#     (top of viewport, 6s) + showSaveToast() fired before
+#     clearObserveForm() and on voice-act saves — "form emptied" can never
+#     be the only visible outcome of a save.
 # v99 (2026-08-02): QA blast-radius fixes (REPORT_LV_QA_BLAST_RADIUS_
 #     2026-08-02, BUG-2..BUG-8 + Class 2/3). static/index.html: global
 #     toast (#lv-toast) + api() network/HTTP error surfacing, observe form

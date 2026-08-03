@@ -11,6 +11,7 @@ import {
   installPythonWindows,
   installOllamaWindows,
   installPythonDeps,
+  verifyPythonDeps,
   refreshWindowsPath,
   startBackend,
   waitForBackend
@@ -131,21 +132,50 @@ async function runSetupFlow(root: string, window: BrowserWindow): Promise<void> 
   emitProgress(window, "ollama", "Checking for Ollama...");
   const ollamaCheck = await checkOllama();
 
+  // P1-1 (Claudia QA 2026-08-03): the model pull used to be fire-and-forget
+  // with .catch(() => {}) — a failed or timed-out pull left the teacher with
+  // no model and no message. Now the pull runs concurrently with dependency
+  // install/server start (so a 2GB download never blocks the app opening),
+  // but its RESULT is awaited and reported before the wizard finishes.
+  let modelPull: Promise<{ ok: boolean; detail: string }> | null = null;
+
   if (ollamaCheck.ok) {
     emitProgress(window, "ollama_ok", ollamaCheck.detail);
-    // Pull model in background (non-blocking for startup)
     if (process.env.LV_SKIP_MODEL_PULL !== "1") {
-      ensureOllamaModel(process.env.LV_OLLAMA_MODEL || undefined).catch(() => {});
+      emitProgress(window, "model", "Preparing the local AI model (first time may take a while)...");
+      modelPull = ensureOllamaModel(process.env.LV_OLLAMA_MODEL || undefined)
+        .catch((err) => ({ ok: false, detail: String(err instanceof Error ? err.message : err) }));
     }
   } else {
     emitProgress(window, "ollama_warn");
     // Wait for user decision (install or skip)
     await waitForOllamaResolution(window);
+    // If they installed Ollama during resolution, still ensure a model exists.
+    if (process.env.LV_SKIP_MODEL_PULL !== "1" && (await checkOllama()).ok) {
+      emitProgress(window, "model", "Preparing the local AI model (first time may take a while)...");
+      modelPull = ensureOllamaModel(process.env.LV_OLLAMA_MODEL || undefined)
+        .catch((err) => ({ ok: false, detail: String(err instanceof Error ? err.message : err) }));
+    }
   }
 
   // Step 3: Install Python deps + start server
   emitProgress(window, "server", "Installing dependencies...");
   await installPythonDeps(pythonCmd, root);
+
+  // P0-1 (Claudia QA 2026-08-03): pip runs --quiet and resolves even on
+  // failure. Verify every critical package actually imports in the Python
+  // that will run the server, and say so plainly when voice deps are missing
+  // — the backend boots fine without them, so nothing else would ever tell
+  // the teacher why her mic does nothing.
+  const depCheck = await verifyPythonDeps(pythonCmd);
+  if (depCheck.missingServer.length > 0) {
+    emitProgress(window, "deps_warn",
+      `Some components did not install (${depCheck.missingServer.join(", ")}). The app may not start — use Retry setup if it doesn't.`);
+  }
+  if (depCheck.missingVoice.length > 0) {
+    emitProgress(window, "voice_warn",
+      "Voice transcription components could not be installed. You can still type everything — voice input will be unavailable until setup is retried.");
+  }
 
   emitProgress(window, "server", "Starting Lingua Viva...");
   const started = startBackend(root, PORT, pythonCmd);
@@ -180,6 +210,37 @@ async function runSetupFlow(root: string, window: BrowserWindow): Promise<void> 
   }
 
   emitProgress(window, "server_ok");
+
+  // Model pull result is VERIFIED and REPORTED, never silent — but a long
+  // download must not hold the app hostage. Give it a short grace window; if
+  // it's still running, open the app and report via system notification when
+  // it finishes either way.
+  if (modelPull) {
+    const raced = await Promise.race([
+      modelPull.then((r) => ({ done: true as const, result: r })),
+      sleep(15000).then(() => ({ done: false as const, result: null })),
+    ]);
+    if (raced.done && raced.result) {
+      const modelResult = raced.result;
+      emitProgress(window, modelResult.ok ? "model_ok" : "model_warn",
+        modelResult.ok
+          ? "Local AI model ready."
+          : "The local AI model could not be downloaded. Questions will not get answers until it is — restart the app to retry.");
+    } else {
+      emitProgress(window, "model", "AI model still downloading — the app will open now and let you know when it's ready.");
+      void modelPull.then((modelResult) => {
+        try {
+          new Notification({
+            title: "Lingua Viva",
+            body: modelResult.ok
+              ? "Local AI model is ready — questions now get answers."
+              : "The AI model download failed. Restart Lingua Viva to retry.",
+          }).show();
+        } catch { /* notifications unavailable — model state still visible via /api/query message */ }
+      });
+    }
+  }
+
   emitProgress(window, "loading");
   await sleep(200);
 

@@ -188,7 +188,9 @@ REPO = Path(__file__).resolve().parent.parent
 #     Settings identity panel, un-provisioned nudge, sentinel ledger guards.
 #   v98 (2026-08-02): routing-memory hardening — raw values into
 #     record_decision at category_suggest emission sites (no route/UI change).
-EXPECTED_VERSION = 99
+#   v100 (2026-08-03): Claudia QA fixes — voice/probe wired into every mic
+#     surface (P0-1), success save toast before form clear (P2-1).
+EXPECTED_VERSION = 100
 
 
 def _html() -> str:

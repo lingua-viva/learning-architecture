@@ -62,6 +62,63 @@ see [`PUSH_TO_PRODUCTION.md`](PUSH_TO_PRODUCTION.md).
 
 ---
 
+## Grounding Integrity Rate (GIR) — LV Definition
+
+**GIR = 1 − (unsupported_claims + uncertainty_claims) / max(total_claims, 1)**
+
+Method `claim_support_v1_heuristic`, implemented in `src/lingua_viva/grounding/build.py`
+(schema in `grounding/schema.py`):
+
+- **claims** = sentence fragments of the synthesized answer.
+- **uncertainty_claims** = fragments containing hedge markers ("might", "possibly", "unclear"…).
+  Hedged claims are honest — they cost score but are not lies.
+- **grounded** = at least one *relevant* source backs the answer: a sources-ledger record
+  (`local`/`drive`/`slack` tiers, token-overlap relevance against the query) or a knowledge
+  citation. If grounded, `unsupported_claims = 0`; if not, every unhedged fragment is unsupported.
+- `synthesis_confidence < 0.1` forces score to 0.0 — a degraded engine cannot claim grounding.
+- The `external` tier is always `blocked` (`local_first_policy`). Student data never buys
+  grounding from the cloud.
+
+**The caught lie is mechanical, no interpretation:** the answer states something without a hedge,
+and `tier_used == "none"` with no knowledge citation. That single condition drives the score down.
+
+**Where it's computed — verdict, not reconstruction:** inline at Step 6.25 GROUND in
+`src/pipeline.py`, immediately after SYNTHESIZE, while `sources_used` and `source_citations` are
+still in memory. The verdict is stored on the path record (`gir_score`, `gir_method`) and in the
+`GroundingResult`. Never recompute GIR later from logs or proxies — the real moment is the only
+moment that has the ground truth.
+
+**What grounds each output type:**
+
+| Output | Grounding source fields |
+|---|---|
+| Ask answers / CEFR claims | `sources_used` (sources ledger) + `source_citations` (knowledge library) |
+| Parent reports & help artifacts | `source_observation_ids` (`src/education/help_artifacts.py`) — every artifact carries the observation IDs behind it |
+| Lesson materials | student-lens CEFR tier assignments + Manuale/curriculum alignment |
+| Grouping/tier suggestions | student-lens evidence (`because` field) — the system suggests, the teacher decides; a tier is never changed by the system |
+
+**Where the score closes the loop (all live):**
+- Voice tone (`src/lingua_viva/voice_tone.py`): ≥0.8 plain · ≥0.4 clarify prefix ("let's double
+  check this together") · <0.4 hedge. A confident voice on an ungrounded answer is a defect.
+- Ask chat renders a GIR badge per answer; action plans carry a `GroundingSummary` badge.
+- Golden workflow runner fails on `gir_out_of_range`; `scripts/run_lv_voice_gir_hardening.py`
+  checks tone↔GIR consistency (plain tone with GIR <0.8 = `tone_mismatch_high_gir`).
+
+**Lagging indicators — what drift looks like in an education app:**
+- **Level inflation**: CEFR level claims moving up with no new observation records behind them.
+- **Grouping staleness**: tier suggestions built from a lens whose newest observation predates
+  the decision window.
+- **Curriculum drift**: generated materials that cite no Manuale/curriculum source.
+- **Tone mismatch**: plain (confident) voice with GIR below the plain threshold.
+
+**Honest maturity label:** `claim_support_v1_heuristic` is sentence-level and token-overlap based,
+not per-claim semantic verification. Known gap (intended v2): Ask answers about a specific student
+do not yet check `source_observation_ids` linkage the way parent reports do — a CEFR claim in chat
+can be "grounded" by a relevant ledger record without naming the observations behind the level.
+Do not describe LV's GIR as claim-level verification until that lands.
+
+---
+
 ## Repo Basics
 
 - Single standalone repo: `git@lingua-viva:lingua-viva/learning-architecture.git`
