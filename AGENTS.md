@@ -66,15 +66,24 @@ see [`PUSH_TO_PRODUCTION.md`](PUSH_TO_PRODUCTION.md).
 
 **GIR = 1 − (unsupported_claims + uncertainty_claims) / max(total_claims, 1)**
 
-Method `claim_support_v1_heuristic`, implemented in `src/lingua_viva/grounding/build.py`
-(schema in `grounding/schema.py`):
+Method `claim_support_v2_linkage` (2026-08-04, supersedes `claim_support_v1_heuristic`),
+implemented in `src/lingua_viva/grounding/build.py` (schema in `grounding/schema.py`):
 
 - **claims** = sentence fragments of the synthesized answer.
 - **uncertainty_claims** = fragments containing hedge markers ("might", "possibly", "unclear"…).
-  Hedged claims are honest — they cost score but are not lies.
+  Hedged claims are honest — they cost score but are not lies. Hedging is NOT penalized when
+  `tier_used == "none"`: an honest "I have no observations yet" scores at least as well as a
+  fabricated confident answer.
+- **identifier linkage**: every `OBS-*`/`SRC-*` identifier cited in the answer must exist, and
+  classroom observation IDs must belong to the in-scope student. Fabricated or wrong-student
+  identifiers are listed in `gir.fabricated_identifiers` and force the fragment unsupported —
+  even when a relevant source record exists.
 - **grounded** = at least one *relevant* source backs the answer: a sources-ledger record
   (`local`/`drive`/`slack` tiers, token-overlap relevance against the query) or a knowledge
-  citation. If grounded, `unsupported_claims = 0`; if not, every unhedged fragment is unsupported.
+  citation. Support is scored **per fragment** (token overlap against the backing sources) —
+  a single relevant source no longer grants blanket amnesty to every claim in the answer.
+- **v1 shadow scoring**: `gir.v1_score` and `gir.v1_delta` record what v1 would have said, so
+  recalibration drift is measurable (`scripts/run_lv_voice_gir_hardening.py` prints deltas).
 - `synthesis_confidence < 0.1` forces score to 0.0 — a degraded engine cannot claim grounding.
 - The `external` tier is always `blocked` (`local_first_policy`). Student data never buys
   grounding from the cloud.
@@ -111,11 +120,13 @@ moment that has the ground truth.
 - **Curriculum drift**: generated materials that cite no Manuale/curriculum source.
 - **Tone mismatch**: plain (confident) voice with GIR below the plain threshold.
 
-**Honest maturity label:** `claim_support_v1_heuristic` is sentence-level and token-overlap based,
-not per-claim semantic verification. Known gap (intended v2): Ask answers about a specific student
-do not yet check `source_observation_ids` linkage the way parent reports do — a CEFR claim in chat
-can be "grounded" by a relevant ledger record without naming the observations behind the level.
-Do not describe LV's GIR as claim-level verification until that lands.
+**Honest maturity label:** `claim_support_v2_linkage` adds identifier-level linkage (cited
+`OBS-*`/`SRC-*` IDs must exist and belong to the in-scope student) and per-fragment
+token-overlap support, but fragment support is still lexical, not semantic entailment. A claim
+that paraphrases a source without token overlap can score unsupported (false negative), and a
+claim reusing source vocabulary to say something the source doesn't can score supported (false
+positive). Tone thresholds are still v1-calibrated — recalibration waits on shadow-window
+`v1_delta` data. Do not describe LV's GIR as semantic claim verification.
 
 ---
 
