@@ -219,6 +219,24 @@ def test_empty_question_is_a_400(roster):
     assert response.status_code == 400
 
 
+def test_oversized_question_is_a_400(no_egress, roster):
+    response = client.post("/api/ask", json={"question": "a" * (web.ASK_QUESTION_MAX_CHARS + 1)})
+    assert response.status_code == 400
+
+
+def test_failed_attempt_still_counts_as_egress(roster, privacy_log, perplexity_key, monkeypatch):
+    """external_call_made is logged BEFORE the call (reasoning.py semantics):
+    a post-gate attempt that errors still left the machine."""
+    def down(messages, max_tokens, key):
+        raise OSError("network unreachable")
+
+    monkeypatch.setattr(web, "_request_perplexity", down)
+    response = client.post("/api/ask", json={"question": "What are fun Italian number games?"})
+    body = response.json()
+    assert body["external_calls"] == 1
+    assert any(event["event_type"] == "external_call_made" for event in _events(privacy_log))
+
+
 def test_messages_are_plain_prose_no_brackets():
     for message in (
         ask_personal_data_refusal_message(),

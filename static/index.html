@@ -931,6 +931,7 @@
           return;
         }
         this.audioChunks = [];
+        try {
         this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
         const source = this.audioContext.createMediaStreamSource(this.mediaStream);
         this.analyser = this.audioContext.createAnalyser();
@@ -1010,6 +1011,13 @@
         // F1b: hard cap — the silence interval above is throttleable in a
         // hidden tab, so a recording must never be able to outlive this.
         this.maxCaptureTimer = setTimeout(() => this.stopCapture(), 30000);
+        } catch (error) {
+          // F1b (15-pass): recorder setup failed AFTER the mic was acquired
+          // — release the hardware immediately, never strand a live track.
+          this.cleanupCapture();
+          if (status) status.textContent = "Voice input failed to start. You can still type.";
+          updateVoiceCompanion("error", "Try again");
+        }
       },
       remoteAudio: null,
       speechQueue: [],
@@ -1049,7 +1057,7 @@
             audio.onended = () => {
               URL.revokeObjectURL(url);
               const status = this.get("ask-voice-status");
-              if (status) status.textContent = "Tap once to talk. Pause when finished, or tap again to stop.";
+              if (status) status.textContent = "Tap Ask to speak, or type below.";
               updateVoiceCompanion("idle", "Ready");
             };
             audio.onerror = () => { URL.revokeObjectURL(url); this.speakLocally(tonePrefix ? (tonePrefix + text) : text); };
@@ -1083,7 +1091,7 @@
         if (!text) { onDone(); return; }
         const done = () => {
           const status = this.get("ask-voice-status");
-          if (status && !this.speechQueue.length) status.textContent = "Tap once to talk. Pause when finished, or tap again to stop.";
+          if (status && !this.speechQueue.length) status.textContent = "Tap Ask to speak, or type below.";
           if (!this.speechQueue.length) updateVoiceCompanion("idle", "Ready");
           onDone();
         };
@@ -1149,7 +1157,7 @@
         utterance.volume = 1;
         utterance.onend = () => {
           const status = this.get("ask-voice-status");
-          if (status) status.textContent = "Tap once to talk. Pause when finished, or tap again to stop.";
+          if (status) status.textContent = "Tap Ask to speak, or type below.";
           updateVoiceCompanion("idle", "Ready");
         };
         utterance.onerror = () => {
@@ -2770,7 +2778,10 @@
     function renderAnswerSafety(meta) {
       const gir = (meta && meta.grounding && meta.grounding.gir) || {};
       const fabricated = Array.isArray(gir.fabricated_identifiers) ? gir.fabricated_identifiers : [];
-      const unsafe = Number(gir.score ?? 1) < 0.5 || fabricated.length > 0;
+      // A null/absent score means "no GIR signal", not "score zero" — only a
+      // real numeric score below threshold (or fabricated IDs) is unsafe.
+      const score = (gir.score === null || gir.score === undefined || Number.isNaN(Number(gir.score))) ? 1 : Number(gir.score);
+      const unsafe = score < 0.5 || fabricated.length > 0;
       const tonePrefix = String((meta && meta.tone_prefix) || "").trim();
       const warningText = tonePrefix || "⚠️ I could not verify this against real records.";
       const fabricatedText = fabricated.length
@@ -6166,7 +6177,11 @@
     function studentOptions() {
       // F5/FM-F: a select that determines WHO a record is written about
       // starts on a disabled placeholder, never on the first roster entry.
-      const placeholder = `<option value="" disabled ${state.selectedStudent ? "" : "selected"}>Choose a student…</option>`;
+      // A stale selectedStudent (archived student) must ALSO fall back to
+      // the placeholder — otherwise the browser silently selects the first
+      // enabled option and the auto-select bug returns.
+      const known = state.students.some(student => student.student_id === state.selectedStudent);
+      const placeholder = `<option value="" disabled ${known ? "" : "selected"}>Choose a student…</option>`;
       return placeholder + state.students.map(student => `<option value="${student.student_id}" ${student.student_id === state.selectedStudent ? "selected" : ""}>${escapeHtml(student.display_name)}</option>`).join("");
     }
 

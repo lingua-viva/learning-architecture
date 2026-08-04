@@ -55,6 +55,23 @@ def test_no_first_student_auto_select():
     assert "state.selectedStudent = state.students[0].student_id" not in HTML
 
 
+def test_stale_selected_student_falls_back_to_placeholder():
+    # 15-pass finding: a selectedStudent no longer on the roster must not let
+    # the browser silently select the first enabled option.
+    assert "state.students.some(student => student.student_id === state.selectedStudent)" in HTML
+
+
+def test_gir_null_score_is_not_treated_as_zero():
+    # 15-pass finding: gir.score null/absent means "no signal", never "0.00".
+    assert 'gir.score === null || gir.score === undefined' in HTML
+
+
+def test_recorder_setup_failure_releases_mic():
+    # 15-pass finding: MediaRecorder setup crash after getUserMedia must not
+    # strand a live mic track.
+    assert "Voice input failed to start. You can still type." in HTML
+
+
 def test_student_placeholder_and_refusals():
     assert "Choose a student…" in HTML
     assert "Choose a student before saving. Nothing was saved." in HTML

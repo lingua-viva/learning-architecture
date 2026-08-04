@@ -1967,6 +1967,7 @@ ASK_SUMMARY_MAX_TOKENS = 220   # brief §5.2: one-paragraph cap at the API level
 ASK_MORE_MAX_TOKENS = 800
 ASK_HISTORY_MAX_TURNS = 6
 ASK_HISTORY_MAX_CHARS = 4000
+ASK_QUESTION_MAX_CHARS = 8000
 
 
 def _perplexity_api_key() -> str:
@@ -2046,6 +2047,8 @@ async def ask_endpoint(payload: dict):
     question = str(payload.get("question", "")).strip()
     if not question:
         return JSONResponse({"error": "question is required"}, status_code=400)
+    if len(question) > ASK_QUESTION_MAX_CHARS:
+        return JSONResponse({"error": "question is too long"}, status_code=400)
     mode = "more" if payload.get("mode") == "more" else "summary"
     raw_history = payload.get("history") or []
     history = [
@@ -2124,6 +2127,9 @@ async def ask_endpoint(payload: dict):
         }
 
     started = time.time()
+    # Logged BEFORE the call (same semantics as reasoning.py's emitter): a
+    # failed attempt still left the machine, so egress accounting counts it.
+    log_event("external_call_made", query_text=question)
     try:
         data = await asyncio.to_thread(_request_perplexity, messages, max_tokens, key)
     except Exception as error:
@@ -2136,17 +2142,16 @@ async def ask_endpoint(payload: dict):
                 "type": "ask_unavailable",
                 "configured": False,
                 "message": ask_not_configured_message(),
-                "external_calls": 0,
+                "external_calls": 1,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         return {
             "type": "ask_unavailable",
             "configured": True,
             "message": ask_offline_message(),
-            "external_calls": 0,
+            "external_calls": 1,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
-    log_event("external_call_made", query_text=question)
 
     choices = data.get("choices") or []
     content = ""

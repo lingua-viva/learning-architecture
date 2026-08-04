@@ -199,7 +199,10 @@ REPO = Path(__file__).resolve().parent.parent
 #     PII egress refusal gate, ASK button + examples + stop/more intercepts,
 #     no-redirect rule (switchView("ask") removed); v104 = 401-vs-offline
 #     honesty fix in the same session.
-EXPECTED_VERSION = 104
+#   v105 (2026-08-04): 15-pass hardening of HF1+T8 — mic release on setup
+#     crash, null-GIR no false warning, stale-student placeholder fallback,
+#     Ask hint copy, question length cap, egress event before the call.
+EXPECTED_VERSION = 105
 
 
 def _html() -> str:

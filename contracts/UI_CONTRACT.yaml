@@ -569,7 +569,17 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 104
+version: 105
+# v105 (2026-08-04): 15-pass hardening of HF1+T8 (6 findings, all fixed):
+#     mic released when MediaRecorder setup crashes post-getUserMedia;
+#     gir.score null/absent reads as "no signal" not 0.00 (no false
+#     fabrication warnings); stale selectedStudent (archived student) falls
+#     back to the placeholder instead of browser-auto-selecting the first
+#     roster entry; TTS onended handlers write the current Ask hint (not
+#     the retired companion copy); /api/ask caps question length (8000);
+#     external_call_made logged BEFORE the Perplexity call so failed
+#     attempts count as egress (reasoning.py semantics), failure responses
+#     report external_calls=1 after a post-gate attempt.
 # v103-v104 (2026-08-04): T8 Ask = voice-first Perplexity
 #     (SPEC_T8_ASK_2026-08-04). v104 adds 401/403-vs-offline honesty in the
 #     same T8 session: a rejected Perplexity key reads as a setup problem
