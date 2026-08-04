@@ -1,0 +1,1 @@
+{"error":"generation_failed","detail":"generation_failed:foundational: I need a local AI model to answer questions about your students. To set this up: install Ollama from ollama.com, then open Terminal and run: ollama pull qwen2.5:3b — then restart Lingua Viva. This keeps all student data on your computer; nothing is sent externally."}

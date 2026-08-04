@@ -1,0 +1,9 @@
+Traceback (most recent call last):
+  File "<stdin>", line 4, in <module>
+  File "/Applications/Lingua Viva.app/Contents/Resources/app/src/lingua_viva/docpipe/sync.py", line 24, in <module>
+    from . import drive, vault
+  File "/Applications/Lingua Viva.app/Contents/Resources/app/src/lingua_viva/docpipe/vault.py", line 15, in <module>
+    from .validate import validate_file
+  File "/Applications/Lingua Viva.app/Contents/Resources/app/src/lingua_viva/docpipe/validate.py", line 15, in <module>
+    from jsonschema import Draft202012Validator, RefResolver
+ModuleNotFoundError: No module named 'jsonschema'

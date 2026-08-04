@@ -1,0 +1,8 @@
+--prepared:/Applications/Lingua Viva.app/Contents/Frameworks/Lingua Viva Helper (Plugin).app
+--validated:/Applications/Lingua Viva.app/Contents/Frameworks/Lingua Viva Helper (Plugin).app
+--prepared:/Applications/Lingua Viva.app/Contents/Frameworks/Lingua Viva Helper (Renderer).app
+--validated:/Applications/Lingua Viva.app/Contents/Frameworks/Lingua Viva Helper (Renderer).app
+--prepared:/Applications/Lingua Viva.app/Contents/Frameworks/Lingua Viva Helper.app
+--validated:/Applications/Lingua Viva.app/Contents/Frameworks/Lingua Viva Helper.app
+--prepared:/Applications/Lingua Viva.app/Contents/Frameworks/Lingua Viva Helper (GPU).app
+--validated:/Applications/Lingua Viva.app/Contents/Frameworks/Lingua Viva Helper (GPU).app

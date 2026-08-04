@@ -1,0 +1,1 @@
+Imagine you are going on an adventure through your day in Italy. Write down the things you do at home, like eating breakfast or watching TV. Use Italian vocabulary for each activity. Then, find a partner and compare what you wrote. Discuss which activities you do together and which ones are different between you.

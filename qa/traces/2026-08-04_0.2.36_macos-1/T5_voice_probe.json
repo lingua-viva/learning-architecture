@@ -1,0 +1,1 @@
+{"stt":{"available":true,"provider":"faster-whisper","decoder":"pyav","local_only":true},"tts":{"rime_configured":false,"student_data_gate":true,"local_fallback":true}}
