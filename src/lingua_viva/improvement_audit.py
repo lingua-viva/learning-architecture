@@ -45,6 +45,11 @@ from typing import Callable, Optional
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
+
+def _state_home() -> Path:
+    """Writable state directory — never inside the signed bundle (F6/P1-1)."""
+    return Path(os.environ.get("LV_STATE_HOME", str(Path.home() / ".lingua-viva")))
+
 # Instruments that are human sweeps / one-off audits rather than wired-in
 # checks. A defect class first found by one of these and later found by a
 # live instrument has "transitioned" — the lagging indicator MC calls #6.
@@ -89,18 +94,18 @@ BURST_FRACTION = 0.5
 
 def _gap_signals_path() -> Path:
     return Path(os.environ.get(
-        "LV_GAP_SIGNALS_PATH", REPO_ROOT / "memory" / "data" / "gap_signals.ndjson"))
+        "LV_GAP_SIGNALS_PATH", _state_home() / "gap_signals.ndjson"))
 
 
 def _revision_log_path() -> Path:
     # Same env var src/web.py:_revision_log_path() already honors.
     return Path(os.environ.get(
-        "LV_REVISION_LOG_PATH", REPO_ROOT / "dev" / "lv_revision_log.ndjson"))
+        "LV_REVISION_LOG_PATH", _state_home() / "lv_revision_log.ndjson"))
 
 
 def _summary_path() -> Path:
     return Path(os.environ.get(
-        "LV_AUDIT_SUMMARY_PATH", REPO_ROOT / "memory" / "data" / "audit_summary.ndjson"))
+        "LV_AUDIT_SUMMARY_PATH", _state_home() / "audit_summary.ndjson"))
 
 
 def _read_ndjson(path: Path) -> list[dict]:

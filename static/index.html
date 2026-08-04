@@ -845,6 +845,13 @@
         this.silenceCheck = null;
         clearTimeout(this.maxCaptureTimer);
         this.maxCaptureTimer = null;
+        // P0-1 (Chip QA 0.2.38): stop the MediaRecorder BEFORE releasing
+        // tracks. Without this, visibilitychange → cleanupCapture() leaves
+        // the recorder in "recording" state on some platforms, which keeps
+        // the mic hardware engaged even after track.stop() is called.
+        if (this.mediaRecorder && this.mediaRecorder.state !== "inactive") {
+          try { this.mediaRecorder.stop(); } catch (error) { /* already stopped */ }
+        }
         if (this.audioContext) {
           try { this.audioContext.close(); } catch (error) { /* already closed */ }
         }

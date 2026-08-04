@@ -36,7 +36,13 @@ class LearnedWeights:
     """Self-improving signal weights driven by path outcomes."""
 
     def __init__(self, weights_path: Optional[Path] = None):
-        self._path = weights_path or Path(__file__).parent / "learned_weights.yaml"
+        # F6/P1-1: default to state home, never write next to own source file
+        # (which is inside the signed bundle on desktop).
+        import os
+        if weights_path is None:
+            state_home = Path(os.environ.get("LV_STATE_HOME", str(Path.home() / ".lingua-viva")))
+            weights_path = state_home / "learned_weights.yaml"
+        self._path = weights_path
         self._weights: dict[str, dict[str, float]] = {}  # node_id -> {signal: weight}
         self._load()
 

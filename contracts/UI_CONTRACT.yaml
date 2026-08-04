@@ -569,7 +569,7 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 112
+version: 113
 # v112 (2026-08-04): P1-3 follow-up (Chip QA 0.2.36 macos-1 report) — the
 #     general-type null-out in /api/observe/capture only cleared
 #     cefr_dimension/cefr_level_observed; sel_domain/sel_valence hit the

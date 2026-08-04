@@ -16,8 +16,13 @@ import yaml
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-REPORT_MD = REPO_ROOT / "dev" / "reports" / "TEACHER_READINESS.md"
-REPORT_JSON = REPO_ROOT / "dev" / "reports" / "TEACHER_READINESS.json"
+
+def _state_home() -> Path:
+    """Writable state directory — never inside the signed bundle (F6/P1-1)."""
+    return Path(os.environ.get("LV_STATE_HOME", str(Path.home() / ".lingua-viva")))
+
+REPORT_MD = _state_home() / "reports" / "TEACHER_READINESS.md"
+REPORT_JSON = _state_home() / "reports" / "TEACHER_READINESS.json"
 CORPUS_PATH = REPO_ROOT / "tests" / "fixtures" / "teacher_readiness_corpus.yaml"
 PLACEHOLDER_RE = re.compile(r"\[[^\]\n]*(?:no model available|Local reasoning|stub|placeholder)[^\]\n]*\]", re.I)
 OBS_ID_RE = re.compile(r"\bOBS-[A-Za-z0-9_-]+\b")
