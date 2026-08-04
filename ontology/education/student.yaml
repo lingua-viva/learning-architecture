@@ -85,6 +85,12 @@ nodes:
   - at risk
   - not meeting
   - below grade level
+  - what support
+  - support need
+  - needs help
+  - extra support
+  - more support
+  - support does
   blocks_external: true
   requires_local: true
   default_intent: DIAGNOSE

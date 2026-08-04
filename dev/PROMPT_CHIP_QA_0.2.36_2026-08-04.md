@@ -168,10 +168,27 @@ Reports publish to the `qa/` folder of `pretendhome/mission-canvas`.
     Green toast at top ("✓ Saved — observation for …"), ~6 seconds, form clears.
 17. **Double-save probe** (known gap C7): save the SAME text twice on purpose. Record
     exactly what happens (one record or two? any warning?). Known issue — evidence only.
-18. **Ask, grounded**: "What support should I prepare for Marco Bianchi tomorrow?" —
-    check whether the answer actually cites his real observations (F3, still open per
-    the deep-dive — expect this may still be generic/ungrounded; record exactly what
-    it says either way, don't assume it's fixed).
+18. **Ask, grounded (F3 — CHECK THIS CAREFULLY, fix candidate as of 2026-08-04)**:
+    "What support should I prepare for Marco Bianchi tomorrow?" — before this fix, the
+    answer came back generic ("I do not have any specific information...") because the
+    query never routed to the module that reads a student's real record. Now it should:
+    - Name Marco Bianchi specifically and include his actual current RTI tier and CEFR
+      snapshot (pulled from his real logged observations) — NOT a vague deflection.
+    - If a short intro sentence above the structured section makes a claim NOT
+      supported by his real data (e.g. invented advice about "time management" or
+      "stress"), that's a known separate model-hallucination risk — it should come
+      with a visible hedge/warning line (something like "I don't have a solid source
+      for this one..."). Record whether that warning shows up ON SCREEN, not just
+      spoken aloud.
+    - P0 if: it still gives the old generic non-answer, OR it states a specific claim
+      about Marco (a number, a date, a quote) that isn't in his real observation
+      history WITHOUT a visible warning.
+    - Also try: "Does Nora Rossi need extra support?" and "What does Marco need right
+      now?" — both should hit the same real-data path, not the old generic fallback.
+    - **Build gate**: this fix ships no earlier than desktop-v0.2.38. If the app
+      reports 0.2.36 or 0.2.37, mark this check BLOCKED (not FAIL) and note the
+      version — the old generic answer is an already-known gap on those builds, not
+      a new finding.
 19. **Prepare / lesson materials**: generate materials for Marco + Nora (any small
     lesson). Must produce a real document, no placeholder brackets anywhere. (Known gap
     C8 — may time out or 422 under load; real-machine evidence matters either way.)
