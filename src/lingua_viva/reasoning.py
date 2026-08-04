@@ -71,7 +71,7 @@ class ReasoningEngine:
         resolved_model = (
             model
             or config.resolve_provider_model()
-            or default_model
+            or (default_model if (default_model and is_provably_local_model(default_model)) else None)
             or os.environ.get("LV_REASON_MODEL")
             or self._resolve_best_model()
         )

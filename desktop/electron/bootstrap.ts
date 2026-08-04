@@ -1,6 +1,6 @@
 import { execFile, execFileSync, spawn } from "node:child_process";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
-import { createWriteStream, existsSync, unlinkSync } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync, unlinkSync } from "node:fs";
 import https from "node:https";
 import http from "node:http";
 import os from "node:os";
@@ -325,6 +325,11 @@ export async function installPythonDeps(pythonCmd: string, repoRoot: string): Pr
     "av>=11.0",
     "ctranslate2>=4.0,<5",
     "python-multipart==0.0.27",
+    // P1-2 (Chip QA 0.2.36): docpipe's validate.py imports jsonschema for
+    // schema validation. Without it, /api/sync/status and any vault path
+    // throws ModuleNotFoundError, surfacing as a red "Something went wrong"
+    // banner on every Settings/view load.
+    "jsonschema>=4.0,<5",
   ];
   // Strategy: try multiple pip invocations in order of preference.
   // macOS python.org installs ship WITHOUT SSL certs configured (need "Install Certificates.command").
@@ -396,7 +401,7 @@ export type DepVerification = {
 
 const SERVER_IMPORTS = [
   "yaml", "fastapi", "starlette", "uvicorn", "httpx",
-  "websockets", "pdfplumber", "sqlite_vec", "requests", "multipart",
+  "websockets", "pdfplumber", "sqlite_vec", "requests", "multipart", "jsonschema",
 ];
 const VOICE_IMPORTS = ["av", "ctranslate2", "faster_whisper"];
 
@@ -486,25 +491,43 @@ export function startBackend(repoRoot: string, port = DEFAULT_PORT, pythonComman
   try {
     if (process.platform !== "win32") {
       execFileSync("sh", ["-c", `lsof -t -i :${port} | xargs kill -9 2>/dev/null || true`], { timeout: 3000 });
+    } else {
+      // P0-B: Windows port cleanup — find and kill any process holding our port
+      execFileSync("cmd", ["/c", `for /f "tokens=5" %a in ('netstat -ano ^| findstr :${port} ^| findstr LISTENING') do taskkill /F /PID %a 2>nul`], { timeout: 5000, windowsHide: true });
     }
   } catch { /* best effort */ }
 
+  // P1-5/F6: prevent .pyc writes into the signed bundle (breaks codesign)
+  // P0-A: prevent OpenMP DLL collision on Windows (libiomp5md vs libomp140)
+  const backendEnv: Record<string, string> = {
+    ...process.env as Record<string, string>,
+    PYTHONUNBUFFERED: "1",
+    PYTHONDONTWRITEBYTECODE: "1",
+    KMP_DUPLICATE_LIB_OK: "TRUE",
+    LV_DESKTOP: "1"
+  };
+
   const child = spawn(pythonCommand, [webPath, String(port)], {
     cwd: repoRoot,
-    env: {
-      ...process.env,
-      PYTHONUNBUFFERED: "1",
-      LV_DESKTOP: "1"
-    },
+    env: backendEnv,
     stdio: ["pipe", "pipe", "pipe"],
     windowsHide: true
   });
 
-  // CRITICAL: drain stdout/stderr so the OS pipe buffer never fills.
-  // An undrained pipe causes the Python process to block on write() and
-  // deadlock the entire event loop (diagnosed in v0.2.4 install report).
-  child.stdout?.resume();
-  child.stderr?.resume();
+  // P0-B: log backend output to file for diagnostics (instead of drain-and-
+  // discard, which caused orphaned backends to freeze when their reader died).
+  const logDir = path.join(process.env.HOME || process.env.USERPROFILE || repoRoot, ".lingua-viva", "logs");
+  try { mkdirSync(logDir, { recursive: true }); } catch { /* best effort */ }
+  const logPath = path.join(logDir, "backend.log");
+  try {
+    const logStream = createWriteStream(logPath, { flags: "a" });
+    child.stdout?.pipe(logStream);
+    child.stderr?.pipe(logStream);
+  } catch {
+    // Fallback: drain without blocking (original behavior)
+    child.stdout?.resume();
+    child.stderr?.resume();
+  }
 
   return {
     process: child,

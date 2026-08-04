@@ -207,7 +207,7 @@ REPO = Path(__file__).resolve().parent.parent
 #   v107 (2026-08-04): relock — T9 follow-up wired real T3 extraction into
 #     the ingest job (web.py) without a bump; sealed here.
 #   v109 (2026-08-04): T5 observe mic, B1-B5 gate closures, A3 JSON errors, A4 CEFR optional.
-EXPECTED_VERSION = 110
+EXPECTED_VERSION = 111
 
 
 def _html() -> str:

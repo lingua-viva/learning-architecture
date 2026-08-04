@@ -40,6 +40,12 @@ logger = logging.getLogger(__name__)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
+
+def _state_home() -> Path:
+    """Resolve state directory — never bundle-relative (F6/P1-9).
+    Uses LV_STATE_HOME or ~/.lingua-viva, same as vault.py."""
+    return Path(os.environ.get("LV_STATE_HOME", str(Path.home() / ".lingua-viva")))
+
 SCHEMA = "lv_route_mem_v1"
 
 # The three routing decision types this memory covers. Safety gates are
@@ -70,7 +76,7 @@ CORRECTED_KEYS = frozenset({
 def routing_memory_path() -> Path:
     return Path(os.environ.get(
         "LV_ROUTING_MEMORY_PATH",
-        str(REPO_ROOT / "memory" / "data" / "routing_memory_v1.ndjson")))
+        str(_state_home() / "routing_memory.ndjson")))
 
 
 # Content-free guard: every string this module persists is an enum, an id,

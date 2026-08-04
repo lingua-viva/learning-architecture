@@ -9,5 +9,10 @@
   <true/>
   <key>com.apple.security.cs.disable-library-validation</key>
   <true/>
+  <!-- P1-1 (Chip QA 0.2.36): without this, hardened runtime blocks
+       getUserMedia even if the user grants mic permission. The OS silently
+       returns empty audio buffers → "I did not hear words" every time. -->
+  <key>com.apple.security.device.audio-input</key>
+  <true/>
 </dict>
 </plist>

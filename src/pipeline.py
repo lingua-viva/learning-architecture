@@ -329,7 +329,7 @@ class ReasoningEngine:
         resolved_model = (
             model
             or self._resolve_provider_model()
-            or default_model
+            or self._usable_default_model(default_model)
             or os.environ.get("LV_REASON_MODEL")
             or self._resolve_best_model()
         )
@@ -393,6 +393,29 @@ class ReasoningEngine:
             confidence=0.0,
             model_used="none",
         )
+
+    def _usable_default_model(self, default_model: Optional[str]) -> Optional[str]:
+        """P1-4 (Chip QA 0.2.36): Only use the ontology's default_model if it's
+        actually reachable. An external default (e.g. perplexity/sonar-pro) that
+        the user hasn't configured as a provider should not be selected — it will
+        just fail with "Not Found" and confuse the teacher. Prefer falling through
+        to the auto-detected local Ollama model instead."""
+        if not default_model:
+            return None
+        # Local models are always usable if they exist
+        if is_provably_local_model(default_model):
+            return default_model
+        # External model: only use if the user has configured that provider
+        if self._is_external_model(default_model) or not is_provably_local_model(default_model):
+            provider_model = self._resolve_provider_model()
+            if provider_model:
+                # User has a provider configured — the default_model is usable
+                # (provider resolution already won at tier 2, so this won't
+                # normally be reached, but covers edge cases)
+                return default_model
+            # No provider configured — skip this unreachable external default
+            return None
+        return default_model
 
     def _resolve_provider_model(self) -> Optional[str]:
         """

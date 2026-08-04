@@ -3737,6 +3737,16 @@ async def observe_capture(request: Request, payload: dict):
     template_type = str(payload.get("template_type") or "").strip() or "general"
     cefr_dimension = str(payload.get("cefr_dimension") or "").strip() or None
     cefr_level_observed = str(payload.get("cefr_level_observed") or "").strip() or None
+
+    # P1-3 (Chip QA 0.2.36): if the type is "general", CEFR and SEL fields
+    # MUST be null — never store a proficiency level without the teacher
+    # explicitly choosing "CEFR skill" as the observation type. A model
+    # suggestion in the "Suggest fields" panel may have populated these, but
+    # saving as "general" means "I didn't classify this" and invented
+    # levels must not reach the lens.
+    if template_type == "general":
+        cefr_dimension = None
+        cefr_level_observed = None
     if template_type == "cefr" and (not cefr_dimension or not cefr_level_observed):
         return JSONResponse(
             {
