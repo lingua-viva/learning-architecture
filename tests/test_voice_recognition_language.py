@@ -40,41 +40,38 @@ def test_no_english_recogniser_survives_anywhere_in_the_bundle():
 
 
 def test_playback_speaks_italian_not_english():
-    """Speech synthesis must answer in Italian.
-
-    Recognising Italian but replying in an English voice is the same bug
-    half-fixed, so the playback path is pinned here alongside the
-    recognisers.
+    """Speech synthesis uses language detection: Italian content → Italian voice,
+    English content (refusals) → English voice. B2 fix ensures locale matches text.
     """
     body = _served_index()
-    start = body.index("speak(text,")
-    end = body.index("toggleAsk()")
+    start = body.index("speakLocally(text)")
+    end = body.index("window.speechSynthesis.speak(utterance)", start)
     speak_body = body[start:end]
 
-    assert 'utterance.lang = "it-IT"' in speak_body, "playback language is not Italian"
+    # Language detection present
+    assert 'textLang' in speak_body, "utterance.lang must be set dynamically from textLang"
+    assert 'looksEnglish' in speak_body, "English detection regex must be present"
+    # Italian path still exists
     assert "/^it([-_]|$)/i.test(voice.lang)" in speak_body, (
-        "playback does not filter the voice list to Italian voices"
+        "Italian voice filter must still be present for Italian content"
     )
-    assert "samantha" not in speak_body.lower(), (
-        "English voice preference still present in playback"
-    )
-    assert "/^en[-_]/i.test(voice.lang)" not in speak_body, (
-        "English voice fallback still present in playback"
+    # English path exists for refusal messages
+    assert "/^en([-_]|$)/i.test(voice.lang)" in speak_body, (
+        "English voice filter must exist for English refusal messages"
     )
 
 
 def test_playback_sets_language_before_reading_the_voice_list():
     """getVoices() is empty until the browser loads voices asynchronously.
 
-    If lang were set after the voice lookup, that first-call-empty case
-    would fall back to an English default. Order matters, so pin it.
+    Language must be set before the voice lookup so the first-call-empty
+    case falls back to the correct language default.
     """
     body = _served_index()
-    start = body.index("speak(text,")
-    speak_body = body[start:body.index("toggleAsk()")]
-    # Match the qualified call, not the bare name — the explanatory comment
-    # above the assignment also mentions getVoices().
-    assert speak_body.index('utterance.lang = "it-IT"') < speak_body.index(
+    start = body.index("speakLocally(text)")
+    end = body.index("window.speechSynthesis.speak(utterance)", start)
+    speak_body = body[start:end]
+    assert speak_body.index("utterance.lang = textLang") < speak_body.index(
         "window.speechSynthesis.getVoices()"
     ), "utterance.lang must be set before the voice list is consulted"
 

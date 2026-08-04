@@ -569,11 +569,7 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 107
-# v107 (2026-08-04): relock for the T9 follow-up commit (29159e5) that wired
-#     ingest onto the REAL T3 extraction + LocalModelClient enrichment
-#     (graceful None fallback) — web.py changed without a bump in that
-#     commit; this seals it. No other content change.
+version: 110
 # v106 (2026-08-04): T9 Students-from-file ingest
 #     (SPEC_T9_INGEST_UI_2026-08-04) + T6 sync enqueue wiring. src/web.py:
 #     POST /api/students/ingest (multipart upload or drive_ref through the

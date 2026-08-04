@@ -575,6 +575,12 @@ intentionally_backend_only:
       teacher-facing voice control already degrades through POST /api/voice/stt;
       this route is for diagnostics, not a separate UI action.
 
+  - route: "GET /api/sync/status"
+    status: permanent
+    reason: >-
+      Sync queue status for the Settings panel (B4). Returns pending/pushed/failed
+      counts from the docpipe sync queue. Read-only, no side effects.
+
   - route: "GET /api/categories"
     status: deferred_undecided
     reason: >-

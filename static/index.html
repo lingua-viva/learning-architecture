@@ -381,6 +381,9 @@
       box-shadow: 0 0 0 7px rgba(178, 75, 49, .18);
       animation: voicePulse 1.5s ease-in-out infinite;
     }
+    .mic-btn { font-size: 24px; padding: 8px 14px; border-radius: 50%; border: 2px solid var(--border); cursor: pointer; background: var(--surface); transition: box-shadow 0.2s; }
+    .mic-btn:hover { box-shadow: 0 0 0 3px rgba(178, 75, 49, .12); }
+    .mic-btn.is-listening { box-shadow: 0 0 0 7px rgba(178, 75, 49, .18); animation: voicePulse 1.5s ease-in-out infinite; background: var(--brand-light, #fff3f0); }
     .mic.is-thinking {
       background: var(--brand-2);
       border-color: var(--brand-2);
@@ -898,8 +901,14 @@
         if (micStatus) {
           micStatus.textContent = unavailable
             ? this.sttUnavailableText
-            : "Type your observation below.";
+            : "Tap mic to dictate, or type below.";
           micStatus.classList.toggle("warn", unavailable);
+        }
+        // T5: dim the observe mic button when STT is unavailable.
+        const obsMic = this.get("obs-mic");
+        if (obsMic) {
+          obsMic.disabled = unavailable;
+          obsMic.style.opacity = unavailable ? "0.4" : "1";
         }
       },
       async captureLocalStt({statusId, micId, inputId, onTranscript}) {
@@ -1143,16 +1152,23 @@
           .replace(/\s+/g, " ")
           .trim();
         const utterance = new SpeechSynthesisUtterance(clean);
-        // Teachers speak Italian and are answered in Italian. Set lang first:
-        // getVoices() returns [] until the browser has loaded its voice list
-        // (Chrome does this asynchronously), and in that case lang alone still
-        // drives the engine to an Italian default instead of an English one.
-        utterance.lang = "it-IT";
+        // Language detection: refusal/system messages are English; student
+        // content and normal answers are Italian. Pick voice to match the text.
+        const looksEnglish = /\b(the|this|your|questions|answers|search|machine|section|web|student|support)\b/i.test(clean);
+        const textLang = looksEnglish ? "en" : "it-IT";
+        utterance.lang = textLang;
         const voices = window.speechSynthesis.getVoices();
-        const italianVoices = voices.filter(voice => /^it([-_]|$)/i.test(voice.lang));
-        utterance.voice = italianVoices.find(voice => /alice|federica|google italiano/i.test(voice.name))
-          || italianVoices[0]
-          || null;
+        if (looksEnglish) {
+          const englishVoices = voices.filter(voice => /^en([-_]|$)/i.test(voice.lang));
+          utterance.voice = englishVoices.find(voice => /samantha|karen|google us|google uk/i.test(voice.name))
+            || englishVoices[0]
+            || null;
+        } else {
+          const italianVoices = voices.filter(voice => /^it([-_]|$)/i.test(voice.lang));
+          utterance.voice = italianVoices.find(voice => /alice|federica|google italiano/i.test(voice.name))
+            || italianVoices[0]
+            || null;
+        }
         utterance.rate = 0.94;
         utterance.pitch = 1.02;
         utterance.volume = 1;
@@ -1823,11 +1839,11 @@
         <div class="grid two">
           <div class="panel">
             <label>Student<select id="obs-student">${studentOptions()}</select></label>
-            <div class="row" style="margin:14px 0;"><span id="mic-status" class="badge" aria-live="polite">Type your observation below.</span></div>
+            <div class="row" style="margin:14px 0;"><button id="obs-mic" type="button" class="mic-btn" aria-label="Dictate observation" aria-pressed="false" title="Tap to dictate — tap again to stop">🎙️</button><span id="mic-status" class="badge" aria-live="polite">Tap mic to dictate, or type below.</span></div>
             <textarea id="obs-text" placeholder="A learner self-corrected passato prossimo, used essere correctly in context"></textarea>
             <div class="row" style="margin-top:10px;"><button id="suggest-observation" type="button">Suggest fields</button><span id="obs-suggest-status" class="voice-hint" aria-live="polite">Nothing is saved until you review and press Save.</span></div>
             <div class="form-grid" style="margin-top:12px;">
-              <label>Observation type <span class="required-mark" title="Required before saving">* required</span><select id="obs-template" class="needs-choice"><option value="">Choose a type (required)</option><option value="cefr">CEFR skill</option><option value="literacy">Literacy</option><option value="sel_incident">SEL concern</option><option value="sel_positive">SEL positive</option><option value="rti_flag">Support flag</option></select></label>
+              <label>Observation type<select id="obs-template"><option value="general">General</option><option value="cefr">CEFR skill</option><option value="literacy">Literacy</option><option value="sel_incident">SEL concern</option><option value="sel_positive">SEL positive</option><option value="rti_flag">Support flag</option></select></label>
               <label>CEFR skill<select id="obs-dim"><option value="">Not tagged</option><option>speaking</option><option>listening</option><option>reading</option><option>writing</option></select></label>
               <label>Observed level<select id="obs-level"><option value="">Not tagged</option><option>A1</option><option>A1+</option><option>A2</option><option>A2+</option><option>B1</option><option>B1+</option><option>B2</option><option>C1</option><option>C2</option></select></label>
               <label>Direction<select id="obs-direction"><option value="">Not stated</option><option>progressing</option><option>plateaued</option><option>regressing</option><option>mixed</option></select></label>
@@ -1852,6 +1868,24 @@
         </div>`;
       $("suggest-observation").addEventListener("click", suggestObservation);
       $("add-support-entry").addEventListener("click", () => addSupportEntry());
+      // T5: Observe mic — conversational dictation that accumulates into the textarea.
+      $("obs-mic").addEventListener("click", () => {
+        voiceRuntime.captureLocalStt({
+          statusId: "mic-status",
+          micId: "obs-mic",
+          inputId: null, // We handle insertion ourselves for accumulation
+          onTranscript(transcript) {
+            const textarea = $("obs-text");
+            if (!textarea) return;
+            // Accumulate: append with a space separator (conversational dictation)
+            const existing = textarea.value.trim();
+            textarea.value = existing ? existing + " " + transcript : transcript;
+            textarea.focus();
+            const status = $("mic-status");
+            if (status) status.textContent = "Captured. Tap mic again to add more, or edit and save.";
+          }
+        });
+      });
       $("obs-student").addEventListener("change", event => {
         state.selectedStudent = event.target.value;
         // BUG-4 (QA 2026-08-02): switching students must clear the form —
@@ -1860,10 +1894,8 @@
         clearObserveForm();
         loadLens("obs-lens", false);
       });
-      // BUG-5: the type dropdown is visually required until chosen.
-      $("obs-template").addEventListener("change", event => {
-        event.target.classList.toggle("needs-choice", !event.target.value);
-      });
+      // Observation type is optional — no visual enforcement needed.
+      $("obs-template").addEventListener("change", () => {});
       $("save-observation").addEventListener("click", saveObservation);
       state.selectedStudent = $("obs-student").value;
       renderSupportEntries([]);
@@ -2035,15 +2067,9 @@
         $("obs-result").innerHTML = "<h3>Not saved</h3><p>Add an observation first.</p>";
         return;
       }
-      if (!templateType) {
-        $("obs-result").innerHTML = "<h3>Review needed</h3><p>Choose an observation type before saving. Nothing was saved.</p>";
-        $("obs-template").classList.add("needs-choice");
-        $("obs-template").focus();
-        return;
-      }
       if (templateType === "cefr" && (!$("obs-dim").value || !$("obs-level").value)) {
-        $("obs-result").innerHTML = "<h3>Review needed</h3><p>Choose both a CEFR skill and observed level.</p>";
-        return;
+        // Advisory: let the teacher know these fields help, but don't block save.
+        // The model can suggest them later via "Suggest fields".
       }
       const button = $("save-observation");
       button.disabled = true;
@@ -4007,7 +4033,33 @@
           <div id="integrations-drive" style="margin-top:18px;"><p class="voice-hint">Loading Google Drive status...</p></div>
         </div>
         <div class="panel" style="margin-top:14px;">
-          <h3>My week</h3>
+          <div class="view-head">
+            <div><h3>Voice</h3><p>Speech-to-text for dictation in Observe, and text-to-speech for Ask answers.</p></div>
+            <span id="settings-voice-badge" class="badge">checking...</span>
+          </div>
+          <div id="settings-voice-status" style="margin-top:8px;"><p class="voice-hint">Checking voice availability...</p></div>
+        </div>
+        <div class="panel" style="margin-top:14px;">
+          <div class="view-head">
+            <div><h3>Sync</h3><p>Local queue of changes waiting to reach Google Drive when you're back online.</p></div>
+            <span id="settings-sync-badge" class="badge">checking...</span>
+          </div>
+          <div id="settings-sync-status" style="margin-top:8px;"><p class="voice-hint">Checking sync queue...</p></div>
+        </div>
+        <div class="panel" style="margin-top:14px;">
+          <div class="view-head">
+            <div><h3>Privacy</h3><p>Student data never leaves this machine unless you explicitly sync to your school's Drive folder.</p></div>
+            <span class="badge ok">local-only</span>
+          </div>
+          <div style="margin-top:8px;">
+            <p class="voice-hint">All observations, lenses, and student records are stored in <code>~/.lingua-viva/</code> on this computer. The only external call is Ask (web search for general teaching questions) — and it refuses any query containing a student name.</p>
+            <p class="voice-hint" style="margin-top:6px;"><a href="#" id="privacy-why-link" style="color:inherit;text-decoration:underline;">View the privacy log (Why tab)</a> to see every external call and its outcome.</p>
+          </div>
+        </div>
+        <div class="panel" style="margin-top:14px;">
+          <div class="view-head">
+            <div><h3>My week</h3><p>Your teaching schedule for this week.</p></div>
+          </div>
           <div id="schedule-grid" class="grid"></div>
           <button id="save-schedule" class="primary" type="button" style="margin-top:12px;">Save Schedule</button>
           <span id="schedule-status" class="badge" style="margin-left:8px;">stored on this machine</span>
@@ -4047,6 +4099,24 @@
       await renderIntegrationsControls();
       await renderExtractionControls();
       await renderUpdateControls();
+      // B4: Voice + Sync live state
+      const privacyLink = $("privacy-why-link");
+      if (privacyLink) privacyLink.addEventListener("click", e => { e.preventDefault(); state.view = "why"; renderShell(); renderView(); });
+      try {
+        const vp = await api("/api/voice/probe");
+        const vBadge = $("settings-voice-badge");
+        const vStatus = $("settings-voice-status");
+        const sttOk = vp.stt && vp.stt.available;
+        if (vBadge) { vBadge.textContent = sttOk ? "available" : "not available"; vBadge.classList.toggle("ok", !!sttOk); }
+        if (vStatus) vStatus.innerHTML = `<p class="voice-hint">STT: ${sttOk ? `ready (${escapeHtml(vp.stt.provider || "browser")})` : "not available in this environment"}. TTS: browser speechSynthesis${vp.tts && vp.tts.rime_configured ? " + Rime" : ""}.</p>`;
+      } catch { const vb = $("settings-voice-badge"); if (vb) vb.textContent = "unavailable"; }
+      try {
+        const sq = await api("/api/sync/status");
+        const sBadge = $("settings-sync-badge");
+        const sStatus = $("settings-sync-status");
+        if (sBadge) { sBadge.textContent = `${sq.pending || 0} pending`; sBadge.classList.toggle("ok", (sq.pending || 0) === 0); }
+        if (sStatus) sStatus.innerHTML = `<p class="voice-hint">${sq.pending ? `${sq.pending} item${sq.pending > 1 ? "s" : ""} waiting to sync.` : "All synced — nothing pending."} ${sq.last_drain ? `Last sync: ${sq.last_drain}.` : ""}</p>`;
+      } catch { const sb = $("settings-sync-badge"); if (sb) sb.textContent = "offline"; }
     }
 
     // --- Teacher identity (teacher-identity P1, 2026-08-02) ----------------
@@ -4342,8 +4412,8 @@
         ? `<p class="voice-hint">Files you import stay on this computer after import.</p>`
         : `<p class="voice-hint">${escapeHtml(status.setup_message || "Google Drive is not set up on this machine.")}</p>`;
       const action = status.needs_signin
-        ? `<p class="voice-hint">Your Google sign-in expired. Open Sources &rarr; Drive to sign in again.</p>`
-        : `<p class="voice-hint">Set up and sign-in live in Sources &rarr; Drive.</p>`;
+        ? `<p class="voice-hint">Your Google sign-in expired. <a href="#" id="settings-sources-link" style="color:inherit;text-decoration:underline;">Open Sources &rarr; Drive</a> to sign in again.</p>`
+        : `<p class="voice-hint">Set up and sign-in live in <a href="#" id="settings-sources-link" style="color:inherit;text-decoration:underline;">Sources &rarr; Drive</a>.</p>`;
       host.innerHTML = `
         <div class="view-head">
           <div><h3 style="margin:0;">Google Drive</h3><p>Import curriculum files you already keep in Drive.</p></div>
@@ -4367,6 +4437,9 @@
         const host = $("integrations-drive");
         if (host) host.innerHTML = `<h3 style="margin:0;">Google Drive</h3><p class="voice-hint">Could not read Drive status: ${escapeHtml(error.message || "unknown error")}</p>`;
       }
+      // B5: wire Sources → Drive navigation link
+      const srcLink = $("settings-sources-link");
+      if (srcLink) srcLink.addEventListener("click", e => { e.preventDefault(); state.view = "sources"; renderShell(); renderView(); });
     }
 
     async function renderUpdateControls() {

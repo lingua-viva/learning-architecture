@@ -59,9 +59,9 @@ def ask_personal_data_refusal_message() -> str:
     bound for the external web search. The refusal is the feature: personal
     questions are never sanitized-and-sent, they are answered from the lens."""
     return (
-        "Ask answers general teaching questions from the web. Information "
-        "about your students lives in their lens — nothing personal is ever "
-        "sent off this machine."
+        "The Ask section answers general teaching questions using web search. "
+        "Questions about your students stay on this machine — their information "
+        "lives in their lens and is never sent externally."
     )
 
 

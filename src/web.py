@@ -48,6 +48,22 @@ if str(LV_ROOT) not in sys.path:
 app = FastAPI(title="Lingua Viva", docs_url=None, redoc_url=None)
 
 
+# ── Global JSON error handler ─────────────────────────────────────────────
+# Guarantees every unhandled exception returns JSON (never bare text "Internal
+# Server Error"). Endpoints that already return JSONResponse on known errors
+# are unaffected — this catches only what falls through.
+@app.exception_handler(Exception)
+async def _global_exception_handler(request: Request, exc: Exception):
+    import traceback as _tb
+    # Log the full traceback server-side for debugging.
+    _tb.print_exc()
+    # Honest, teacher-safe message. Never leak internals.
+    return JSONResponse(
+        {"error": "Something went wrong — please try again or contact support."},
+        status_code=500,
+    )
+
+
 def _sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, separators=(',', ':'))}\n\n"
 
@@ -3095,6 +3111,13 @@ async def voice_probe():
     }
 
 
+@app.get("/api/sync/status")
+async def sync_status_endpoint():
+    """B4: Sync queue status for the Settings panel. Returns pending/pushed/failed counts."""
+    from src.lingua_viva.docpipe.sync import sync_status as _sync_status
+    return _sync_status()
+
+
 @app.post("/api/voice/stt")
 async def voice_stt(request: Request):
     audio = await request.body()
@@ -3708,16 +3731,10 @@ async def observe_capture(request: Request, payload: dict):
     if not transcript:
         return JSONResponse({"error": "Observation text is required."}, status_code=400)
 
-    # BUG-5 (REPORT_LV_QA_BLAST_RADIUS_2026-08-02): this endpoint used to
-    # invent cefr/speaking/A1/progressing when fields were omitted — a save
-    # without a type silently became a real CEFR data point and cascaded
-    # into cohort-plan tiers. Never guess clinical tags; reject instead.
-    template_type = str(payload.get("template_type") or "").strip()
-    if not template_type:
-        return JSONResponse(
-            {"error": "Choose an observation type before saving. Nothing was saved."},
-            status_code=400,
-        )
+    # A4 (Claudia P1-2): template_type is optional. Teachers who know the
+    # type can tag it; teachers who don't just save. "general" means
+    # "unclassified" — the model can suggest a reclassification later.
+    template_type = str(payload.get("template_type") or "").strip() or "general"
     cefr_dimension = str(payload.get("cefr_dimension") or "").strip() or None
     cefr_level_observed = str(payload.get("cefr_level_observed") or "").strip() or None
     if template_type == "cefr" and (not cefr_dimension or not cefr_level_observed):

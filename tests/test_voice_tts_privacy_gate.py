@@ -166,11 +166,13 @@ def test_ui_tries_the_endpoint_then_the_local_voice():
 
 
 def test_local_fallback_still_speaks_italian():
-    """The fallback must not undo the v52 Italian TTS fix."""
+    """The fallback uses language detection — Italian content gets Italian voice (B2)."""
     body = client.get("/").text
     start = body.index("speakLocally(text)")
-    end = body.index("toggleAsk()")
-    assert 'utterance.lang = "it-IT"' in body[start:end]
+    end = body.index("window.speechSynthesis.speak(utterance)", start)
+    speak_body = body[start:end]
+    assert 'textLang' in speak_body
+    assert "/^it([-_]|$)/i.test(voice.lang)" in speak_body
 
 
 def test_stopping_speech_also_stops_rime_playback():

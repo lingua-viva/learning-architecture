@@ -58,7 +58,7 @@ VALID_CEFR_DIMENSIONS = ("reading", "writing", "speaking", "listening")
 VALID_CEFR_LEVELS = ("Pre-A1", "A1", "A1+", "A2", "A2+", "B1", "B1+", "B2", "C1", "C2")
 VALID_CEFR_DIRECTIONS = ("progressing", "plateaued", "regressing")
 VALID_SEL_VALENCE = ("positive", "concern", "neutral")
-VALID_TEMPLATE_TYPES = ("literacy", "cefr", "sel_incident", "sel_positive", "rti_flag")
+VALID_TEMPLATE_TYPES = ("general", "literacy", "cefr", "sel_incident", "sel_positive", "rti_flag")
 
 SUPPORT_CATEGORY_IDS = (
     "learning_and_cognition",
