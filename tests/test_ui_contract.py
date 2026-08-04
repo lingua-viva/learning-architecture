@@ -204,7 +204,9 @@ REPO = Path(__file__).resolve().parent.parent
 #     Ask hint copy, question length cap, egress event before the call.
 #   v106 (2026-08-04): T9 Students-from-file ingest + T6 sync enqueue;
 #     demo-roster seeding removed (empty on install, acceptance A6).
-EXPECTED_VERSION = 106
+#   v107 (2026-08-04): relock — T9 follow-up wired real T3 extraction into
+#     the ingest job (web.py) without a bump; sealed here.
+EXPECTED_VERSION = 107
 
 
 def _html() -> str:
