@@ -22,6 +22,13 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from src.web import app
+import pytest
+
+# Demo-roster seeding was removed from web.py (T9 / acceptance A6) —
+# these tests exercise flows that need students on the roster, so they
+# opt in to the explicit demo_roster fixture from conftest.py.
+pytestmark = pytest.mark.usefixtures("demo_roster")
+
 
 client = TestClient(app)
 

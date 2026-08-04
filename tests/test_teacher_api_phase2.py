@@ -5,6 +5,13 @@ from types import SimpleNamespace
 from fastapi.testclient import TestClient
 
 from src.web import app
+import pytest
+
+# Demo-roster seeding was removed from web.py (T9 / acceptance A6) —
+# these tests exercise flows that need students on the roster, so they
+# opt in to the explicit demo_roster fixture from conftest.py.
+pytestmark = pytest.mark.usefixtures("demo_roster")
+
 
 
 client = TestClient(app)
@@ -13,6 +20,14 @@ client = TestClient(app)
 def _isolate_runtime(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("LV_STUDENT_DB_PATH", str(tmp_path / "students.db"))
     monkeypatch.setenv("LV_REVISION_LOG_PATH", str(tmp_path / "lv_revision_log.ndjson"))
+    # Own fresh DB → create students explicitly (rosters are empty on
+    # install — web.py no longer seeds a demo trio).
+    from src.education.student_lens import StudentLensStore
+
+    with StudentLensStore(db_path=tmp_path / "students.db") as store:
+        if not store.list_lenses():
+            store.create_lens(student_id="student-marco", display_name="Marco")
+            store.create_lens(student_id="student-nora", display_name="Nora")
 
 
 def test_teacher_curriculum_and_prepare_endpoints(monkeypatch, tmp_path):

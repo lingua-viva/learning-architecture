@@ -3,6 +3,12 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from src.web import app
 
+# Demo-roster seeding was removed from web.py (T9 / acceptance A6) —
+# these tests exercise flows that need students on the roster, so they
+# opt in to the explicit demo_roster fixture from conftest.py.
+pytestmark = pytest.mark.usefixtures("demo_roster")
+
+
 
 @pytest.mark.asyncio
 async def test_add_student_success():

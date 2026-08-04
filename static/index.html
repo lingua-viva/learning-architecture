@@ -799,7 +799,8 @@
       selectedTraceId: "",
       schoolProfile: null,
       askHistory: [],
-      askMoreOffered: false
+      askMoreOffered: false,
+      ingestJob: null
     };
 
     const voiceRuntime = {
@@ -2127,6 +2128,17 @@
       $("content").innerHTML = `
         <div class="view-head"><div><h2>Student Lenses</h2><p>View profiles, observations, CEFR trajectory, grouping notes, and support proposals. The system suggests; the teacher decides.</p></div></div>
         <div class="panel" style="margin-bottom:14px;">
+          <h3>Import students from a file</h3>
+          <p class="voice-hint">Point at a class list, roster, or lesson plan — the pipeline reads it and builds student lenses. No manual field entry. Every populated field traces to the document.</p>
+          <form id="ingest-form" class="row" style="gap:8px;align-items:center;flex-wrap:wrap;">
+            <input id="ingest-file" type="file" style="width:auto;">
+            <button class="primary" type="submit">Import</button>
+            <span id="ingest-status" class="voice-hint" aria-live="polite"></span>
+          </form>
+          <div id="ingest-results" style="margin-top:8px;"></div>
+          <p class="voice-hint" style="margin-top:6px;">Drive folder import arrives with the Drive connector.</p>
+        </div>
+        <div class="panel" style="margin-bottom:14px;">
           <h3>Add Student</h3>
           <form id="add-student-form" class="row" style="gap:8px;flex-wrap:wrap;align-items:flex-end;">
             <label style="display:flex;flex-direction:column;gap:4px;"><span>Name</span><input id="new-student-name" required placeholder="Display name"></label>
@@ -2141,6 +2153,11 @@
             <p class="voice-hint" id="growth-note" style="margin-top:10px;"></p></div>
           <div id="lens" class="panel"></div>
         </div>`;
+      $("ingest-form").addEventListener("submit", submitStudentsIngest);
+      renderIngestResults();
+      // Resume polling for an in-flight import when the teacher returns to
+      // this view — jobs keep running while they navigate elsewhere.
+      if (state.ingestJob && state.ingestJob.job_id && !["done", "failed"].includes(state.ingestJob.status)) pollIngestJob();
       $("add-student-form").addEventListener("submit", async (event) => {
         event.preventDefault();
         const name = $("new-student-name").value.trim();
@@ -2168,6 +2185,116 @@
         loadLens();
       }));
       await loadLens();
+    }
+
+    // T9 (SPEC_T9_INGEST_UI_2026-08-04): Students-from-file ingest. The
+    // teacher points at a document; the pipeline builds lens scaffolds.
+    // Job state lives on state.ingestJob; polling runs only while the
+    // Students view is mounted and stops on completion or navigation.
+    let ingestPollTimer = null;
+
+    function ingestStatusLine(job) {
+      if (!job) return "";
+      if (job.status === "queued" || job.status === "extracting") return `Reading ${job.source_name}…`;
+      if (job.status === "identifying") return "Identifying students…";
+      if (job.status === "failed") return job.error || "Import failed.";
+      if (job.status === "done") {
+        const created = (job.students_created || []).length;
+        if (!job.students_found) return `No students found in ${job.source_name}. Nothing was invented — check that the document names your students.`;
+        return `${created} student${created === 1 ? "" : "s"} added from ${job.source_name}.`;
+      }
+      return "";
+    }
+
+    function renderIngestResults() {
+      const host = $("ingest-results");
+      const status = $("ingest-status");
+      const job = state.ingestJob;
+      if (status) status.textContent = ingestStatusLine(job);
+      if (!host) return;
+      if (!job || (job.status !== "done" && job.status !== "failed")) { host.innerHTML = ""; return; }
+      const created = (job.students_created || []).map(student => `
+        <div class="source-line"><span class="badge ok">${escapeHtml(student.display_name)}</span><span class="badge">from ${escapeHtml(job.source_name)}</span>${(student.fields_populated || []).length ? `<span class="badge">${student.fields_populated.length} field${student.fields_populated.length === 1 ? "" : "s"} grounded</span>` : '<span class="badge">lens scaffold only</span>'}</div>`).join("");
+      const pending = (job.needs_confirmation || []).map(item => `
+        <div class="source-line"><span class="badge warn">This looks like ${escapeHtml(item.display_name)} (low confidence)</span><button type="button" data-ingest-confirm="${escapeHtml(item.display_name)}">Add student</button></div>`).join("");
+      host.innerHTML = created + pending;
+      host.querySelectorAll("[data-ingest-confirm]").forEach(button => button.addEventListener("click", async () => {
+        button.disabled = true;
+        try {
+          const response = await fetch("/api/students/ingest/confirm", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({job_id: state.ingestJob.job_id, display_name: button.dataset.ingestConfirm})
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || "confirm failed");
+          state.ingestJob.needs_confirmation = state.ingestJob.needs_confirmation.filter(item => item.display_name !== button.dataset.ingestConfirm);
+          state.ingestJob.students_created.push(data.student);
+          await renderStudents();
+        } catch (error) {
+          button.disabled = false;
+          button.textContent = "retry";
+        }
+      }));
+    }
+
+    function pollIngestJob() {
+      clearTimeout(ingestPollTimer);
+      const job = state.ingestJob;
+      if (!job || !job.job_id || state.view !== "students") return;
+      ingestPollTimer = setTimeout(async () => {
+        try {
+          const response = await fetch(`/api/students/ingest/${job.job_id}`);
+          const data = await response.json();
+          if (!response.ok) {
+            state.ingestJob = {status: "failed", error: data.error || "Import job lost.", source_name: job.source_name, job_id: null};
+          } else {
+            state.ingestJob = data;
+          }
+        } catch { /* transient — keep polling */ }
+        const current = state.ingestJob;
+        if (current && (current.status === "done" || current.status === "failed")) {
+          if (current.status === "done" && (current.students_created || []).length) {
+            await renderStudents();
+            return;
+          }
+          renderIngestResults();
+          return;
+        }
+        renderIngestResults();
+        pollIngestJob();
+      }, 1500);
+    }
+
+    async function submitStudentsIngest(event) {
+      event.preventDefault();
+      const input = $("ingest-file");
+      const file = input && input.files && input.files[0];
+      if (!file) {
+        if ($("ingest-status")) $("ingest-status").textContent = "Choose a file first.";
+        return;
+      }
+      if ($("ingest-status")) $("ingest-status").textContent = `Uploading ${file.name}…`;
+      const body = new FormData();
+      body.append("file", file);
+      let data;
+      try {
+        const response = await fetch("/api/students/ingest", {method: "POST", body});
+        data = await response.json();
+        if (!response.ok) throw new Error(data.error || "import failed");
+      } catch (error) {
+        state.ingestJob = {status: "failed", error: error.message || "Import failed.", source_name: file.name, job_id: null};
+        renderIngestResults();
+        return;
+      }
+      if (data.status === "failed") {
+        state.ingestJob = {status: "failed", error: data.error, source_name: file.name, job_id: null};
+        renderIngestResults();
+        return;
+      }
+      state.ingestJob = {job_id: data.job_id, status: "queued", source_name: file.name, students_created: [], needs_confirmation: []};
+      renderIngestResults();
+      pollIngestJob();
     }
 
     async function loadLens(targetId = "lens", showDecisionControls = true) {

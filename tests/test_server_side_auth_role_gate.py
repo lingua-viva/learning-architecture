@@ -13,6 +13,12 @@ from fastapi.testclient import TestClient
 
 from src.web import app
 
+# Demo-roster seeding was removed from web.py (T9 / acceptance A6) —
+# these tests exercise flows that need students on the roster, so they
+# opt in to the explicit demo_roster fixture from conftest.py.
+pytestmark = pytest.mark.usefixtures("demo_roster")
+
+
 client = TestClient(app)
 
 TEACHER_HEADERS = {
@@ -157,6 +163,12 @@ def test_observe_capture_forces_header_teacher_id(monkeypatch, tmp_path):
     monkeypatch.setenv("LV_AUTH_MODE", "local_header")
     monkeypatch.setenv("LV_STUDENT_DB_PATH", str(tmp_path / "students.db"))
     monkeypatch.setenv("LV_PRIVACY_LOG_PATH", str(tmp_path / "privacy.ndjson"))
+    # This test pins its own fresh DB, so it creates its own student
+    # (rosters are empty on install — no seeding).
+    from src.education.student_lens import StudentLensStore
+
+    with StudentLensStore(db_path=tmp_path / "students.db") as store:
+        store.create_lens(student_id="student-marco", display_name="Marco")
 
     roster = client.get("/api/students", headers=TEACHER_HEADERS)
     assert roster.status_code == 200
@@ -185,6 +197,11 @@ def test_observe_capture_forces_header_teacher_id(monkeypatch, tmp_path):
 def test_parent_recommendation_forces_header_teacher_id(monkeypatch, tmp_path):
     monkeypatch.setenv("LV_AUTH_MODE", "local_header")
     monkeypatch.setenv("LV_STUDENT_DB_PATH", str(tmp_path / "students.db"))
+    # Own fresh DB → create the student explicitly (no seeding on install).
+    from src.education.student_lens import StudentLensStore
+
+    with StudentLensStore(db_path=tmp_path / "students.db") as store:
+        store.create_lens(student_id="student-marco", display_name="Marco")
     seen: dict[str, str] = {}
 
     def fake_generate(self, student_id, teacher_id, **kwargs):

@@ -202,7 +202,9 @@ REPO = Path(__file__).resolve().parent.parent
 #   v105 (2026-08-04): 15-pass hardening of HF1+T8 — mic release on setup
 #     crash, null-GIR no false warning, stale-student placeholder fallback,
 #     Ask hint copy, question length cap, egress event before the call.
-EXPECTED_VERSION = 105
+#   v106 (2026-08-04): T9 Students-from-file ingest + T6 sync enqueue;
+#     demo-roster seeding removed (empty on install, acceptance A6).
+EXPECTED_VERSION = 106
 
 
 def _html() -> str:

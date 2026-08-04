@@ -29,7 +29,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi import BackgroundTasks, FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import (
     FileResponse,
     HTMLResponse,
@@ -289,7 +289,6 @@ def _get_slack_observation_bot():
         previous_store.close()
 
     store = StudentLensStore(db_path=_student_db_path())
-    _seed_demo_roster(store)
     bot = SlackObservationBot(
         capture_pipeline=ObservationCapturePipeline(store=store),
         teacher_channel_map=channels,
@@ -1370,40 +1369,15 @@ def _student_db_path() -> Path:
     return lv_home() / "runtime" / "student_lenses.db"
 
 
-def _seed_demo_roster(store) -> None:
-    if store.list_lenses():
-        return
-    store.create_lens(
-        student_id="student-marco",
-        display_name="Marco",
-        campus="local",
-        grade_level="G3",
-        home_languages=["it"],
-        rti_current_tier=1,
-    )
-    store.create_lens(
-        student_id="student-nora",
-        display_name="Nora",
-        campus="local",
-        grade_level="G3",
-        home_languages=["it"],
-        rti_current_tier=2,
-    )
-    store.create_lens(
-        student_id="student-luca",
-        display_name="Luca",
-        campus="local",
-        grade_level="G3",
-        home_languages=["it", "en"],
-        rti_current_tier=1,
-    )
+# Demo-roster seeding removed (T9 / build-brief hard rule 5 + acceptance A6):
+# a fresh install must show an EMPTY roster with the import affordance —
+# never invented students. Tests that need a roster create one explicitly.
 
 
 def _with_student_store(callback):
     from src.education.student_lens import StudentLensStore
 
     with StudentLensStore(db_path=_student_db_path()) as store:
-        _seed_demo_roster(store)
         return callback(store)
 
 
@@ -1411,7 +1385,6 @@ def _student_store_for_brief():
     from src.education.student_lens import StudentLensStore
 
     store = StudentLensStore(db_path=_student_db_path())
-    _seed_demo_roster(store)
     return store
 
 
@@ -2177,6 +2150,264 @@ async def ask_endpoint(payload: dict):
         "external_calls": 1,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+
+
+# ---------------------------------------------------------------------------
+# Students ingest — file → vault → extraction → lens scaffolds (T9,
+# SPEC_T9_INGEST_UI_2026-08-04). One tab end-to-end. T1 (Drive fetch) and T3
+# (extraction) are contract-frozen seams: call sites use the exact frozen
+# signatures and degrade honestly while a seam is unimplemented.
+# ---------------------------------------------------------------------------
+
+INGEST_MAX_BYTES = 15 * 1024 * 1024
+INGEST_CONFIDENCE_THRESHOLD = 0.7
+_INGEST_JOBS: dict[str, dict] = {}
+
+
+def _ingest_job(job_id: str) -> Optional[dict]:
+    return _INGEST_JOBS.get(job_id)
+
+
+def _new_ingest_job(source_id: str, source_name: str) -> dict:
+    job = {
+        "job_id": f"JOB-{uuid.uuid4()}",
+        "status": "queued",
+        "source_id": source_id,
+        "source_name": source_name,
+        "students_found": 0,
+        "students_created": [],
+        "needs_confirmation": [],
+        "warnings": [],
+        "error": None,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    _INGEST_JOBS[job["job_id"]] = job
+    return job
+
+
+def _build_source_record(*, filename: str, content: bytes, origin: str, path: str,
+                         drive_file_id: Optional[str] = None) -> "object":
+    import mimetypes
+
+    from src.lingua_viva.docpipe.contracts import SourceRecord
+
+    ext = Path(filename).suffix.lower()
+    mime = mimetypes.guess_type(filename)[0] or (
+        "text/markdown" if ext in (".md", ".markdown") else "application/octet-stream"
+    )
+    return SourceRecord({
+        "schema_version": "docpipe.source.v1",
+        "source_id": f"SRC-{uuid.uuid4()}",
+        "origin": origin,
+        "drive_file_id": drive_file_id,
+        "path": path,
+        "sha256": hashlib.sha256(content).hexdigest(),
+        "imported_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "mime": mime,
+        "owner": "teacher:local",
+        "original_filename": filename,
+        "original_ext": ext,
+        "byte_size": len(content),
+    })
+
+
+def _create_lens_for_detected(extraction, detected: dict) -> dict:
+    """Create (or merge into) a lens for one detected student, bridged into
+    the roster via StudentLensStore. Runs in a worker thread."""
+    from src.lingua_viva.docpipe import lens as docpipe_lens
+
+    student_id = str(detected.get("student_id") or f"student-{uuid.uuid4()}")
+    display_name = str(detected.get("display_name") or "").strip()
+
+    def bridge(store):
+        return docpipe_lens.create_from_extraction(
+            extraction,
+            student_id=student_id,
+            student_name=display_name,
+            added_by="teacher:ingest",
+            student_store=store,
+        )
+
+    record = _with_student_store(bridge)
+    # Operator ruling (brief §8.1): a locally saved lens propagates to Drive.
+    # Enqueue is offline-safe — the T6 queue holds until push_file can drain.
+    try:
+        from src.lingua_viva.docpipe import sync as docpipe_sync
+
+        docpipe_sync.enqueue_lens(student_id)
+    except Exception:
+        pass
+    populated = [
+        field_id
+        for field_id, field in record.data.get("profile", {}).items()
+        if field.get("evidence")
+    ]
+    return {
+        "student_id": student_id,
+        "display_name": display_name,
+        "fields_populated": populated,
+    }
+
+
+async def _run_ingest_job(job: dict, source, content: bytes) -> None:
+    from src.lingua_viva.docpipe import extract as docpipe_extract
+    from src.lingua_viva.docpipe import vault as docpipe_vault
+
+    try:
+        job["status"] = "extracting"
+        extraction = await docpipe_extract.extract_document(source, content)
+        await asyncio.to_thread(docpipe_vault.put_extraction, extraction)
+        job["status"] = "identifying"
+        detected = [
+            student
+            for student in extraction.data.get("structure", {}).get("students_detected", [])
+            if isinstance(student, dict) and str(student.get("display_name") or "").strip()
+        ]
+        job["students_found"] = len(detected)
+        for student in detected:
+            try:
+                confidence = float(student.get("confidence", 0.0))
+            except (TypeError, ValueError):
+                confidence = 0.0
+            if confidence >= INGEST_CONFIDENCE_THRESHOLD:
+                created = await asyncio.to_thread(_create_lens_for_detected, extraction, student)
+                job["students_created"].append(created)
+            else:
+                # Never auto-create on a guess — surface for the teacher.
+                job["needs_confirmation"].append({
+                    "display_name": str(student.get("display_name")),
+                    "confidence": confidence,
+                    "reason": "Low-confidence match in the document.",
+                })
+        job["warnings"] = [str(w) for w in extraction.data.get("warnings", [])]
+        job["status"] = "done"
+    except NotImplementedError:
+        job["status"] = "failed"
+        job["error"] = (
+            "Document extraction is not available in this build yet. The file "
+            "was saved safely and nothing was invented — try again after the "
+            "next update."
+        )
+    except Exception as error:
+        job["status"] = "failed"
+        job["error"] = f"Could not read this document: {error}"
+
+
+@app.post("/api/students/ingest")
+async def students_ingest(request: Request, background_tasks: BackgroundTasks):
+    from src.lingua_viva.docpipe import vault as docpipe_vault
+
+    content_type = request.headers.get("content-type", "")
+    filename = ""
+    content = b""
+    origin = "local"
+    drive_file_id = None
+    path = ""
+    if "multipart/form-data" in content_type:
+        form = await request.form()
+        upload = form.get("file")
+        if upload is None or isinstance(upload, str):
+            return JSONResponse({"error": "attach a file to import"}, status_code=400)
+        content = await upload.read()
+        filename = upload.filename or "imported-file"
+        path = filename
+    else:
+        try:
+            payload = await request.json()
+        except Exception:
+            return JSONResponse({"error": "attach a file to import"}, status_code=400)
+        drive_ref = str((payload or {}).get("drive_ref", "")).strip()
+        if not drive_ref:
+            return JSONResponse({"error": "attach a file or provide a drive_ref"}, status_code=400)
+        # Frozen T1 seam — honest failure while drive.fetch_file is a stub.
+        from src.lingua_viva.docpipe import drive as docpipe_drive
+
+        try:
+            fetched = await asyncio.to_thread(docpipe_drive.fetch_file, drive_ref)
+        except NotImplementedError:
+            return {
+                "job_id": None,
+                "status": "failed",
+                "error": (
+                    "Drive import is not available in this build yet. Import a "
+                    "local file instead — nothing else changes."
+                ),
+            }
+        content = fetched.content
+        filename = fetched.filename
+        origin = "drive"
+        drive_file_id = fetched.drive_file_id
+        path = fetched.path
+    if not content:
+        return JSONResponse({"error": "the file is empty"}, status_code=400)
+    if len(content) > INGEST_MAX_BYTES:
+        return JSONResponse({"error": "file is larger than 15 MB"}, status_code=413)
+
+    source = _build_source_record(
+        filename=filename, content=content, origin=origin,
+        path=path, drive_file_id=drive_file_id,
+    )
+    await asyncio.to_thread(docpipe_vault.put_source, source, content)
+    job = _new_ingest_job(source.source_id, filename)
+    # BackgroundTasks (not a bare create_task): the framework keeps the
+    # reference and runs the job after the response is sent, so the browser
+    # gets the job_id immediately and the chain cannot be garbage-collected
+    # mid-flight or die with a per-request test event loop.
+    background_tasks.add_task(_run_ingest_job, job, source, content)
+    return {"job_id": job["job_id"], "source_id": source.source_id, "status": job["status"]}
+
+
+@app.get("/api/students/ingest/{job_id}")
+async def students_ingest_status(job_id: str):
+    job = _ingest_job(job_id)
+    if job is None:
+        return JSONResponse({
+            "error": (
+                "This import job is no longer tracked (the app may have "
+                "restarted). Your file is saved — importing it again is safe: "
+                "duplicate imports merge into existing students, never fork."
+            ),
+        }, status_code=404)
+    return job
+
+
+@app.post("/api/students/ingest/confirm")
+async def students_ingest_confirm(payload: dict):
+    from src.lingua_viva.docpipe import vault as docpipe_vault
+
+    job_id = str((payload or {}).get("job_id", "")).strip()
+    display_name = str((payload or {}).get("display_name", "")).strip()
+    job = _ingest_job(job_id)
+    if job is None:
+        return JSONResponse({"error": "import job not found"}, status_code=404)
+    if not display_name:
+        return JSONResponse({"error": "display_name is required"}, status_code=400)
+    pending = next(
+        (item for item in job["needs_confirmation"] if item.get("display_name") == display_name),
+        None,
+    )
+    if pending is None:
+        return JSONResponse({"error": "that student is not awaiting confirmation"}, status_code=404)
+    try:
+        extraction = await asyncio.to_thread(docpipe_vault.get_extraction, job["source_id"])
+    except FileNotFoundError:
+        return JSONResponse({
+            "error": "The extracted document is no longer available — import the file again (re-imports merge safely).",
+        }, status_code=409)
+    detected = next(
+        (
+            student
+            for student in extraction.data.get("structure", {}).get("students_detected", [])
+            if str(student.get("display_name") or "").strip() == display_name
+        ),
+        {"display_name": display_name},
+    )
+    created = await asyncio.to_thread(_create_lens_for_detected, extraction, detected)
+    job["needs_confirmation"] = [
+        item for item in job["needs_confirmation"] if item.get("display_name") != display_name
+    ]
+    job["students_created"].append(created)
+    return {"status": "created", "student": created}
 
 
 @app.get("/api/students/growth")

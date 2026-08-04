@@ -91,6 +91,15 @@ reachable_from_ui:
   - route: "POST /api/ask"
     call_site: '"/api/ask"'
 
+  # T9 — Students-from-file ingest (submitStudentsIngest / pollIngestJob /
+  # confirm buttons, SPEC_T9_INGEST_UI_2026-08-04).
+  - route: "POST /api/students/ingest"
+    call_site: '"/api/students/ingest"'
+  - route: "GET /api/students/ingest/{job_id}"
+    call_site: '/api/students/ingest/${job.job_id}'
+  - route: "POST /api/students/ingest/confirm"
+    call_site: '"/api/students/ingest/confirm"'
+
   # Slice 6 — Daily briefing widgets (renderDailyBriefing).
   - route: "GET /api/daily/briefing"
     call_site: 'api("/api/daily/briefing")'

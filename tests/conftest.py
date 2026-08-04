@@ -117,3 +117,28 @@ def _hermetic_lv_state(monkeypatch, tmp_path):
     # status() now consults the connected-folders registry for can_upload
     # (§A5) — default path is the operator's REAL lv_home()/runtime/.
     monkeypatch.setenv("LV_GOOGLE_DRIVE_FOLDERS_PATH", str(state_home / "drive_folders.json"))
+
+
+@pytest.fixture()
+def demo_roster():
+    """Explicit replacement for the removed web._seed_demo_roster (T9 /
+    build-brief hard rule 5, acceptance A6): a fresh install shows an EMPTY
+    roster, so tests that need students opt in here instead of inheriting
+    invisible seeding. Same trio the old seeding created."""
+    from src.education.student_lens import StudentLensStore
+    from src.web import _student_db_path
+
+    with StudentLensStore(db_path=_student_db_path()) as store:
+        if not store.list_lenses():
+            store.create_lens(
+                student_id="student-marco", display_name="Marco", campus="local",
+                grade_level="G3", home_languages=["it"], rti_current_tier=1,
+            )
+            store.create_lens(
+                student_id="student-nora", display_name="Nora", campus="local",
+                grade_level="G3", home_languages=["it"], rti_current_tier=2,
+            )
+            store.create_lens(
+                student_id="student-luca", display_name="Luca", campus="local",
+                grade_level="G3", home_languages=["it", "en"], rti_current_tier=1,
+            )
