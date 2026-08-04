@@ -58,22 +58,28 @@ def test_archive_unknown_student_returns_404(monkeypatch, tmp_path):
     assert response.status_code == 404
 
 
-def test_observe_without_type_is_rejected_not_defaulted(monkeypatch, tmp_path):
-    """BUG-5 regression (QA 2026-08-02): a save without an observation type
-    used to be silently stored as cefr/speaking/A1 — invented clinical data
-    that cascaded into cohort-plan tiers. It must be a 400, never a guess."""
+def test_observe_without_type_defaults_to_general_not_invented_cefr(monkeypatch, tmp_path):
+    """A4 (2026-08-04): a save without an observation type is never forced or
+    rejected — it stores as template_type='general' (unclassified), not an
+    invented cefr/speaking/A1 guess (that was BUG-5, QA 2026-08-02) and not a
+    400 either (that was the interim BUG-5 fix, since replaced by A4)."""
     monkeypatch.setenv("LV_STUDENT_DB_PATH", str(tmp_path / "students.db"))
 
+    created = client.post("/api/students", json={"display_name": "A4 Test Student", "grade_level": "G3"})
+    assert created.status_code == 200
+    student_id = created.json()["student_id"]
+
     response = client.post("/api/observe/capture", json={
-        "student_id": "any",
+        "student_id": student_id,
         "transcript": "test note",
     })
-    assert response.status_code == 400
-    assert "observation type" in response.json()["error"].lower()
+    assert response.status_code == 200
+    assert response.json()["observation"]["template_type"] == "general"
 
-    # cefr without skill+level is also rejected, not defaulted.
+    # cefr explicitly chosen without skill+level is still rejected, not defaulted —
+    # that guard is unrelated to A4 and still protects against invented CEFR data.
     response = client.post("/api/observe/capture", json={
-        "student_id": "any",
+        "student_id": student_id,
         "transcript": "test note",
         "template_type": "cefr",
     })
