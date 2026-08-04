@@ -71,7 +71,7 @@ class ReasoningEngine:
         resolved_model = (
             model
             or config.resolve_provider_model()
-            or (default_model if (default_model and is_provably_local_model(default_model)) else None)
+            or self._usable_default_model(default_model)
             or os.environ.get("LV_REASON_MODEL")
             or self._resolve_best_model()
         )
@@ -167,6 +167,20 @@ class ReasoningEngine:
 
     def _resolve_provider_model(self) -> Optional[str]:
         return config.resolve_provider_model()
+
+    def _usable_default_model(self, default_model: Optional[str]) -> Optional[str]:
+        """P1-4 (Chip QA 0.2.36): mirrors src/pipeline.py's ReasoningEngine —
+        see that copy's docstring. Local-looking (ollama/) default models are
+        usable even before we've confirmed they're installed (no egress risk,
+        fails clearly at call time). External default models are only usable
+        if the user has actually configured that provider."""
+        if not default_model:
+            return None
+        if not self._is_external_model(default_model):
+            return default_model
+        if self._resolve_provider_model():
+            return default_model
+        return None
 
     def _resolve_best_model(self) -> str | None:
         if not hasattr(self, "_cached_model"):

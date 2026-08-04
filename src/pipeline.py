@@ -399,23 +399,30 @@ class ReasoningEngine:
         actually reachable. An external default (e.g. perplexity/sonar-pro) that
         the user hasn't configured as a provider should not be selected — it will
         just fail with "Not Found" and confuse the teacher. Prefer falling through
-        to the auto-detected local Ollama model instead."""
+        to the auto-detected local Ollama model instead.
+
+        Note this is a syntactic check (is_external_model), not
+        is_provably_local_model's "actually installed" check — an
+        ollama/-prefixed default_model is usable even before we've confirmed
+        it's pulled (Ollama fails clearly at call time, and the query never
+        leaves the machine either way, so there is no privacy reason to
+        gate on installed-ness here). is_provably_local_model is reserved
+        for the local_only egress gate below, where "installed" is the
+        right question because a cloud fallback is the alternative.
+        """
         if not default_model:
             return None
-        # Local models are always usable if they exist
-        if is_provably_local_model(default_model):
+        # Local-looking models are always usable — no egress risk.
+        if not self._is_external_model(default_model):
             return default_model
         # External model: only use if the user has configured that provider
-        if self._is_external_model(default_model) or not is_provably_local_model(default_model):
-            provider_model = self._resolve_provider_model()
-            if provider_model:
-                # User has a provider configured — the default_model is usable
-                # (provider resolution already won at tier 2, so this won't
-                # normally be reached, but covers edge cases)
-                return default_model
-            # No provider configured — skip this unreachable external default
-            return None
-        return default_model
+        if self._resolve_provider_model():
+            # User has a provider configured — the default_model is usable
+            # (provider resolution already won at tier 2, so this won't
+            # normally be reached, but covers edge cases)
+            return default_model
+        # No provider configured — skip this unreachable external default
+        return None
 
     def _resolve_provider_model(self) -> Optional[str]:
         """

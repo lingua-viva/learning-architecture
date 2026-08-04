@@ -3737,16 +3737,25 @@ async def observe_capture(request: Request, payload: dict):
     template_type = str(payload.get("template_type") or "").strip() or "general"
     cefr_dimension = str(payload.get("cefr_dimension") or "").strip() or None
     cefr_level_observed = str(payload.get("cefr_level_observed") or "").strip() or None
+    cefr_direction = str(payload.get("cefr_direction") or "").strip() or None
+    sel_domain = payload.get("sel_domain")
+    sel_valence = payload.get("sel_valence")
 
     # P1-3 (Chip QA 0.2.36): if the type is "general", CEFR and SEL fields
-    # MUST be null — never store a proficiency level without the teacher
-    # explicitly choosing "CEFR skill" as the observation type. A model
-    # suggestion in the "Suggest fields" panel may have populated these, but
-    # saving as "general" means "I didn't classify this" and invented
-    # levels must not reach the lens.
+    # MUST be null — never store a proficiency level or SEL valence without
+    # the teacher explicitly choosing that observation type. A model
+    # suggestion in the "Suggest fields" panel may have populated any of
+    # these, but saving as "general" means "I didn't classify this" and
+    # invented clinical/behavioral tags must not reach the lens. (Originally
+    # scoped to cefr_* only — sel_domain/sel_valence hit the identical bug,
+    # confirmed by Chip's macos-1 report: an untyped save invented both a
+    # CEFR level AND an sel_valence of "concern".)
     if template_type == "general":
         cefr_dimension = None
         cefr_level_observed = None
+        cefr_direction = None
+        sel_domain = None
+        sel_valence = None
     if template_type == "cefr" and (not cefr_dimension or not cefr_level_observed):
         return JSONResponse(
             {
@@ -3767,9 +3776,9 @@ async def observe_capture(request: Request, payload: dict):
             template_type=template_type,
             cefr_dimension=cefr_dimension,
             cefr_level_observed=cefr_level_observed,
-            cefr_direction=str(payload.get("cefr_direction") or "").strip() or None,
-            sel_domain=payload.get("sel_domain"),
-            sel_valence=payload.get("sel_valence"),
+            cefr_direction=cefr_direction,
+            sel_domain=sel_domain,
+            sel_valence=sel_valence,
             urgency_flag=bool(payload.get("urgency_flag", False)),
             support_category=payload.get("support_category"),
             need_statement=payload.get("need_statement"),
