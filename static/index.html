@@ -213,6 +213,20 @@
     body.voice-hidden .app { padding-right: 0; }
     body.voice-hidden .voice-companion,
     body.voice-hidden .voice-transcript { display: none; }
+    .ask-example {
+      font-size: 12.5px;
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--panel);
+      color: var(--muted);
+      cursor: pointer;
+      text-align: left;
+    }
+    .ask-example:hover {
+      border-color: var(--brand-2);
+      color: var(--ink);
+    }
     .content {
       padding: 22px 24px 32px;
       max-width: 1180px;
@@ -783,7 +797,9 @@
       selectedStudent: "",
       chat: [],
       selectedTraceId: "",
-      schoolProfile: null
+      schoolProfile: null,
+      askHistory: [],
+      askMoreOffered: false
     };
 
     const voiceRuntime = {
@@ -1339,7 +1355,10 @@
       } else {
         appendLinguaVivaMessage(data);
       }
-      if (state.view === "ask") renderAsk(); else await switchView("ask");
+      // T8 no-redirect rule (brief §5.2): the teacher is never moved to the
+      // Ask tab. The answer is spoken; the text waits in Ask for when they
+      // choose to open it.
+      if (state.view === "ask") renderAsk();
       const reply = state.chat[state.chat.length - 1];
       if (reply && !reply.isError) {
         updateVoiceCompanion("speaking", "Speaking");
@@ -2560,17 +2579,188 @@
         <div class="output">${Object.values(assessment.tier_assessments).map(item => `${item.tier}: ${item.task_prompt}`).join("\n\n")}</div>`;
     }
 
+    // T8 (SPEC_T8_ASK_2026-08-04): Ask is external web research (Perplexity)
+    // only. Questions naming a student get an honest refusal from the
+    // backend gate — nothing personal ever leaves the machine.
+    const ASK_EXAMPLES = [
+      "What are strategies for a student with ADD in a language immersion classroom?",
+      "What are some suggestions for helping kids with dyslexia learn to read?",
+      "What are some good lesson plan ideas around Italian food vocabulary?"
+    ];
+
     async function renderAsk() {
-      setTitle("Ask", "governed local reasoning");
+      setTitle("Ask", "web research route");
       $("content").innerHTML = `
-        <div class="view-head"><div><h2>Ask Lingua Viva</h2><p>Free-form teacher questions route through the governed local app runtime.</p></div><span class="badge ok">governance route</span></div>
+        <div class="view-head"><div><h2>Ask Lingua Viva</h2><p>Ask answers general teaching questions from the web. Nothing about your students is ever sent — questions that name a student are answered from their lens instead.</p></div><span class="badge warn">answers come from the web</span></div>
         <div class="panel">
           <div id="chat-log" class="chat-log">${state.chat.map(renderMessage).join("")}</div>
-          <div id="ask-voice-status" class="voice-hint" aria-live="polite" style="margin-top:12px;">Type your question below.</div>
-          <form id="ask-form" class="row" style="margin-top:12px;"><input id="ask-input" placeholder="How do I scaffold articles for mixed-level Grade 3?"><button class="primary" type="submit">Send</button></form>
+          <div id="ask-voice-status" class="voice-hint" aria-live="polite" style="margin-top:12px;">Tap Ask to speak, or type below.</div>
+          <form id="ask-form" class="row" style="margin-top:12px;"><input id="ask-input" placeholder="Ask a general teaching question…"><button id="ask-button" class="primary" type="submit">Ask</button></form>
+          <div id="ask-examples" class="row" style="margin-top:10px;flex-wrap:wrap;gap:6px;">
+            ${ASK_EXAMPLES.map(question => `<button type="button" class="ask-example" data-ask-example="${escapeHtml(question)}">${escapeHtml(question)}</button>`).join("")}
+          </div>
         </div>`;
       $("ask-form").addEventListener("submit", askQuestion);
+      document.querySelectorAll("[data-ask-example]").forEach(button => button.addEventListener("click", () => {
+        $("ask-input").value = button.dataset.askExample;
+        $("ask-input").focus();
+      }));
+      document.querySelectorAll("[data-ask-more]").forEach(button => button.addEventListener("click", () => submitAskMore()));
       attachWhyLinks();
+    }
+
+    function askPlaybackActive() {
+      return Boolean(voiceRuntime.remoteAudio)
+        || voiceRuntime.speechQueueActive
+        || ("speechSynthesis" in window && window.speechSynthesis.speaking);
+    }
+
+    function stopAskPlayback() {
+      voiceRuntime.stopSpeaking();
+      const status = $("ask-voice-status");
+      if (status) status.textContent = "Stopped. Tap Ask to speak, or type below.";
+    }
+
+    // Voice command intercepts: "stop" halts playback; "more"/"yes" after an
+    // offered continuation fetches it. Anything else is a question.
+    const ASK_STOP_WORDS = ["stop", "stop please", "no", "no thanks", "no thank you"];
+    const ASK_MORE_WORDS = ["more", "hear more", "yes", "yes please", "tell me more", "continue"];
+
+    function handleAskTranscript(transcript) {
+      const normalized = String(transcript || "").trim().toLowerCase().replace(/[.,!?]+$/, "");
+      if (!normalized) return;
+      if (ASK_STOP_WORDS.includes(normalized)) {
+        stopAskPlayback();
+        if ($("ask-input")) $("ask-input").value = "";
+        return;
+      }
+      if (state.askMoreOffered && ASK_MORE_WORDS.includes(normalized)) {
+        if ($("ask-input")) $("ask-input").value = "";
+        submitAskMore();
+        return;
+      }
+      submitAskExternal(transcript);
+    }
+
+    // The ASK button (brief §5.2): stops playback if speaking, submits typed
+    // text if present, otherwise dictates via the local STT chokepoint.
+    async function askQuestion(event) {
+      event.preventDefault();
+      if (askPlaybackActive()) {
+        stopAskPlayback();
+        return;
+      }
+      const text = $("ask-input").value.trim();
+      if (text) {
+        await submitAskExternal(text);
+        return;
+      }
+      voiceRuntime.captureLocalStt({
+        statusId: "ask-voice-status",
+        micId: "ask-button",
+        inputId: "ask-input",
+        onTranscript: transcript => handleAskTranscript(transcript)
+      });
+    }
+
+    function appendAskAnswer(question, data) {
+      state.chat.forEach(message => { if (message.askMore) message.askMore = false; });
+      if (data.type === "ask_result") {
+        state.askHistory = [
+          {role: "user", content: question},
+          {role: "assistant", content: data.content}
+        ];
+        state.askMoreOffered = Boolean(data.more_available);
+        state.chat.push({
+          role: "Lingua Viva",
+          text: data.content,
+          askMore: Boolean(data.more_available),
+          meta: {route: "external", model_used: data.model_used, duration_ms: data.duration_ms, sources: data.citations}
+        });
+      } else {
+        // Refusal or unavailable — nothing left the machine; say so honestly.
+        state.askHistory = [];
+        state.askMoreOffered = false;
+        state.chat.push({
+          role: "Lingua Viva",
+          text: data.message || data.error || "Ask could not answer.",
+          meta: {route: "local", model_used: data.refused ? "ask-privacy-gate" : "none", duration_ms: 0}
+        });
+      }
+    }
+
+    function speakAskAnswer(data, {offerMore = true} = {}) {
+      const text = data.type === "ask_result" ? data.content : (data.message || "");
+      if (!text) return;
+      const spoken = data.type === "ask_result" && data.more_available && offerMore
+        ? `${text} Would you like to hear more?`
+        : text;
+      const status = $("ask-voice-status");
+      if (status) status.textContent = "Speaking… tap Ask to stop.";
+      voiceRuntime.speak(spoken);
+    }
+
+    async function submitAskExternal(text) {
+      text = String(text || "").trim();
+      if (!text || voiceRuntime.busy) return;
+      voiceRuntime.busy = true;
+      state.askMoreOffered = false;
+      state.chat.push({role: "teacher", text});
+      if ($("ask-input")) $("ask-input").value = "";
+      if (state.view === "ask") renderAsk();
+      if ($("ask-voice-status")) $("ask-voice-status").textContent = "Searching the web…";
+      let data;
+      try {
+        const response = await fetch("/api/ask", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({question: text, mode: "summary"})
+        });
+        data = await response.json();
+      } catch {
+        data = {type: "ask_unavailable", message: "I could not reach the local app service. Check Health and try again."};
+      }
+      voiceRuntime.busy = false;
+      appendAskAnswer(text, data);
+      if (state.view === "ask") renderAsk();
+      speakAskAnswer(data);
+    }
+
+    async function submitAskMore() {
+      if (voiceRuntime.busy || !state.askHistory.length) return;
+      voiceRuntime.busy = true;
+      state.chat.forEach(message => { if (message.askMore) message.askMore = false; });
+      state.askMoreOffered = false;
+      if (state.view === "ask") renderAsk();
+      if ($("ask-voice-status")) $("ask-voice-status").textContent = "Getting more detail…";
+      let data;
+      try {
+        const response = await fetch("/api/ask", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({question: state.askHistory[0].content, mode: "more", history: state.askHistory})
+        });
+        data = await response.json();
+      } catch {
+        data = {type: "ask_unavailable", message: "I could not reach the local app service. Check Health and try again."};
+      }
+      voiceRuntime.busy = false;
+      if (data.type === "ask_result") {
+        state.askHistory.push({role: "assistant", content: data.content});
+        state.chat.push({
+          role: "Lingua Viva",
+          text: data.content,
+          meta: {route: "external", model_used: data.model_used, duration_ms: data.duration_ms, sources: data.citations}
+        });
+      } else {
+        state.chat.push({
+          role: "Lingua Viva",
+          text: data.message || data.error || "Ask could not continue.",
+          meta: {route: "local", model_used: "none", duration_ms: 0}
+        });
+      }
+      if (state.view === "ask") renderAsk();
+      speakAskAnswer(data, {offerMore: false});
     }
 
     // F2 (Chip QA 0.2.32) / FM-B: ONE safety gate consumed by BOTH the text
@@ -2620,13 +2810,10 @@
         ? `<span class="badge">tier ${escapeHtml(message.meta.grounding.tier_used || "none")}</span><span class="${safety.girBadgeClass}">GIR ${Number(message.meta.grounding.gir?.score ?? 1).toFixed(2)}</span>`
         : "";
       const meta = message.meta ? `<div class="source-line">${routeBadge}<span class="badge">${escapeHtml(message.meta.model_used || "model unavailable")}</span><span class="badge">${((message.meta.duration_ms || 0) / 1000).toFixed(1)}s</span>${grounding}${sourceBadges}<button type="button" data-why="${escapeHtml(message.meta.trace_id || "")}">Why?</button></div>` : "";
-      return `<div class="message ${message.role === "teacher" ? "user" : ""}"><strong>${message.role}</strong>${safety.warningHtml}<p>${escapeHtml(message.text)}</p>${meta}</div>`;
-    }
-
-    async function askQuestion(event) {
-      event.preventDefault();
-      const text = $("ask-input").value.trim();
-      await submitAskText(text, false);
+      const moreButton = message.askMore
+        ? `<div class="row" style="margin-top:8px;"><button type="button" data-ask-more>Hear more</button></div>`
+        : "";
+      return `<div class="message ${message.role === "teacher" ? "user" : ""}"><strong>${message.role}</strong>${safety.warningHtml}<p>${escapeHtml(message.text)}</p>${meta}${moreButton}</div>`;
     }
 
     function parseSseBlock(block) {

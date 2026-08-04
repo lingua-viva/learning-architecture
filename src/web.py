@@ -1954,6 +1954,226 @@ def _request_rime_audio(text: str, speaker: str, model_id: str, key: str) -> byt
         return response.read()
 
 
+# ---------------------------------------------------------------------------
+# Ask = voice-first Perplexity (T8, SPEC_T8_ASK_2026-08-04).
+# Ask is EXTERNAL information retrieval only: it never reasons over student
+# data, and no personal information leaves the machine on any Ask call. A
+# roster-name or PII hit gets an honest refusal — never sanitize-and-send.
+# ---------------------------------------------------------------------------
+
+PERPLEXITY_API_URL = "https://api.perplexity.ai/chat/completions"
+PERPLEXITY_MODEL = "sonar-pro"
+ASK_SUMMARY_MAX_TOKENS = 220   # brief §5.2: one-paragraph cap at the API level
+ASK_MORE_MAX_TOKENS = 800
+ASK_HISTORY_MAX_TURNS = 6
+ASK_HISTORY_MAX_CHARS = 4000
+
+
+def _perplexity_api_key() -> str:
+    try:
+        from src.lingua_viva.config import provider_api_key
+
+        configured = provider_api_key("perplexity")
+    except Exception:
+        configured = None
+    return (configured or os.environ.get("PERPLEXITY_API_KEY", "")).strip()
+
+
+def _ask_payload_text(question: str, history: list[dict]) -> str:
+    """Every byte that could leave the machine, joined for the PII gate."""
+    parts = [question]
+    parts.extend(str(turn.get("content", "")) for turn in history)
+    return "\n".join(parts)
+
+
+def _ask_personal_data_hit(payload_text: str) -> Optional[str]:
+    """Return a content-free reason string when the outbound payload contains
+    personal data, None when it is clean. Unreadable roster fails CLOSED —
+    same rule as /api/voice/tts."""
+    from src.lingua_viva.privacy import contains_private_runtime_data
+    from src.lingua_viva.voice_intent import detect_student_detailed
+
+    try:
+        names = _active_student_names()
+    except Exception:
+        return "roster_unreadable"
+    roster = [
+        {"student_id": f"roster-{index}", "display_name": name}
+        for index, name in enumerate(names)
+        if name and name.strip()
+    ]
+    detection = detect_student_detailed(payload_text, roster)
+    if detection.student_id or detection.match_quality == "ambiguous":
+        return "student_name_detected"
+    if contains_private_runtime_data(payload_text):
+        return "private_pattern_detected"
+    return None
+
+
+def _request_perplexity(messages: list[dict], max_tokens: int, key: str) -> dict:
+    import json as _json
+    import urllib.request as _urlreq
+
+    body = _json.dumps({
+        "model": PERPLEXITY_MODEL,
+        "messages": messages,
+        "max_tokens": max_tokens,
+    }).encode("utf-8")
+    outgoing = _urlreq.Request(
+        PERPLEXITY_API_URL,
+        data=body,
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    with _urlreq.urlopen(outgoing, timeout=30) as response:
+        return _json.loads(response.read().decode("utf-8"))
+
+
+@app.post("/api/ask")
+async def ask_endpoint(payload: dict):
+    from src.lingua_viva.messages import (
+        ask_not_configured_message,
+        ask_offline_message,
+        ask_personal_data_refusal_message,
+    )
+    from src.lingua_viva.privacy_log import log_event
+
+    if not isinstance(payload, dict):
+        return JSONResponse({"error": "invalid request"}, status_code=400)
+    question = str(payload.get("question", "")).strip()
+    if not question:
+        return JSONResponse({"error": "question is required"}, status_code=400)
+    mode = "more" if payload.get("mode") == "more" else "summary"
+    raw_history = payload.get("history") or []
+    history = [
+        {
+            "role": "assistant" if turn.get("role") == "assistant" else "user",
+            "content": str(turn.get("content", ""))[:ASK_HISTORY_MAX_CHARS],
+        }
+        for turn in raw_history[-ASK_HISTORY_MAX_TURNS:]
+        if isinstance(turn, dict) and str(turn.get("content", "")).strip()
+    ]
+
+    # PII egress gate — runs before the key is even read, so the refusal is
+    # identical whether or not Ask is configured.
+    payload_text = _ask_payload_text(question, history)
+    hit = await asyncio.to_thread(_ask_personal_data_hit, payload_text)
+    if hit:
+        log_event("student_name_blocked", query_text=question)
+        return {
+            "type": "ask_refused",
+            "refused": True,
+            "message": ask_personal_data_refusal_message(),
+            "external_calls": 0,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+    key = _perplexity_api_key()
+    if not key:
+        return {
+            "type": "ask_unavailable",
+            "configured": False,
+            "message": ask_not_configured_message(),
+            "external_calls": 0,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+    from src.lingua_viva.injection_guard import redact_injection
+    from src.lingua_viva.privacy import assert_safe_for_external_output
+
+    clean_question, _ = redact_injection(question)
+    if mode == "more":
+        messages = [
+            {"role": "system", "content": (
+                "You are answering an experienced teacher's general teaching "
+                "question. Continue your previous answer with more depth and "
+                "concrete detail."
+            )},
+            *history,
+            {"role": "user", "content": "Please continue with more detail."},
+        ]
+        max_tokens = ASK_MORE_MAX_TOKENS
+    else:
+        messages = [
+            {"role": "system", "content": (
+                "You are answering an experienced teacher's general teaching "
+                "question. Answer in ONE concise paragraph."
+            )},
+            *history,
+            {"role": "user", "content": clean_question},
+        ]
+        max_tokens = ASK_SUMMARY_MAX_TOKENS
+
+    # Belt-and-braces: nothing personal in the final outbound payload. A trip
+    # here means the gate above has a hole — refuse, do not 500.
+    try:
+        assert_safe_for_external_output(
+            "\n".join(str(m.get("content", "")) for m in messages)
+        )
+    except ValueError:
+        log_event("student_name_blocked", query_text=question)
+        return {
+            "type": "ask_refused",
+            "refused": True,
+            "message": ask_personal_data_refusal_message(),
+            "external_calls": 0,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+    started = time.time()
+    try:
+        data = await asyncio.to_thread(_request_perplexity, messages, max_tokens, key)
+    except Exception as error:
+        # A rejected key is a setup problem, not a connectivity problem —
+        # "check the internet" would send the teacher down the wrong path.
+        import urllib.error
+
+        if isinstance(error, urllib.error.HTTPError) and error.code in (401, 403):
+            return {
+                "type": "ask_unavailable",
+                "configured": False,
+                "message": ask_not_configured_message(),
+                "external_calls": 0,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+        return {
+            "type": "ask_unavailable",
+            "configured": True,
+            "message": ask_offline_message(),
+            "external_calls": 0,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    log_event("external_call_made", query_text=question)
+
+    choices = data.get("choices") or []
+    content = ""
+    if choices and isinstance(choices[0], dict):
+        content = str(((choices[0].get("message") or {}).get("content")) or "").strip()
+    citations = [str(c) for c in (data.get("citations") or []) if str(c).strip()]
+    if not content:
+        return {
+            "type": "ask_unavailable",
+            "configured": True,
+            "message": ask_offline_message(),
+            "external_calls": 1,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    return {
+        "type": "ask_result",
+        "content": content,
+        "citations": citations,
+        "model_used": f"perplexity/{PERPLEXITY_MODEL}",
+        "route": "external",
+        "duration_ms": int((time.time() - started) * 1000),
+        "more_available": mode == "summary",
+        "external_calls": 1,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 @app.get("/api/students/growth")
 async def students_growth():
     """Growth badge and any tier recommendation per student (Gap 6, Phase 1).

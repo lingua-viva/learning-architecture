@@ -52,3 +52,34 @@ def model_unreachable_message(model: str, reason: str = "connection failed") -> 
         "starting, loading the model, or temporarily unreachable. Check that "
         "Ollama is running, then try again."
     )
+
+
+def ask_personal_data_refusal_message() -> str:
+    """Ask (T8) detected a student name or personal identifier in a question
+    bound for the external web search. The refusal is the feature: personal
+    questions are never sanitized-and-sent, they are answered from the lens."""
+    return (
+        "Ask answers general teaching questions from the web. Information "
+        "about your students lives in their lens — nothing personal is ever "
+        "sent off this machine."
+    )
+
+
+def ask_not_configured_message() -> str:
+    """Ask (T8) has no Perplexity key configured. Offline-first rule: say so
+    plainly, never fake an answer."""
+    return (
+        "Ask searches the web for general teaching questions, and the web "
+        "search service is not set up on this computer yet. Ask needs a "
+        "Perplexity key before it can answer. Everything else in Lingua "
+        "Viva works without it."
+    )
+
+
+def ask_offline_message() -> str:
+    """Ask (T8) is configured but the web search call failed. Offline is a
+    supported state, not an error state."""
+    return (
+        "I could not reach the web search service. Check the internet "
+        "connection and try again. Your question is still in the box."
+    )

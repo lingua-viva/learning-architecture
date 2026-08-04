@@ -195,7 +195,11 @@ REPO = Path(__file__).resolve().parent.parent
 #     F5 student placeholder + refusals, §8.2 voice companion hidden.
 #   v102 (2026-08-04): relock only — v101 hashes were CRLF-contaminated
 #     (Windows autocrlf checkout); recomputed from LF-canonical bytes.
-EXPECTED_VERSION = 102
+#   v103-v104 (2026-08-04): T8 Ask = voice-first Perplexity — /api/ask with
+#     PII egress refusal gate, ASK button + examples + stop/more intercepts,
+#     no-redirect rule (switchView("ask") removed); v104 = 401-vs-offline
+#     honesty fix in the same session.
+EXPECTED_VERSION = 104
 
 
 def _html() -> str:

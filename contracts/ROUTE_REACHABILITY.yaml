@@ -86,6 +86,11 @@ reachable_from_ui:
   - route: "POST /api/voice/tts"
     call_site: '"/api/voice/tts"'
 
+  # T8 — Ask = voice-first Perplexity with PII egress refusal gate
+  # (submitAskExternal / submitAskMore, SPEC_T8_ASK_2026-08-04).
+  - route: "POST /api/ask"
+    call_site: '"/api/ask"'
+
   # Slice 6 — Daily briefing widgets (renderDailyBriefing).
   - route: "GET /api/daily/briefing"
     call_site: 'api("/api/daily/briefing")'

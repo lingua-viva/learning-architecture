@@ -569,7 +569,23 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 102
+version: 104
+# v103-v104 (2026-08-04): T8 Ask = voice-first Perplexity
+#     (SPEC_T8_ASK_2026-08-04). v104 adds 401/403-vs-offline honesty in the
+#     same T8 session: a rejected Perplexity key reads as a setup problem
+#     (ask_not_configured_message), not "check the internet".
+#     src/web.py: POST /api/ask — external web research with a hard PII
+#     egress gate (roster fuzzy match via detect_student_detailed +
+#     contains_private_runtime_data, roster-unreadable fails closed,
+#     assert_safe_for_external_output belt) that REFUSES rather than
+#     sanitizes; refusal/unconfigured/offline copy from messages.py;
+#     student_name_blocked + external_call_made privacy events; sonar-pro
+#     with max_tokens=220 summary / 800 "more" continuation with gated
+#     history. static/index.html: Ask region rebuilt — ASK button
+#     (speak/submit/stop), example-question chips, stop/more voice
+#     intercepts, "Hear more" button, citations via renderMessage source
+#     badges, honest web-route header copy; handleVoiceActResult's
+#     switchView("ask") auto-redirect REMOVED (brief §5.2 no-redirect).
 # v102 (2026-08-04): relock only — no file content change. v101's hashes
 #     were computed from a Windows checkout with core.autocrlf=true (CRLF
 #     worktree bytes), so CI's LF checkout failed the auto-release test

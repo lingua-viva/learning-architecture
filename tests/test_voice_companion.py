@@ -23,7 +23,11 @@ def test_voice_companion_is_single_mic_surface():
 
 def test_voice_companion_routes_ask_and_observe():
     assert 'state.view === "observe"' in HTML
-    assert 'await switchView("ask")' in HTML
+    # T8 no-redirect rule (LV_BUILD_BRIEF_2026-08-04 §5.2): the teacher is
+    # never moved to the Ask tab automatically. The companion's question
+    # branch renders in place when already on Ask, and never navigates.
+    assert 'switchView("ask")' not in HTML
+    assert 'if (state.view === "ask") renderAsk();' in HTML
     assert 'inputId: "obs-text"' in HTML
     assert 'inputId: "ask-input"' in HTML
     assert "submitAskText(text, true)" in HTML
