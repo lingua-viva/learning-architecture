@@ -26,13 +26,12 @@ client = TestClient(app)
 
 
 @pytest.fixture
-def roster():
-    """Ensure the student store exists before asserting on counts drawn from it.
+def roster(demo_roster):
+    """Ensure the student store has students before asserting on counts.
 
-    tests/conftest.py points lv_home at a temp location, so the store is
-    absent until something creates it. GET /api/students seeds the demo roster
-    the same way a first launch does — this is establishing the precondition,
-    not substituting fake data for real.
+    First launches no longer seed a demo roster (T9 / acceptance A6 —
+    fresh installs are empty), so this fixture opts in to conftest's
+    explicit demo_roster trio and then reads the API view of it.
     """
     return client.get("/api/students").json()["students"]
 
