@@ -161,16 +161,31 @@ def test_low_confidence_student_needs_confirmation(isolated_state, monkeypatch):
     assert all(item["display_name"] != "Nora Rossi" for item in refreshed["needs_confirmation"])
 
 
-def test_extraction_stub_fails_honestly(isolated_state):
-    """Current reality: T3's extract_document raises NotImplementedError.
-    The job must fail with honest teacher copy, keep the source, and write
-    no lenses."""
+def test_real_extraction_end_to_end_no_mock(isolated_state, monkeypatch):
+    """T3 landed: the REAL extractor (deterministic core, no model) drives the
+    chain — upload the fixture document, get real grounded lenses. This test
+    replaced the honest-stub-failure test the moment T3 shipped."""
+    # Force the deterministic path: no model client in the ingest job.
+    import src.lingua_viva.docpipe.model as docpipe_model
+
+    monkeypatch.setattr(
+        docpipe_model, "LocalModelClient",
+        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("no model in test")),
+    )
     job = _wait_for_job(_upload()["job_id"])
-    assert job["status"] == "failed"
-    assert "not available" in job["error"]
+    assert job["status"] == "done", job
+    names = sorted(s["display_name"] for s in job["students_created"])
+    assert names == ["Marco Bianchi", "Nora Rossi"]
     root = vault.vault_root()
-    assert (root / "sources").exists() and any((root / "sources").iterdir())
-    assert not (root / "lenses").exists() or not any((root / "lenses").iterdir())
+    extraction = json.loads(
+        (root / "extracted" / f"{job['source_id']}.json").read_text(encoding="utf-8")
+    )
+    assert extraction["structure"]["document_type"] == "lesson_plan"
+    for created in job["students_created"]:
+        lens = json.loads(
+            (root / "lenses" / created["student_id"] / "lens.json").read_text(encoding="utf-8")
+        )
+        assert any(f["evidence"] for f in lens["profile"].values())
 
 
 def test_no_students_found_is_honest(isolated_state, monkeypatch):

@@ -2255,7 +2255,18 @@ async def _run_ingest_job(job: dict, source, content: bytes) -> None:
 
     try:
         job["status"] = "extracting"
-        extraction = await docpipe_extract.extract_document(source, content)
+        # Local model enrichment when available; extraction is deterministic
+        # without it (offline is a supported state — T3 spec §0).
+        model_client = None
+        try:
+            from src.lingua_viva.docpipe.model import LocalModelClient
+
+            model_client = LocalModelClient()
+        except Exception:
+            model_client = None
+        extraction = await docpipe_extract.extract_document(
+            source, content, model_client=model_client
+        )
         await asyncio.to_thread(docpipe_vault.put_extraction, extraction)
         job["status"] = "identifying"
         detected = [
