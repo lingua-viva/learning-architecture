@@ -4120,10 +4120,39 @@ async def students():
 
 @app.post("/api/students")
 async def create_student(payload: dict):
-    """Create a new student lens from the Add Student form."""
+    """Create a new student lens from the Add Student form.
+
+    Grade is validated against the curriculum's canonical grade bands
+    (dev/ADD_STUDENT_FORM_DECISION_2026-08-04.md, Decision 1) so a mismatched
+    value (e.g. "3rd grade") can never silently fail to match a grade band
+    later in differentiation/materials generation. The client form now sends
+    a dropdown of canonical values; this check is defense-in-depth for any
+    other caller of this endpoint.
+    """
     display_name = (payload.get("display_name") or "").strip()
     if not display_name:
         return JSONResponse({"error": "display_name is required"}, status_code=400)
+
+    grade_level = (payload.get("grade_level") or "").strip()
+    if grade_level:
+        from src.lingua_viva.curriculum import CurriculumService
+
+        service = CurriculumService()
+        normalized = service._normalize_grade(grade_level)
+        known_grades = {
+            band["grade"] for band in service.get_overview()["grade_bands"]
+        }
+        if normalized not in known_grades:
+            return JSONResponse(
+                {
+                    "error": (
+                        f"'{grade_level}' is not a known grade band "
+                        f"({', '.join(sorted(known_grades))})."
+                    )
+                },
+                status_code=400,
+            )
+        payload = {**payload, "grade_level": normalized}
 
     def do_create(store):
         student_id = store.create_lens(

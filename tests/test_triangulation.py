@@ -20,6 +20,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from src.education.student_lens import (
+    NARRATION_NOT_SHARED,
     Observation,
     StudentLensStore,
     compute_triangulation,
@@ -218,6 +219,67 @@ def test_ledger_exports_local_rows_only(tmp_path):
     # The local provenance column never travels.
     assert all("origin" not in r for r in rows)
     store.close()
+
+
+def test_ledger_rows_never_carry_raw_narration(tmp_path):
+    """Lens Primitive DOES boundary (2026-08-04): raw_transcript is where a
+    teacher's spoken/typed narration lives — exactly the surface where
+    causal ("why") language about a student shows up. A colleague's
+    ledger row must never carry it, by construction, regardless of what a
+    teacher actually wrote."""
+    store = StudentLensStore(db_path=tmp_path / "s.db")
+    sid = store.create_lens(display_name="Marco Bianchi")
+    _append_local(
+        store,
+        sid,
+        "t-local",
+        raw_transcript="His mother was hurt in the war and he still struggles with it.",
+        teacher_edited_transcript="Edited: his mother was hurt in the war.",
+    )
+
+    ledger = drive_sync.build_ledger_ndjson(store, sid, "t-local")
+    rows = [json.loads(line) for line in ledger.strip().splitlines()][1:]
+    assert len(rows) == 1
+    assert rows[0]["raw_transcript"] == NARRATION_NOT_SHARED
+    assert "war" not in rows[0]["raw_transcript"]
+    assert rows[0]["teacher_edited_transcript"] is None
+
+    # The neutralized row still imports cleanly on the receiving side —
+    # blanking narration must not silently break triangulation.
+    other = StudentLensStore(db_path=tmp_path / "other.db")
+    other.create_lens(student_id=sid, display_name="Marco Bianchi")
+    result = other.import_observation_rows(rows)
+    assert result == {"imported": 1, "skipped": 0}
+    other.close()
+    store.close()
+
+
+def test_drive_markdown_never_renders_raw_observation_text(tmp_path, monkeypatch):
+    """The Drive-bound markdown lens is a shared, cross-teacher artifact —
+    it must only ever contain what we explicitly assemble for it. Raw
+    observation narration must never appear, however it's spelled."""
+    lens_data = {
+        "display_name": "Marco Bianchi",
+        "student_id": "stu-1",
+        "grade_level": "G3",
+        "cefr_trajectory": "progressing",
+        "support_profile": {"categories": {}},
+        "observations": [
+            {
+                "created_at": "2026-08-04T00:00:00Z",
+                "raw_transcript": "His mother was hurt in the war and he still struggles with it.",
+            }
+        ],
+        "recent_observations": [
+            {
+                "created_at": "2026-08-04T00:00:00Z",
+                "text": "His mother was hurt in the war and he still struggles with it.",
+            }
+        ],
+    }
+    markdown = drive_sync.format_lens_markdown(lens_data)
+    assert "war" not in markdown
+    assert "Recent Observations" not in markdown
 
 
 def test_sync_uploads_id_only_ledger_filenames(tmp_path, monkeypatch):

@@ -74,7 +74,19 @@ class CandidateStore:
     """
 
     def __init__(self, proposals_dir: Optional[Path] = None):
-        self._dir = proposals_dir or Path(__file__).parent
+        import os
+        if proposals_dir is None:
+            # F6/hermeticity: in desktop mode (LV_DESKTOP=1) or when
+            # LV_STATE_HOME is set, write to state home instead of next to
+            # this source file (which is inside the signed bundle).
+            # In dev mode (no env set), keep the original behavior for
+            # direct human review of candidate files.
+            state_home = os.environ.get("LV_STATE_HOME")
+            if state_home or os.environ.get("LV_DESKTOP"):
+                proposals_dir = Path(state_home or str(Path.home() / ".lingua-viva")) / "proposals"
+            else:
+                proposals_dir = Path(__file__).parent
+        self._dir = proposals_dir
         self._dir.mkdir(parents=True, exist_ok=True)
 
     def create(

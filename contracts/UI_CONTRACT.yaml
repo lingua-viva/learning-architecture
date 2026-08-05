@@ -569,7 +569,18 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 113
+version: 114
+# v114 (2026-08-04): Add Student form Decision 1
+#     (dev/ADD_STUDENT_FORM_DECISION_2026-08-04.md). static/index.html:
+#     #new-student-grade is now a dropdown populated from
+#     overview.grade_bands (G1-G5), matching the Prepare-view pattern —
+#     free text like "3rd grade" previously created a student that could
+#     never match a grade band, so differentiation/materials generation
+#     silently found nothing. src/web.py: create_student adds
+#     defense-in-depth server-side validation (normalizes grade_level,
+#     rejects anything outside the known grade bands with a 400) so any
+#     other caller of /api/students gets the same protection the dropdown
+#     gives the form.
 # v112 (2026-08-04): P1-3 follow-up (Chip QA 0.2.36 macos-1 report) — the
 #     general-type null-out in /api/observe/capture only cleared
 #     cefr_dimension/cefr_level_observed; sel_domain/sel_valence hit the

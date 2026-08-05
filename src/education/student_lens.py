@@ -108,6 +108,13 @@ VALID_SUPPORT_BUCKETS = (
 
 VALID_STRATEGY_OUTCOMES = ("worked", "did_not_work", "unknown")
 
+# DOES boundary (Lens Primitive, 2026-08-04): raw narration never leaves the
+# machine. Every observation that travels off-device (ledger export, Drive
+# lens) has its narration fields overwritten with this fixed marker at the
+# export boundary — never filtered by scanning their contents, always
+# replaced by construction. See dev/SPEC_LENS_PRIMITIVE_2026-08-04.md.
+NARRATION_NOT_SHARED = "(observation narration is device-local and is not shared)"
+
 # Profile-level strengths (v2.1): separate from the per-category strengths
 # buckets inside support_profile. These answer the report-facing ask
 # "Academic Strengths / Personal Strengths" as top-level profile sections.
@@ -1526,17 +1533,35 @@ class StudentLensStore:
     def local_observation_rows(self, student_id: str, teacher_id: str) -> list[dict]:
         """This teacher's locally-authored observation rows for a student,
         shaped for the shared-Drive ledger (Observation schema fields only —
-        the local `origin` provenance column never travels)."""
+        the local `origin` provenance column never travels).
+
+        DOES boundary: this is the one place a local observation becomes a
+        row that can leave the machine, so this is where narration gets
+        neutralized — `raw_transcript` / `teacher_edited_transcript` are
+        always overwritten with a fixed, non-informative marker
+        (NARRATION_NOT_SHARED), never passed through, regardless of
+        content. Spoken/typed narration is exactly where causal ("why")
+        language shows up (the specific trauma, the family history behind
+        a need) — the categorized fields (support_category,
+        need_statement, strength_statement, strategy_statement,
+        evidence_summary, support_entries) describe *what* a student
+        needs inside a fixed category vocabulary and travel intact; that
+        distinction, not a name or a keyword scan, is the actual privacy
+        boundary. See dev/SPEC_LENS_PRIMITIVE_2026-08-04.md.
+        """
         field_names = {f.name for f in dataclass_fields(Observation)}
         rows = self._conn.execute(
             "SELECT * FROM observations WHERE student_id = ? AND teacher_id = ?"
             " AND origin = 'local' ORDER BY recorded_at ASC",
             (student_id, teacher_id),
         ).fetchall()
-        return [
-            {k: v for k, v in self._observation_row_to_dict(r).items() if k in field_names}
-            for r in rows
-        ]
+        shareable = []
+        for r in rows:
+            row = {k: v for k, v in self._observation_row_to_dict(r).items() if k in field_names}
+            row["raw_transcript"] = NARRATION_NOT_SHARED
+            row["teacher_edited_transcript"] = None
+            shareable.append(row)
+        return shareable
 
     def local_teacher_ids(self, student_id: Optional[str] = None) -> list[str]:
         """Teacher ids with locally-authored observations — 'us', as opposed

@@ -5,6 +5,16 @@ When a sync folder is configured, any lens update (observation save, extraction
 write, manual edit) triggers an async push of the updated lens file to Drive.
 
 Sync is fire-and-forget: failures are logged but never block the save.
+
+DOES boundary (Lens Primitive, 2026-08-04): everything this module writes to
+Drive is a shared, cross-teacher/cross-school artifact, so it may only ever
+carry what we explicitly choose to include. A student's name is not the
+sensitive element here (support-need lenses are meant to be shared and
+reused across similar students) — the causal/etiological narrative behind a
+need is. `format_lens_markdown()` never renders raw observation narration,
+and `local_observation_rows()` (student_lens.py) always neutralizes
+raw_transcript / teacher_edited_transcript before a row can reach a ledger.
+See dev/SPEC_LENS_PRIMITIVE_2026-08-04.md.
 """
 
 from __future__ import annotations
@@ -112,17 +122,14 @@ def format_lens_markdown(student_data: dict) -> str:
                         lines.append(f"- → {st}")
                 lines.append("")
 
-    # Recent observations
-    observations = student_data.get("observations", student_data.get("recent_observations", []))
-    if observations:
-        lines.append("## Recent Observations")
-        lines.append("")
-        for obs in observations[:10]:
-            date = obs.get("created_at", "")[:10] if obs.get("created_at") else ""
-            text = obs.get("raw_transcript", obs.get("text", ""))
-            level = obs.get("observed_level", "")
-            lines.append(f"- [{date}] {text}" + (f" (CEFR {level})" if level else ""))
-        lines.append("")
+    # DOES boundary (Lens Primitive, 2026-08-04): this file is uploaded to a
+    # shared Drive folder, so it may only ever contain what we explicitly
+    # choose to put here. Raw observation narration (raw_transcript /
+    # teacher_edited_transcript) is deliberately never rendered below —
+    # that free-text narration is where causal ("why") language about a
+    # student actually appears. The Support Profile section above already
+    # carries the categorized, shareable "what helps" content. See
+    # dev/SPEC_LENS_PRIMITIVE_2026-08-04.md.
 
     # Grouping notes
     grouping = student_data.get("grouping", {})
