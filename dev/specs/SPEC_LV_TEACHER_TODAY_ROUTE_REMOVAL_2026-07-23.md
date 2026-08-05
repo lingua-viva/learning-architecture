@@ -1,7 +1,7 @@
 # SPEC: Remove GET /api/teacher/today — Genuine Duplicate, Confirmed
 
 **Date**: 2026-07-23
-**Status**: APPROVED — ready to build
+**Status**: SUPERSEDED — route and test removed as specified (d1b1846); removal was the deliverable
 **Author**: Claude, this session
 **Trigger**: `contracts/ROUTE_REACHABILITY.yaml`, `GET /api/teacher/today`, `deferred_undecided`.
 Fifth fix in the mount-fix series, same shape as `SPEC_LV_UNOBSERVED_ROUTE_REMOVAL_2026-07-23.md`

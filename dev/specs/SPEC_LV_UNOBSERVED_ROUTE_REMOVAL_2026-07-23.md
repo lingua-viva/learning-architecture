@@ -1,7 +1,7 @@
 # SPEC: Remove GET /api/students/unobserved — Genuine Duplicate, Confirmed
 
 **Date**: 2026-07-23
-**Status**: APPROVED — ready to build
+**Status**: SUPERSEDED — route and test removed as specified (d1b1846); removal was the deliverable
 **Author**: Claude, this session
 **Trigger**: `contracts/ROUTE_REACHABILITY.yaml`, `GET /api/students/unobserved`,
 `deferred_undecided`. Fourth fix in the mount-fix series — the second non-UI resolution, and

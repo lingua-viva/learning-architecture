@@ -1,7 +1,7 @@
 # SPEC: Lingua Viva Phase 4 — Teacher Home View + Onboarding UX
 
 **Date**: 2026-07-17
-**Status**: SHIPPED
+**Status**: SHIPPED (tests/test_teacher_schedule.py and tests/test_unobserved_students.py removed by SPEC_LV_TEACHER_TODAY_ROUTE_REMOVAL_2026-07-23 and SPEC_LV_UNOBSERVED_ROUTE_REMOVAL_2026-07-23)
 **Repo**: `/home/mical/learning-architecture`
 **Branch**: `LINGUA-VIVA-UPDATE`
 **Depends on**: Phase 1 (Electron shell), Phase 2 (teacher interface), Phase 3 (support bundle)

@@ -1,0 +1,88 @@
+{
+  "generated_at": "2026-08-05T13:19:55+00:00",
+  "active_clusters": [],
+  "retired_clusters": [],
+  "needs_review": [
+    {
+      "candidate_id": "CAND-67D0122B",
+      "status": "ENRICHED",
+      "fallback_node": "CORE-RESEARCH",
+      "fallback_confidence": 0.3,
+      "now_classifies_to": "LV-TCH-001",
+      "now_confidence": 0.7,
+      "reason": "routes_to_different_node"
+    },
+    {
+      "candidate_id": "CAND-AB1D05D6",
+      "status": "CREATED",
+      "fallback_node": "CORE-PROTECT",
+      "fallback_confidence": 0.3,
+      "now_classifies_to": "MC-LEGAL-001",
+      "now_confidence": 0.6,
+      "reason": "routes_to_different_node"
+    },
+    {
+      "candidate_id": "CAND-B6FCE003",
+      "status": "ENRICHED",
+      "fallback_node": "CORE-PROTECT",
+      "fallback_confidence": 0.3,
+      "now_classifies_to": "INTENT-PROTECT",
+      "now_confidence": 0.6,
+      "reason": "routes_to_different_node"
+    },
+    {
+      "candidate_id": "CAND-BDD09D9D",
+      "status": "ENRICHED",
+      "fallback_node": "CORE-PROTECT",
+      "fallback_confidence": 0.3,
+      "now_classifies_to": "LV-STU-001",
+      "now_confidence": 0.7,
+      "reason": "routes_to_different_node"
+    }
+  ],
+  "defect_concentration": {
+    "total": 0,
+    "counts": {},
+    "top_class": "",
+    "top_share": 0.0,
+    "distinct_classes": 0,
+    "singleton_share": 0.0,
+    "meets_floor": false,
+    "warn_concentration": false,
+    "warn_fragmentation": false,
+    "warn": false
+  },
+  "proxy_to_live": [],
+  "routing": {
+    "total_rows": 2,
+    "skipped_rows": 0,
+    "dangling_corrections": 0,
+    "per_type": {
+      "category_suggest": {
+        "volume": 2,
+        "corrected": 0,
+        "confirmed": 0,
+        "correction_rate": 0.0,
+        "confidence_corrected": null,
+        "confidence_uncorrected": 0.0
+      }
+    },
+    "per_signal": [],
+    "collapse_flags": [],
+    "proposals": []
+  },
+  "summary": {
+    "timestamp": 1785935995.2376256,
+    "generated_at": "2026-08-05T13:19:55+00:00",
+    "active_clusters": 0,
+    "retired_clusters": 0,
+    "needs_review": 4,
+    "top_cluster": null,
+    "revision_entries": 0,
+    "distinct_defect_classes": 0,
+    "proxy_to_live_transitions": 0,
+    "routing_decisions": 2,
+    "routing_corrections": 0,
+    "routing_collapse_flags": 0
+  }
+}

@@ -10,7 +10,7 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SEVERITIES = ("info", "warn", "fail")
-BUILT_STATUSES = ("built", "shipped", "built + hardened")
+BUILT_STATUSES = ("built", "shipped", "built + hardened", "complete", "superseded")
 DRAFT_STATUSES = ("draft", "approved", "approved for build", "triage")
 FINDING_CODES = (
     "missing_index_entry",
@@ -101,9 +101,21 @@ def _strip_fenced_code(text: str) -> str:
 
 
 def _metadata_value(text: str, key: str) -> str:
-    match = re.search(rf"^\s*\*\*{re.escape(key)}\*\*\s*:\s*(.+)$", text, flags=re.M)
+    # Try various markdown formatting patterns for metadata lines:
+    # **Key**: value | **Key:** value | **Key: value** | - **Key**: value
+    match = re.search(rf"^\s*[-*]*\s*\*\*{re.escape(key)}\*\*\s*:\s*(.+)$", text, flags=re.M)
     if match:
         return match.group(1).strip()
+    # **Key:** value (colon inside the bold)
+    match = re.search(rf"^\s*[-*]*\s*\*\*{re.escape(key)}:\*\*\s*(.+)$", text, flags=re.M)
+    if match:
+        return match.group(1).strip()
+    # **Key: value** or **Key: value (rest)**
+    match = re.search(rf"^\s*[-*]*\s*\*\*{re.escape(key)}:\s*(.+?)(?:\*\*)?$", text, flags=re.M)
+    if match:
+        val = match.group(1).strip().rstrip("*").strip()
+        return val
+    # Plain: Key: value
     match = re.search(rf"^\s*{re.escape(key)}\s*:\s*(.+)$", text, flags=re.M | re.I)
     return match.group(1).strip() if match else ""
 
@@ -140,7 +152,7 @@ def _routes(text: str) -> list[str]:
 
 def _is_status_built(status: str) -> bool:
     status_l = status.lower()
-    if "unbuilt" in status_l or "not built" in status_l:
+    if "unbuilt" in status_l or "not built" in status_l or "not yet built" in status_l:
         return False
     return any(marker in status_l for marker in BUILT_STATUSES)
 
@@ -354,7 +366,10 @@ def check_spec_status(root: Path | None = None) -> SpecStatusReport:
             findings.append(_finding("warn", "missing_index_entry", record.path, "Spec is not listed in dev/INDEX.md."))
         findings.extend(_status_findings(record))
         built = _is_status_built(record.header_status) or _is_status_built(record.index_status)
+        superseded = "superseded" in (record.header_status or "").lower() or "superseded" in (record.index_status or "").lower()
         for ref in record.claimed_files:
+            if superseded:
+                continue  # superseded specs intentionally did not build their claimed files
             if _planned_target_context(text, ref) and _is_status_draft(record.header_status or record.index_status):
                 continue
             if not (root / ref).exists():

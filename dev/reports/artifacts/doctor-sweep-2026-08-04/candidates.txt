@@ -1,0 +1,42 @@
+ID             STATUS     HITS DOMAIN       SIGNALS
+CAND-10D0B39E  CREATED       1 core         
+CAND-195C9574  CREATED       1 core         
+CAND-2F0116B5  CREATED       1 core         
+CAND-320962B5  CREATED       1 core         
+CAND-3D23F1D6  CREATED       1 core         
+CAND-44B0DF37  CREATED       1 core         
+CAND-4DA96F8F  ENRICHED      2 core         still, rise, nonprofit, school…
+CAND-4FB4B742  CREATED       1 core         
+CAND-50683E54  CREATED       1 core         should, beginners, practice
+CAND-5E1652A1  CREATED       1 core         
+CAND-622A7032  CREATED       1 core         
+CAND-62CE6E6F  ENRICHED      2 core         help
+CAND-62F0968E  CREATED       1 core         
+CAND-64B8B01D  CREATED       1 core         
+CAND-67D0122B  ENRICHED      2 core         just, watched, amira, starting…
+CAND-6822231B  CREATED       1 core         
+CAND-6B084DA6  CREATED       1 core         
+CAND-70977533  CREATED       1 core         
+CAND-79C32400  CREATED       1 core         
+CAND-7A54ED03  CREATED       1 core         
+CAND-7EC20BE8  CREATED       1 core         
+CAND-8744DCC3  CREATED       1 core         
+CAND-913BC8E1  CREATED       1 core         
+CAND-952465B3  CREATED       1 core         
+CAND-9641042F  CREATED       1 core         
+CAND-9A861241  ENRICHED    498 core         good, warm, activities, beginner…
+CAND-AB1D05D6  CREATED       1 core         client, conversation, attorney, client…
+CAND-B6FCE003  ENRICHED     24 core         patient, john, smith, 6789…
+CAND-B8CCB9C1  ENRICHED      9 core         weather, forecast, tomorrow, field…
+CAND-BDD09D9D  ENRICHED     79 core         confidential, pull, together, amina…
+CAND-C69B6CE1  ENRICHED      2 core         does, morning, briefing, look…
+CAND-CB3CF7B2  ENRICHED      2 core         follow, source, rely, most
+CAND-D3B96992  ENRICHED      3 core         prepare, activity, pack, test…
+CAND-DAB5C815  CREATED       1 core         teach, fractions, grade
+CAND-E30DA88D  CREATED       1 core         
+CAND-E95F4BA4  ENRICHED      4 core         achievement, levels, criterion, reading…
+CAND-F734BAFA  ENRICHED      6 core         orient
+CAND-FACE2995  CREATED       1 core         
+CAND-FDBB29A4  CREATED       1 core         
+
+39 candidate(s). Files: /home/mical/learning-architecture/ontology/proposals/CAND-*.yaml (read-only view)

@@ -361,7 +361,13 @@ def _run_zero_egress(checks: list[ReadinessCheck], socket_attempts: list[dict[st
     chain = "zero_egress"
     controls = [item for item in _load_corpus() if str(item.get("id", "")).startswith("TR-ZE")]
     log_path = Path(os.environ["LV_SANITIZER_DATA_DIR"]) / "firewall_log.ndjson"
+    # Baseline: count existing lines per trace_id BEFORE we sanitize, so we
+    # only verify that exactly 1 NEW entry was written per control.
+    baseline_counts: dict[str, int] = {}
     scoped_counts: dict[str, int] = {}
+    for item in controls:
+        trace_id = f"teacher-readiness-{item['id']}"
+        baseline_counts[trace_id] = _count_firewall_lines(log_path, trace_id)
     for item in controls:
         trace_id = f"teacher-readiness-{item['id']}"
         sanitize(
@@ -371,7 +377,7 @@ def _run_zero_egress(checks: list[ReadinessCheck], socket_attempts: list[dict[st
             namespace="teacher-readiness",
             trace_id=trace_id,
         )
-        scoped_counts[trace_id] = _count_firewall_lines(log_path, trace_id)
+        scoped_counts[trace_id] = _count_firewall_lines(log_path, trace_id) - baseline_counts[trace_id]
     unexpected_hosts = [attempt for attempt in socket_attempts if attempt.get("host") not in {"127.0.0.1", "::1", "localhost"}]
     _add_check(checks, "ZE", "Zero-egress controls have scoped firewall evidence", all(count == 1 for count in scoped_counts.values()) and not unexpected_hosts, chain=chain, severity="P0", evidence={"scoped_log_counts": scoped_counts, "unexpected_socket_hosts": unexpected_hosts})
 
@@ -554,8 +560,8 @@ def run_teacher_readiness() -> ReadinessReport:
         git_sha=_git_sha(),
         duration_ms=duration,
         checks=checks,
-        report_path=str(REPORT_MD.relative_to(REPO_ROOT)),
-        json_path=str(REPORT_JSON.relative_to(REPO_ROOT)),
+        report_path=str(REPORT_MD),
+        json_path=str(REPORT_JSON),
     )
     _write_reports(report)
     return report

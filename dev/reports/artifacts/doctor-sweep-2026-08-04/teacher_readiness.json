@@ -1,0 +1,265 @@
+{
+  "started_at": "2026-08-05T13:15:53.895586Z",
+  "git_sha": "eff9fd3",
+  "duration_ms": 223469,
+  "summary": {
+    "total": 19,
+    "passed": 14,
+    "failed": 5,
+    "stubbed": 0,
+    "readiness_percent": 73.7,
+    "highest_severity": "P0"
+  },
+  "checks": [
+    {
+      "check_id": "DR",
+      "name": "Single shared external-model routing predicate",
+      "status": "PASS",
+      "severity": "",
+      "chain": "preflight",
+      "expected_fail": false,
+      "evidence": {
+        "locations": [
+          "src/pipeline.py:275:_is_external_model = staticmethod(is_external_model)",
+          "src/pipeline.py:338:self._is_external_model(resolved_model)",
+          "src/pipeline.py:416:if not self._is_external_model(default_model):",
+          "src/lingua_viva/reasoning.py:80:self._is_external_model(resolved_model)",
+          "src/lingua_viva/reasoning.py:136:if not self._is_external_model(resolved_model):",
+          "src/lingua_viva/reasoning.py:179:if not self._is_external_model(default_model):",
+          "src/lingua_viva/reasoning.py:191:if self._is_external_model(model):",
+          "src/lingua_viva/reasoning.py:205:if self._is_external_model(model):",
+          "src/lingua_viva/reasoning.py:289:_is_external_model = staticmethod(is_external_model)",
+          "src/lingua_viva/reasoning.py:321:though _is_external_model() counts it as leaving the machine.\"\"\""
+        ]
+      }
+    },
+    {
+      "check_id": "C2",
+      "name": "Voice probe availability matches import recheck",
+      "status": "PASS",
+      "severity": "",
+      "chain": "probe",
+      "expected_fail": false,
+      "evidence": {
+        "probe_available": true,
+        "imports_available": true,
+        "status": 200
+      }
+    },
+    {
+      "check_id": "C11",
+      "name": "Functional probe parity covers STT import",
+      "status": "PASS",
+      "severity": "",
+      "chain": "probe",
+      "expected_fail": false,
+      "evidence": {
+        "faster_whisper_import": true,
+        "av_import": true
+      }
+    },
+    {
+      "check_id": "C1",
+      "name": "No bracket placeholder reaches Observe -> Ask",
+      "status": "PASS",
+      "severity": "",
+      "chain": "observe_ask",
+      "expected_fail": false,
+      "evidence": {
+        "placeholder_match": null
+      }
+    },
+    {
+      "check_id": "C3",
+      "name": "No-model response is teacher-facing, not a stub",
+      "status": "PASS",
+      "severity": "",
+      "chain": "observe_ask",
+      "expected_fail": false,
+      "evidence": {
+        "model_used": "none:missing_data",
+        "status": 200
+      }
+    },
+    {
+      "check_id": "C4",
+      "name": "GIR/tone values are coherent when present",
+      "status": "PASS",
+      "severity": "",
+      "chain": "observe_ask",
+      "expected_fail": false,
+      "evidence": {
+        "gir": null,
+        "voice_tone": "name_boundary"
+      }
+    },
+    {
+      "check_id": "C8",
+      "name": "Observe -> Ask latency envelope",
+      "status": "PASS",
+      "severity": "",
+      "chain": "observe_ask",
+      "expected_fail": false,
+      "evidence": {
+        "duration_ms": 673
+      }
+    },
+    {
+      "check_id": "C1",
+      "name": "No bracket placeholder reaches materials",
+      "status": "PASS",
+      "severity": "",
+      "chain": "observe_materials",
+      "expected_fail": false,
+      "evidence": {}
+    },
+    {
+      "check_id": "C8",
+      "name": "Observe -> Materials route completes inside latency envelope",
+      "status": "PASS",
+      "severity": "",
+      "chain": "observe_materials",
+      "expected_fail": false,
+      "evidence": {
+        "duration_ms": 45588,
+        "capture_status": 200,
+        "materials_status": 200,
+        "materials_error": null
+      }
+    },
+    {
+      "check_id": "C1",
+      "name": "No bracket placeholder reaches parent report",
+      "status": "PASS",
+      "severity": "",
+      "chain": "observe_parent_report",
+      "expected_fail": false,
+      "evidence": {}
+    },
+    {
+      "check_id": "C6",
+      "name": "Parent report source observation ids belong to student",
+      "status": "FAIL",
+      "severity": "P1",
+      "chain": "observe_parent_report",
+      "expected_fail": false,
+      "evidence": {
+        "source_observation_ids": [],
+        "known_observation_ids": [
+          "814a9192-e335-462c-8e34-b18af65830c2",
+          "8a2a4efb-c3ca-4745-8c38-92507a009ce8"
+        ],
+        "capture_observation_id": "8a2a4efb-c3ca-4745-8c38-92507a009ce8"
+      }
+    },
+    {
+      "check_id": "C8",
+      "name": "Observe -> Parent report latency envelope",
+      "status": "PASS",
+      "severity": "",
+      "chain": "observe_parent_report",
+      "expected_fail": false,
+      "evidence": {
+        "duration_ms": 427,
+        "status": 200
+      }
+    },
+    {
+      "check_id": "C5",
+      "name": "Cold Ask does not invent observations",
+      "status": "PASS",
+      "severity": "",
+      "chain": "cold_ask",
+      "expected_fail": false,
+      "evidence": {
+        "student_id": "062434d5-0b7d-4ada-8410-09b5e2ac019f",
+        "response_preview": "{\"_status_code\": 200, \"error\": \"that took longer than expected \\u2014 the local ai model may still be loading. wait a few seconds and ask again.\", \"timeout\": true, \"timestamp\": 1785935809.8167217, \"type\": \"error\"}"
+      }
+    },
+    {
+      "check_id": "C8",
+      "name": "Cold Ask latency envelope",
+      "status": "PASS",
+      "severity": "",
+      "chain": "cold_ask",
+      "expected_fail": false,
+      "evidence": {
+        "duration_ms": 61073
+      }
+    },
+    {
+      "check_id": "C7",
+      "name": "Repeated save produces one record",
+      "status": "FAIL",
+      "severity": "P2",
+      "chain": "double_artifact",
+      "expected_fail": false,
+      "evidence": {
+        "created_count": 2,
+        "first_status": 200,
+        "second_status": 200
+      }
+    },
+    {
+      "check_id": "ZE",
+      "name": "Zero-egress controls have scoped firewall evidence",
+      "status": "FAIL",
+      "severity": "P0",
+      "chain": "zero_egress",
+      "expected_fail": false,
+      "evidence": {
+        "scoped_log_counts": {
+          "teacher-readiness-TR-ZE-001": 6,
+          "teacher-readiness-TR-ZE-002": 6
+        },
+        "unexpected_socket_hosts": []
+      }
+    },
+    {
+      "check_id": "INV",
+      "name": "Every cited observation identifier exists",
+      "status": "PASS",
+      "severity": "",
+      "chain": "invention_probe",
+      "expected_fail": false,
+      "evidence": {
+        "cited_ids": [],
+        "invented_ids": [],
+        "known_observation_ids": [
+          "6bf35ee1-69d3-4b9b-80cb-11651f175a8e",
+          "83e88907-c04b-40e7-97cc-815167738fdc"
+        ]
+      }
+    },
+    {
+      "check_id": "C9",
+      "name": "Ollama-down degradation does not mix no-model with deterministic output",
+      "status": "FAIL",
+      "severity": "P1",
+      "chain": "model_failure",
+      "expected_fail": true,
+      "evidence": {
+        "model_used": "ollama/qwen2.5:7b",
+        "has_no_model": false,
+        "has_deterministic_terms": true,
+        "sentinel_seen": false,
+        "banner_seen": false
+      }
+    },
+    {
+      "check_id": "C10",
+      "name": "Fake non-listed provider is blocked local with warning and zero egress",
+      "status": "FAIL",
+      "severity": "P0",
+      "chain": "model_failure",
+      "expected_fail": true,
+      "evidence": {
+        "model_used": null,
+        "external_calls": null,
+        "status": 200
+      }
+    }
+  ],
+  "report_path": "/home/mical/.lingua-viva/reports/TEACHER_READINESS.md",
+  "json_path": "/home/mical/.lingua-viva/reports/TEACHER_READINESS.json"
+}

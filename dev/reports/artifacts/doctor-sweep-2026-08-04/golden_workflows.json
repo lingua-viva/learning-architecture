@@ -1,0 +1,405 @@
+{
+  "results": [
+    {
+      "workflow_id": "GW-EDU-001",
+      "name": "Observation to parent report",
+      "mode": "hermetic",
+      "status": "PASS",
+      "started_at": "2026-08-05T13:20:22.186005Z",
+      "duration_ms": 83,
+      "steps": [
+        {
+          "name": "source_record",
+          "status": "PASS",
+          "ui_path": "",
+          "api_call": "",
+          "evidence": {
+            "source_record_id": "SRC-137784533f68300b7a18"
+          }
+        },
+        {
+          "name": "grounding_result",
+          "status": "PASS",
+          "ui_path": "",
+          "api_call": "",
+          "evidence": {
+            "grounding_id": "GRD-e6d662bcc39e70706565",
+            "tier_used": "local"
+          }
+        },
+        {
+          "name": "action_plan",
+          "status": "PASS",
+          "ui_path": "",
+          "api_call": "",
+          "evidence": {
+            "action_plan_id": "APL-36c01efdebb446b48a38"
+          }
+        },
+        {
+          "name": "deliverable_record",
+          "status": "PASS",
+          "ui_path": "",
+          "api_call": "",
+          "evidence": {
+            "deliverable_id": "DLV-b009c3f40c7c4566954e"
+          }
+        },
+        {
+          "name": "audit_receipt",
+          "status": "PASS",
+          "ui_path": "",
+          "api_call": "",
+          "evidence": {
+            "audit_receipt_id": "AUD-131f541951ce3dd74448",
+            "complete": true
+          }
+        }
+      ],
+      "contract_ids": {
+        "source_record_id": "SRC-137784533f68300b7a18",
+        "grounding_id": "GRD-e6d662bcc39e70706565",
+        "action_plan_id": "APL-36c01efdebb446b48a38",
+        "deliverable_id": "DLV-b009c3f40c7c4566954e",
+        "audit_receipt_id": "AUD-131f541951ce3dd74448"
+      },
+      "notes": ""
+    },
+    {
+      "workflow_id": "GW-EDU-002",
+      "name": "Daily file from local and Drive",
+      "mode": "hermetic",
+      "status": "PASS",
+      "started_at": "2026-08-05T13:20:22.248179Z",
+      "duration_ms": 62,
+      "steps": [
+        {
+          "name": "source_record",
+          "status": "PASS",
+          "ui_path": "",
+          "api_call": "",
+          "evidence": {
+            "source_record_id": "SRC-1ed72346952499903e6c"
+          }
+        },
+        {
+          "name": "grounding_result",
+          "status": "PASS",
+          "ui_path": "",
+          "api_call": "",
+          "evidence": {
+            "grounding_id": "GRD-0ca090cae9cc5c6554e3",
+            "tier_used": "local"
+          }
+        },
+        {
+          "name": "action_plan",
+          "status": "PASS",
+          "ui_path": "",
+          "api_call": "",
+          "evidence": {
+            "action_plan_id": "APL-027d68798d62480a8d66"
+          }
+        },
+        {
+          "name": "deliverable_record",
+          "status": "PASS",
+          "ui_path": "",
+          "api_call": "",
+          "evidence": {
+            "deliverable_id": "DLV-8207bb1b38bf8621eb15"
+          }
+        },
+        {
+          "name": "audit_receipt",
+          "status": "PASS",
+          "ui_path": "",
+          "api_call": "",
+          "evidence": {
+            "audit_receipt_id": "AUD-3135f7c19f38c3fe721d",
+            "complete": true
+          }
+        }
+      ],
+      "contract_ids": {
+        "source_record_id": "SRC-1ed72346952499903e6c",
+        "grounding_id": "GRD-0ca090cae9cc5c6554e3",
+        "action_plan_id": "APL-027d68798d62480a8d66",
+        "deliverable_id": "DLV-8207bb1b38bf8621eb15",
+        "audit_receipt_id": "AUD-3135f7c19f38c3fe721d"
+      },
+      "notes": ""
+    },
+    {
+      "workflow_id": "GW-EDU-003",
+      "name": "Grounded answer to assessment",
+      "mode": "hermetic",
+      "status": "PASS",
+      "started_at": "2026-08-05T13:20:22.307724Z",
+      "duration_ms": 59,
+      "steps": [
+        {
+          "name": "source_record",
+          "status": "PASS",
+          "ui_path": "",
+          "api_call": "",
+          "evidence": {
+            "source_record_id": "SRC-ac5b71c5f719ff9caba5"
+          }
+        },
+        {
+          "name": "grounding_result",
+          "status": "PASS",
+          "ui_path": "",
+          "api_call": "",
+          "evidence": {
+            "grounding_id": "GRD-d84c1b6b26ef30763d5e",
+            "tier_used": "local"
+          }
+        },
+        {
+          "name": "action_plan",
+          "status": "PASS",
+          "ui_path": "",
+          "api_call": "",
+          "evidence": {
+            "action_plan_id": "APL-1cca0c2ed51f426691a6"
+          }
+        },
+        {
+          "name": "deliverable_record",
+          "status": "PASS",
+          "ui_path": "",
+          "api_call": "",
+          "evidence": {
+            "deliverable_id": "DLV-e53aa845f6924ed82d54"
+          }
+        },
+        {
+          "name": "audit_receipt",
+          "status": "PASS",
+          "ui_path": "",
+          "api_call": "",
+          "evidence": {
+            "audit_receipt_id": "AUD-7d65bddb22fb293a8886",
+            "complete": true
+          }
+        }
+      ],
+      "contract_ids": {
+        "source_record_id": "SRC-ac5b71c5f719ff9caba5",
+        "grounding_id": "GRD-d84c1b6b26ef30763d5e",
+        "action_plan_id": "APL-1cca0c2ed51f426691a6",
+        "deliverable_id": "DLV-e53aa845f6924ed82d54",
+        "audit_receipt_id": "AUD-7d65bddb22fb293a8886"
+      },
+      "notes": ""
+    },
+    {
+      "workflow_id": "GW-DRIVE-004",
+      "name": "Drive import to answer and export",
+      "mode": "hermetic",
+      "status": "PASS",
+      "started_at": "2026-08-05T13:20:22.369149Z",
+      "duration_ms": 61,
+      "steps": [
+        {
+          "name": "source_record",
+          "status": "PASS",
+          "ui_path": "",
+          "api_call": "",
+          "evidence": {
+            "source_record_id": "SRC-9d80d531cec667de5383"
+          }
+        },
+        {
+          "name": "grounding_result",
+          "status": "PASS",
+          "ui_path": "",
+          "api_call": "",
+          "evidence": {
+            "grounding_id": "GRD-a72fa3770bac0701c614",
+            "tier_used": "local"
+          }
+        },
+        {
+          "name": "action_plan",
+          "status": "PASS",
+          "ui_path": "",
+          "api_call": "",
+          "evidence": {
+            "action_plan_id": "APL-9b7b293fc60e4d279052"
+          }
+        },
+        {
+          "name": "deliverable_record",
+          "status": "PASS",
+          "ui_path": "",
+          "api_call": "",
+          "evidence": {
+            "deliverable_id": "DLV-d005db1283e4c657c47e"
+          }
+        },
+        {
+          "name": "audit_receipt",
+          "status": "PASS",
+          "ui_path": "",
+          "api_call": "",
+          "evidence": {
+            "audit_receipt_id": "AUD-404aeace98228d36e150",
+            "complete": true
+          }
+        }
+      ],
+      "contract_ids": {
+        "source_record_id": "SRC-9d80d531cec667de5383",
+        "grounding_id": "GRD-a72fa3770bac0701c614",
+        "action_plan_id": "APL-9b7b293fc60e4d279052",
+        "deliverable_id": "DLV-d005db1283e4c657c47e",
+        "audit_receipt_id": "AUD-404aeace98228d36e150"
+      },
+      "notes": ""
+    },
+    {
+      "workflow_id": "GW-SLACK-005",
+      "name": "Slack observation to lens update",
+      "mode": "hermetic",
+      "status": "PASS",
+      "started_at": "2026-08-05T13:20:22.432562Z",
+      "duration_ms": 63,
+      "steps": [
+        {
+          "name": "source_record",
+          "status": "PASS",
+          "ui_path": "",
+          "api_call": "",
+          "evidence": {
+            "source_record_id": "SRC-f4b48e071d6a2939084f"
+          }
+        },
+        {
+          "name": "grounding_result",
+          "status": "PASS",
+          "ui_path": "",
+          "api_call": "",
+          "evidence": {
+            "grounding_id": "GRD-3486541327db0afb8ac2",
+            "tier_used": "local"
+          }
+        },
+        {
+          "name": "action_plan",
+          "status": "PASS",
+          "ui_path": "",
+          "api_call": "",
+          "evidence": {
+            "action_plan_id": "APL-4c1de454cba04f48afe6"
+          }
+        },
+        {
+          "name": "deliverable_record",
+          "status": "PASS",
+          "ui_path": "",
+          "api_call": "",
+          "evidence": {
+            "deliverable_id": "DLV-29bc93b7ee9f7031b865"
+          }
+        },
+        {
+          "name": "audit_receipt",
+          "status": "PASS",
+          "ui_path": "",
+          "api_call": "",
+          "evidence": {
+            "audit_receipt_id": "AUD-9a34e33524abfee124a7",
+            "complete": true
+          }
+        }
+      ],
+      "contract_ids": {
+        "source_record_id": "SRC-f4b48e071d6a2939084f",
+        "grounding_id": "GRD-3486541327db0afb8ac2",
+        "action_plan_id": "APL-4c1de454cba04f48afe6",
+        "deliverable_id": "DLV-29bc93b7ee9f7031b865",
+        "audit_receipt_id": "AUD-9a34e33524abfee124a7"
+      },
+      "notes": ""
+    },
+    {
+      "workflow_id": "GW-VOICE-006",
+      "name": "Voice loop: STT to grounded TTS",
+      "mode": "hermetic",
+      "status": "PASS",
+      "started_at": "2026-08-05T13:21:27.191180Z",
+      "duration_ms": 64799,
+      "steps": [
+        {
+          "name": "stt_transcribe",
+          "status": "PASS",
+          "ui_path": "",
+          "api_call": "",
+          "evidence": {
+            "transcript_preview": "Show me the current project status.",
+            "keywords_matched": [
+              "current",
+              "project",
+              "status"
+            ]
+          }
+        },
+        {
+          "name": "pipeline_run",
+          "status": "PASS",
+          "ui_path": "",
+          "api_call": "",
+          "evidence": {
+            "duration_ms": 60111,
+            "steps": [
+              "SCAN",
+              "CLASSIFY",
+              "RETRIEVE",
+              "REASON",
+              "SYNTHESIZE",
+              "STORE(skipped)"
+            ]
+          }
+        },
+        {
+          "name": "grounding_result",
+          "status": "PASS",
+          "ui_path": "",
+          "api_call": "",
+          "evidence": {
+            "gir_score": 0.0,
+            "method": "claim_support_v2_linkage"
+          }
+        },
+        {
+          "name": "tone_resolved",
+          "status": "PASS",
+          "ui_path": "",
+          "api_call": "",
+          "evidence": {
+            "stored_tone": "name_boundary",
+            "expected_tone": "name_boundary"
+          }
+        },
+        {
+          "name": "tts_hermetic",
+          "status": "PASS",
+          "ui_path": "",
+          "api_call": "",
+          "evidence": {
+            "tone": "name_boundary",
+            "prefix_length": 94,
+            "prefix_present": true
+          }
+        }
+      ],
+      "contract_ids": {},
+      "notes": ""
+    }
+  ],
+  "passed": 6,
+  "total": 6
+}

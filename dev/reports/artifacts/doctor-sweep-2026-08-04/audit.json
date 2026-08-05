@@ -1,0 +1,83 @@
+{
+  "report": {
+    "record_count": 108,
+    "malformed_lines": 0,
+    "repeat_pairs": {
+      "skipped_research@LV-CUR-003": 43,
+      "voice_loop_failure@GW-VOICE-006": 25,
+      "entry_gate_blocked@CORE-PROTECT": 15,
+      "low_classification_confidence@CORE-PROTECT": 15,
+      "research_blocked_by_entry_gate@CORE-PROTECT": 15,
+      "research_skipped_by_intent@CORE-PROTECT": 15,
+      "weak_classification@CORE-PROTECT": 15,
+      "no_knowledge_at_node@CORE-PROTECT": 15,
+      "low_classification_confidence@CORE-RESEARCH": 12,
+      "weak_classification@CORE-RESEARCH": 12,
+      "no_knowledge_at_node@INTENT-RESEARCH": 4,
+      "no_knowledge_at_node@INTENT-CREATE": 4
+    },
+    "distribution": {
+      "total": 195,
+      "distinct_families": 9,
+      "top_family": "skipped_research",
+      "top_share": 0.221,
+      "singleton_share": 0.0,
+      "concentration_warn": false,
+      "fragmentation_warn": false
+    },
+    "oov_families": [],
+    "aging_candidates": [
+      {
+        "id": "CAND-9A861241",
+        "hits": 498,
+        "status": "ENRICHED"
+      },
+      {
+        "id": "CAND-B6FCE003",
+        "hits": 24,
+        "status": "ENRICHED"
+      },
+      {
+        "id": "CAND-B8CCB9C1",
+        "hits": 9,
+        "status": "ENRICHED"
+      },
+      {
+        "id": "CAND-BDD09D9D",
+        "hits": 79,
+        "status": "ENRICHED"
+      },
+      {
+        "id": "CAND-F734BAFA",
+        "hits": 6,
+        "status": "ENRICHED"
+      }
+    ],
+    "candidates_unavailable": null,
+    "firewall_count": 344,
+    "routing": {
+      "decisions": 2,
+      "corrections": 0,
+      "collapse_flags": 0,
+      "proposals": 0,
+      "skipped_rows": 0,
+      "unavailable": ""
+    }
+  },
+  "delta": {
+    "new_repeat_pairs": [],
+    "new_oov_families": [],
+    "concentration_worse": false,
+    "fragmentation_new": false,
+    "new_aging_candidates": [
+      "CAND-B8CCB9C1"
+    ],
+    "firewall_delta": 0.0,
+    "days_since_baseline": 5.3,
+    "has_new_drift": true
+  },
+  "exit_code": 1,
+  "exit_basis": "delta",
+  "journaled": false,
+  "window": "full"
+}

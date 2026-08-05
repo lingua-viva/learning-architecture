@@ -569,7 +569,11 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 114
+version: 116
+# v116 (2026-08-05): Doctor sweep — observation capture dedup guard at
+#   endpoint layer (C7), prevents double-click duplicates.
+# v115 (2026-08-05): Doctor sweep — parent report source_observation_ids
+#   (GIR traceability C6), export_lens for observation linkage.
 # v114 (2026-08-04): Add Student form Decision 1
 #     (dev/ADD_STUDENT_FORM_DECISION_2026-08-04.md). static/index.html:
 #     #new-student-grade is now a dropdown populated from

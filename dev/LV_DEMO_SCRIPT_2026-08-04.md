@@ -91,8 +91,10 @@ saved straight from speech — we ripped it out."
 
 ## What NOT to do live
 - Don't open dev tools to "show the JSON" unless specifically asked — keep it teacher-facing.
-- Don't demo the Add Student form's edge cases (last name / grade format) — those are open product
-  decisions (Task #9), not yet resolved. If asked, say "that's next on the list, not today."
+- The Add Student grade field is now a dropdown (G1-G5) with server-side validation — safe to
+  demo directly if asked, no longer an open decision. The single-name field (no separate last
+  name) is still a deliberate choice, not a bug — if asked, say "one display name field is enough
+  for what the app needs today."
 - Don't improvise a new voice surface, even if the audience asks "can it just listen all the
   time?" Answer honestly: "that's the exact thing we tried and walked back — here's why," and
   point to Beat 1's closing line.

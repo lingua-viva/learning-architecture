@@ -1,0 +1,16 @@
+[app-reality] MEDIUM: static/index.html builds /api/admin/${state.view} at runtime — cannot statically confirm the route exists
+[app-reality] MEDIUM: ${icon} rendered into markup without escapeHtml
+[app-reality] MEDIUM: ${label} rendered into markup without escapeHtml
+[app-reality] MEDIUM: ${data.recent.observations_this_week} rendered into markup without escapeHtml
+[app-reality] MEDIUM: ${g.grade} rendered into markup without escapeHtml
+[app-reality] MEDIUM: ${tier.replace("_", " ")} rendered into markup without escapeHtml
+[app-reality] MEDIUM: ${lens.rti_current_tier} rendered into markup without escapeHtml
+[app-reality] MEDIUM: ${message.role} rendered into markup without escapeHtml
+[app-reality] MEDIUM: ${ACTIVITY_ICON[entry.kind] || "•"} rendered into markup without escapeHtml
+[app-reality] MEDIUM: ${data.leave_this_computer} rendered into markup without escapeHtml
+[app-reality] MEDIUM: ${privacy.total_queries_local} rendered into markup without escapeHtml
+[app-reality] MEDIUM: ${privacy.student_blocks} rendered into markup without escapeHtml
+[app-reality] MEDIUM: ${privacy.external_calls} rendered into markup without escapeHtml
+[app-reality] MEDIUM: ${profile.students_tracked || 0} rendered into markup without escapeHtml
+[app-reality] MEDIUM: ${field.help} rendered into markup without escapeHtml
+[app-reality] 15 finding(s): {'medium': 15}

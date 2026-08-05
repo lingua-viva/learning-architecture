@@ -1,0 +1,265 @@
+{
+  "status": "PRIVATE_RISK",
+  "summary": "I found a privacy risk and stopped.",
+  "timestamp": "2026-08-05T05:16:43Z",
+  "mode": "teacher",
+  "branch_expected": "main",
+  "branch_allowed": [
+    "main",
+    "LINGUA-VIVA-UPDATE"
+  ],
+  "repo_root": "/home/mical/learning-architecture",
+  "lingua_viva_root": "/home/mical/learning-architecture",
+  "checks": [
+    {
+      "id": "branch",
+      "status": "pass",
+      "message": "Branch is allowed: main.",
+      "detail": "main",
+      "safe_fix": null,
+      "severity": "required"
+    },
+    {
+      "id": "required_file:README.md",
+      "status": "pass",
+      "message": "Required file present: README.md",
+      "detail": "",
+      "safe_fix": null,
+      "severity": "required"
+    },
+    {
+      "id": "required_file:Manuale_Italiano_Laboratorio_Linguistico_G1-G5.docx",
+      "status": "pass",
+      "message": "Required file present: Manuale_Italiano_Laboratorio_Linguistico_G1-G5.docx",
+      "detail": "",
+      "safe_fix": null,
+      "severity": "required"
+    },
+    {
+      "id": "required_file:dev/specs/LV_PUBLICATION_READINESS_AUDIT_2026-07-16.md",
+      "status": "pass",
+      "message": "Required file present: dev/specs/LV_PUBLICATION_READINESS_AUDIT_2026-07-16.md",
+      "detail": "",
+      "safe_fix": null,
+      "severity": "required"
+    },
+    {
+      "id": "required_file:artifacts/inventory.yaml",
+      "status": "pass",
+      "message": "Required file present: artifacts/inventory.yaml",
+      "detail": "",
+      "safe_fix": null,
+      "severity": "required"
+    },
+    {
+      "id": "required_file:claims/evidence_register.yaml",
+      "status": "pass",
+      "message": "Required file present: claims/evidence_register.yaml",
+      "detail": "",
+      "safe_fix": null,
+      "severity": "required"
+    },
+    {
+      "id": "required_file:governance/publication_safety.yaml",
+      "status": "pass",
+      "message": "Required file present: governance/publication_safety.yaml",
+      "detail": "",
+      "safe_fix": null,
+      "severity": "required"
+    },
+    {
+      "id": "required_file:curriculum/lingua_viva_matrix.yaml",
+      "status": "pass",
+      "message": "Required file present: curriculum/lingua_viva_matrix.yaml",
+      "detail": "",
+      "safe_fix": null,
+      "severity": "required"
+    },
+    {
+      "id": "required_file:doctor/lv_artifact_gauntlet.py",
+      "status": "pass",
+      "message": "Required file present: doctor/lv_artifact_gauntlet.py",
+      "detail": "",
+      "safe_fix": null,
+      "severity": "required"
+    },
+    {
+      "id": "required_file:dev/lv_revision_log.ndjson",
+      "status": "pass",
+      "message": "Required file present: dev/lv_revision_log.ndjson",
+      "detail": "",
+      "safe_fix": null,
+      "severity": "required"
+    },
+    {
+      "id": "required_file:dev/lv_deferred_candidates.yaml",
+      "status": "pass",
+      "message": "Required file present: dev/lv_deferred_candidates.yaml",
+      "detail": "",
+      "safe_fix": null,
+      "severity": "required"
+    },
+    {
+      "id": "worktree_status",
+      "status": "warn",
+      "message": "Lingua Viva package has local changes; review before update.",
+      "detail": "M dev/LV_DEMO_SCRIPT_2026-08-04.md\n?? dev/PROMPT_CHIP_QA_0.2.40_2026-08-04.md\n?? dev/PROMPT_DOCTOR_FULL_SWEEP_2026-08-04.md\n?? dev/reports/artifacts/doctor-sweep-2026-08-04/",
+      "safe_fix": null,
+      "severity": "recommended"
+    },
+    {
+      "id": "docx_no_diff",
+      "status": "pass",
+      "message": ".docx exists and has no git diff.",
+      "detail": "",
+      "safe_fix": null,
+      "severity": "required"
+    },
+    {
+      "id": "yaml:artifacts/inventory.yaml",
+      "status": "pass",
+      "message": "YAML parsed: artifacts/inventory.yaml",
+      "detail": "",
+      "safe_fix": null,
+      "severity": "required"
+    },
+    {
+      "id": "yaml:claims/evidence_register.yaml",
+      "status": "pass",
+      "message": "YAML parsed: claims/evidence_register.yaml",
+      "detail": "",
+      "safe_fix": null,
+      "severity": "required"
+    },
+    {
+      "id": "yaml:governance/publication_safety.yaml",
+      "status": "pass",
+      "message": "YAML parsed: governance/publication_safety.yaml",
+      "detail": "",
+      "safe_fix": null,
+      "severity": "required"
+    },
+    {
+      "id": "yaml:curriculum/lingua_viva_matrix.yaml",
+      "status": "pass",
+      "message": "YAML parsed: curriculum/lingua_viva_matrix.yaml",
+      "detail": "",
+      "safe_fix": null,
+      "severity": "required"
+    },
+    {
+      "id": "yaml:dev/lv_deferred_candidates.yaml",
+      "status": "pass",
+      "message": "YAML parsed: dev/lv_deferred_candidates.yaml",
+      "detail": "",
+      "safe_fix": null,
+      "severity": "required"
+    },
+    {
+      "id": "revision_log_schema",
+      "status": "pass",
+      "message": "Revision log parses and includes the full schema.",
+      "detail": "",
+      "safe_fix": null,
+      "severity": "required"
+    },
+    {
+      "id": "lv_artifact_gauntlet",
+      "status": "pass",
+      "message": "Lingua Viva artifact gauntlet passed.",
+      "detail": "Lingua Viva artifact gauntlet: PASS\nChecked 15 files and 7 gates.",
+      "safe_fix": null,
+      "severity": "required"
+    },
+    {
+      "id": "matrix_authority",
+      "status": "pass",
+      "message": "Curriculum matrix remains non-authoritative.",
+      "detail": "",
+      "safe_fix": null,
+      "severity": "required"
+    },
+    {
+      "id": "claim_register",
+      "status": "pass",
+      "message": "Claim register contains required claims.",
+      "detail": "",
+      "safe_fix": null,
+      "severity": "required"
+    },
+    {
+      "id": "publication_safety",
+      "status": "pass",
+      "message": "Publication safety rules are present.",
+      "detail": "",
+      "safe_fix": null,
+      "severity": "required"
+    },
+    {
+      "id": "readme_overclaims",
+      "status": "pass",
+      "message": "README forbidden overclaim scan passed.",
+      "detail": "",
+      "safe_fix": null,
+      "severity": "required"
+    },
+    {
+      "id": "active_surface_mc_bloat",
+      "status": "pass",
+      "message": "No obvious MC platform bloat found in active Lingua Viva surfaces.",
+      "detail": "",
+      "safe_fix": null,
+      "severity": "required"
+    },
+    {
+      "id": "updates_pending",
+      "status": "pass",
+      "message": "No template updates waiting.",
+      "detail": "",
+      "safe_fix": null,
+      "severity": "required"
+    },
+    {
+      "id": "update_downgrade",
+      "status": "pass",
+      "message": "No downgrade detected.",
+      "detail": "",
+      "safe_fix": null,
+      "severity": "required"
+    },
+    {
+      "id": "live_templates",
+      "status": "pass",
+      "message": "All live template lenses loaded cleanly.",
+      "detail": "",
+      "safe_fix": null,
+      "severity": "required"
+    },
+    {
+      "id": "privacy_path_scan",
+      "status": "private_risk",
+      "message": "Possible private/student data path found. Contents were not read.",
+      "detail": ".lv_teacher_readiness/student_lenses.db: private-path pattern",
+      "safe_fix": null,
+      "severity": "privacy"
+    }
+  ],
+  "safe_actions": [],
+  "blocked_actions": [
+    "docx edits",
+    "curriculum matrix promotion",
+    "curriculum content rewrites",
+    "destructive git commands",
+    "student-data upload",
+    "external support transmission"
+  ],
+  "privacy_notes": [
+    "Doctor checks paths and metadata only for private-risk files.",
+    "Raw student observations, IEPs, parent communications, and .docx contents are not included in output."
+  ],
+  "support_bundle_available": true,
+  "next_steps": [
+    "Use the Health view to create a local redacted support bundle if you need help reviewing these findings."
+  ],
+  "external_calls": false
+}

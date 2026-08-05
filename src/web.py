@@ -3768,6 +3768,32 @@ async def observe_capture(request: Request, payload: dict):
         )
 
     def capture(store):
+        # Dedup guard (teacher-readiness C7): prevent double-click / network-retry
+        # duplicates at the API layer. Same student+teacher+text within 60s → return
+        # the existing record. Programmatic/test callers use append_observation
+        # directly and are unaffected.
+        from datetime import datetime, timezone, timedelta
+        cutoff = (datetime.now(timezone.utc) - timedelta(seconds=60)).isoformat()
+        dup_row = store._conn.execute(
+            "SELECT observation_id FROM observations"
+            " WHERE student_id = ? AND teacher_id = ? AND raw_transcript = ?"
+            " AND recorded_at > ? LIMIT 1",
+            (student_id, teacher_id, transcript, cutoff),
+        ).fetchone()
+        if dup_row:
+            existing_id = dup_row[0] if isinstance(dup_row, (tuple, list)) else dup_row["observation_id"]
+            return {
+                "observation": {"observation_id": existing_id, "deduplicated": True},
+                "validation_errors": [],
+                "escalations": [],
+                "ethos_trait_suggestions": [],
+                "category_suggestions": [],
+                "strategy_outcome_parsed": {},
+                "classification": {},
+                "sanitizer_report": {"ok": True, "blocked": False, "redaction_count": 0},
+                "governance_note": None,
+            }
+
         pipeline = ObservationCapturePipeline(store=store)
         return pipeline.capture(
             student_id=student_id,
@@ -5351,10 +5377,10 @@ async def parent_recommendation(request: Request, payload: dict):
         generator = ParentReportGenerator(store)
         target_student_id = student_id
         try:
-            lens = store.get_lens(target_student_id)
+            lens = store.export_lens(target_student_id)
         except Exception:
             target_student_id = "student-nora"
-            lens = store.get_lens(target_student_id)
+            lens = store.export_lens(target_student_id)
         draft = generator.generate_draft(
             target_student_id,
             teacher_id,
@@ -5368,12 +5394,21 @@ async def parent_recommendation(request: Request, payload: dict):
                 f"{body} At home, you might offer a {extra} and notice what your child "
                 "chooses to try first."
             )
+        # source_observation_ids: traceability — every parent report carries the
+        # observation IDs behind it (AGENTS.md GIR contract, teacher-readiness C6).
+        observations = lens.get("observations") or []
+        source_obs_ids = [
+            str(obs["observation_id"])
+            for obs in observations
+            if obs.get("observation_id")
+        ]
         result = {
             "subject_line": _strip_parent_output(draft.subject_line, names),
             "body": _strip_parent_output(body, names),
             "home_activities": [_strip_parent_output(item, names) for item in draft.home_activities],
             "review_label": "Review before sending. No AI attribution in final message.",
             "source_citation": "Source: Manuale v1 and local teacher observations.",
+            "source_observation_ids": source_obs_ids,
         }
 
         # Gap 1 (SPEC_LV_REMAINING_GAPS_2026-07-29): the same gate the

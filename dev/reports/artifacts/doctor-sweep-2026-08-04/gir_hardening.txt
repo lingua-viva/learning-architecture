@@ -1,0 +1,5 @@
+GIR + Voice Hardening Harness
+App URL: http://127.0.0.1:8787
+Evidence: /home/mical/learning-architecture/dev/reports/artifacts/gir_voice_hardening_evidence.jsonl
+======================================================================
+FATAL: app not reachable at http://127.0.0.1:8787: [Errno 111] Connection refused

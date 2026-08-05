@@ -1,0 +1,172 @@
+# Spec Status Drift Report
+
+Generated: 2026-08-05T13:20:04.717286Z
+Specs: 94 (70 indexed)
+Findings: 160
+
+## Summary
+- info: 0
+- warn: 141
+- fail: 19
+
+## Findings
+- **warn** `missing_index_entry` dev/LV_IMPROVEMENT_CYCLE_SPEC_IDEA_MATRICES_GROUPED_2026-07-30.md: Spec is not listed in dev/INDEX.md.
+- **warn** `status_drift` dev/LV_IMPROVEMENT_CYCLE_SPEC_IDEA_MATRICES_GROUPED_2026-07-30.md: Spec has no Status metadata header.
+- **warn** `missing_spec_prompt_pair` dev/LV_IMPROVEMENT_CYCLE_SPEC_IDEA_MATRICES_GROUPED_2026-07-30.md: Top-level spec has no matching build prompt.
+- **warn** `missing_index_entry` dev/LV_IMPROVEMENT_CYCLE_SPEC_IDEA_MATRICES_GROUPED_2026-07-30_2.md: Spec is not listed in dev/INDEX.md.
+- **warn** `status_drift` dev/LV_IMPROVEMENT_CYCLE_SPEC_IDEA_MATRICES_GROUPED_2026-07-30_2.md: Spec has no Status metadata header.
+- **warn** `missing_spec_prompt_pair` dev/LV_IMPROVEMENT_CYCLE_SPEC_IDEA_MATRICES_GROUPED_2026-07-30_2.md: Top-level spec has no matching build prompt.
+- **warn** `missing_index_entry` dev/LV_IMPROVEMENT_CYCLE_SPEC_IDEA_MATRICES_GROUPED_2026-07-30_3.md: Spec is not listed in dev/INDEX.md.
+- **warn** `status_drift` dev/LV_IMPROVEMENT_CYCLE_SPEC_IDEA_MATRICES_GROUPED_2026-07-30_3.md: Spec has no Status metadata header.
+- **warn** `missing_spec_prompt_pair` dev/LV_IMPROVEMENT_CYCLE_SPEC_IDEA_MATRICES_GROUPED_2026-07-30_3.md: Top-level spec has no matching build prompt.
+- **warn** `status_drift` dev/MEMORY_LV_5_SPEC_SEQUENCE_COMPLETE_2026-07-23.md: Spec has no Status metadata header.
+- **warn** `missing_spec_prompt_pair` dev/MEMORY_LV_5_SPEC_SEQUENCE_COMPLETE_2026-07-23.md: Top-level spec has no matching build prompt.
+- **warn** `missing_index_entry` dev/SPEC_LENS_PRIMITIVE_2026-08-04.md: Spec is not listed in dev/INDEX.md.
+- **warn** `status_drift` dev/SPEC_LENS_PRIMITIVE_2026-08-04.md: Spec has no Status metadata header.
+- **warn** `missing_spec_prompt_pair` dev/SPEC_LENS_PRIMITIVE_2026-08-04.md: Top-level spec has no matching build prompt.
+- **warn** `missing_index_entry` dev/SPEC_LV_BASE_LENS_SCHOOL_CATEGORIES_2026-08-01.md: Spec is not listed in dev/INDEX.md.
+- **warn** `status_drift` dev/SPEC_LV_DRIVE_FINAL_HARDENING_2026-07-27.md: Spec has no Status metadata header.
+- **warn** `missing_spec_prompt_pair` dev/SPEC_LV_DRIVE_FINAL_HARDENING_2026-07-27.md: Top-level spec has no matching build prompt.
+- **warn** `status_drift` dev/SPEC_LV_DRIVE_SELF_SERVICE_AUTH_2026-07-27.md: Spec has no Status metadata header.
+- **warn** `missing_spec_prompt_pair` dev/SPEC_LV_DRIVE_SELF_SERVICE_AUTH_2026-07-27.md: Top-level spec has no matching build prompt.
+- **warn** `missing_index_entry` dev/SPEC_LV_DRIVE_WORKSPACE_2026-07-27.md: Spec is not listed in dev/INDEX.md.
+- **warn** `status_drift` dev/SPEC_LV_DRIVE_WORKSPACE_2026-07-27.md: Spec has no Status metadata header.
+- **warn** `missing_spec_prompt_pair` dev/SPEC_LV_DRIVE_WORKSPACE_2026-07-27.md: Top-level spec has no matching build prompt.
+- **warn** `missing_index_entry` dev/SPEC_LV_EVIDENCE_ETHOS_TRAITS_2026-08-01.md: Spec is not listed in dev/INDEX.md.
+- **warn** `missing_claimed_file` dev/SPEC_LV_FINAL_GOVERNANCE_READINESS_PRODUCT_POLISH_SWEEP_2026-07-30.md: Claimed file does not exist: src/education/curriculum_proposals.py
+- **warn** `missing_claimed_file` dev/SPEC_LV_FINAL_GOVERNANCE_READINESS_PRODUCT_POLISH_SWEEP_2026-07-30.md: Claimed file does not exist: src/education/policy_retrieval.py
+- **warn** `missing_claimed_file` dev/SPEC_LV_FINAL_GOVERNANCE_READINESS_PRODUCT_POLISH_SWEEP_2026-07-30.md: Claimed file does not exist: src/education/recommendations.py
+- **warn** `missing_claimed_file` dev/SPEC_LV_FINAL_GOVERNANCE_READINESS_PRODUCT_POLISH_SWEEP_2026-07-30.md: Claimed file does not exist: src/lingua_viva/action_audit.py
+- **warn** `missing_claimed_file` dev/SPEC_LV_FINAL_GOVERNANCE_READINESS_PRODUCT_POLISH_SWEEP_2026-07-30.md: Claimed file does not exist: src/lingua_viva/p0_sweep.py
+- **warn** `missing_claimed_file` dev/SPEC_LV_FINAL_GOVERNANCE_READINESS_PRODUCT_POLISH_SWEEP_2026-07-30.md: Claimed file does not exist: src/lingua_viva/sources.py
+- **warn** `missing_claimed_file` dev/SPEC_LV_FINAL_GOVERNANCE_READINESS_PRODUCT_POLISH_SWEEP_2026-07-30.md: Claimed file does not exist: static/admin.html
+- **warn** `missing_index_entry` dev/SPEC_LV_FRONTEND_VOICE_WIRE_2026-08-01.md: Spec is not listed in dev/INDEX.md.
+- **warn** `missing_index_entry` dev/SPEC_LV_GIR_VOICE_TONE_2026-07-29.md: Spec is not listed in dev/INDEX.md.
+- **warn** `missing_index_entry` dev/SPEC_LV_INTEGRATION_PORT_FROM_MC_2026-07-29.md: Spec is not listed in dev/INDEX.md.
+- **warn** `missing_claimed_file` dev/SPEC_LV_INTEGRATION_PORT_FROM_MC_2026-07-29.md: Claimed file does not exist: src/api_server.py
+- **warn** `missing_claimed_file` dev/SPEC_LV_INTEGRATION_PORT_FROM_MC_2026-07-29.md: Claimed file does not exist: src/audit_receipts/
+- **warn** `missing_claimed_file` dev/SPEC_LV_INTEGRATION_PORT_FROM_MC_2026-07-29.md: Claimed file does not exist: src/sources/schema.py
+- **warn** `missing_claimed_file` dev/SPEC_LV_INTEGRATION_PORT_FROM_MC_2026-07-29.md: Claimed file does not exist: src/voice/capture.ts
+- **warn** `missing_spec_prompt_pair` dev/SPEC_LV_INTEGRATION_PORT_FROM_MC_2026-07-29.md: Top-level spec has no matching build prompt.
+- **warn** `missing_index_entry` dev/SPEC_LV_LESSON_MATERIALS_2026-08-01.md: Spec is not listed in dev/INDEX.md.
+- **warn** `status_drift` dev/SPEC_LV_MC_CONVERGENCE_PORT_2026-08-01.md: Spec header is draft-like but index is built/shipped.
+- **fail** `missing_claimed_file` dev/SPEC_LV_MC_CONVERGENCE_PORT_2026-08-01.md: Claimed file does not exist: src/download_eval.py
+- **fail** `missing_claimed_file` dev/SPEC_LV_MC_CONVERGENCE_PORT_2026-08-01.md: Claimed file does not exist: src/lingua_viva/download_eval.py
+- **warn** `missing_index_entry` dev/SPEC_LV_MULTI_TEACHER_TRIANGULATION_2026-08-01.md: Spec is not listed in dev/INDEX.md.
+- **warn** `missing_index_entry` dev/SPEC_LV_MVP_MONDAY_SPRINT_2026-08-01.md: Spec is not listed in dev/INDEX.md.
+- **warn** `missing_spec_prompt_pair` dev/SPEC_LV_MVP_MONDAY_SPRINT_2026-08-01.md: Top-level spec has no matching build prompt.
+- **warn** `missing_index_entry` dev/SPEC_LV_ROUTING_MEMORY_LOOP_2026-08-01.md: Spec is not listed in dev/INDEX.md.
+- **warn** `missing_index_entry` dev/SPEC_LV_VOICE_COMPANION_2026-07-29.md: Spec is not listed in dev/INDEX.md.
+- **warn** `missing_index_entry` dev/SPEC_LV_VOICE_INTENT_ROUTER_2026-08-01.md: Spec is not listed in dev/INDEX.md.
+- **warn** `status_drift` dev/SPEC_LV_VOICE_STUDENT_DETECTION_V2_2026-08-01.md: Spec header is draft-like but index is built/shipped.
+- **warn** `missing_index_entry` dev/SPEC_PREREQUISITE_DETECTION_RESOLUTION_LV_2026-07-22.md: Spec is not listed in dev/INDEX.md.
+- **warn** `missing_spec_prompt_pair` dev/SPEC_PREREQUISITE_DETECTION_RESOLUTION_LV_2026-07-22.md: Top-level spec has no matching build prompt.
+- **warn** `missing_index_entry` dev/SPEC_T2_VAULT_2026-08-04.md: Spec is not listed in dev/INDEX.md.
+- **warn** `status_drift` dev/SPEC_T2_VAULT_2026-08-04.md: Spec has no Status metadata header.
+- **warn** `missing_spec_prompt_pair` dev/SPEC_T2_VAULT_2026-08-04.md: Top-level spec has no matching build prompt.
+- **warn** `missing_index_entry` dev/SPEC_T3_EXTRACTION_2026-08-04.md: Spec is not listed in dev/INDEX.md.
+- **warn** `status_drift` dev/SPEC_T3_EXTRACTION_2026-08-04.md: Spec has no Status metadata header.
+- **warn** `missing_spec_prompt_pair` dev/SPEC_T3_EXTRACTION_2026-08-04.md: Top-level spec has no matching build prompt.
+- **warn** `missing_index_entry` dev/SPEC_T4_LENS_ENGINE_2026-08-04.md: Spec is not listed in dev/INDEX.md.
+- **warn** `status_drift` dev/SPEC_T4_LENS_ENGINE_2026-08-04.md: Spec has no Status metadata header.
+- **warn** `missing_spec_prompt_pair` dev/SPEC_T4_LENS_ENGINE_2026-08-04.md: Top-level spec has no matching build prompt.
+- **warn** `missing_index_entry` dev/SPEC_T6_SYNC_2026-08-04.md: Spec is not listed in dev/INDEX.md.
+- **warn** `status_drift` dev/SPEC_T6_SYNC_2026-08-04.md: Spec has no Status metadata header.
+- **warn** `missing_spec_prompt_pair` dev/SPEC_T6_SYNC_2026-08-04.md: Top-level spec has no matching build prompt.
+- **warn** `missing_index_entry` dev/SPEC_T8_ASK_2026-08-04.md: Spec is not listed in dev/INDEX.md.
+- **warn** `status_drift` dev/SPEC_T8_ASK_2026-08-04.md: Spec has no Status metadata header.
+- **warn** `missing_spec_prompt_pair` dev/SPEC_T8_ASK_2026-08-04.md: Top-level spec has no matching build prompt.
+- **warn** `missing_index_entry` dev/SPEC_T9_INGEST_UI_2026-08-04.md: Spec is not listed in dev/INDEX.md.
+- **warn** `status_drift` dev/SPEC_T9_INGEST_UI_2026-08-04.md: Spec has no Status metadata header.
+- **warn** `missing_spec_prompt_pair` dev/SPEC_T9_INGEST_UI_2026-08-04.md: Top-level spec has no matching build prompt.
+- **fail** `missing_claimed_file` dev/specs/SPEC_DOWNLOAD_BUTTONS_2026-07-20.md: Claimed file does not exist: src/mc_cli.py
+- **warn** `status_drift` dev/specs/SPEC_INSTALL_RELEASE_PIPELINE_HARDENING_2026-07-20.md: Spec header is draft-like but index is built/shipped.
+- **warn** `missing_claimed_file` dev/specs/SPEC_LINGUA_VIVA_APP_UNIFIED_BUILD_2026-07-16.md: Claimed file does not exist: src/api_server.py
+- **warn** `missing_claimed_file` dev/specs/SPEC_LINGUA_VIVA_APP_UNIFIED_BUILD_2026-07-16.md: Claimed file does not exist: src/gates/
+- **warn** `missing_claimed_file` dev/specs/SPEC_LINGUA_VIVA_APP_UNIFIED_BUILD_2026-07-16.md: Claimed file does not exist: src/mc_cli.py
+- **warn** `missing_claimed_file` dev/specs/SPEC_LINGUA_VIVA_APP_UNIFIED_BUILD_2026-07-16.md: Claimed file does not exist: src/missions/
+- **warn** `status_drift` dev/specs/SPEC_LINGUA_VIVA_MC_TRANSFER_APPENDIX_2026-07-16.md: Spec has no Status metadata header.
+- **warn** `status_drift` dev/specs/SPEC_LINGUA_VIVA_MC_TRANSFER_FULL_TABLE_2026-07-16.md: Spec has no Status metadata header.
+- **warn** `status_drift` dev/specs/SPEC_LIVE_LAYER_READ_PATH_2026-07-27.md: Spec has no Status metadata header.
+- **warn** `status_drift` dev/specs/SPEC_LV_DATA_IN_CONTRACTS_2026-07-22.md: Spec header is draft-like but index is built/shipped.
+- **warn** `status_drift` dev/specs/SPEC_LV_EXTRACT_FILL_VERIFY_ENGINE_2026-07-22.md: Spec header is draft-like but index is built/shipped.
+- **warn** `status_drift` dev/specs/SPEC_LV_FILEMAP_VERIFICATION_UI_2026-07-22.md: Spec header is draft-like but index is built/shipped.
+- **warn** `missing_index_entry` dev/specs/SPEC_LV_FILE_MAP_FINAL_2026-07-27.md: Spec is not listed in dev/INDEX.md.
+- **warn** `status_drift` dev/specs/SPEC_LV_FILE_MAP_FINAL_2026-07-27.md: Spec has no Status metadata header.
+- **warn** `status_drift` dev/specs/SPEC_LV_FULL_ARTIFACT_HARDENING_2026-07-20.md: Spec header is draft-like but index is built/shipped.
+- **warn** `status_drift` dev/specs/SPEC_LV_GOOGLE_DRIVE_CONNECTOR_2026-07-23.md: Spec has no Status metadata header.
+- **warn** `status_drift` dev/specs/SPEC_LV_INGESTION_EXTRACTION_MAPPING_V2_2026-07-23.md: Spec has no Status metadata header.
+- **warn** `status_drift` dev/specs/SPEC_LV_LENS_UI_API_CONTRACT_2026-07-23.md: Spec has no Status metadata header.
+- **warn** `status_drift` dev/specs/SPEC_LV_LENS_UI_API_CONTRACT_2026-07-23_GAGNE_REVISION.md: Spec has no Status metadata header.
+- **warn** `status_drift` dev/specs/SPEC_LV_MEASUREMENT_DISTILLATION_2026-07-26.md: Spec header is draft-like but index is built/shipped.
+- **warn** `status_drift` dev/specs/SPEC_LV_OBSERVATION_IEP_CLASSIFICATION_WRITE_PATH_2026-07-23.md: Spec has no Status metadata header.
+- **warn** `status_drift` dev/specs/SPEC_LV_P0_IMPROVEMENT_CYCLE_2026-07-20.md: Spec header is draft-like but index is built/shipped.
+- **warn** `status_drift` dev/specs/SPEC_LV_SESSION_ROUTE_RECLASSIFY_2026-07-23.md: Spec header is draft-like but index is built/shipped.
+- **warn** `status_drift` dev/specs/SPEC_LV_SLACK_APP_INTEGRATION_2026-07-22.md: Spec has no Status metadata header.
+- **warn** `status_drift` dev/specs/SPEC_LV_SLACK_OPS_ASSISTANT_2026-07-27.md: Spec has no Status metadata header.
+- **warn** `status_drift` dev/specs/SPEC_LV_SLACK_OPS_V2_WORKFLOW_PACKS_2026-07-27.md: Spec has no Status metadata header.
+- **warn** `status_drift` dev/specs/SPEC_LV_STUDENT_LENS_JSON_V2_SCHEMA_2026-07-23.md: Spec has no Status metadata header.
+- **warn** `status_drift` dev/specs/SPEC_LV_TEACHER_TODAY_ROUTE_REMOVAL_2026-07-23.md: Spec header is draft-like but index is built/shipped.
+- **fail** `missing_claimed_test` dev/specs/SPEC_LV_TEACHER_TODAY_ROUTE_REMOVAL_2026-07-23.md: Claimed file does not exist: tests/test_teacher_schedule.py
+- **warn** `status_drift` dev/specs/SPEC_LV_UI_WIRING_FIXES_2026-07-22.md: Spec header is draft-like but index is built/shipped.
+- **warn** `status_drift` dev/specs/SPEC_LV_UNOBSERVED_ROUTE_REMOVAL_2026-07-23.md: Spec header is draft-like but index is built/shipped.
+- **fail** `missing_claimed_test` dev/specs/SPEC_LV_UNOBSERVED_ROUTE_REMOVAL_2026-07-23.md: Claimed file does not exist: tests/test_unobserved_students.py
+- **fail** `missing_claimed_file` dev/specs/SPEC_MC_BACKEND_MIGRATION_2026-07-16.md: Claimed file does not exist: src/agent_adapter.py
+- **fail** `missing_claimed_file` dev/specs/SPEC_MC_BACKEND_MIGRATION_2026-07-16.md: Claimed file does not exist: src/api_server.py
+- **fail** `missing_claimed_file` dev/specs/SPEC_MC_BACKEND_MIGRATION_2026-07-16.md: Claimed file does not exist: src/codex_adapter.py
+- **fail** `missing_claimed_file` dev/specs/SPEC_MC_BACKEND_MIGRATION_2026-07-16.md: Claimed file does not exist: src/cron.py
+- **fail** `missing_claimed_file` dev/specs/SPEC_MC_BACKEND_MIGRATION_2026-07-16.md: Claimed file does not exist: src/gates/
+- **fail** `missing_claimed_file` dev/specs/SPEC_MC_BACKEND_MIGRATION_2026-07-16.md: Claimed file does not exist: src/gateway/
+- **fail** `missing_claimed_file` dev/specs/SPEC_MC_BACKEND_MIGRATION_2026-07-16.md: Claimed file does not exist: src/integration_onboarding.py
+- **fail** `missing_claimed_file` dev/specs/SPEC_MC_BACKEND_MIGRATION_2026-07-16.md: Claimed file does not exist: src/integrity/
+- **fail** `missing_claimed_file` dev/specs/SPEC_MC_BACKEND_MIGRATION_2026-07-16.md: Claimed file does not exist: src/integrity_gate.py
+- **fail** `missing_claimed_file` dev/specs/SPEC_MC_BACKEND_MIGRATION_2026-07-16.md: Claimed file does not exist: src/mc_cli.py
+- **fail** `missing_claimed_file` dev/specs/SPEC_MC_BACKEND_MIGRATION_2026-07-16.md: Claimed file does not exist: src/missions/
+- **warn** `status_drift` dev/specs/SPEC_ONE_BUTTON_UPDATE_2026-07-27.md: Spec has no Status metadata header.
+- **fail** `missing_claimed_file` dev/specs/SPEC_ONE_BUTTON_UPDATE_2026-07-27.md: Claimed file does not exist: src/onboarding.py
+- **fail** `missing_claimed_test` dev/specs/SPEC_PHASE4_ONBOARDING_UX_2026-07-17.md: Claimed file does not exist: tests/test_teacher_schedule.py
+- **fail** `missing_claimed_test` dev/specs/SPEC_PHASE4_ONBOARDING_UX_2026-07-17.md: Claimed file does not exist: tests/test_unobserved_students.py
+- **warn** `orphan_prompt` dev/EXECUTION_PROMPT_DOWNLOAD_BUTTONS_2026-07-20.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/EXECUTION_PROMPT_INSTALL_RELEASE_HARDENING_2026-07-20.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/EXECUTION_PROMPT_LIVE_LAYER_READ_PATH_2026-07-27.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/EXECUTION_PROMPT_LV_BLT007_SYSTEM_STATS_MOUNT_2026-07-23.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/EXECUTION_PROMPT_LV_CLAUDIA_LENS_REPASS_2026-07-20.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/EXECUTION_PROMPT_LV_CLAUDIA_LENS_REPASS_2026-07-20_CODEX.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/EXECUTION_PROMPT_LV_DEMO_READINESS_2026-07-22_KIRO.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/EXECUTION_PROMPT_LV_EVAL_ARCHITECTURE_2026-07-22_KIRO.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/EXECUTION_PROMPT_LV_EVAL_PHASE2_PHASE3_2026-07-22_KIRO.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/EXECUTION_PROMPT_LV_EXTRACT_FILL_VERIFY_ENGINE_2026-07-22_CLAUDE.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/EXECUTION_PROMPT_LV_FILEMAP_VERIFICATION_UI_2026-07-22_CODEX.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/EXECUTION_PROMPT_LV_FILE_MAP_FINAL_2026-07-27.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/EXECUTION_PROMPT_LV_FULL_ARTIFACT_HARDENING_2026-07-20_CODEX.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/EXECUTION_PROMPT_LV_OBSERVE_LIVE_CAPTURE_2026-07-22.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/EXECUTION_PROMPT_LV_P0_IMPROVEMENT_CYCLE_2026-07-20.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/EXECUTION_PROMPT_LV_SETUP_WIZARD_AND_HARDENING_2026-07-20_KIRO.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/EXECUTION_PROMPT_LV_SIDEBAR_DESIGN_2026-07-20_CODEX.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/EXECUTION_PROMPT_LV_SLACK_OPS_V2_PACKS_2026-07-27.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/EXECUTION_PROMPT_LV_SOURCES_SHIP_2026-07-27.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/EXECUTION_PROMPT_LV_SOURCES_VIEW_2026-07-27.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/EXECUTION_PROMPT_LV_UI_WIRING_FIXES_2026-07-22_KIRO.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/EXECUTION_PROMPT_ONE_BUTTON_UPDATE_2026-07-27.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/EXECUTION_PROMPT_TEMPLATE_MOUNT_FIX_2026-07-23.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/PROMPT_CHIP_QA_0.2.32_2026-08-04.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/PROMPT_CHIP_QA_0.2.36_2026-08-04.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/PROMPT_CHIP_QA_0.2.38_2026-08-04.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/PROMPT_CHIP_QA_0.2.39_2026-08-04.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/PROMPT_CHIP_QA_0.2.40_2026-08-04.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/PROMPT_CHIP_QA_REGRESSION_0.2.31_2026-08-04.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/PROMPT_DOCTOR_FULL_SWEEP_2026-08-04.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/PROMPT_LV_FULL_SYSTEM_CONVERGENCE_RUN_2026-07-31.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/PROMPT_LV_INTEGRATION_BUILD_2026-07-29.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/PROMPT_PAIR_HF1_FRONTEND_HOTFIX_2026-08-04.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/PROMPT_PAIR_HF2_BACKEND_HOTFIX_2026-08-04.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/PROMPT_PAIR_T0_CONTRACTS_2026-08-04.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/PROMPT_PAIR_T1_DRIVE_INGEST_2026-08-04.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/PROMPT_PAIR_T2_VAULT_2026-08-04.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/PROMPT_PAIR_T3_EXTRACTION_2026-08-04.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/PROMPT_PAIR_T4_LENS_ENGINE_2026-08-04.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/PROMPT_PAIR_T5_OBSERVE_CAPTURE_2026-08-04.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/PROMPT_PAIR_T6_DRIVE_WRITEBACK_2026-08-04.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/PROMPT_PAIR_T7_E2E_AUDIT_2026-08-04.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/PROMPT_PAIR_T8_ASK_PERPLEXITY_2026-08-04.md: Prompt has no matching spec.
+- **warn** `orphan_prompt` dev/PROMPT_PAIR_T9_INGEST_UI_2026-08-04.md: Prompt has no matching spec.

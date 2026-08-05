@@ -1,0 +1,1 @@
+[route-reachability] OK — 140 routes classified (115 reachable, 25 backend-only, 19 still deferred_undecided and awaiting an operator decision)

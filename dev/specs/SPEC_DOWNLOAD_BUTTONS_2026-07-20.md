@@ -1,6 +1,6 @@
 # SPEC_DOWNLOAD_BUTTONS_2026-07-20
 
-Status: SHIPPED (partial — Phases 1-2 only, Phases 3-4 still pending)
+Status: SUPERSEDED — download buttons shipped via static docs/index.html; src/mc_cli.py was an MC pattern never ported
 
 Partial ship evidence, 2026-07-20:
 - Phase 1 naming split fixed in `60faae5`.
