@@ -18,7 +18,16 @@ from .reasoning import ReasoningEngine
 
 
 def _print_json(data: object) -> None:
+    # Explicit flush (Chip QA 0.2.42 check #6): `--json` output was observed
+    # silently empty under two background-process invocations of
+    # `lv eval teacher-readiness --json` on a run long enough (30-60s+ of
+    # model calls) that stdout's block-buffering to a non-tty pipe could
+    # lose the final print if the wrapper reads/closes the pipe right at
+    # process exit, before the implicit flush lands. Not reproduced/proven
+    # as the exact mechanism, but this is a safe, zero-risk hardening for
+    # every `--json` CLI command that shares this helper.
     print(json.dumps(data, indent=2, ensure_ascii=True))
+    sys.stdout.flush()
 
 
 async def _chat_once(args: argparse.Namespace) -> int:

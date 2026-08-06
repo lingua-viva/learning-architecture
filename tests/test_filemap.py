@@ -464,6 +464,24 @@ def test_student_data_zone_detector():
     assert is_student_data_zone("~/Students/reports")
 
 
+def test_student_data_zone_ignores_macos_private_prefix():
+    # Regression: macOS resolves /tmp -> /private/tmp and /var -> /private/var.
+    # A bare substring match on "private" anywhere in the full path string used
+    # to flag any scan rooted under /private as a student-data zone, excluding
+    # the entire scan and silently returning zero entries (Chip 0.2.42 QA,
+    # check #5-new). The system /private prefix itself must never trigger this.
+    assert not is_student_data_zone("/private/tmp/lv-scan-root")
+    assert not is_student_data_zone("/private/var/folders/lv-scan-root")
+
+
+def test_student_data_zone_still_flags_real_private_folder():
+    # A genuinely named "Private" folder elsewhere in the path must still be
+    # excluded as sensitive -- the fix narrows matching to path components and
+    # exempts the macOS /private system prefix specifically, not the keyword.
+    assert is_student_data_zone("/Users/teacher/Private Notes/marco.md")
+    assert is_student_data_zone("/private/tmp/Private Notes/marco.md")
+
+
 # --- Error-code plumbing (SPEC_LV_SOURCES_VIEW_FILE_MAP_UX_2026-07-27 §8) ---
 
 

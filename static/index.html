@@ -2841,11 +2841,24 @@
           {role: "assistant", content: data.content}
         ];
         state.askMoreOffered = Boolean(data.more_available);
+        // GIR warning: if the backend signals low grounding confidence,
+        // prepend the tone_prefix so the teacher sees it (P0 fabrication visibility).
+        const girWarning = (data.tone_prefix && data.gir !== undefined && data.gir < 0.8)
+          ? `⚠️ ${data.tone_prefix}\n\n`
+          : "";
+        const displayContent = girWarning + data.content;
         state.chat.push({
           role: "Lingua Viva",
-          text: data.content,
+          text: displayContent,
           askMore: Boolean(data.more_available),
-          meta: {route: "external", model_used: data.model_used, duration_ms: data.duration_ms, sources: data.citations}
+          meta: {
+            route: data.local_only ? "local" : "external",
+            model_used: data.model_used || (data.local_only ? "local model" : "unknown"),
+            duration_ms: data.duration_ms || 0,
+            sources: data.citations || data.sources_used || [],
+            gir: data.gir,
+            local_only: data.local_only
+          }
         });
       } else {
         // Refusal or unavailable — nothing left the machine; say so honestly.
@@ -2860,8 +2873,12 @@
     }
 
     function speakAskAnswer(data, {offerMore = true} = {}) {
-      const text = data.type === "ask_result" ? data.content : (data.message || "");
+      let text = data.type === "ask_result" ? data.content : (data.message || "");
       if (!text) return;
+      // Prepend GIR warning to spoken output when grounding is low
+      if (data.tone_prefix && data.gir !== undefined && data.gir < 0.8) {
+        text = data.tone_prefix + " " + text;
+      }
       const spoken = data.type === "ask_result" && data.more_available && offerMore
         ? `${text} Would you like to hear more?`
         : text;

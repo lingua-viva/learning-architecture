@@ -118,6 +118,21 @@ def _hermetic_lv_state(monkeypatch, tmp_path):
     # (§A5) — default path is the operator's REAL lv_home()/runtime/.
     monkeypatch.setenv("LV_GOOGLE_DRIVE_FOLDERS_PATH", str(state_home / "drive_folders.json"))
 
+    # F6/hermeticity seam (candidate.py, vault.py, routing_memory.py,
+    # improvement_audit.py, learned_weights.py, teacher_readiness.py all
+    # share the same `_state_home()` pattern: LV_STATE_HOME override, else
+    # ~/.lingua-viva). Without this, any test constructing a CandidateStore
+    # (no explicit proposals_dir) falls through to Path(__file__).parent —
+    # the real tracked ontology/proposals/ dir — and appends/rewrites real
+    # CAND-*.yaml files. Chip's QA report flagged this as its 5th
+    # reproduction across sessions; the four specific overrides above never
+    # covered it because none of them touch LV_STATE_HOME itself. A bare
+    # truthy LV_STATE_HOME already satisfies candidate.py's own
+    # `state_home or LV_DESKTOP` check, so LV_DESKTOP itself is deliberately
+    # left alone here — forcing it on suite-wide would flip desktop-mode
+    # detection for the tests that specifically exercise dev-mode behavior.
+    monkeypatch.setenv("LV_STATE_HOME", str(state_home / "lv-state-home"))
+
 
 @pytest.fixture()
 def demo_roster():

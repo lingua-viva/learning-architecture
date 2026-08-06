@@ -58,6 +58,22 @@ def test_eval_golden_subcommand(capsys):
     assert output["failed"] == 0
 
 
+def test_print_json_flushes_stdout_explicitly(monkeypatch):
+    """Chip 0.2.42 QA check #6: `lv eval teacher-readiness --json` silently
+    produced empty stdout under two background-process invocations on a run
+    long enough (30-60s+ of model calls) to risk losing block-buffered
+    output if the wrapper reads/closes the pipe right at process exit.
+    _print_json is the single helper shared by every `--json` CLI command
+    (health/doctor/eval/chat) — lock that it always flushes explicitly
+    rather than relying on the implicit flush at interpreter exit."""
+    calls = []
+    monkeypatch.setattr(cli.sys.stdout, "flush", lambda: calls.append("flushed"))
+
+    cli._print_json({"ok": True})
+
+    assert calls == ["flushed"]
+
+
 def test_spec_status_subcommand_dispatches(monkeypatch):
     called = {}
 

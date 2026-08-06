@@ -569,7 +569,17 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 117
+version: 119
+# v119 (2026-08-05): F3 local-route metadata gap — src/web.py's ask_endpoint
+#   success-path return dict now threads model_used/duration_ms through from
+#   _build_query_response() (already computed, never wired into that branch),
+#   so local-routed Ask answers show the real model and elapsed time instead
+#   of always rendering "0.0s"/unknown. Found while re-verifying v118's Ask
+#   metadata fix — the frontend fallback logic v118 added was correct, but
+#   the backend field it falls back FROM was empty for local routes.
+# v118 (2026-08-05): Chip 0.2.42 QA — GIR tone_prefix warning rendered in Ask
+#   chat + voice (P0 fabrication visibility), correct route/model metadata for
+#   local responses.
 # v117 (2026-08-05): P0 cross-tab wrong-student fix — Parent Update gets
 #   independent parentSelectedStudent + parentStudentOptions().
 # v116 (2026-08-05): Doctor sweep — observation capture dedup guard at

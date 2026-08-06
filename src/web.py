@@ -2081,6 +2081,8 @@ async def ask_endpoint(payload: dict):
                     "voice_tone": response.get("voice_tone"),
                     "tone_prefix": response.get("tone_prefix"),
                     "sources_used": response.get("sources") or [],
+                    "model_used": response.get("model_used"),
+                    "duration_ms": response.get("duration_ms"),
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
             except Exception:

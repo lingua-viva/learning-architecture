@@ -43,9 +43,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Optional
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-
-
 def _state_home() -> Path:
     """Writable state directory — never inside the signed bundle (F6/P1-1)."""
     return Path(os.environ.get("LV_STATE_HOME", str(Path.home() / ".lingua-viva")))

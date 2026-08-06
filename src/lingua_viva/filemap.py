@@ -157,8 +157,22 @@ def infer_sensitivity(dir_path: str | Path) -> str:
 
 
 def is_student_data_zone(dir_path: str | Path) -> bool:
-    path_lower = str(dir_path).lower()
-    return any(keyword in path_lower for keyword in STUDENT_DATA_KEYWORDS)
+    # Match keywords as substrings within individual path components (directory
+    # names), NOT as substrings of the full path string. This prevents macOS's
+    # /private/tmp (resolved from /tmp) from false-positiving on "private" when
+    # the actual directory being scanned is unrelated to student data.
+    # System paths (/private, /var/private) are explicitly excluded.
+    _SYSTEM_COMPONENTS = {"private"}  # macOS /private/{tmp,var,etc}
+    parts = Path(dir_path).parts
+    for part in parts:
+        part_lower = part.lower()
+        # Skip the macOS system /private directory itself
+        if part_lower in _SYSTEM_COMPONENTS and str(dir_path).startswith(("/private", "/var/private")):
+            continue
+        for keyword in STUDENT_DATA_KEYWORDS:
+            if keyword in part_lower:
+                return True
+    return False
 
 
 def _is_excluded(path: Path, exclusions: list[str]) -> bool:

@@ -2,7 +2,41 @@
 from pathlib import Path
 
 import pytest
-from sanitizer.app import sanitize
+from sanitizer.app import _data_dir, sanitize
+
+
+def test_data_dir_redirects_out_of_bundle_in_electron_desktop_context(monkeypatch, tmp_path):
+    """Chip 0.2.42 QA, check #11 (P0): in the Electron-packaged app, sys.frozen
+    never fires (it's not a PyInstaller onefile binary), so _data_dir() fell
+    through to Path(__file__).parent / "data" -- writing firewall_log.ndjson
+    live inside the signed .app bundle on every ordinary sanitizer call and
+    breaking `codesign --verify`. LV_DESKTOP/ELECTRON_RUN_AS_NODE must be
+    detected and redirected to LV_STATE_HOME, same as every other bundle-write
+    path in this repo (improvement_audit.py, teacher_readiness.py,
+    ontology/learned_weights.py)."""
+    monkeypatch.delenv("LV_SANITIZER_DATA_DIR", raising=False)
+    monkeypatch.setenv("LV_DESKTOP", "1")
+    monkeypatch.setenv("LV_STATE_HOME", str(tmp_path))
+
+    data_dir = _data_dir()
+
+    repo_data_dir = Path(__file__).resolve().parent.parent / "sanitizer" / "data"
+    assert data_dir != repo_data_dir
+    assert repo_data_dir not in data_dir.parents and data_dir != repo_data_dir
+    assert data_dir == tmp_path / "sanitizer"
+
+
+def test_data_dir_never_defaults_to_stale_still_i_rise_home(monkeypatch, tmp_path):
+    """Companion to the check #11 fix: the old frozen-path fallback pointed at
+    STILL_I_RISE_HOME (~/.still-i-rise), a leftover from the product's prior
+    name -- a mismatch Chip's report flagged as a "bonus" finding alongside
+    the main bundle-write bug. No code path should ever reference it again."""
+    import inspect
+    import sanitizer.app as sanitizer_app
+
+    source = inspect.getsource(sanitizer_app._data_dir)
+    assert "STILL_I_RISE_HOME" not in source
+    assert ".still-i-rise" not in source
 
 
 def test_firewall_log_honors_hermeticity_override(monkeypatch, tmp_path):

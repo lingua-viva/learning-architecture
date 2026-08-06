@@ -209,7 +209,9 @@ REPO = Path(__file__).resolve().parent.parent
 #   v109 (2026-08-04): T5 observe mic, B1-B5 gate closures, A3 JSON errors, A4 CEFR optional.
 #   v111 (2026-08-04): P0-A/B + P1-1/2/3/4/5/9 fixes from v0.2.36 QA (three reports).
 #   v112 (2026-08-04): P1-3 follow-up — sel_domain/sel_valence null-out on general type.
-EXPECTED_VERSION = 117
+#   v119 (2026-08-05): F3 local-route metadata gap — model_used/duration_ms
+#     threaded through the ask_endpoint success-path return dict.
+EXPECTED_VERSION = 119
 
 
 def _html() -> str:
