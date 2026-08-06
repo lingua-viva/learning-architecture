@@ -569,7 +569,9 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 116
+version: 117
+# v117 (2026-08-05): P0 cross-tab wrong-student fix — Parent Update gets
+#   independent parentSelectedStudent + parentStudentOptions().
 # v116 (2026-08-05): Doctor sweep — observation capture dedup guard at
 #   endpoint layer (C7), prevents double-click duplicates.
 # v115 (2026-08-05): Doctor sweep — parent report source_observation_ids

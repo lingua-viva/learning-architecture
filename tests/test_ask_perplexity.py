@@ -70,24 +70,29 @@ def test_roster_name_query_is_refused_with_zero_egress(no_egress, roster, privac
     response = client.post("/api/ask", json={"question": "What should I do about Nora Rossi's reading?"})
     assert response.status_code == 200
     body = response.json()
-    assert body["type"] == "ask_refused"
-    assert body["refused"] is True
+    # F3: student-named queries route locally (grounded pipeline), never external.
+    # The privacy gate prevents egress but answers from local observations.
+    assert body["type"] == "ask_result"
     assert body["external_calls"] == 0
-    assert body["message"] == ask_personal_data_refusal_message()
-    assert any(event["event_type"] == "student_name_blocked" for event in _events(privacy_log))
+    assert body.get("local_only") is True
+    assert any(event["event_type"] == "student_query_routed_local" for event in _events(privacy_log))
 
 
 def test_fuzzy_roster_name_is_refused(no_egress, roster, privacy_log, perplexity_key):
     response = client.post("/api/ask", json={"question": "Any advice for helping Marko with focus?"})
     body = response.json()
-    assert body["type"] == "ask_refused"
+    # Fuzzy match → routes locally too
+    assert body["type"] == "ask_result"
     assert body["external_calls"] == 0
+    assert body.get("local_only") is True
 
 
 def test_first_name_only_is_refused(no_egress, roster, privacy_log, perplexity_key):
     response = client.post("/api/ask", json={"question": "How can I help Nora concentrate?"})
     body = response.json()
-    assert body["type"] == "ask_refused"
+    assert body["type"] == "ask_result"
+    assert body["external_calls"] == 0
+    assert body.get("local_only") is True
 
 
 def test_pattern_pii_without_roster_hit_is_refused(no_egress, roster, privacy_log, perplexity_key):
@@ -118,8 +123,10 @@ def test_history_is_gated_too(no_egress, roster, privacy_log, perplexity_key):
         ],
     })
     body = response.json()
-    assert body["type"] == "ask_refused"
+    # Student name in history → route locally, zero egress
+    assert body["type"] == "ask_result"
     assert body["external_calls"] == 0
+    assert body.get("local_only") is True
 
 
 # --- The happy path ------------------------------------------------------------

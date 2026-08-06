@@ -47,10 +47,10 @@ saved straight from speech — we ripped it out."
    1] need?" This is the RTI path (`LV-STU-003`), fixed this session (F3): it now classifies
    correctly and returns a grounded answer built from that student's actual observations and
    RTI-tier evidence, not a generic answer.
-   - **Say explicitly:** "This used to fall through to a generic teaching answer that ignored the
-     student's name entirely. It's fixed as of this build — ask it again on an older build and
-     you'd get the generic answer; that's a known, documented gap on 0.2.36/0.2.37, not a new
-     bug."
+   - **Say explicitly:** "This used to flat-refuse any question containing a student's name.
+     Now it routes locally through the lens and returns a grounded answer — no data leaves
+     this machine. The privacy gate still blocks the question from going to Perplexity, but
+     it answers from local observations instead of refusing."
 3. Optionally, ask something with **no grounding available at all** (a student with zero
    observations, or a fabricated-sounding claim). Let the safety gate fire — a visible warning
    prefix should appear in the chat bubble itself, not just in speech.

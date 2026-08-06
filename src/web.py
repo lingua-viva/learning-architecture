@@ -2054,6 +2054,46 @@ async def ask_endpoint(payload: dict):
     payload_text = _ask_payload_text(question, history)
     hit = await asyncio.to_thread(_ask_personal_data_hit, payload_text)
     if hit:
+        # F3 fix: student-named questions route to the LOCAL grounded path
+        # (lens + observations), never to Perplexity. The privacy gate blocks
+        # external egress — but a local, grounded answer is safe and expected.
+        if hit == "student_name_detected":
+            from src.lingua_viva.privacy_log import log_event as _log
+            _log("student_query_routed_local", query_text=question)
+            try:
+                from src.lingua_viva.app import run_teacher_query
+                from src.session import get_active_session
+                session_id = get_active_session()
+                result = await asyncio.wait_for(
+                    run_teacher_query(question, intent=None, session_id=session_id, eval_mode=False),
+                    timeout=60,
+                )
+                response = _build_query_response(result, question, session_id, False)
+                # Reshape for the Ask UI's expected format
+                answer_text = (response.get("result") or {}).get("content") or response.get("content") or ""
+                return {
+                    "type": "ask_result",
+                    "content": answer_text,
+                    "citations": response.get("sources") or [],
+                    "external_calls": 0,
+                    "local_only": True,
+                    "gir": response.get("gir_score"),
+                    "voice_tone": response.get("voice_tone"),
+                    "tone_prefix": response.get("tone_prefix"),
+                    "sources_used": response.get("sources") or [],
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+            except Exception:
+                # Graceful degradation: if the local pipeline fails, return
+                # an honest message rather than the old flat refusal.
+                return {
+                    "type": "ask_result",
+                    "content": "I couldn't generate a grounded answer right now. The local model may be unavailable — check Health and try again.",
+                    "citations": [],
+                    "external_calls": 0,
+                    "local_only": True,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
         log_event("student_name_blocked", query_text=question)
         return {
             "type": "ask_refused",
@@ -4067,7 +4107,7 @@ async def observe_classify(payload: dict):
                 model=lv_config.detect_model(),
                 system_prompt=system_prompt,
             ),
-            timeout=15,
+            timeout=60,
         )
     except Exception:
         result = None

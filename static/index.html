@@ -798,6 +798,7 @@
       unitId: "",
       students: [],
       selectedStudent: "",
+      parentSelectedStudent: "",
       chat: [],
       selectedTraceId: "",
       schoolProfile: null,
@@ -3291,9 +3292,10 @@
       $("content").innerHTML = `
         <div class="view-head"><div><h2>Parent Recommendation</h2><p>Draft a warm, parent-safe note for teacher review.</p></div><span class="badge warn">Review before sending. No AI attribution in final message.</span></div>
         <div class="grid two">
-          <div class="panel"><label>Student<select id="parent-student">${studentOptions()}</select></label><label style="display:block;margin-top:12px;">Home support focus<input id="parent-focus" value="creative quiet workspace"></label><label style="display:block;margin-top:12px;"><input type="checkbox" id="parent-include-evidence"> Include evidence summaries (teacher-confirmed only; same safety review as the rest of the draft)</label><button id="draft-parent" class="primary" type="button" style="margin-top:12px;">Draft Recommendation</button></div>
+          <div class="panel"><label>Student<select id="parent-student">${parentStudentOptions()}</select></label><label style="display:block;margin-top:12px;">Home support focus<input id="parent-focus" value="creative quiet workspace"></label><label style="display:block;margin-top:12px;"><input type="checkbox" id="parent-include-evidence"> Include evidence summaries (teacher-confirmed only; same safety review as the rest of the draft)</label><button id="draft-parent" class="primary" type="button" style="margin-top:12px;">Draft Recommendation</button></div>
           <div id="parent-output" class="panel"><p>Drafts appear here for editing before sending.</p></div>
         </div>`;
+      $("parent-student").addEventListener("change", e => { state.parentSelectedStudent = e.target.value; });
       $("draft-parent").addEventListener("click", draftParent);
     }
 
@@ -6391,6 +6393,14 @@
       const known = state.students.some(student => student.student_id === state.selectedStudent);
       const placeholder = `<option value="" disabled ${known ? "" : "selected"}>Choose a student…</option>`;
       return placeholder + state.students.map(student => `<option value="${student.student_id}" ${student.student_id === state.selectedStudent ? "selected" : ""}>${escapeHtml(student.display_name)}</option>`).join("");
+    }
+
+    function parentStudentOptions() {
+      // P0 cross-tab fix: Parent Update uses its own selection state so
+      // switching to Observe and back never silently swaps the student.
+      const known = state.students.some(student => student.student_id === state.parentSelectedStudent);
+      const placeholder = `<option value="" disabled ${known ? "" : "selected"}>Choose a student…</option>`;
+      return placeholder + state.students.map(student => `<option value="${student.student_id}" ${student.student_id === state.parentSelectedStudent ? "selected" : ""}>${escapeHtml(student.display_name)}</option>`).join("");
     }
 
     // Quick capture (Ctrl/Cmd+K) — MC-lessons §7. Claudia's core loop is
