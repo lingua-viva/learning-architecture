@@ -201,6 +201,63 @@ def test_unsupported_format_fails_honestly():
         _run(extract_document(bad, b"\x89PNG..."))
 
 
+def test_xlsx_roster_extracts_cell_text():
+    from io import BytesIO
+
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["First", "Last"])
+    sheet.append(["Marco", "Bianchi"])
+    sheet.append(["Nora", "Rossi"])
+    buffer = BytesIO()
+    workbook.save(buffer)
+    source, _ = _source("source_lesson_plan_marco_nora.json", "lesson_plan_marco_nora.md")
+    xlsx = SourceRecord({
+        **source.data,
+        "mime": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "original_ext": ".xlsx",
+    })
+
+    record = _run(extract_document(xlsx, buffer.getvalue()))
+
+    assert "Marco Bianchi" in record.data["normalized_text"]
+    assert "Nora Rossi" in record.data["normalized_text"]
+    names = [s["display_name"] for s in record.data["structure"]["students_detected"]]
+    assert names == ["Marco Bianchi", "Nora Rossi"]
+
+
+def test_docx_roster_extracts_paragraph_and_table_text():
+    from io import BytesIO
+
+    import docx
+
+    document = docx.Document()
+    document.add_paragraph("Class List")
+    table = document.add_table(rows=1, cols=2)
+    table.rows[0].cells[0].text = "First"
+    table.rows[0].cells[1].text = "Last"
+    for first, last in [("Marco", "Bianchi"), ("Nora", "Rossi")]:
+        cells = table.add_row().cells
+        cells[0].text = first
+        cells[1].text = last
+    buffer = BytesIO()
+    document.save(buffer)
+    source, _ = _source("source_lesson_plan_marco_nora.json", "lesson_plan_marco_nora.md")
+    word = SourceRecord({
+        **source.data,
+        "mime": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "original_ext": ".docx",
+    })
+
+    record = _run(extract_document(word, buffer.getvalue()))
+
+    assert "Class List" in record.data["normalized_text"]
+    names = [s["display_name"] for s in record.data["structure"]["students_detected"]]
+    assert names == ["Marco Bianchi", "Nora Rossi"]
+
+
 # --- Job runner ----------------------------------------------------------------
 
 

@@ -46,6 +46,7 @@ if str(LV_ROOT) not in sys.path:
     sys.path.insert(0, str(LV_ROOT))
 
 app = FastAPI(title="Lingua Viva", docs_url=None, redoc_url=None)
+STUDENT_GRADE_LEVELS = tuple(f"G{grade}" for grade in range(1, 13))
 
 
 # ── Global JSON error handler ─────────────────────────────────────────────
@@ -90,7 +91,7 @@ async def _enforce_role_gate(request: Request, call_next):
     required_roles = None
 
     if any(path.startswith(p) for p in (
-        "/api/slack/credentials", "/api/ops/setup/", "/api/provider/", "/api/google-drive/",
+        "/api/slack/credentials", "/api/ops/setup/", "/api/provider/", "/api/settings/keys", "/api/google-drive/",
     )):
         required_roles = ADMIN_ONLY
     elif path.startswith("/api/admin/"):
@@ -1677,7 +1678,8 @@ def _strip_parent_output(text: str, names: list[str]) -> str:
 async def curriculum_overview():
     from src.lingua_viva.curriculum import CurriculumService
 
-    return await asyncio.to_thread(CurriculumService().get_overview)
+    overview = await asyncio.to_thread(CurriculumService().get_overview)
+    return {**overview, "student_grade_levels": list(STUDENT_GRADE_LEVELS)}
 
 
 @app.get("/api/curriculum/grade/{grade}")
@@ -1907,7 +1909,13 @@ RIME_MAX_CHARS = 12_000
 
 
 def _rime_api_key() -> str:
-    return os.environ.get("RIME_API_KEY", "").strip()
+    try:
+        from src.lingua_viva.config import service_api_key
+
+        configured = service_api_key("rime")
+    except Exception:
+        configured = None
+    return (configured or os.environ.get("RIME_API_KEY", "")).strip()
 
 
 def _active_student_names() -> list[str]:
@@ -1961,9 +1969,9 @@ ASK_QUESTION_MAX_CHARS = 8000
 
 def _perplexity_api_key() -> str:
     try:
-        from src.lingua_viva.config import provider_api_key
+        from src.lingua_viva.config import service_api_key
 
-        configured = provider_api_key("perplexity")
+        configured = service_api_key("perplexity")
     except Exception:
         configured = None
     return (configured or os.environ.get("PERPLEXITY_API_KEY", "")).strip()
@@ -2219,11 +2227,44 @@ async def ask_endpoint(payload: dict):
 
 INGEST_MAX_BYTES = 15 * 1024 * 1024
 INGEST_CONFIDENCE_THRESHOLD = 0.7
+BULK_IMPORT_CONFIRMATION_THRESHOLD = 2
 _INGEST_JOBS: dict[str, dict] = {}
 
 
 def _ingest_job(job_id: str) -> Optional[dict]:
-    return _INGEST_JOBS.get(job_id)
+    job = _INGEST_JOBS.get(job_id)
+    if job is not None:
+        return job
+    path = _ingest_job_path(job_id)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    _INGEST_JOBS[job_id] = data
+    return data
+
+
+def _ingest_jobs_dir() -> Path:
+    root = Path(os.environ.get("LV_STATE_HOME") or Path.home() / ".lingua-viva")
+    return root / "ingest-jobs"
+
+
+def _ingest_job_path(job_id: str) -> Path:
+    safe = re.sub(r"[^A-Za-z0-9_.-]", "_", job_id)
+    return _ingest_jobs_dir() / f"{safe}.json"
+
+
+def _save_ingest_job(job: dict) -> None:
+    job_id = str(job.get("job_id") or "")
+    if not job_id:
+        return
+    path = _ingest_job_path(job_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(job, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
+    os.replace(tmp, path)
 
 
 def _new_ingest_job(source_id: str, source_name: str) -> dict:
@@ -2240,6 +2281,7 @@ def _new_ingest_job(source_id: str, source_name: str) -> dict:
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     _INGEST_JOBS[job["job_id"]] = job
+    _save_ingest_job(job)
     return job
 
 
@@ -2313,6 +2355,7 @@ async def _run_ingest_job(job: dict, source, content: bytes) -> None:
 
     try:
         job["status"] = "extracting"
+        _save_ingest_job(job)
         # Local model enrichment when available; extraction is deterministic
         # without it (offline is a supported state — T3 spec §0).
         model_client = None
@@ -2327,18 +2370,26 @@ async def _run_ingest_job(job: dict, source, content: bytes) -> None:
         )
         await asyncio.to_thread(docpipe_vault.put_extraction, extraction)
         job["status"] = "identifying"
+        _save_ingest_job(job)
         detected = [
             student
             for student in extraction.data.get("structure", {}).get("students_detected", [])
             if isinstance(student, dict) and str(student.get("display_name") or "").strip()
         ]
         job["students_found"] = len(detected)
+        bulk_review_required = len(detected) > BULK_IMPORT_CONFIRMATION_THRESHOLD
         for student in detected:
             try:
                 confidence = float(student.get("confidence", 0.0))
             except (TypeError, ValueError):
                 confidence = 0.0
-            if confidence >= INGEST_CONFIDENCE_THRESHOLD:
+            if bulk_review_required:
+                job["needs_confirmation"].append({
+                    "display_name": str(student.get("display_name")),
+                    "confidence": confidence,
+                    "reason": "Roster-style import: review names before creating student profiles.",
+                })
+            elif confidence >= INGEST_CONFIDENCE_THRESHOLD:
                 created = await asyncio.to_thread(_create_lens_for_detected, extraction, student)
                 job["students_created"].append(created)
             else:
@@ -2350,6 +2401,7 @@ async def _run_ingest_job(job: dict, source, content: bytes) -> None:
                 })
         job["warnings"] = [str(w) for w in extraction.data.get("warnings", [])]
         job["status"] = "done"
+        _save_ingest_job(job)
     except NotImplementedError:
         job["status"] = "failed"
         job["error"] = (
@@ -2357,9 +2409,11 @@ async def _run_ingest_job(job: dict, source, content: bytes) -> None:
             "was saved safely and nothing was invented — try again after the "
             "next update."
         )
+        _save_ingest_job(job)
     except Exception as error:
         job["status"] = "failed"
         job["error"] = f"Could not read this document: {error}"
+        _save_ingest_job(job)
 
 
 @app.post("/api/students/ingest")
@@ -2446,37 +2500,92 @@ async def students_ingest_confirm(payload: dict):
 
     job_id = str((payload or {}).get("job_id", "")).strip()
     display_name = str((payload or {}).get("display_name", "")).strip()
+    display_names = [
+        str(item).strip()
+        for item in ((payload or {}).get("display_names") or [])
+        if str(item).strip()
+    ]
+    if display_name and not display_names:
+        display_names = [display_name]
     job = _ingest_job(job_id)
     if job is None:
         return JSONResponse({"error": "import job not found"}, status_code=404)
-    if not display_name:
+    if not display_names:
         return JSONResponse({"error": "display_name is required"}, status_code=400)
-    pending = next(
-        (item for item in job["needs_confirmation"] if item.get("display_name") == display_name),
-        None,
-    )
-    if pending is None:
-        return JSONResponse({"error": "that student is not awaiting confirmation"}, status_code=404)
+    pending_names = {
+        str(item.get("display_name") or "").strip()
+        for item in job["needs_confirmation"]
+    }
+    missing = [name for name in display_names if name not in pending_names]
+    if missing:
+        return JSONResponse({"error": "one or more students are not awaiting confirmation"}, status_code=404)
     try:
         extraction = await asyncio.to_thread(docpipe_vault.get_extraction, job["source_id"])
     except FileNotFoundError:
         return JSONResponse({
             "error": "The extracted document is no longer available — import the file again (re-imports merge safely).",
         }, status_code=409)
-    detected = next(
-        (
-            student
-            for student in extraction.data.get("structure", {}).get("students_detected", [])
-            if str(student.get("display_name") or "").strip() == display_name
-        ),
-        {"display_name": display_name},
-    )
-    created = await asyncio.to_thread(_create_lens_for_detected, extraction, detected)
+    detected_by_name = {
+        str(student.get("display_name") or "").strip(): student
+        for student in extraction.data.get("structure", {}).get("students_detected", [])
+        if isinstance(student, dict)
+    }
+    created_students = []
+    for name in display_names:
+        detected = detected_by_name.get(name) or {"display_name": name}
+        created = await asyncio.to_thread(_create_lens_for_detected, extraction, detected)
+        created_students.append(created)
+        job["students_created"].append(created)
     job["needs_confirmation"] = [
-        item for item in job["needs_confirmation"] if item.get("display_name") != display_name
+        item for item in job["needs_confirmation"] if item.get("display_name") not in set(display_names)
     ]
-    job["students_created"].append(created)
-    return {"status": "created", "student": created}
+    _save_ingest_job(job)
+    body = {"status": "created", "students": created_students}
+    if len(created_students) == 1:
+        body["student"] = created_students[0]
+    return body
+
+
+@app.delete("/api/students/ingest/{job_id}")
+async def students_ingest_undo(job_id: str):
+    from src.education.student_lens import LensNotFoundError
+
+    job = _ingest_job(job_id)
+    if job is None:
+        return JSONResponse({"error": "import job not found"}, status_code=404)
+    created = [
+        item for item in job.get("students_created", [])
+        if isinstance(item, dict) and str(item.get("student_id") or "").strip()
+    ]
+    archived: list[dict] = []
+    skipped: list[dict] = []
+
+    def do_archive(store):
+        for item in created:
+            student_id = str(item.get("student_id"))
+            try:
+                store.delete_lens(student_id, hard=False)
+                archived.append({
+                    "student_id": student_id,
+                    "display_name": str(item.get("display_name") or ""),
+                })
+            except LensNotFoundError:
+                skipped.append({"student_id": student_id, "reason": "not found"})
+
+    await asyncio.to_thread(_with_student_store, do_archive)
+    job["undo"] = {
+        "status": "archived",
+        "archived_at": datetime.now(timezone.utc).isoformat(),
+        "students_archived": archived,
+        "skipped": skipped,
+    }
+    _save_ingest_job(job)
+    return {
+        "status": "archived",
+        "job_id": job_id,
+        "students_archived": archived,
+        "skipped": skipped,
+    }
 
 
 @app.get("/api/students/growth")
@@ -4190,11 +4299,9 @@ async def students():
 async def create_student(payload: dict):
     """Create a new student lens from the Add Student form.
 
-    Grade is validated against the curriculum's canonical grade bands
-    (dev/ADD_STUDENT_FORM_DECISION_2026-08-04.md, Decision 1) so a mismatched
-    value (e.g. "3rd grade") can never silently fail to match a grade band
-    later in differentiation/materials generation. The client form now sends
-    a dropdown of canonical values; this check is defense-in-depth for any
+    Grade is validated against the school's canonical student grades, not
+    against whichever grades currently have curriculum content loaded. The
+    client form sends this dropdown; this check is defense-in-depth for any
     other caller of this endpoint.
     """
     display_name = (payload.get("display_name") or "").strip()
@@ -4207,14 +4314,12 @@ async def create_student(payload: dict):
 
         service = CurriculumService()
         normalized = service._normalize_grade(grade_level)
-        known_grades = {
-            band["grade"] for band in service.get_overview()["grade_bands"]
-        }
+        known_grades = set(STUDENT_GRADE_LEVELS)
         if normalized not in known_grades:
             return JSONResponse(
                 {
                     "error": (
-                        f"'{grade_level}' is not a known grade band "
+                        f"'{grade_level}' is not a known student grade "
                         f"({', '.join(sorted(known_grades))})."
                     )
                 },
@@ -5690,7 +5795,30 @@ async def provider_info():
     itself, only whether a provider is connected and whether local Ollama
     is currently reachable."""
     from src.provider_config import provider_status
-    return await asyncio.to_thread(provider_status)
+    from src.lingua_viva.config import service_key_status
+
+    status = await asyncio.to_thread(provider_status)
+    key_status = await asyncio.to_thread(service_key_status)
+    return {**status, "service_keys": key_status}
+
+
+@app.post("/api/settings/keys")
+async def settings_keys(payload: dict):
+    """Persist Ask/Voice service keys without echoing plaintext values."""
+    from src.lingua_viva.config import save_service_api_keys
+
+    keys = {}
+    for service in ("perplexity", "rime"):
+        if service in payload:
+            value = payload.get(service)
+            if not isinstance(value, str):
+                return JSONResponse({"error": f"{service} key must be text."}, status_code=400)
+            keys[service] = value
+    try:
+        status = await asyncio.to_thread(save_service_api_keys, keys)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    return {"status": "saved", "service_keys": status}
 
 
 @app.get("/api/google-drive/status")

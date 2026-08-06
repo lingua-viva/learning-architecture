@@ -195,6 +195,22 @@ def test_missing_key_is_honest_and_makes_no_call(no_egress, roster, privacy_log,
     assert body["external_calls"] == 0
 
 
+def test_saved_perplexity_key_is_used_without_env(roster, privacy_log, recorded_perplexity, monkeypatch, tmp_path):
+    from src.lingua_viva.config import save_service_api_keys
+
+    monkeypatch.delenv("PERPLEXITY_API_KEY", raising=False)
+    monkeypatch.setenv("LV_CONFIG_HOME", str(tmp_path))
+    save_service_api_keys({"perplexity": "pplx-saved-key"})
+
+    response = client.post("/api/ask", json={
+        "question": "What are useful routines for language learners?",
+    })
+
+    assert response.status_code == 200
+    assert response.json()["type"] == "ask_result"
+    assert recorded_perplexity[0]["key"] == "pplx-saved-key"
+
+
 def test_rejected_key_reads_as_setup_problem_not_connectivity(roster, privacy_log, perplexity_key, monkeypatch):
     import urllib.error
 

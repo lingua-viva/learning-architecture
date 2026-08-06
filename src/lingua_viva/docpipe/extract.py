@@ -27,6 +27,14 @@ EXTRACTOR_VERSION = "1.0"
 TEXT_MIMES = {"text/markdown", "text/plain", "text/csv", "text/x-markdown"}
 TEXT_EXTS = {".md", ".markdown", ".txt", ".csv"}
 PDF_MIMES = {"application/pdf"}
+SPREADSHEET_MIMES = {
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+}
+SPREADSHEET_EXTS = {".xlsx"}
+DOCX_MIMES = {
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+DOCX_EXTS = {".docx"}
 
 MODEL_STUDENT_CONFIDENCE = 0.7
 VERBATIM_STUDENT_CONFIDENCE = 0.99
@@ -43,6 +51,7 @@ _NAME_BLOCKLIST = {
     "personal", "identity", "voice", "grade", "school", "lesson", "plan",
     "report", "progress", "term", "roster", "list", "level", "reading",
     "writing", "speaking", "listening", "differentiation", "next", "step",
+    "first", "last", "name", "surname", "given", "family",
     "monday", "tuesday", "wednesday", "thursday", "friday", "saturday",
     "sunday", "january", "february", "march", "april", "may", "june",
     "july", "august", "september", "october", "november", "december",
@@ -108,10 +117,14 @@ def _normalize(source: SourceRecord, content: bytes) -> str:
         raw = content.decode("utf-8", errors="replace")
     elif mime in PDF_MIMES or ext == ".pdf":
         raw = _pdf_text(content)
+    elif mime in SPREADSHEET_MIMES or ext in SPREADSHEET_EXTS:
+        raw = _xlsx_text(content)
+    elif mime in DOCX_MIMES or ext in DOCX_EXTS:
+        raw = _docx_text(content)
     else:
         raise ValueError(
             f"unsupported format for extraction: {mime or ext or 'unknown'} — "
-            "supported today: markdown, plain text, csv, pdf"
+            "supported today: markdown, plain text, csv, pdf, xlsx, docx"
         )
     return _normalize_text(raw)
 
@@ -141,6 +154,63 @@ def _pdf_text(content: bytes) -> str:
     text = "\n\n".join(page for page in pages if page.strip())
     if not text.strip():
         raise ValueError("no extractable text found in this PDF")
+    return text
+
+
+def _xlsx_text(content: bytes) -> str:
+    import io
+
+    try:
+        import openpyxl
+    except ImportError as error:
+        raise ValueError(
+            "Excel support is not available on this computer (openpyxl missing)"
+        ) from error
+    workbook = openpyxl.load_workbook(
+        io.BytesIO(content), read_only=True, data_only=True
+    )
+    sheets: list[str] = []
+    try:
+        for sheet in workbook.worksheets:
+            rows: list[str] = []
+            for row in sheet.iter_rows(values_only=True):
+                cells = [
+                    str(cell).strip()
+                    for cell in row
+                    if cell is not None and str(cell).strip()
+                ]
+                if cells:
+                    rows.append(" ".join(cells))
+            if rows:
+                sheets.append("\n".join(rows))
+    finally:
+        workbook.close()
+    text = "\n\n".join(sheets)
+    if not text.strip():
+        raise ValueError("no extractable text found in this Excel file")
+    return text
+
+
+def _docx_text(content: bytes) -> str:
+    import io
+
+    try:
+        import docx
+    except ImportError as error:
+        raise ValueError(
+            "Word document support is not available on this computer (python-docx missing)"
+        ) from error
+    document = docx.Document(io.BytesIO(content))
+    blocks: list[str] = []
+    blocks.extend(paragraph.text for paragraph in document.paragraphs if paragraph.text.strip())
+    for table in document.tables:
+        for row in table.rows:
+            cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+            if cells:
+                blocks.append(" ".join(cells))
+    text = "\n".join(blocks)
+    if not text.strip():
+        raise ValueError("no extractable text found in this Word document")
     return text
 
 

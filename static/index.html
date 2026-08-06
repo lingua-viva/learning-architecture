@@ -1602,6 +1602,13 @@
       return state.overview;
     }
 
+    function studentGradeLevels(overview) {
+      if (overview && Array.isArray(overview.student_grade_levels) && overview.student_grade_levels.length) {
+        return overview.student_grade_levels;
+      }
+      return (overview?.grade_bands || []).map(g => g.grade);
+    }
+
     async function ensureStudents() {
       const data = await api("/api/students");
       state.students = data.students || [];
@@ -2164,9 +2171,9 @@
         <div class="view-head"><div><h2>Student Lenses</h2><p>View profiles, observations, CEFR trajectory, grouping notes, and support proposals. The system suggests; the teacher decides.</p></div></div>
         <div class="panel" style="margin-bottom:14px;">
           <h3>Import students from a file</h3>
-          <p class="voice-hint">Point at a class list, roster, or lesson plan — the pipeline reads it and builds student lenses. No manual field entry. Every populated field traces to the document.</p>
+          <p class="voice-hint">Point at a class list, roster, or lesson plan (.xlsx, .docx, .csv, .txt, .md, or .pdf). Roster-style imports ask you to confirm names before creating student profiles.</p>
           <form id="ingest-form" class="row" style="gap:8px;align-items:center;flex-wrap:wrap;">
-            <input id="ingest-file" type="file" style="width:auto;">
+            <input id="ingest-file" type="file" accept=".xlsx,.docx,.csv,.txt,.md,.markdown,.pdf,text/plain,text/csv,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style="width:auto;">
             <button class="primary" type="submit">Import</button>
             <span id="ingest-status" class="voice-hint" aria-live="polite"></span>
           </form>
@@ -2177,7 +2184,7 @@
           <h3>Add Student</h3>
           <form id="add-student-form" class="row" style="gap:8px;flex-wrap:wrap;align-items:flex-end;">
             <label style="display:flex;flex-direction:column;gap:4px;"><span>Name</span><input id="new-student-name" required placeholder="Display name"></label>
-            <label style="display:flex;flex-direction:column;gap:4px;"><span>Grade</span><select id="new-student-grade"><option value="">— none —</option>${overview.grade_bands.map(g => `<option value="${g.grade}">${g.grade}</option>`).join("")}</select></label>
+            <label style="display:flex;flex-direction:column;gap:4px;"><span>Grade</span><select id="new-student-grade"><option value="">— none —</option>${studentGradeLevels(overview).map(g => `<option value="${g}">${g}</option>`).join("")}</select></label>
             <label style="display:flex;flex-direction:column;gap:4px;"><span>Home language</span><input id="new-student-lang" placeholder="e.g. it"></label>
             <button class="primary" type="submit">Add</button>
           </form>
@@ -2236,6 +2243,7 @@
       if (job.status === "done") {
         const created = (job.students_created || []).length;
         if (!job.students_found) return `No students found in ${job.source_name}. Nothing was invented — check that the document names your students.`;
+        if ((job.needs_confirmation || []).length) return `${job.needs_confirmation.length} name${job.needs_confirmation.length === 1 ? "" : "s"} found in ${job.source_name}. Review before creating student profiles.`;
         return `${created} student${created === 1 ? "" : "s"} added from ${job.source_name}.`;
       }
       return "";
@@ -2251,8 +2259,15 @@
       const created = (job.students_created || []).map(student => `
         <div class="source-line"><span class="badge ok">${escapeHtml(student.display_name)}</span><span class="badge">from ${escapeHtml(job.source_name)}</span>${(student.fields_populated || []).length ? `<span class="badge">${student.fields_populated.length} field${student.fields_populated.length === 1 ? "" : "s"} grounded</span>` : '<span class="badge">lens scaffold only</span>'}</div>`).join("");
       const pending = (job.needs_confirmation || []).map(item => `
-        <div class="source-line"><span class="badge warn">This looks like ${escapeHtml(item.display_name)} (low confidence)</span><button type="button" data-ingest-confirm="${escapeHtml(item.display_name)}">Add student</button></div>`).join("");
-      host.innerHTML = created + pending;
+        <label class="source-line" style="align-items:center;"><input type="checkbox" data-ingest-confirm-check="${escapeHtml(item.display_name)}" checked style="width:auto;"><span class="badge warn">${escapeHtml(item.display_name)}</span><span class="badge">${escapeHtml(item.reason || "Needs confirmation")}</span><span class="badge">confidence ${Number(item.confidence || 0).toFixed(2)}</span></label>`).join("");
+      const pendingControls = pending ? `<div style="margin-top:8px;">${pending}<div class="row" style="margin-top:8px;"><button type="button" class="primary" data-ingest-confirm-selected>Create selected students</button></div></div>` : "";
+      const undo = (job.students_created || []).length && !(job.undo && job.undo.status === "archived")
+        ? `<div class="row" style="margin-top:8px;"><button type="button" data-ingest-undo>Undo this import</button><span class="voice-hint">Archives only the students created by this import.</span></div>`
+        : "";
+      const undone = job.undo && job.undo.status === "archived"
+        ? `<div class="source-line"><span class="badge ok">Import undone</span><span class="badge">${(job.undo.students_archived || []).length} archived</span></div>`
+        : "";
+      host.innerHTML = created + pendingControls + undo + undone;
       host.querySelectorAll("[data-ingest-confirm]").forEach(button => button.addEventListener("click", async () => {
         button.disabled = true;
         try {
@@ -2271,6 +2286,43 @@
           button.textContent = "retry";
         }
       }));
+      const confirmSelected = host.querySelector("[data-ingest-confirm-selected]");
+      if (confirmSelected) confirmSelected.addEventListener("click", async () => {
+        const names = Array.from(host.querySelectorAll("[data-ingest-confirm-check]:checked")).map(input => input.dataset.ingestConfirmCheck);
+        if (!names.length) return;
+        confirmSelected.disabled = true;
+        try {
+          const response = await fetch("/api/students/ingest/confirm", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({job_id: state.ingestJob.job_id, display_names: names})
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || "confirm failed");
+          state.ingestJob.needs_confirmation = state.ingestJob.needs_confirmation.filter(item => !names.includes(item.display_name));
+          state.ingestJob.students_created.push(...(data.students || []));
+          await renderStudents();
+        } catch (error) {
+          confirmSelected.disabled = false;
+          confirmSelected.textContent = "Retry";
+        }
+      });
+      const undoButton = host.querySelector("[data-ingest-undo]");
+      if (undoButton) undoButton.addEventListener("click", async () => {
+        if (!confirm("Archive every student created by this import? Other students are untouched.")) return;
+        undoButton.disabled = true;
+        try {
+          const response = await fetch(`/api/students/ingest/${state.ingestJob.job_id}`, {method: "DELETE"});
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || "undo failed");
+          state.ingestJob.undo = {status: "archived", students_archived: data.students_archived || [], skipped: data.skipped || []};
+          state.students = null;
+          await renderStudents();
+        } catch (error) {
+          undoButton.disabled = false;
+          undoButton.textContent = "Retry undo";
+        }
+      });
     }
 
     function pollIngestJob() {
@@ -4053,6 +4105,21 @@
           </div>
         </div>
         <div class="panel" style="margin-top:14px;">
+          <div class="view-head"><div><h3>Ask and voice keys</h3><p>Optional service keys for general Ask web search and natural text-to-speech.</p></div></div>
+          <div class="form-grid">
+            <label>Perplexity key<input id="perplexity-key-input" type="password" placeholder="${status.service_keys?.perplexity?.configured ? "Configured" : "Paste Perplexity key"}"></label>
+            <label>Rime key<input id="rime-key-input" type="password" placeholder="${status.service_keys?.rime?.configured ? "Configured" : "Paste Rime key"}"></label>
+          </div>
+          <div class="source-line" style="margin-top:10px;">
+            <span id="perplexity-key-badge" class="badge ${status.service_keys?.perplexity?.configured ? "ok" : ""}">Perplexity ${status.service_keys?.perplexity?.configured ? "configured" : "not configured"}</span>
+            <span id="rime-key-badge" class="badge ${status.service_keys?.rime?.configured ? "ok" : ""}">Rime ${status.service_keys?.rime?.configured ? "configured" : "not configured"}</span>
+          </div>
+          <div class="row" style="margin-top:12px;">
+            <button id="service-keys-save" class="primary" type="button">Save keys</button>
+            <span id="service-keys-status" class="voice-hint"></span>
+          </div>
+        </div>
+        <div class="panel" style="margin-top:14px;">
           <div class="view-head">
             <div><h3>Integrations</h3><p>Connect Lingua Viva to the tools your school already uses. Everything below is set up and stored on this computer.</p></div>
           </div>
@@ -4122,6 +4189,7 @@
         </div>`;
       await renderScheduleControls(overview);
       renderProviderControls();
+      renderServiceKeyControls(status.service_keys || {});
       await renderTeacherIdentityControls();
       await renderIntegrationsControls();
       await renderExtractionControls();
@@ -4581,6 +4649,54 @@
         } catch (e) {
           statusEl.textContent = e.message || "Disconnect failed.";
         }
+      };
+    }
+
+    function renderServiceKeyControls(initialStatus) {
+      const btn = $("service-keys-save");
+      const statusEl = $("service-keys-status");
+      const perplexityInput = $("perplexity-key-input");
+      const rimeInput = $("rime-key-input");
+      if (!btn) return;
+
+      function setBadge(id, label, configured) {
+        const badge = $(id);
+        if (!badge) return;
+        badge.textContent = `${label} ${configured ? "configured" : "not configured"}`;
+        badge.classList.toggle("ok", !!configured);
+      }
+
+      setBadge("perplexity-key-badge", "Perplexity", initialStatus.perplexity?.configured);
+      setBadge("rime-key-badge", "Rime", initialStatus.rime?.configured);
+
+      btn.onclick = async () => {
+        const payload = {};
+        if (perplexityInput.value.trim()) payload.perplexity = perplexityInput.value.trim();
+        if (rimeInput.value.trim()) payload.rime = rimeInput.value.trim();
+        if (!Object.keys(payload).length) {
+          statusEl.textContent = "Paste a key to save.";
+          return;
+        }
+        btn.disabled = true;
+        statusEl.textContent = "Saving...";
+        try {
+          const result = await api("/api/settings/keys", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(payload)
+          });
+          perplexityInput.value = "";
+          rimeInput.value = "";
+          const serviceKeys = result.service_keys || {};
+          setBadge("perplexity-key-badge", "Perplexity", serviceKeys.perplexity?.configured);
+          setBadge("rime-key-badge", "Rime", serviceKeys.rime?.configured);
+          perplexityInput.placeholder = serviceKeys.perplexity?.configured ? "Configured" : "Paste Perplexity key";
+          rimeInput.placeholder = serviceKeys.rime?.configured ? "Configured" : "Paste Rime key";
+          statusEl.textContent = "Saved.";
+        } catch (e) {
+          statusEl.textContent = e.message || "Save failed.";
+        }
+        btn.disabled = false;
       };
     }
 

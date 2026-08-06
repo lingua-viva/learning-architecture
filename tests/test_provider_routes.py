@@ -20,14 +20,17 @@ import src.web as web
 client = TestClient(web.app)
 
 
-def test_get_provider_returns_status_shape(monkeypatch):
+def test_get_provider_returns_status_shape(monkeypatch, tmp_path):
+    monkeypatch.setenv("LV_CONFIG_HOME", str(tmp_path))
     monkeypatch.setattr(provider_config, "provider_status", lambda: {
         "connected": False, "provider": "local", "model": None, "ollama_reachable": True,
     })
     response = client.get("/api/provider")
     assert response.status_code == 200
-    assert response.json() == {
+    body = response.json()
+    assert body == {
         "connected": False, "provider": "local", "model": None, "ollama_reachable": True,
+        "service_keys": {"perplexity": {"configured": False}, "rime": {"configured": False}},
     }
 
 
@@ -92,3 +95,36 @@ def test_connect_rejects_non_string_model_before_calling_provider_config(monkeyp
     assert response.status_code == 400
     assert response.json()["error"] == "Unsupported model value."
     assert calls == []  # never reaches connect_provider()
+
+
+def test_settings_keys_persist_and_never_echo_plaintext(monkeypatch, tmp_path):
+    monkeypatch.setenv("LV_CONFIG_HOME", str(tmp_path))
+    response = client.post("/api/settings/keys", json={
+        "perplexity": "pplx-route-secret",
+        "rime": "rime-route-secret",
+    })
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["service_keys"] == {
+        "perplexity": {"configured": True},
+        "rime": {"configured": True},
+    }
+    assert "pplx-route-secret" not in response.text
+    assert "rime-route-secret" not in response.text
+
+
+def test_settings_keys_reject_non_string_values(monkeypatch, tmp_path):
+    monkeypatch.setenv("LV_CONFIG_HOME", str(tmp_path))
+    response = client.post("/api/settings/keys", json={"perplexity": 123})
+
+    assert response.status_code == 400
+    assert "must be text" in response.json()["error"]
+
+
+def test_settings_view_renders_perplexity_and_rime_key_controls():
+    html = (Path(__file__).resolve().parents[1] / "static" / "index.html").read_text(encoding="utf-8")
+    assert 'id="perplexity-key-input"' in html
+    assert 'id="rime-key-input"' in html
+    assert 'api("/api/settings/keys"' in html
+    assert "service_keys" in html

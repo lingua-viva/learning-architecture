@@ -164,6 +164,58 @@ def provider_api_key(provider_name: str) -> Optional[str]:
     return entry.get("api_key") if isinstance(entry, dict) else None
 
 
+SERVICE_KEY_FIELDS = {
+    "perplexity": "perplexity_api_key",
+    "rime": "rime_api_key",
+}
+
+
+def service_api_key(service_name: str) -> Optional[str]:
+    field = SERVICE_KEY_FIELDS.get(service_name)
+    if not field:
+        return None
+    config = read_provider_config()
+    if not config:
+        return None
+    value = config.get(field)
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def service_key_status() -> dict:
+    return {
+        name: {"configured": bool(service_api_key(name))}
+        for name in SERVICE_KEY_FIELDS
+    }
+
+
+def save_service_api_keys(keys: dict[str, str]) -> dict:
+    """Persist non-reasoning service keys in providers.json.
+
+    This intentionally does not verify the keys over the network: Ask and TTS
+    already surface rejected credentials honestly at call time, and Settings
+    must work offline for packaged installs.
+    """
+    allowed = {name: value for name, value in keys.items() if name in SERVICE_KEY_FIELDS}
+    if not allowed:
+        raise ValueError("No supported service keys were sent.")
+    config_path = provider_config_path()
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    existing = read_provider_config() or {}
+    for name, value in allowed.items():
+        field = SERVICE_KEY_FIELDS[name]
+        cleaned = str(value or "").strip()
+        if cleaned:
+            existing[field] = cleaned
+        else:
+            existing.pop(field, None)
+    tmp_path = config_path.with_suffix(".json.tmp")
+    with tmp_path.open("w", encoding="utf-8") as handle:
+        json.dump(existing, handle)
+    os.chmod(tmp_path, 0o600)
+    os.replace(tmp_path, config_path)
+    return service_key_status()
+
+
 def resolve_provider_model() -> Optional[str]:
     config = read_provider_config()
     if not config:

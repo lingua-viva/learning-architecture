@@ -307,6 +307,8 @@ export async function installPythonDeps(pythonCmd: string, repoRoot: string): Pr
     "httpx==0.28.1",
     "websockets==15.0.1",
     "pdfplumber==0.11.9",
+    "openpyxl>=3.1,<4",
+    "python-docx>=1.1,<2",
     "sqlite-vec==0.1.9",
     "faster-whisper==1.1.1",
     // P0 (Chip 0.2.31 regression, 2026-08-04): faster-whisper imports

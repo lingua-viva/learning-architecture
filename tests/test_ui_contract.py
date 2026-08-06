@@ -211,7 +211,9 @@ REPO = Path(__file__).resolve().parent.parent
 #   v112 (2026-08-04): P1-3 follow-up — sel_domain/sel_valence null-out on general type.
 #   v119 (2026-08-05): F3 local-route metadata gap — model_used/duration_ms
 #     threaded through the ask_endpoint success-path return dict.
-EXPECTED_VERSION = 119
+#   v120 (2026-08-06): Still I Rise Phase 1 Items 1-5 — roster import review/
+#     undo, G1-G12 Add Student, Settings Perplexity/Rime keys.
+EXPECTED_VERSION = 120
 
 
 def _html() -> str:

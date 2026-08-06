@@ -26,6 +26,33 @@ async def test_add_student_success():
 
 
 @pytest.mark.asyncio
+async def test_add_student_accepts_g9_without_curriculum_content():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post("/api/students", json={
+            "display_name": "Upper Grade Student",
+            "grade_level": "G9",
+        })
+        data = resp.json()
+
+    assert resp.status_code == 200
+    assert data["display_name"] == "Upper Grade Student"
+
+
+@pytest.mark.asyncio
+async def test_add_student_invalid_grade_lists_full_student_grades():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post("/api/students", json={
+            "display_name": "Invalid Grade Student",
+            "grade_level": "G13",
+        })
+        data = resp.json()
+
+    assert resp.status_code == 400
+    assert "G12" in data["error"]
+    assert "G13" not in data["error"].split("(", 1)[1]
+
+
+@pytest.mark.asyncio
 async def test_add_student_empty_name_returns_400():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.post("/api/students", json={"display_name": ""})

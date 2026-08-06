@@ -569,7 +569,10 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 119
+version: 120
+# v120 (2026-08-06): Still I Rise Phase 1 Items 1-5. src/web.py/static/index.html:
+#   roster import review/undo UI, G1-G12 Add Student dropdown backed by canonical
+#   student grades, and Settings Ask/Voice key persistence for Perplexity/Rime.
 # v119 (2026-08-05): F3 local-route metadata gap — src/web.py's ask_endpoint
 #   success-path return dict now threads model_used/duration_ms through from
 #   _build_query_response() (already computed, never wired into that branch),

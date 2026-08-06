@@ -114,6 +114,27 @@ def test_clean_text_reaches_rime_and_returns_audio(monkeypatch):
     assert response.headers["content-type"] == "audio/wav"
     assert response.content.startswith(b"RIFF")
     assert captured["key"] == "rime-test-key"
+
+
+def test_saved_rime_key_is_used_without_env(monkeypatch, tmp_path):
+    from src.lingua_viva.config import save_service_api_keys
+
+    monkeypatch.delenv("RIME_API_KEY", raising=False)
+    monkeypatch.setenv("LV_CONFIG_HOME", str(tmp_path))
+    save_service_api_keys({"rime": "rime-saved-key"})
+    captured = {}
+
+    def fake_audio(text, speaker, model_id, key):
+        captured.update(text=text, speaker=speaker, model_id=model_id, key=key)
+        return b"RIFF"
+
+    monkeypatch.setattr(web, "_active_student_names", lambda: [])
+    monkeypatch.setattr(web, "_request_rime_audio", fake_audio)
+
+    response = _tts("Buongiorno a tutti")
+
+    assert response.status_code == 200
+    assert captured["key"] == "rime-saved-key"
     assert "Marco" not in captured["text"]
 
 

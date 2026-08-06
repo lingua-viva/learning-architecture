@@ -59,6 +59,45 @@ def test_connect_provider_writes_verified_config(monkeypatch, tmp_path):
     assert saved["default_provider"] == "openai"
 
 
+def test_service_keys_save_without_disturbing_reasoning_provider(monkeypatch, tmp_path):
+    monkeypatch.setenv("LV_CONFIG_HOME", str(tmp_path))
+    path = config.provider_config_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({
+        "default_provider": "openai",
+        "providers": {"openai": {"model": "gpt-4o-mini", "api_key": "sk-test"}},
+    }), encoding="utf-8")
+
+    status = config.save_service_api_keys({
+        "perplexity": "pplx-test",
+        "rime": "rime-test",
+    })
+
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert saved["providers"]["openai"]["api_key"] == "sk-test"
+    assert saved["perplexity_api_key"] == "pplx-test"
+    assert saved["rime_api_key"] == "rime-test"
+    assert status == {
+        "perplexity": {"configured": True},
+        "rime": {"configured": True},
+    }
+    assert config.service_api_key("perplexity") == "pplx-test"
+    assert config.service_api_key("rime") == "rime-test"
+
+
+def test_service_key_status_never_returns_plaintext(monkeypatch, tmp_path):
+    monkeypatch.setenv("LV_CONFIG_HOME", str(tmp_path))
+    config.save_service_api_keys({"perplexity": "pplx-secret"})
+
+    status = config.service_key_status()
+
+    assert status == {
+        "perplexity": {"configured": True},
+        "rime": {"configured": False},
+    }
+    assert "pplx-secret" not in json.dumps(status)
+
+
 def test_connect_provider_rejects_non_string_model(monkeypatch, tmp_path):
     monkeypatch.setenv("LV_CONFIG_HOME", str(tmp_path))
 
