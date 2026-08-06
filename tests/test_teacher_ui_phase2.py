@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_teacher_sidebar_contract():
     html = (ROOT / "static" / "index.html").read_text()
 
-    for label in ["Home", "Plan", "Prepare", "Observe", "Students", "Assess", "Ask", "Parents"]:
+    for label in ["Home", "Plan", "Prepare", "Observe", "Students", "Assess", "Ask", "Summaries"]:
         assert f'"{label}"' in html
 
     for label in ["Health", "Privacy", "Settings", "Reflect"]:
@@ -56,7 +56,7 @@ def test_teacher_sidebar_contract():
     assert "/api/admin/programme" in html
     assert "lvSchedule" in html
     assert "My Schedule" in html
-    assert "Review before sending. No AI attribution in final message." in html
+    assert "Review before sharing. No AI attribution in final message." in html
     # Was: assert "No external calls" in html. That string was rendered as the
     # label of the external-call COUNT, so a machine that had made three
     # external calls displayed "3 / No external calls". Slice 4 replaced it

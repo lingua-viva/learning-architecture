@@ -764,6 +764,23 @@ async def ops_staffing_summary(date: str | None = None):
             return {
                 "date": date_iso,
                 "reported_absences": len(absences),
+                "absences": [
+                    {
+                        "record_id": r.id,
+                        "reported_by": r.actor_name or r.teacher_id or "Unknown",
+                        "teacher_id": r.teacher_id,
+                        "date_for": r.date_for,
+                        "time_window": r.time_window,
+                        "periods": list(r.periods or []),
+                        "status": r.status,
+                        "coverage_requested": any(
+                            c.teacher_id == r.teacher_id and c.date_for == r.date_for
+                            for c in coverage
+                        ),
+                        "needs_review": bool(r.needs_review),
+                    }
+                    for r in absences
+                ],
                 "coverage_requests": len(coverage),
                 "fully_covered": len(confirmed),
                 "awaiting_coverage": len(awaiting),
@@ -5014,6 +5031,11 @@ async def get_categories():
             "definition": "Extension, acceleration, passion project, depth of knowledge, and gifted/talented challenge needs.",
             "examples": ["Demonstrates B2/C1 reading comprehension; requires advanced text extension."],
             "non_examples": ["Do not use advanced enrichment needs to escalate RTI intervention tier."],
+        },
+        "personal_context": {
+            "definition": "Teacher-confirmed personal-life, wellbeing, safeguarding, family, or living-context evidence that may affect support planning and should be handled with restricted review.",
+            "examples": ["Staff record a verified family-context concern that may affect attendance or classroom readiness."],
+            "non_examples": ["Do not guess abuse, neglect, medical, or family-status claims from vague classroom behavior."],
         },
     }
 

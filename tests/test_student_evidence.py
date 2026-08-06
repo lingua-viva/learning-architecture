@@ -32,7 +32,7 @@ def _isolate(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("LV_REVISION_LOG_PATH", str(tmp_path / "revision.ndjson"))
     monkeypatch.setenv("LV_CONFIG_HOME", str(tmp_path / "config-home"))
     # Nonexistent path -> load_ethos() falls back to the built-in seed
-    # taxonomy (ambition/bravery/care + learner attributes), deterministic.
+    # taxonomy (Still I Rise traits/characteristics), deterministic.
     monkeypatch.setenv("LV_ETHOS_PATH", str(tmp_path / "ethos.yaml"))
     monkeypatch.delenv("LV_AUTH_MODE", raising=False)
 
@@ -211,17 +211,17 @@ def test_ethos_evidence_updates_rollups_and_mirrors_profile(monkeypatch, tmp_pat
     with TestClient(app) as client:
         sid = _create_student(client)
         first = _post_evidence(
-            client, sid, target_type="ethos_trait", target_id="bravery",
+            client, sid, target_type="ethos_trait", target_id="grit",
             summary="Tried again after failing in front of the class.",
         )
         second = _post_evidence(
-            client, sid, target_type="ethos_trait", target_id="bravery",
+            client, sid, target_type="ethos_trait", target_id="grit",
             summary="Volunteered to read aloud first.",
         )
         assert first.status_code == 200 and second.status_code == 200
 
         lens = client.get(f"/api/students/{sid}/lens").json()
-        trait = lens["ethos_profile"]["traits"]["bravery"]
+        trait = lens["ethos_profile"]["traits"]["grit"]
         assert trait["evidence_count"] == 2
         assert trait["last_evidence_at"]
 
@@ -234,7 +234,7 @@ def test_ethos_evidence_updates_rollups_and_mirrors_profile(monkeypatch, tmp_pat
         gone = first.json()["evidence_id"]
         assert client.delete(f"/api/students/{sid}/evidence/{gone}").status_code == 200
         lens = client.get(f"/api/students/{sid}/lens").json()
-        trait = lens["ethos_profile"]["traits"]["bravery"]
+        trait = lens["ethos_profile"]["traits"]["grit"]
         assert trait["evidence_count"] == 1
         retired = [i for i in trait["evidence"] if i["id"] == gone]
         assert retired and retired[0]["active"] is False
@@ -257,7 +257,7 @@ def test_ethos_double_submit_is_idempotent(monkeypatch, tmp_path):
     with TestClient(app) as client:
         sid = _create_student(client)
         payload = dict(
-            target_type="ethos_trait", target_id="care",
+            target_type="ethos_trait", target_id="social_intelligence",
             summary="Helped a new classmate find the library.",
         )
         first = _post_evidence(client, sid, **payload).json()["evidence_id"]
@@ -265,7 +265,7 @@ def test_ethos_double_submit_is_idempotent(monkeypatch, tmp_path):
         assert first == second
         assert _list_evidence(client, sid)["total"] == 1
         lens = client.get(f"/api/students/{sid}/lens").json()
-        assert lens["ethos_profile"]["traits"]["care"]["evidence_count"] == 1
+        assert lens["ethos_profile"]["traits"]["social_intelligence"]["evidence_count"] == 1
 
 
 def test_shipped_add_ethos_evidence_path_writes_the_ledger_too(monkeypatch, tmp_path):
@@ -276,14 +276,14 @@ def test_shipped_add_ethos_evidence_path_writes_the_ledger_too(monkeypatch, tmp_
     with StudentLensStore(db_path=tmp_path / "s.db") as store:
         sid = store.create_lens(display_name="Test Student")
         profile = store.add_ethos_evidence(
-            sid, "bravery", "Volunteered first.", "teacher-a",
-            allowed_trait_ids=["bravery"],
+            sid, "grit", "Volunteered first.", "teacher-a",
+            allowed_trait_ids=["grit"],
         )
-        item_id = profile["traits"]["bravery"]["evidence"][0]["id"]
+        item_id = profile["traits"]["grit"]["evidence"][0]["id"]
         rows = store.list_evidence(sid, target_type="ethos_trait")
         assert [r["evidence_id"] for r in rows] == [item_id]
         assert rows[0]["kind"] == "teacher_feedback"
-        assert profile["traits"]["bravery"]["evidence_count"] == 1
+        assert profile["traits"]["grit"]["evidence_count"] == 1
 
 
 # ---------------------------------------------------------------------------
@@ -306,7 +306,7 @@ def test_taxonomy_endpoint_serves_the_seed(monkeypatch, tmp_path):
         data = client.get("/api/ethos/taxonomy").json()
         assert data["available"] is True
         ids = [t["id"] for t in data["traits"]]
-        assert "bravery" in ids and "care" in ids
+        assert "grit" in ids and "social_intelligence" in ids
 
 
 def test_classify_ethos_suggestions_degrade_to_empty(monkeypatch, tmp_path):
@@ -330,18 +330,18 @@ def test_classify_suggests_traits_on_keyword_match(monkeypatch, tmp_path):
             "/api/observe/classify",
             json={
                 "student_id": sid,
-                "raw_transcript": "Marco showed real courage reading aloud.",
+                "raw_transcript": "Marco kept trying while reading aloud.",
             },
         )
         assert res.status_code == 200
         suggestions = res.json()["ethos_suggestions"]
-        assert {"trait_id": "bravery", "matched_term": "courage", "label": "Bravery"} in suggestions
-        # Word-boundary rule: 'scared' must not match 'care'.
+        assert {"trait_id": "grit", "matched_term": "kept trying", "label": "Grit"} in suggestions
+        # Word-boundary rule: ordinary words must not match trait substrings.
         res = client.post(
             "/api/observe/classify",
             json={"student_id": sid, "raw_transcript": "Marco seemed scared of the test."},
         )
-        assert all(s["trait_id"] != "care" for s in res.json()["ethos_suggestions"])
+        assert all(s["trait_id"] != "social_intelligence" for s in res.json()["ethos_suggestions"])
 
 
 # ---------------------------------------------------------------------------
@@ -377,11 +377,11 @@ def test_voice_act_gains_additive_ethos_suggestions(monkeypatch, tmp_path):
         sid = _create_student(client)
         body = _voice_observation(
             client, sid,
-            "Marco struggled to stay on task but showed courage during group reading",
+            "Marco struggled to stay on task but kept trying during group reading",
         )
         assert body["intent"] == "observation"
         traits = [s["trait_id"] for s in body["ethos_suggestions"]]
-        assert "bravery" in traits
+        assert "grit" in traits
 
 
 def test_voice_act_existing_shape_survives_a_broken_taxonomy(monkeypatch, tmp_path):

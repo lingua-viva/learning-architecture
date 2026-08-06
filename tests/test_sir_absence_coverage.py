@@ -358,6 +358,9 @@ def test_staffing_summary_reports_correct_counts(env):
     assert resp.status_code == 200
     data = resp.json()
     assert data["reported_absences"] == 2
+    assert [a["reported_by"] for a in data["absences"]] == ["t-ana", "t-ben"]
+    assert data["absences"][0]["date_for"] == "2026-07-30"
+    assert data["absences"][0]["coverage_requested"] is True
     assert data["coverage_requests"] == 2
     assert data["fully_covered"] == 1
     assert data["awaiting_coverage"] == 1

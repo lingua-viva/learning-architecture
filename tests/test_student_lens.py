@@ -265,6 +265,7 @@ def test_new_lens_contains_support_profile_with_all_categories(store):
         "physical_sensory_needs",
         "attendance_and_engagement",
         "advanced_enrichment",
+        "personal_context",
     }
     assert set(cats.keys()) == expected_ids
     for cat_id, data in cats.items():
@@ -317,7 +318,7 @@ def test_existing_db_without_support_profile_migrates_cleanly(tmp_path):
     lens = s.get_lens("s1")
     assert lens["display_name"] == "Old Student"
     assert lens["support_profile"]["schema_version"] == 2
-    assert len(lens["support_profile"]["categories"]) == 8
+    assert len(lens["support_profile"]["categories"]) == 9
     s.close()
 
 
@@ -331,7 +332,7 @@ def test_malformed_support_json_degrades_to_default(store):
 
     lens = store.get_lens(sid)
     assert lens["support_profile"]["schema_version"] == 2
-    assert len(lens["support_profile"]["categories"]) == 8
+    assert len(lens["support_profile"]["categories"]) == 9
     assert lens["support_profile_warnings"]
 
 

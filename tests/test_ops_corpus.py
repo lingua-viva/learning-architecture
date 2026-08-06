@@ -58,7 +58,7 @@ def spec_with(data: dict) -> ops_bot_spec.CompiledBotSpec:
 
 def test_parity_corpus_all_pack_samples_pass():
     result = ops_corpus.run_corpus(load_compiled_spec(), today=TODAY)
-    assert result.total == 17  # 5 launch packs' shipped samples
+    assert result.total == 18  # 5 launch packs' shipped samples
     assert result.failed == 0
     assert result.passed is True
     assert {row.source for row in result.rows} == {
@@ -94,7 +94,7 @@ def test_admin_sentences_included_and_failures_counted():
         {"text": "Totally unrelated chatter.", "expect": {"category": "schedule_change"}},
     ]
     result = ops_corpus.run_corpus(spec_with(data), today=TODAY)
-    assert result.total == 19
+    assert result.total == 20
     assert result.failed == 1
     assert result.passed is False
     bad = next(row for row in result.rows if not row.ok)
@@ -172,7 +172,7 @@ def test_corpus_run_records_last_run_and_unlocks_go_live(_seams):
     assert response.status_code == 200
     payload = response.json()
     assert payload["run"]["passed"] is True
-    assert payload["run"]["total"] == 17
+    assert payload["run"]["total"] == 18
     assert len(payload["run"]["result_hash"]) == 64
     assert all(row["ok"] for row in payload["rows"])
     # Recorded on disk → the gate opens.
@@ -299,7 +299,7 @@ def test_approve_candidate_corpus_pass_goes_live_in_classifier(_seams):
     assert state["decided_rule"]["status"] == "approved"
     # The passing run (which INCLUDED the rule) was recorded.
     assert state["corpus"]["last_run"]["passed"] is True
-    assert state["corpus_run"]["run"]["total"] == 17
+    assert state["corpus_run"]["run"]["total"] == 18
     # Approved → compiled in and live via the atomic swap.
     assert (
         classify_ops_message("Door duty starts Monday.", today=TODAY).category

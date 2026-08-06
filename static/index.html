@@ -1454,7 +1454,7 @@
       ["students", "Students", "👤"],
       ["assess", "Assess", "📊"],
       ["ask", "Ask", "💬"],
-      ["parents", "Parents", "👨‍👩‍👧"]
+      ["parents", "Summaries", "👨‍👩‍👧"]
     ];
     const adminNav = [
       ["programme", "Programme", "🗺️"],
@@ -1488,7 +1488,8 @@
       ["emotional_regulation", "Emotional Regulation"],
       ["physical_sensory_needs", "Physical/Sensory Needs"],
       ["attendance_and_engagement", "Attendance and Engagement"],
-      ["advanced_enrichment", "Advanced Students / Enrichment"]
+      ["advanced_enrichment", "Advanced Students / Enrichment"],
+      ["personal_context", "Personal Context"]
     ];
     const SUPPORT_CATEGORY_LABELS = Object.fromEntries(SUPPORT_CATEGORIES);
 
@@ -3356,12 +3357,12 @@
     }
 
     async function renderParents() {
-      setTitle("Parents", "parent-safe draft");
+      setTitle("Student Summaries", "reviewed draft");
       await ensureStudents();
       $("content").innerHTML = `
-        <div class="view-head"><div><h2>Parent Recommendation</h2><p>Draft a warm, parent-safe note for teacher review.</p></div><span class="badge warn">Review before sending. No AI attribution in final message.</span></div>
+        <div class="view-head"><div><h2>Student Summary</h2><p>Draft a student-safe, family-safe summary for teacher review.</p></div><span class="badge warn">Review before sharing. No AI attribution in final message.</span></div>
         <div class="grid two">
-          <div class="panel"><label>Student<select id="parent-student">${parentStudentOptions()}</select></label><label style="display:block;margin-top:12px;">Home support focus<input id="parent-focus" value="creative quiet workspace"></label><label style="display:block;margin-top:12px;"><input type="checkbox" id="parent-include-evidence"> Include evidence summaries (teacher-confirmed only; same safety review as the rest of the draft)</label><button id="draft-parent" class="primary" type="button" style="margin-top:12px;">Draft Recommendation</button></div>
+          <div class="panel"><label>Student<select id="parent-student">${parentStudentOptions()}</select></label><label style="display:block;margin-top:12px;">Summary focus<input id="parent-focus" value="creative quiet workspace"></label><label style="display:block;margin-top:12px;"><input type="checkbox" id="parent-include-evidence"> Include evidence summaries (teacher-confirmed only; same safety review as the rest of the draft)</label><button id="draft-parent" class="primary" type="button" style="margin-top:12px;">Draft Summary</button></div>
           <div id="parent-output" class="panel"><p>Drafts appear here for editing before sending.</p></div>
         </div>`;
       $("parent-student").addEventListener("change", e => { state.parentSelectedStudent = e.target.value; });
@@ -5409,12 +5410,18 @@
       setTitle("Daily", "operations assistant");
       let status = null;
       let daily = null;
+      let staffing = null;
       let loadError = null;
       try {
         [status, daily] = await Promise.all([
           api("/api/slack/ops/status"),
           api("/api/ops/daily")
         ]);
+        try {
+          staffing = await api("/api/ops/staffing-summary");
+        } catch (_error) {
+          staffing = null;
+        }
       } catch (error) {
         loadError = error.message;
       }
@@ -5437,6 +5444,21 @@
             <span class="badge">${escapeHtml(teacher.file_path)}</span>
           </div>
         </div>`).join("");
+      const absenceRows = ((staffing || {}).absences || []).map(absence => {
+        const periods = (absence.periods || []).length
+          ? `period ${escapeHtml((absence.periods || []).join(", "))}`
+          : "";
+        const window = absence.time_window ? escapeHtml(absence.time_window) : "";
+        const details = [window, periods].filter(Boolean).join(" · ");
+        return `
+          <div class="item">
+            <strong>${escapeHtml(absence.reported_by)}</strong>
+            <span class="badge">${escapeHtml(absence.date_for)}</span>
+            <span class="badge ${absence.coverage_requested ? "warn" : "ok"}">${absence.coverage_requested ? "coverage requested" : "logged"}</span>
+            ${absence.needs_review ? `<span class="badge warn">review</span>` : ""}
+            ${details ? `<p>${details}</p>` : ""}
+          </div>`;
+      }).join("");
       const emptyPanel = `
         <div class="panel">
           <h3>No daily files yet</h3>
@@ -5476,6 +5498,15 @@
             </div>
           </div>
         </div>
+        ${staffing ? `<div class="panel" style="margin-top:14px;">
+          <h3>Absences</h3>
+          <div class="source-line">
+            <span class="badge">${escapeHtml((staffing || {}).date || daily.date)}</span>
+            <span class="badge warn">${Number((staffing || {}).reported_absences || 0)} reported</span>
+            <span class="badge">${Number((staffing || {}).awaiting_coverage || 0)} awaiting coverage</span>
+          </div>
+          <div class="list">${absenceRows || `<div class="item"><p>No absences reported for this date.</p></div>`}</div>
+        </div>` : ""}
         <div style="margin-top:14px;">
           ${teacherPanels || emptyPanel}
         </div>

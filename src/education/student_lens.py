@@ -69,6 +69,7 @@ SUPPORT_CATEGORY_IDS = (
     "physical_sensory_needs",
     "attendance_and_engagement",
     "advanced_enrichment",
+    "personal_context",
 )
 
 SUPPORT_CATEGORY_LABELS = {
@@ -80,6 +81,7 @@ SUPPORT_CATEGORY_LABELS = {
     "physical_sensory_needs": "Physical/Sensory Needs",
     "attendance_and_engagement": "Attendance and Engagement",
     "advanced_enrichment": "Advanced Students / Enrichment",
+    "personal_context": "Personal Context",
 }
 
 VALID_CONFIDENCE_VALUES = (
@@ -187,6 +189,7 @@ def support_category_definition(category_id: str) -> str:
         "physical_sensory_needs": "sensory access, movement, fatigue, fine/gross motor, seating, hearing, vision, and environmental access evidence",
         "attendance_and_engagement": "attendance, punctuality, participation, stamina, avoidance, withdrawal, and sustained engagement evidence",
         "advanced_enrichment": "high-readiness, acceleration, extension, challenge, and enrichment evidence",
+        "personal_context": "teacher-confirmed personal-life, wellbeing, safeguarding, family, or living-context evidence that may affect support planning and should be handled with restricted review",
     }
     return definitions.get(category_id, "support-planning evidence")
 

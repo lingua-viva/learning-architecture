@@ -52,13 +52,23 @@ class TestEthosTaxonomy:
     def test_seed_is_valid(self):
         seed = ethos.ethos_seed()
         ethos.validate_ethos(seed)  # must not raise
-        assert len(seed["traits"]) == 13
+        assert len(seed["traits"]) == 9
         groups = {t["group"] for t in seed["traits"]}
         assert groups == {"value", "learner_attribute"}
 
-    def test_seed_has_abc_values(self):
+    def test_seed_has_still_i_rise_traits(self):
         ids = ethos.trait_ids(ethos.ethos_seed())
-        assert {"ambition", "bravery", "care"} <= set(ids)
+        assert {
+            "self_worth",
+            "self_discipline",
+            "critical_thinking",
+            "emotional_intelligence",
+            "self_organization",
+            "grit",
+            "social_intelligence",
+            "entrepreneurship",
+            "integrity",
+        } <= set(ids)
 
     def test_missing_file_falls_back_to_seed(self, tmp_path, monkeypatch):
         monkeypatch.setenv("LV_ETHOS_PATH", str(tmp_path / "nope.yaml"))
@@ -121,9 +131,9 @@ class TestEthosTaxonomy:
 
     def test_match_traits_is_case_insensitive_and_suggestion_only(self):
         seed = ethos.ethos_seed()
-        matched = ethos.match_traits("She was BRAVE and showed empathy today", seed)
-        assert "bravery" in matched
-        assert "caring" in matched
+        matched = ethos.match_traits("She showed empathy and kept trying today", seed)
+        assert "emotional_intelligence" in matched
+        assert "grit" in matched
 
     def test_match_traits_no_signal_no_match(self):
         assert ethos.match_traits("Completed the worksheet.", ethos.ethos_seed()) == []
@@ -132,7 +142,7 @@ class TestEthosTaxonomy:
         text = ethos.format_traits_for_prompt(ethos.ethos_seed())
         assert "Core values:" in text
         assert "Learner attributes:" in text
-        assert "Bravery (bravery):" in text
+        assert "Self-Worth (self_worth):" in text
 
 
 # ----------------------------------------------------------------------
@@ -163,10 +173,10 @@ class TestStudentLensV21:
 
     def test_add_ethos_evidence_against_seed(self, store, student):
         ep = store.add_ethos_evidence(
-            student, "bravery", "Volunteered to present first", "t1"
+            student, "grit", "Kept trying after a difficult first attempt", "t1"
         )
-        assert ep["ethos_name"] == "seed"
-        assert len(ep["traits"]["bravery"]["evidence"]) == 1
+        assert ep["ethos_name"] == "still_i_rise_seed"
+        assert len(ep["traits"]["grit"]["evidence"]) == 1
 
     def test_add_ethos_evidence_rejects_unknown_trait(self, store, student):
         with pytest.raises(ValueError, match="Unknown ethos trait"):
@@ -182,7 +192,7 @@ class TestStudentLensV21:
     def test_writes_bump_profile_version(self, store, student):
         v0 = store.get_lens(student)["profile_version"]
         store.add_profile_strength(student, "academic", "x", "t1")
-        store.add_ethos_evidence(student, "care", "helped a peer", "t1")
+        store.add_ethos_evidence(student, "social_intelligence", "helped a peer", "t1")
         assert store.get_lens(student)["profile_version"] == v0 + 2
 
     def test_corrupt_columns_normalize_with_warnings(self, store, student):
@@ -262,15 +272,17 @@ class TestCaptureWiring:
             student_id=student,
             teacher_id="t1",
             raw_transcript=(
-                "She was brave today, volunteered first and showed real "
-                "curiosity in the group inquiry."
+                "She kept trying today, volunteered first and showed real "
+                "empathy in the group work."
             ),
             template_type="sel_positive",
             sel_domain="confidence",
             sel_valence="positive",
         )
         sugs = r["ethos_trait_suggestions"]
-        assert {"bravery", "inquirer"} <= {s["trait_id"] for s in sugs}
+        assert {"grit", "emotional_intelligence", "social_intelligence"} <= {
+            s["trait_id"] for s in sugs
+        }
         for s in sugs:
             assert s["confidence"] == "model_suggested"
             assert s["status"] == "pending_teacher_confirmation"
@@ -281,16 +293,16 @@ class TestCaptureWiring:
         r = pipe.capture(
             student_id=student,
             teacher_id="t1",
-            raw_transcript="Showed bravery presenting to the class.",
+            raw_transcript="Kept trying while presenting to the class.",
             template_type="sel_positive",
         )
         obs_id = r["observation"]["observation_id"]
         ep = pipe.confirm_ethos_suggestion(
-            student, "t1", "bravery",
+            student, "t1", "grit",
             "Presented to the whole class despite visible nerves.",
             observation_id=obs_id,
         )
-        ev = ep["traits"]["bravery"]["evidence"][0]
+        ev = ep["traits"]["grit"]["evidence"][0]
         assert ev["confidence"] == "teacher_confirmed"
         assert ev["source_observation_id"] == obs_id
 
@@ -316,11 +328,11 @@ class TestEthosReport:
     def test_report_includes_only_report_grade_confidence(self, store, student):
         assert "model_suggested" not in REPORT_GRADE_CONFIDENCE
         store.add_ethos_evidence(
-            student, "bravery", "Confirmed brave moment", "t1",
+            student, "grit", "Confirmed persistence moment", "t1",
             confidence="teacher_confirmed",
         )
         store.add_ethos_evidence(
-            student, "bravery", "Unconfirmed model guess", "t1",
+            student, "grit", "Unconfirmed model guess", "t1",
             confidence="model_suggested",
         )
         store.add_profile_strength(
@@ -333,35 +345,35 @@ class TestEthosReport:
         report = store.export_ethos_report(student)
         assert report["display_name"] == "Test Student"
         [trait] = report["traits"]
-        assert trait["trait_id"] == "bravery"
-        assert trait["label"] == "Bravery"
-        assert [e["summary"] for e in trait["evidence"]] == ["Confirmed brave moment"]
+        assert trait["trait_id"] == "grit"
+        assert trait["label"] == "Grit"
+        assert [e["summary"] for e in trait["evidence"]] == ["Confirmed persistence moment"]
         assert [e["text"] for e in report["academic_strengths"]] == ["Confirmed strength"]
         assert report["personal_strengths"] == []
         assert "pending_review" not in report
 
     def test_include_unconfirmed_surfaces_pending_separately(self, store, student):
         store.add_ethos_evidence(
-            student, "care", "Model-flagged kindness", "t1",
+            student, "social_intelligence", "Model-flagged peer support", "t1",
             confidence="model_suggested",
         )
         report = store.export_ethos_report(student, include_unconfirmed=True)
         assert report["traits"] == []  # never in the report body
         [pending] = report["pending_review"]["traits"]
-        assert pending["trait_id"] == "care"
+        assert pending["trait_id"] == "social_intelligence"
         assert pending["items"][0]["confidence"] == "model_suggested"
 
     def test_report_degrades_to_trait_ids_on_broken_taxonomy(self, store, student):
-        store.add_ethos_evidence(student, "bravery", "Confirmed", "t1")
+        store.add_ethos_evidence(student, "grit", "Confirmed", "t1")
         with open(os.environ["LV_ETHOS_PATH"], "w") as f:
             f.write("traits: broken")
         report = store.export_ethos_report(student)
         [trait] = report["traits"]
-        assert trait["label"] == "bravery"  # id fallback, export never blocked
+        assert trait["label"] == "grit"  # id fallback, export never blocked
 
     def test_traits_with_no_confirmed_evidence_are_omitted(self, store, student):
         store.add_ethos_evidence(
-            student, "reflective", "guess", "t1", confidence="model_suggested"
+            student, "integrity", "guess", "t1", confidence="model_suggested"
         )
         assert store.export_ethos_report(student)["traits"] == []
 
@@ -381,12 +393,12 @@ class TestHardening:
         assert ethos.match_traits("He played goalkeeper today", seed) == []
         assert ethos.match_traits("Drew a portrait in art class", seed) == []
         # true positives still match:
-        assert "care" in ethos.match_traits("Showed real care for a peer", seed)
-        assert "ambition" in ethos.match_traits("Set a stretch goal this term", seed)
+        assert "social_intelligence" in ethos.match_traits("Showed peer support", seed)
+        assert "self_discipline" in ethos.match_traits("Showed follow-through this term", seed)
 
     def test_match_traits_unicode_text_safe(self):
         seed = ethos.ethos_seed()
-        assert ethos.match_traits("È stata molto brave oggi!", seed) == ["bravery"]
+        assert ethos.match_traits("È stata molto resourceful oggi!", seed) == ["entrepreneurship"]
         assert ethos.match_traits("Ha mostrato coraggio", seed) == []
 
     def test_report_excludes_items_missing_confidence_field(self, store, student):
@@ -439,17 +451,17 @@ class TestHardening:
         r = pipe.capture(
             student_id=other,
             teacher_id="t1",
-            raw_transcript="Was brave.",
+            raw_transcript="Kept trying.",
             template_type="sel_positive",
         )
         other_obs = r["observation"]["observation_id"]
         with pytest.raises(ValueError, match="unverifiable source"):
             pipe.confirm_ethos_suggestion(
-                student, "t1", "bravery", "s", observation_id="forged-id"
+                student, "t1", "grit", "s", observation_id="forged-id"
             )
         with pytest.raises(ValueError, match="unverifiable source"):
             pipe.confirm_ethos_suggestion(
-                student, "t1", "bravery", "s", observation_id=other_obs
+                student, "t1", "grit", "s", observation_id=other_obs
             )
 
     def test_oversized_ethos_file_refused(self, tmp_path, monkeypatch):
@@ -473,11 +485,11 @@ class TestHardening:
         assert list(tmp_path.glob("*.tmp")) == []
 
     def test_evidence_and_strengths_stripped_and_idempotent(self, store, student):
-        p1 = store.add_ethos_evidence(student, "bravery", "  Presented first.  ", "t1")
-        assert p1["traits"]["bravery"]["evidence"][0]["summary"] == "Presented first."
+        p1 = store.add_ethos_evidence(student, "grit", "  Presented first.  ", "t1")
+        assert p1["traits"]["grit"]["evidence"][0]["summary"] == "Presented first."
         v1 = store.get_lens(student)["profile_version"]
-        p2 = store.add_ethos_evidence(student, "bravery", "Presented first.", "t1")
-        assert len(p2["traits"]["bravery"]["evidence"]) == 1
+        p2 = store.add_ethos_evidence(student, "grit", "Presented first.", "t1")
+        assert len(p2["traits"]["grit"]["evidence"]) == 1
         assert store.get_lens(student)["profile_version"] == v1
         store.add_profile_strength(student, "academic", " Strong writer ", "t1")
         s = store.add_profile_strength(student, "academic", "Strong writer", "t1")

@@ -62,147 +62,106 @@ def default_ethos_path() -> Path:
 
 
 def ethos_seed() -> dict:
-    """Built-in generic seed taxonomy.
+    """Built-in Still I Rise starter taxonomy.
 
-    Three core values (generic ambition/bravery/care triad) plus ten
-    learner attributes. Descriptors are original paraphrases written for
-    this project — not quoted from any school's or organization's
-    published materials.
+    The active school can still replace this by writing its own
+    ethos.yaml. This seed keeps a fresh local install aligned with the
+    current Mission Canvas / Still I Rise student-profile language.
     """
     return {
         "schema_version": ETHOS_SCHEMA_VERSION,
-        "ethos_name": "seed",
-        "source": "built_in_seed",
+        "ethos_name": "still_i_rise_seed",
+        "source": "built_in_still_i_rise_seed_2026_08_06",
         "traits": [
             {
-                "id": "ambition",
-                "label": "Ambition",
+                "id": "self_worth",
+                "label": "Self-Worth",
                 "group": "value",
                 "descriptor": (
-                    "Sets high personal goals and keeps working toward them, "
-                    "even when progress is slow."
+                    "Recognizes personal value, voice, and belonging, and can "
+                    "name strengths with growing confidence."
                 ),
-                "signal_keywords": ["ambition", "ambitious", "goal", "aims high"],
+                "signal_keywords": ["self-worth", "self worth", "belonging", "confidence", "voice"],
             },
             {
-                "id": "bravery",
-                "label": "Bravery",
+                "id": "self_discipline",
+                "label": "Self-Discipline",
                 "group": "value",
                 "descriptor": (
-                    "Faces difficulty with courage — willing to try, to fail "
-                    "in front of others, and to try again."
+                    "Builds habits of focus, follow-through, and responsible "
+                    "choice even when work is difficult."
                 ),
-                "signal_keywords": ["brave", "bravery", "courage", "courageous"],
+                "signal_keywords": ["self-discipline", "self discipline", "follow-through", "focus", "responsible choice"],
             },
             {
-                "id": "care",
-                "label": "Care",
-                "group": "value",
-                "descriptor": (
-                    "Looks after themselves, other people, and the shared "
-                    "community with kindness and respect."
-                ),
-                "signal_keywords": ["care", "caring", "kindness", "kind to"],
-            },
-            {
-                "id": "inquirer",
-                "label": "Inquirer",
+                "id": "critical_thinking",
+                "label": "Critical Thinking",
                 "group": "learner_attribute",
                 "descriptor": (
-                    "Shows curiosity — asks questions, investigates "
-                    "independently, and enjoys the process of finding out."
+                    "Questions, reasons, evaluates evidence, and uses judgment "
+                    "to solve problems."
                 ),
-                "signal_keywords": ["curious", "curiosity", "inquiry", "asks questions", "asked questions"],
+                "signal_keywords": ["critical thinking", "reasoned", "evidence", "problem solving", "judgment"],
             },
             {
-                "id": "knowledgeable",
-                "label": "Knowledgeable",
+                "id": "emotional_intelligence",
+                "label": "Emotional Intelligence",
                 "group": "learner_attribute",
                 "descriptor": (
-                    "Builds understanding across subjects and connects ideas "
-                    "to issues in the wider world."
+                    "Recognizes emotions, regulates responses, and responds to "
+                    "others with empathy."
                 ),
-                "signal_keywords": ["knowledgeable", "connects ideas", "background knowledge"],
+                "signal_keywords": ["emotional intelligence", "empathy", "self-regulation", "regulated", "recognized emotions"],
             },
             {
-                "id": "thinker",
-                "label": "Thinker",
+                "id": "self_organization",
+                "label": "Self-Organization",
                 "group": "learner_attribute",
                 "descriptor": (
-                    "Reasons through problems, weighs options, and makes "
-                    "thoughtful, defensible decisions."
+                    "Plans, sequences, manages materials and time, and follows "
+                    "through on learning routines."
                 ),
-                "signal_keywords": ["critical thinking", "reasoned", "problem solving"],
+                "signal_keywords": ["self-organization", "self organization", "organized", "planned", "time management"],
             },
             {
-                "id": "communicator",
-                "label": "Communicator",
+                "id": "grit",
+                "label": "Grit",
                 "group": "learner_attribute",
                 "descriptor": (
-                    "Expresses ideas clearly in more than one language or "
-                    "mode, and listens carefully to others."
+                    "Persists through setbacks, keeps trying, and learns from "
+                    "mistakes."
                 ),
-                "signal_keywords": ["communicator", "expresses", "listens", "presentation"],
+                "signal_keywords": ["grit", "persisted", "kept trying", "resilience", "setback"],
             },
             {
-                "id": "principled",
-                "label": "Principled",
+                "id": "social_intelligence",
+                "label": "Social Intelligence",
                 "group": "learner_attribute",
                 "descriptor": (
-                    "Acts with honesty and fairness, and takes responsibility "
-                    "for their own actions and their consequences."
+                    "Reads social situations, collaborates constructively, and "
+                    "builds respectful relationships."
                 ),
-                "signal_keywords": ["principled", "honest", "honesty", "fair", "integrity"],
+                "signal_keywords": ["social intelligence", "collaborated", "peer", "relationship", "group work"],
             },
             {
-                "id": "open_minded",
-                "label": "Open-minded",
+                "id": "entrepreneurship",
+                "label": "Entrepreneurship",
                 "group": "learner_attribute",
                 "descriptor": (
-                    "Values their own culture and history while genuinely "
-                    "considering other perspectives and traditions."
+                    "Shows initiative, identifies opportunities, creates value, "
+                    "and acts resourcefully."
                 ),
-                "signal_keywords": ["open-minded", "open minded", "perspective", "other cultures"],
+                "signal_keywords": ["entrepreneurship", "initiative", "resourceful", "created value", "opportunity"],
             },
             {
-                "id": "caring",
-                "label": "Caring",
+                "id": "integrity",
+                "label": "Integrity",
                 "group": "learner_attribute",
                 "descriptor": (
-                    "Shows empathy and compassion, and acts to make a "
-                    "positive difference for others."
+                    "Acts honestly, keeps commitments, takes responsibility, "
+                    "and does what is right."
                 ),
-                "signal_keywords": ["empathy", "compassion", "helped a classmate"],
-            },
-            {
-                "id": "risk_taker",
-                "label": "Risk-taker",
-                "group": "learner_attribute",
-                "descriptor": (
-                    "Approaches unfamiliar situations with resolve and tries "
-                    "new strategies without fear of being wrong."
-                ),
-                "signal_keywords": ["risk-taker", "risk taker", "tried something new", "stepped up"],
-            },
-            {
-                "id": "balanced",
-                "label": "Balanced",
-                "group": "learner_attribute",
-                "descriptor": (
-                    "Attends to intellectual, physical, and emotional "
-                    "well-being — their own and other people's."
-                ),
-                "signal_keywords": ["balanced", "well-being", "wellbeing", "self-care"],
-            },
-            {
-                "id": "reflective",
-                "label": "Reflective",
-                "group": "learner_attribute",
-                "descriptor": (
-                    "Thinks about their own learning and experience, and can "
-                    "name strengths and areas to grow."
-                ),
-                "signal_keywords": ["reflective", "reflection", "self-assessed", "growth area"],
+                "signal_keywords": ["integrity", "honest", "honesty", "fair", "responsibility"],
             },
         ],
     }

@@ -107,6 +107,12 @@ CATEGORY_SIGNALS: dict[str, list[tuple[str, float]]] = {
         (r"\b(advanced|ahead of|beyond (the )?(class|level)|gifted)\b", 0.4),
         (r"\b(extension|enrichment)\b", 0.4),
     ],
+    "personal_context": [
+        (r"\b(safeguarding|child protection|mandated report|cps|personal context)\b", 0.6),
+        (r"\b(home situation|family situation|living situation|housing|shelter)\b", 0.5),
+        (r"\b(abuse|neglect|domestic violence|unsafe at home)\b", 0.6),
+        (r"\b(bereavement|grief|family emergency|caregiver)\b", 0.5),
+    ],
 }
 
 

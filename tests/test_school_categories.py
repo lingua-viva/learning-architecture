@@ -191,6 +191,15 @@ def test_vague_transcript_nothing_above_threshold():
     assert suggest_support_categories("") == []
 
 
+def test_personal_context_suggested_only_from_explicit_context():
+    suggestions = suggest_support_categories(
+        "Teacher-confirmed safeguarding note: the family situation may affect attendance."
+    )
+    by_id = {s["category_id"]: s for s in suggestions}
+    assert "personal_context" in by_id
+    assert by_id["personal_context"]["confidence"] >= CATEGORY_SUGGESTION_THRESHOLD
+
+
 def test_suggestions_sorted_by_confidence():
     suggestions = suggest_support_categories(
         "She was distracted and off-task, then got frustrated and cried"

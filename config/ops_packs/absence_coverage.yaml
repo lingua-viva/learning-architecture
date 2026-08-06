@@ -61,6 +61,7 @@ categories:
     broadcast: false
     capability: absence_flow
     vocabulary:
+      - '(^|\s)@absence\b'
       - '\b(i''?m out(?! of (?!(?:town|the office|office|school|the building)\b))|i am out(?! of (?!(?:town|the office|office|school|the building)\b))|i''?ll be out(?! of (?!(?:town|the office|office|school|the building)\b))|i will be out(?! of (?!(?:town|the office|office|school|the building)\b))|i''?m absent|i am absent|i''?m sick|i am sick|i''?m not feeling well|i can''?t come in|i cannot come in|i won''?t be in|i will not be in|calling in sick)\b'
 
   - id: coverage_claim
@@ -92,6 +93,11 @@ samples:
       category: absence
       confidence: high
       date_for: '+0d'
+  - text: "@absence tomorrow"
+    expect:
+      category: absence
+      confidence: high
+      date_for: '+1d'
   - text: "Need substitute for Claudia, Grade 4, 9:00-11:30."
     expect:
       category: coverage_request

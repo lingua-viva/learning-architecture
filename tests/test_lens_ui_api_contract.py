@@ -4,7 +4,7 @@ Tests for SPEC_LV_LENS_UI_API_CONTRACT_2026-07-23.md (Build order 3 of 5).
 Validates:
   - GET /api/students/{id}/lens returns support_profile and support_profile_warnings
   - malformed support profile degrades safely without crashing API or rendering
-  - GET /api/categories returns static metadata for all 8 canonical categories
+  - GET /api/categories returns static metadata for all canonical categories
   - GET /api/students/support-summary returns aggregate counts with zero raw transcript text
   - Observe capture persists support_entries and returns structured feedback
   - Observe classify returns writes_made: 0 and teacher_confirmation_required: true
@@ -47,7 +47,7 @@ def test_get_categories_route():
     data = response.json()
     assert "categories" in data
     cats = data["categories"]
-    assert len(cats) == 8
+    assert len(cats) == len(SUPPORT_CATEGORY_IDS)
     cat_ids = [c["id"] for c in cats]
     for cid in SUPPORT_CATEGORY_IDS:
         assert cid in cat_ids

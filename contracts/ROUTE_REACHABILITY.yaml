@@ -174,6 +174,10 @@ reachable_from_ui:
   - route: "GET /api/ops/daily"
     call_site: 'api("/api/ops/daily")'
 
+  - route: "GET /api/ops/staffing-summary"
+    call_site: 'api("/api/ops/staffing-summary")'
+    note: "Daily Absences panel. Optional under auth; teacher-only sessions omit it on 403."
+
   - route: "GET /api/ops/setup/catalog"
     call_site: 'api("/api/ops/setup/catalog")'
     note: "Bot Setup panel (Daily view → Bot Setup): shipped workflow-pack catalog."
@@ -547,13 +551,6 @@ intentionally_backend_only:
     reason: >-
       Teacher decision flywheel backend slice (2026-07-30). Explicit approval
       writes deliverable/audit records; UI workbench placement is deferred.
-
-  - route: "GET /api/ops/staffing-summary"
-    status: deferred_undecided
-    reason: >-
-      Still I Rise absence+coverage MVP (2026-07-30). Read-only staffing
-      summary from ops records. UI surface deferred — backend/reporting is
-      the safer first slice per spec.
 
   - route: "GET /api/ops/request-summary"
     status: deferred_undecided

@@ -569,7 +569,12 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 120
+version: 121
+# v121 (2026-08-06): Still I Rise category/ops follow-up. static/index.html:
+#   Daily view now optionally renders the wired staffing-summary Absences
+#   panel, teacher nav renames Parents to Summaries, and the draft surface
+#   uses Student Summary language. src/web.py: staffing summary returns
+#   compact absence rows and /api/categories includes Personal Context.
 # v120 (2026-08-06): Still I Rise Phase 1 Items 1-5. src/web.py/static/index.html:
 #   roster import review/undo UI, G1-G12 Add Student dropdown backed by canonical
 #   student grades, and Settings Ask/Voice key persistence for Perplexity/Rime.

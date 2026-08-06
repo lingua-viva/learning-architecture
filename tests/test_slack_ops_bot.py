@@ -234,6 +234,17 @@ async def test_absence_without_coverage_posts_no_card(rig):
     assert client.posts[0]["channel"] == "DU111"
 
 
+async def test_at_absence_signal_creates_simple_absence_record(rig):
+    bot, client, store = rig["bot"], rig["client"], rig["store"]
+    await send_dm(bot, "@absence tomorrow")
+
+    records = store.records_for_day(TOMORROW, teacher_id="t-ana")
+    assert [r.category for r in records] == ["absence"]
+    assert records[0].text_clean == "@absence tomorrow"
+    assert records[0].actor_name == "Ana Ruiz"
+    assert "log your absence for " + TOMORROW in client.posts[0]["text"]
+
+
 # ------------------------------------------------------------------ claim
 
 

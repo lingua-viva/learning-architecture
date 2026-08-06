@@ -91,7 +91,7 @@ def test_enabled_backlog_packs_route_and_pass_corpus():
         == "schedule_change"
     )
     result = ops_corpus.run_corpus(spec, today=TODAY)
-    assert result.total == 23  # 17 launch + 3 bus + 3 dismissal
+    assert result.total == 24  # 18 launch + 3 bus + 3 dismissal
     assert result.passed, [r.mismatches for r in result.rows if not r.ok]
     # Sections render after the launch sections, before To Review.
     order = list(spec.rule_set.section_order)
