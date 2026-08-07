@@ -3451,7 +3451,31 @@ async def voice_act(request: Request, payload: dict):
         has_cefr_evidence = bool(cefr_dimension and cefr_level)
 
         def capture(store):
+            from datetime import timedelta as _td
             from src.education.observation_capture import ObservationCapturePipeline
+
+            # Dedup guard (same logic as /api/observe/capture): prevent
+            # double-writes from frontend retries or network timeouts.
+            cutoff = (datetime.now(timezone.utc) - _td(seconds=60)).isoformat()
+            dup_row = store._conn.execute(
+                "SELECT observation_id FROM observations"
+                " WHERE student_id = ? AND teacher_id = ? AND raw_transcript = ?"
+                " AND recorded_at > ? LIMIT 1",
+                (student_id, teacher_id, transcript, cutoff),
+            ).fetchone()
+            if dup_row:
+                existing_id = dup_row[0] if isinstance(dup_row, (tuple, list)) else dup_row["observation_id"]
+                return {
+                    "observation": {"observation_id": existing_id, "deduplicated": True},
+                    "validation_errors": [],
+                    "escalations": [],
+                    "ethos_trait_suggestions": [],
+                    "category_suggestions": [],
+                    "strategy_outcome_parsed": {},
+                    "classification": {},
+                    "sanitizer_report": {"ok": True, "blocked": False, "redaction_count": 0},
+                    "governance_note": None,
+                }
 
             pipeline = ObservationCapturePipeline(store=store)
             if has_cefr_evidence:

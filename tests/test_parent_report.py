@@ -132,3 +132,53 @@ def test_to_printable_text_is_plain_string(tmp_path):
     assert "Amina" in text
     assert "Ms. Fatima" in text
     assert "AI" not in text
+
+
+def test_personal_context_evidence_excluded_from_parent_summaries(tmp_path):
+    """Personal Context (safeguarding/family) evidence must NEVER appear in
+    parent-facing output, even when include_evidence_summaries=True and the
+    evidence is teacher_confirmed."""
+    store = make_store(tmp_path)
+    store.create_lens(student_id="s1", display_name="Amina")
+    pipeline = ObservationCapturePipeline(store=store)
+    # Add a normal observation so the student has some data
+    pipeline.capture(
+        student_id="s1", teacher_id="teacher_1",
+        raw_transcript="Amina read aloud with growing confidence today",
+        template_type="cefr",
+        cefr_dimension="reading", cefr_level_observed="A2", cefr_direction="progressing",
+    )
+    # Add personal_context evidence (teacher-confirmed)
+    store.add_support_entry(
+        student_id="s1",
+        category_id="personal_context",
+        bucket="needs",
+        text="Family situation: caregiver instability affecting attendance.",
+        created_by="teacher_1",
+        confidence="teacher_confirmed",
+    )
+    # Also add evidence ledger row tagged to personal_context
+    store.append_evidence({
+        "student_id": "s1",
+        "teacher_id": "teacher_1",
+        "target_type": "support_category",
+        "target_id": "personal_context",
+        "summary": "Safeguarding note — home situation may affect readiness.",
+        "kind": "teacher_feedback",
+        "confidence_level": "teacher_confirmed",
+    })
+    gen = ParentReportGenerator(store)
+    draft = gen.generate_draft(
+        "s1", "teacher_1", include_evidence_summaries=True
+    )
+    # The sensitive content must not appear anywhere in the parent draft
+    for forbidden in (
+        "safeguarding",
+        "caregiver",
+        "family situation",
+        "home situation",
+        "personal context",
+    ):
+        assert forbidden.lower() not in draft.body.lower(), (
+            f"Personal context text '{forbidden}' leaked into parent report body"
+        )

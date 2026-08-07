@@ -179,11 +179,19 @@ class ParentReportGenerator:
         # and before the endpoint's _strip_parent_output +
         # check_publication_safety — evidence text passes every gate the
         # generated prose passes.
+        #
+        # personal_context is EXCLUDED unconditionally: safeguarding,
+        # family-situation, and wellbeing evidence must never appear in
+        # parent/student-facing output regardless of confidence or teacher
+        # confirmation. The teacher can choose to share that information
+        # directly; the system must not surface it.
         if include_evidence_summaries:
             per_target: dict = {}
             picked = []
             for item in self.store.list_evidence(student_id):
                 if item.get("confidence_level") not in REPORT_GRADE_CONFIDENCE:
+                    continue
+                if item.get("target_id") == "personal_context":
                     continue
                 key = (item.get("target_type"), item.get("target_id"))
                 if per_target.get(key, 0) >= 3:

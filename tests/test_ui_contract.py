@@ -213,7 +213,7 @@ REPO = Path(__file__).resolve().parent.parent
 #     threaded through the ask_endpoint success-path return dict.
 #   v120 (2026-08-06): Still I Rise Phase 1 Items 1-5 — roster import review/
 #     undo, G1-G12 Add Student, Settings Perplexity/Rime keys.
-EXPECTED_VERSION = 121
+EXPECTED_VERSION = 122
 
 
 def _html() -> str:
