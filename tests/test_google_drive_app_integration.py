@@ -38,6 +38,7 @@ class FakeDriveTransport:
             "parents": metadata.get("parents"),
             "mime_type": content_type,
             "size": len(content),
+            "content": content.decode("utf-8", errors="replace"),
         }
         FakeDriveTransport.uploads.append(record)
         return {"id": f"uploaded-{len(FakeDriveTransport.uploads)}", "name": record["name"]}
@@ -169,12 +170,16 @@ def test_upload_route_shares_student_lens(monkeypatch, tmp_path):
     assert payload["failed"] == []
     assert len(payload["uploaded"]) == 1
     assert payload["uploaded"][0]["name"].startswith(f"student-lens-{student_id}")
+    assert payload["uploaded"][0]["name"].endswith(".md")
     assert payload["uploaded"][0]["folder_id"] == "root-folder"
     assert FakeDriveTransport.uploads[0]["parents"] == ["root-folder"]
-    # Lens JSON was materialized in the export dir before sharing.
-    exported = list((tmp_path / "drive_exports").glob("student-lens-*.json"))
+    assert FakeDriveTransport.uploads[0]["mime_type"] == "text/markdown"
+    assert "# Student Lens - Marco" in FakeDriveTransport.uploads[0]["content"]
+    assert "Privacy Boundary" in FakeDriveTransport.uploads[0]["content"]
+    # Lens Markdown was materialized in the export dir before sharing.
+    exported = list((tmp_path / "drive_exports").glob("student-lens-*.md"))
     assert len(exported) == 1
-    assert json.loads(exported[0].read_text(encoding="utf-8"))
+    assert exported[0].read_text(encoding="utf-8").startswith("# Student Lens - Marco")
 
 
 def test_upload_route_creates_deliverable_and_audit_receipt(monkeypatch, tmp_path):

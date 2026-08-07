@@ -16,6 +16,8 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v123 (2026-08-07): real deliverable hardening — Prepare printable packet
+#     preview/approval surface and Drive lens Markdown preview-before-share.
 #   v1 (2026-07-19): initial lock, MC-lessons pass baseline.
 #   v2 (2026-07-19): src/web.py — added _log_request_outcome middleware
 #     (MC-lessons §5, request-outcome NDJSON log + zero-500 health check).
@@ -569,7 +571,7 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 122
+version: 123
 # v122 (2026-08-06): Failure-mode hardening. src/web.py: voice-act observation
 #   dedup guard (same 60s window as observe/capture, prevents network-retry
 #   duplicates). src/education/parent_report.py: personal_context evidence

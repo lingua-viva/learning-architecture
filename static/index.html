@@ -1756,10 +1756,14 @@
             <label>Unit<select id="prep-unit"></select></label>
             <label class="full">Topic<input id="prep-topic" value="${escapeHtml(state.pendingPrepTopic || "")}" placeholder="Optional focus for today's lesson"></label>
           </div>
-          <button id="generate-activity" class="primary" type="button">Generate Activity</button>
+          <div class="row" style="margin-top:12px;">
+            <button id="generate-activity" class="primary" type="button">Generate Activity</button>
+            <button id="preview-lesson-packet" type="button">Preview Printable Packet</button>
+          </div>
           <div id="prepare-privacy-preview" class="source-line" style="margin-top:10px;"></div>
         </div>
         <div id="activity-output" class="grid three" style="margin-top:14px;"></div>
+        <div id="lesson-packet-output" class="panel" style="margin-top:14px;display:none;"></div>
         <div id="differentiated-groups" class="panel" style="margin-top:14px;"><h3>Differentiated Groups</h3><p>Loading tier assignments...</p></div>`;
       // BUG-6: a "create a worksheet about X" typed into Ask lands here with
       // the topic already carried over — one-shot, then cleared.
@@ -1770,6 +1774,7 @@
       });
       await populateUnitSelect("prep-unit");
       $("generate-activity").addEventListener("click", generateActivity);
+      $("preview-lesson-packet").addEventListener("click", previewLessonPacket);
       await renderPrivacyPreview("generate_activity_pack", "prepare-privacy-preview");
       await renderDifferentiatedGroups();
     }
@@ -1845,6 +1850,67 @@
           <div class="output">${item.tasks.map(task => `• ${task.type}: ${task.prompt}`).join("\n")}</div>
         </div>`;
       }).join("");
+    }
+
+    function lessonPayload() {
+      const unitSelect = $("prep-unit");
+      const selectedUnit = unitSelect && unitSelect.selectedOptions.length ? unitSelect.selectedOptions[0].textContent : "";
+      return {
+        grade: $("prep-grade").value,
+        unit_id: unitSelect ? unitSelect.value : "",
+        lesson: {
+          ib_programme: "PYP",
+          subject: "language",
+          unit_title: selectedUnit || "Current unit",
+          topic: $("prep-topic").value.trim() || selectedUnit || "Current lesson",
+          atl_skills: ["communication"],
+          cefr_target: "A2",
+          duration_minutes: 45,
+          language_of_instruction: "en"
+        }
+      };
+    }
+
+    async function previewLessonPacket() {
+      const output = $("lesson-packet-output");
+      output.style.display = "block";
+      output.innerHTML = `<p>Building the printable packet...</p>`;
+      try {
+        const data = await api("/api/lesson-materials/packet/preview", {
+          method: "POST",
+          body: JSON.stringify(lessonPayload())
+        });
+        state.lessonPacketDraft = data;
+        const markdown = data.packet && data.packet.markdown ? data.packet.markdown : "";
+        output.innerHTML = `
+          <div class="view-head"><div><h3>Printable Packet Preview</h3><p>Review the teacher cover page and student handouts before approving a local file.</p></div><span class="badge warn">draft</span></div>
+          <pre class="output" style="white-space:pre-wrap;max-height:520px;overflow:auto;">${escapeHtml(markdown)}</pre>
+          <div class="row" style="margin-top:12px;">
+            <button id="approve-lesson-packet" class="primary" type="button">Approve Local Packet</button>
+          </div>`;
+        $("approve-lesson-packet").addEventListener("click", approveLessonPacket);
+      } catch (error) {
+        output.innerHTML = `<p>${escapeHtml(error.message)}</p>`;
+      }
+    }
+
+    async function approveLessonPacket() {
+      const output = $("lesson-packet-output");
+      const draft = state.lessonPacketDraft || {};
+      output.innerHTML = `<p>Writing the approved packet...</p>`;
+      try {
+        const data = await api("/api/lesson-materials/packet/approve", {
+          method: "POST",
+          body: JSON.stringify({...lessonPayload(), materials: draft.materials || []})
+        });
+        const markdown = data.packet && data.packet.markdown ? data.packet.markdown : "";
+        output.innerHTML = `
+          <div class="source-line"><span class="badge ok">approved</span><span class="badge">local file</span><span class="voice-hint">${escapeHtml(data.packet.file_path || "")}</span></div>
+          <pre class="output" style="white-space:pre-wrap;max-height:520px;overflow:auto;">${escapeHtml(markdown)}</pre>`;
+        showSaveToast("printable packet approved");
+      } catch (error) {
+        output.innerHTML = `<p>${escapeHtml(error.message)}</p>`;
+      }
     }
 
     async function renderObserve() {
@@ -4979,7 +5045,7 @@
             <label>Into folder<select id="drive-share-folder">${driveFolderOptions(folders, status, "")}</select></label>
           </div>
           <div class="row" style="margin-top:12px;">
-            <button id="share-lens-drive" class="primary" type="button" ${canShare ? "" : "disabled"}>Share snapshot</button>
+            <button id="share-lens-drive" class="primary" type="button" ${canShare ? "" : "disabled"}>Preview snapshot</button>
             ${canShare ? "" : `<span class="voice-hint">Sharing needs a connected folder or the school shared folder configured.</span>`}
           </div>
           <div id="drive-share-result" style="margin-top:12px;"></div>
@@ -5212,7 +5278,22 @@
         result.innerHTML = `<span class="badge warn">Choose a student to share.</span>`;
         return;
       }
-      if (!confirm("Share a snapshot of this student's lens to the shared Drive folder? Colleagues with access to that folder will be able to see it.")) return;
+      result.innerHTML = `<p>Preparing a readable lens preview...</p>`;
+      try {
+        const preview = await api(`/api/students/${encodeURIComponent(studentId)}/lens/markdown`);
+        result.innerHTML = `
+          <div class="source-line"><span class="badge warn">review before sharing</span><span class="badge">Markdown</span><span class="voice-hint">Raw notes and Personal Context are omitted.</span></div>
+          <pre class="output" style="white-space:pre-wrap;max-height:420px;overflow:auto;">${escapeHtml(preview.markdown || "")}</pre>
+          <div class="row" style="margin-top:12px;"><button id="confirm-share-lens-drive" class="primary" type="button">Share This Snapshot</button></div>`;
+        $("confirm-share-lens-drive").addEventListener("click", confirmShareStudentLensToDrive);
+      } catch (error) {
+        result.innerHTML = `<p>${escapeHtml(error.message)}</p>`;
+      }
+    }
+
+    async function confirmShareStudentLensToDrive() {
+      const result = $("drive-share-result");
+      const studentId = $("drive-share-student").value;
       result.innerHTML = `<p>Sharing the lens snapshot to Drive...</p>`;
       try {
         const data = await api("/api/google-drive/upload", {

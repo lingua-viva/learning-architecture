@@ -80,47 +80,159 @@ def set_sync_folder_id(folder_id: str) -> None:
 
 def format_lens_markdown(student_data: dict) -> str:
     """Format a student lens as a readable Markdown file for Drive export."""
+    from src.education.student_lens import (
+        REPORT_GRADE_CONFIDENCE,
+        SUPPORT_CATEGORY_LABELS,
+    )
+    from src.education.ethos import get_trait, load_ethos
+
     name = student_data.get("display_name", "Unknown Student")
     grade = student_data.get("grade_level", "")
     student_id = student_data.get("student_id", "")
-    trajectory = student_data.get("cefr_trajectory", "unknown")
-    support_tier = student_data.get("support_tier", "")
+    trajectory = student_data.get("cefr_trajectory_30d", "insufficient_data")
+    rti_tier = student_data.get("rti_current_tier", "")
     updated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
+    def active_report_items(items: object, text_key: str = "text") -> list[dict]:
+        if not isinstance(items, list):
+            return []
+        kept = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            if item.get("active", True) is False:
+                continue
+            if item.get("confidence", "teacher_confirmed") not in REPORT_GRADE_CONFIDENCE:
+                continue
+            text = str(
+                item.get(text_key)
+                or item.get("summary")
+                or item.get("need_statement")
+                or ""
+            ).strip()
+            if not text:
+                continue
+            kept.append({**item, "_text": text})
+        return kept
+
+    try:
+        ethos_taxonomy = load_ethos()
+    except Exception:
+        ethos_taxonomy = {"traits": []}
+
+    strengths = student_data.get("strengths_profile", {}) or {}
+    academic_strengths = active_report_items(strengths.get("academic_strengths"))
+    personal_strengths = active_report_items(strengths.get("personal_strengths"))
+
     lines = [
-        f"# Student Lens: {name}",
+        f"# Student Lens - {name}",
         "",
-        f"**Student ID**: {student_id}",
-        f"**Grade**: {grade}" if grade else "",
-        f"**CEFR trajectory**: {trajectory}",
-        f"**Support tier**: {support_tier}" if support_tier else "",
-        f"**Last updated**: {updated}",
+        "## Overview",
+        "",
+        f"- Student ID: `{student_id}`",
+        f"- Grade: {grade or 'not set'}",
+        f"- Current RTI tier: {rti_tier or 'not set'}",
+        f"- CEFR trajectory: {trajectory}",
+        f"- Last updated: {updated}",
+        "",
+        "## Strengths",
         "",
     ]
 
-    # Support profile
-    support = student_data.get("support_profile", {})
-    if support:
-        lines.append("## Support Profile")
+    if academic_strengths or personal_strengths:
+        if academic_strengths:
+            lines.append("### Academic Strengths")
+            lines.extend(f"- {item['_text']}" for item in academic_strengths[:8])
+            lines.append("")
+        if personal_strengths:
+            lines.append("### Personal Strengths")
+            lines.extend(f"- {item['_text']}" for item in personal_strengths[:8])
+            lines.append("")
+    else:
+        lines.append("- No teacher-confirmed strengths recorded yet.")
         lines.append("")
-        categories = support.get("categories", {})
-        for cat_id, cat_data in categories.items():
-            if isinstance(cat_data, dict):
-                label = cat_data.get("label", cat_id)
-                lines.append(f"### {label}")
-                strengths = cat_data.get("strengths", [])
-                if strengths:
-                    for s in strengths:
-                        lines.append(f"- ✓ {s}")
-                needs = cat_data.get("needs", [])
-                if needs:
-                    for n in needs:
-                        lines.append(f"- ⚠ {n}")
-                strategies = cat_data.get("strategies", [])
-                if strategies:
-                    for st in strategies:
-                        lines.append(f"- → {st}")
-                lines.append("")
+
+    support = student_data.get("support_profile", {})
+    categories = support.get("categories", {}) if isinstance(support, dict) else {}
+    lines.append("## Support Profile")
+    lines.append("")
+    wrote_support = False
+    for cat_id, cat_data in categories.items():
+        if cat_id == "personal_context":
+            continue
+        if not isinstance(cat_data, dict):
+            continue
+        needs = active_report_items(cat_data.get("needs"))
+        legacy_items = active_report_items(cat_data.get("items"), text_key="need_statement")
+        cat_strengths = active_report_items(cat_data.get("strengths"))
+        worked = active_report_items(cat_data.get("strategies_worked"))
+        not_worked = active_report_items(cat_data.get("strategies_not_worked"))
+        questions = active_report_items(cat_data.get("open_questions"))
+        evidence = active_report_items(cat_data.get("evidence"), text_key="summary")
+        if not any((needs, legacy_items, cat_strengths, worked, not_worked, questions, evidence)):
+            continue
+        wrote_support = True
+        lines.append(f"### {SUPPORT_CATEGORY_LABELS.get(cat_id, cat_id)}")
+        for label, items in (
+            ("Needs", needs or legacy_items),
+            ("Strengths", cat_strengths),
+            ("Strategies that worked", worked),
+            ("Strategies to reconsider", not_worked),
+            ("Open questions", questions),
+            ("Evidence", evidence),
+        ):
+            if not items:
+                continue
+            lines.append(f"**{label}**")
+            lines.extend(f"- {item['_text']}" for item in items[:6])
+            lines.append("")
+    if not wrote_support:
+        lines.append("- No teacher-confirmed support entries recorded yet.")
+        lines.append("")
+
+    ethos_profile = student_data.get("ethos_profile", {}) or {}
+    traits = ethos_profile.get("traits", {}) if isinstance(ethos_profile, dict) else {}
+    lines.append("## Still I Rise Traits")
+    lines.append("")
+    wrote_traits = False
+    if isinstance(traits, dict):
+        for trait_id, trait_data in traits.items():
+            if not isinstance(trait_data, dict):
+                continue
+            evidence = active_report_items(trait_data.get("evidence"), text_key="summary")
+            if not evidence:
+                continue
+            wrote_traits = True
+            trait = get_trait(ethos_taxonomy, trait_id) or {}
+            lines.append(f"### {trait.get('label') or trait_id}")
+            lines.extend(f"- {item['_text']}" for item in evidence[:6])
+            lines.append("")
+    if not wrote_traits:
+        lines.append("- No teacher-confirmed trait evidence recorded yet.")
+        lines.append("")
+
+    observations = student_data.get("observations") if isinstance(student_data.get("observations"), list) else []
+    if observations:
+        lines.append("## Observation Log")
+        lines.append("")
+        lines.append(f"- {len(observations)} observation(s) recorded locally.")
+        recent = observations[-5:]
+        for obs in recent:
+            if not isinstance(obs, dict):
+                continue
+            parts = [
+                str(obs.get("recorded_at") or "")[:10],
+                str(obs.get("template_type") or "observation"),
+            ]
+            cefr = "/".join(
+                str(obs.get(field) or "")
+                for field in ("cefr_dimension", "cefr_level_observed", "cefr_direction")
+                if obs.get(field)
+            )
+            if cefr:
+                parts.append(cefr)
+            lines.append(f"- `{obs.get('observation_id')}` - " + " | ".join(p for p in parts if p))
+        lines.append("")
 
     # DOES boundary (Lens Primitive, 2026-08-04): this file is uploaded to a
     # shared Drive folder, so it may only ever contain what we explicitly
@@ -131,14 +243,12 @@ def format_lens_markdown(student_data: dict) -> str:
     # carries the categorized, shareable "what helps" content. See
     # dev/SPEC_LENS_PRIMITIVE_2026-08-04.md.
 
-    # Grouping notes
-    grouping = student_data.get("grouping", {})
-    if grouping:
-        avoid = grouping.get("avoid_pairing_notes", "")
-        if avoid:
-            lines.append(f"## Grouping Notes")
-            lines.append(f"Avoid-pairing: {avoid}")
-            lines.append("")
+    lines.append("## Privacy Boundary")
+    lines.append("")
+    lines.append("- Raw observation narration is device-local and is not included in this shared lens.")
+    lines.append("- Personal Context / safeguarding evidence is omitted from this shared lens.")
+    lines.append("- Model-suggested or unconfirmed evidence is omitted.")
+    lines.append("")
 
     lines.append("---")
     lines.append(f"*Generated by Lingua Viva · {updated}*")

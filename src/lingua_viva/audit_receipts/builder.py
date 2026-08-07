@@ -7,7 +7,12 @@ from src.lingua_viva.audit_receipts.schema import AuditReceipt, compute_receipt_
 
 _STUDENT_ID_RE = re.compile(r"\b(?:student[_ -]?id|student|child|pupil)[:= ]+[A-Za-z0-9_-]+\b", re.IGNORECASE)
 _NAME_HINT_RE = re.compile(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b")
-LOCAL_EVIDENCE_SCOPES = {"help_artifact", "portfolio_entry", "cohort_lesson_plan"}
+LOCAL_EVIDENCE_SCOPES = {
+    "help_artifact",
+    "portfolio_entry",
+    "cohort_lesson_plan",
+    "lesson_material_packet",
+}
 
 
 def sanitize_student_text(value: str) -> str:

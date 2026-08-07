@@ -280,6 +280,58 @@ def test_drive_markdown_never_renders_raw_observation_text(tmp_path, monkeypatch
     markdown = drive_sync.format_lens_markdown(lens_data)
     assert "war" not in markdown
     assert "Recent Observations" not in markdown
+    assert "Privacy Boundary" in markdown
+
+
+def test_drive_markdown_is_readable_and_omits_personal_context(tmp_path, monkeypatch):
+    lens_data = {
+        "display_name": "Marco Bianchi",
+        "student_id": "stu-1",
+        "grade_level": "G3",
+        "rti_current_tier": 2,
+        "cefr_trajectory_30d": {"speaking": "progressing"},
+        "support_profile": {
+            "categories": {
+                "communication_and_language": {
+                    "items": [
+                        {
+                            "need_statement": "Needs sentence starters for oral rehearsal.",
+                            "confidence": "teacher_confirmed",
+                        }
+                    ]
+                },
+                "personal_context": {
+                    "items": [
+                        {
+                            "need_statement": "Sensitive family detail must remain private.",
+                            "confidence": "teacher_confirmed",
+                        }
+                    ]
+                },
+            }
+        },
+        "ethos_profile": {
+            "traits": {
+                "resilience": {
+                    "level": "emerging",
+                    "evidence": [
+                        {"summary": "Returns to the task after feedback.", "confidence": "teacher_confirmed"}
+                    ],
+                }
+            }
+        },
+        "observations": [{"observation_id": "obs-1", "created_at": "2026-08-04T00:00:00Z"}],
+    }
+
+    markdown = drive_sync.format_lens_markdown(lens_data)
+
+    assert markdown.startswith("# Student Lens - Marco Bianchi")
+    assert "## Support Profile" in markdown
+    assert "Communication and Language" in markdown
+    assert "Needs sentence starters" in markdown
+    assert "Personal Context" in markdown
+    assert "Sensitive family detail" not in markdown
+    assert "obs-1" in markdown
 
 
 def test_sync_uploads_id_only_ledger_filenames(tmp_path, monkeypatch):

@@ -417,6 +417,9 @@ reachable_from_ui:
   - route: "POST /api/google-drive/upload"
     call_site: 'api("/api/google-drive/upload"'
 
+  - route: "GET /api/students/{student_id}/lens/markdown"
+    call_site: 'api(`/api/students/${encodeURIComponent(studentId)}/lens/markdown`)'
+
   - route: "GET /api/google-drive/folders"
     call_site: 'api("/api/google-drive/folders")'
 
@@ -443,6 +446,12 @@ reachable_from_ui:
 
   - route: "POST /api/provider/connect"
     call_site: 'api("/api/provider/connect"'
+
+  - route: "POST /api/lesson-materials/packet/preview"
+    call_site: 'api("/api/lesson-materials/packet/preview"'
+
+  - route: "POST /api/lesson-materials/packet/approve"
+    call_site: 'api("/api/lesson-materials/packet/approve"'
     note: >-
       Settings cloud-provider connect form (commit ff2401e, closed LV-BLT-001).
       Was misclassified as deferred_undecided until 2026-07-25 — the UI form
@@ -519,8 +528,9 @@ intentionally_backend_only:
   - route: "POST /api/lesson-materials/generate"
     status: deferred_undecided
     reason: >-
-      MVP sprint Spec 3 (2026-08-01). Generates tier-differentiated student-facing
-      materials; UI workbench placement deferred to Spec 4.
+      MVP sprint Spec 3 (2026-08-01). Raw generation API kept for API/QA
+      verification; the teacher-facing Prepare flow now uses the preview and
+      approval packet routes.
 
   - route: "POST /api/voice/act"
     status: deferred_undecided

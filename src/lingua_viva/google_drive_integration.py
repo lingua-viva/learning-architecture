@@ -328,6 +328,21 @@ def _atomic_write_private_json(path: Path, payload: dict[str, Any]) -> None:
     os.chmod(path, 0o600)
 
 
+def _atomic_write_private_text(path: Path, content: str) -> None:
+    """Write private UTF-8 text with the same 0600 atomic semantics as JSON."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(str(content or ""))
+        os.replace(tmp, path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    os.chmod(path, 0o600)
+
+
 def list_connected_folders() -> list[dict[str, Any]]:
     try:
         data = json.loads(folders_path().read_text(encoding="utf-8"))
@@ -902,7 +917,7 @@ def prune_student_exports(student_id: str, keep: int = 3) -> int:
         candidates = [
             p
             for p in export_dir().iterdir()
-            if p.is_file() and p.name.startswith(prefix) and p.suffix == ".json"
+            if p.is_file() and p.name.startswith(prefix) and p.suffix in {".json", ".md"}
         ]
     except (FileNotFoundError, OSError):
         return 0

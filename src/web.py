@@ -3216,6 +3216,35 @@ async def deliverables(limit: int = 50, session_id: str = "", action_plan_id: st
     return {"deliverables": records, "count": len(records)}
 
 
+@app.get("/api/students/{student_id}/lens/markdown")
+async def student_lens_markdown_preview(student_id: str):
+    """Human-readable, Drive-safe lens preview.
+
+    This is the exact Markdown shape used for manual Drive sharing and
+    automatic lens sync: readable to a normal teacher, but with raw
+    observation narration and Personal Context omitted.
+    """
+    from src.lingua_viva.drive_sync import format_lens_markdown
+
+    def build(store):
+        return format_lens_markdown(store.export_lens(student_id))
+
+    try:
+        markdown = await asyncio.to_thread(_with_student_store, build)
+    except Exception:
+        return JSONResponse({"error": "Student lens could not be rendered."}, status_code=404)
+    return {
+        "student_id": student_id,
+        "format": "markdown",
+        "markdown": markdown,
+        "privacy_boundary": {
+            "raw_observations_included": False,
+            "personal_context_included": False,
+            "unconfirmed_evidence_included": False,
+        },
+    }
+
+
 @app.post("/api/audit-receipts/export")
 async def audit_receipts_export(payload: dict):
     from src.lingua_viva.audit_receipts.builder import build_receipt
@@ -5391,6 +5420,171 @@ async def lesson_materials_generate(request: Request, payload: dict):
     }
 
 
+@app.post("/api/lesson-materials/packet/preview")
+async def lesson_materials_packet_preview(request: Request, payload: dict):
+    from src.lingua_viva.access_roles import effective_teacher_id
+    from src.lingua_viva.lesson_materials import (
+        assign_tier_groups,
+        generate_lesson_materials,
+        materials_as_dicts,
+        render_printable_packet_markdown,
+    )
+
+    teacher_id = effective_teacher_id(request, str(payload.get("teacher_id") or "local-teacher"))
+    try:
+        lesson = _cohort_lesson_from_payload(payload, teacher_id)
+    except (TypeError, ValueError) as exc:
+        return JSONResponse({"error": "invalid_lesson", "detail": str(exc)}, status_code=400)
+    student_ids = payload.get("student_ids") if isinstance(payload.get("student_ids"), list) else None
+
+    def load(store):
+        return assign_tier_groups(store, teacher_id, student_ids)
+
+    try:
+        groups, roster_names = await asyncio.to_thread(_with_student_store, load)
+        result = await generate_lesson_materials(
+            lesson=lesson,
+            teacher_id=teacher_id,
+            push_to_drive=False,
+            tier_groups=groups,
+            roster_names=roster_names,
+        )
+        markdown = render_printable_packet_markdown(lesson, result.materials)
+    except PermissionError as exc:
+        return JSONResponse({"error": "unauthorized_student_ids", "detail": str(exc)}, status_code=422)
+    except ValueError as exc:
+        return JSONResponse({"error": "generation_failed", "detail": str(exc)}, status_code=422)
+
+    return {
+        "packet": {
+            "format": "markdown",
+            "markdown": markdown,
+            "filename": None,
+            "printable": True,
+        },
+        "materials": materials_as_dicts(result),
+        "lesson_summary": result.lesson_summary,
+        "requires_teacher_approval": True,
+        "writes": {"deliverables": 0, "audit_receipts": 0},
+    }
+
+
+@app.post("/api/lesson-materials/packet/approve")
+async def lesson_materials_packet_approve(request: Request, payload: dict):
+    from src.lingua_viva.access_roles import effective_teacher_id
+    from src.lingua_viva.audit_receipts.builder import build_receipt
+    from src.lingua_viva.deliverables.schema import (
+        DeliverableLocation,
+        DeliverableRecord,
+        compute_deliverable_id,
+    )
+    from src.lingua_viva.deliverables.store import upsert_deliverable
+    from src.lingua_viva.lesson_materials import (
+        assign_tier_groups,
+        generate_lesson_materials,
+        material_from_dict,
+        materials_as_dicts,
+        printable_packet_hash,
+        render_printable_packet_markdown,
+        write_printable_packet,
+    )
+
+    teacher_id = effective_teacher_id(request, str(payload.get("teacher_id") or "local-teacher"))
+    try:
+        lesson = _cohort_lesson_from_payload(payload, teacher_id)
+    except (TypeError, ValueError) as exc:
+        return JSONResponse({"error": "invalid_lesson", "detail": str(exc)}, status_code=400)
+
+    materials_payload = payload.get("materials") if isinstance(payload.get("materials"), list) else []
+    try:
+        if materials_payload:
+            materials = [material_from_dict(item) for item in materials_payload if isinstance(item, dict)]
+            if len(materials) != 3:
+                raise ValueError("materials must contain exactly three tiers")
+        else:
+            student_ids = payload.get("student_ids") if isinstance(payload.get("student_ids"), list) else None
+
+            def load(store):
+                return assign_tier_groups(store, teacher_id, student_ids)
+
+            groups, roster_names = await asyncio.to_thread(_with_student_store, load)
+            result = await generate_lesson_materials(
+                lesson=lesson,
+                teacher_id=teacher_id,
+                push_to_drive=False,
+                tier_groups=groups,
+                roster_names=roster_names,
+            )
+            materials = result.materials
+    except PermissionError as exc:
+        return JSONResponse({"error": "unauthorized_student_ids", "detail": str(exc)}, status_code=422)
+    except ValueError as exc:
+        return JSONResponse({"error": "approval_failed", "detail": str(exc)}, status_code=422)
+
+    try:
+        path = await asyncio.to_thread(write_printable_packet, lesson, materials)
+        markdown = Path(path).read_text(encoding="utf-8")
+    except ValueError as exc:
+        return JSONResponse({"error": "approval_failed", "detail": str(exc)}, status_code=422)
+
+    trace_id = f"lesson-packet-{uuid.uuid4().hex[:12]}"
+    deliverable_id = compute_deliverable_id(trace_id, "")
+    source_ids = [
+        sid
+        for material in materials
+        for sid in material.student_ids
+        if str(sid).strip()
+    ]
+    deliverable = DeliverableRecord(
+        deliverable_id=deliverable_id,
+        session_id=broadcaster.session_id or "",
+        trace_id=trace_id,
+        type="lesson_material_packet",
+        title=f"Printable lesson packet: {lesson.topic}",
+        status="created",
+        location=DeliverableLocation(kind="local_path", path=str(path)),
+        source_record_ids=source_ids,
+        summary="Teacher-approved printable lesson packet. Local until explicitly shared.",
+        content_hash=printable_packet_hash(markdown),
+    )
+    upsert_deliverable(deliverable)
+    receipt = build_receipt(
+        scope="lesson_material_packet",
+        session_id=broadcaster.session_id or "",
+        trace_id=trace_id,
+        deliverable_id=deliverable_id,
+        source_record_ids=source_ids,
+    )
+    sync_status = "not_requested"
+    drive_result = None
+    if bool(payload.get("push_to_drive", False)):
+        try:
+            from src.lingua_viva.google_drive_integration import upload_paths
+
+            drive_result = await asyncio.to_thread(
+                upload_paths,
+                [str(path)],
+                str(payload.get("folder_id") or ""),
+            )
+            sync_status = "pushed_to_drive" if drive_result.get("uploaded") else "push_failed"
+        except Exception:
+            sync_status = "push_failed"
+
+    return {
+        "packet": {
+            "format": "markdown",
+            "markdown": markdown,
+            "file_path": str(path),
+            "printable": True,
+        },
+        "materials": materials_as_dicts(materials),
+        "deliverable": deliverable.as_dict(),
+        "audit_receipt": receipt.as_dict(),
+        "sync_status": sync_status,
+        "drive_result": drive_result,
+    }
+
+
 @app.post("/api/students/{student_id}/help-artifact/preview")
 async def help_artifact_preview(student_id: str, request: Request, payload: dict):
     from src.education.help_artifacts import generate_help_artifact
@@ -6080,14 +6274,15 @@ async def google_drive_upload(payload: dict):
     """Explicitly share deliverables back into the connected Drive folder.
 
     Accepts either {"student_id": "..."} — materializes that student lens as
-    JSON into the export dir and shares it — or {"file_paths": [...]} for
-    existing deliverable files (must live inside the Lingua Viva home).
+    human-readable Markdown into the export dir and shares it — or
+    {"file_paths": [...]} for existing deliverable files (must live inside
+    the Lingua Viva home).
     """
     from src.lingua_viva.google_drive_integration import (
         DriveAuthError,
         DriveConfigError,
         _allowed_export_roots,
-        _atomic_write_private_json,
+        _atomic_write_private_text,
         export_dir,
         prune_student_exports,
         upload_paths,
@@ -6104,14 +6299,16 @@ async def google_drive_upload(payload: dict):
         student_id = student_id.strip()
 
         def materialize(store):
+            from src.lingua_viva.drive_sync import format_lens_markdown
+
             lens = store.export_lens(student_id)
             target = export_dir()
             target.mkdir(parents=True, exist_ok=True)
             stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-            path = target / f"student-lens-{student_id}-{stamp}.json"
+            path = target / f"student-lens-{student_id}-{stamp}.md"
             # 0600 from birth — the snapshot is student data (H3 review found
             # the old write_text left it at the default umask).
-            _atomic_write_private_json(path, lens)
+            _atomic_write_private_text(path, format_lens_markdown(lens))
             return str(path)
 
         try:

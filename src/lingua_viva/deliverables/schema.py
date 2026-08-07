@@ -13,6 +13,7 @@ DELIVERABLE_TYPES = (
     "help_artifact",
     "portfolio_entry",
     "cohort_lesson_plan",
+    "lesson_material_packet",
     "none",
 )
 STATUSES = ("created", "updated", "sent", "exported", "failed", "not_applicable")
