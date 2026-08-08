@@ -296,6 +296,30 @@ def test_folders_route_connect_list_disconnect_lifecycle(monkeypatch, tmp_path):
     assert client.delete("/api/google-drive/folders/shared-folder-1").status_code == 404
 
 
+def test_sync_folder_map_route_round_trip(monkeypatch, tmp_path):
+    monkeypatch.setenv("LV_STATE_HOME", str(tmp_path / "state"))
+
+    saved = client.post(
+        "/api/google-drive/sync-folder-map",
+        json={
+            "folder_map": {
+                "student_summaries": "folder-summary",
+                "personal": "folder-personal",
+            }
+        },
+    )
+    assert saved.status_code == 200
+    assert saved.json()["folder_map"]["student_summaries"] == "folder-summary"
+    assert saved.json()["folder_map"]["personal"] == "folder-personal"
+
+    loaded = client.get("/api/google-drive/sync-folder-map")
+    assert loaded.status_code == 200
+    assert loaded.json()["folder_map"] == saved.json()["folder_map"]
+    categories = {item["id"]: item for item in loaded.json()["categories"]}
+    assert categories["personal"]["label"] == "Personal"
+    assert categories["personal"]["configured"] is True
+
+
 def test_folders_route_rejects_bad_links_and_file_links(monkeypatch, tmp_path):
     _configure_folders(monkeypatch, tmp_path)
 
@@ -336,7 +360,9 @@ def test_drive_workspace_ui_mounts_controls():
         "/api/google-drive/import",
         'api("/api/google-drive/folders")',
         'api("/api/google-drive/folders", {',
+        'api("/api/google-drive/sync-folder-map")',
         "api(`/api/google-drive/folders/${",
+        "Drive Folder Routing",
         "renderDrive",
         "drive-connect-link",
         "drive-folder-select",

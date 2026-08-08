@@ -361,6 +361,108 @@ def test_sync_uploads_id_only_ledger_filenames(tmp_path, monkeypatch):
     assert json.loads(ledger_uploads[0]["content"].splitlines()[0])["schema"] == drive_sync.LEDGER_SCHEMA
 
 
+def test_folder_map_round_trip(tmp_path, monkeypatch):
+    _isolate(monkeypatch, tmp_path)
+
+    folder_map = drive_sync.set_sync_folder_map({
+        "student_summaries": "folder-summary",
+        "personal": "folder-personal",
+    })
+
+    assert folder_map == {
+        "student_summaries": "folder-summary",
+        "personal": "folder-personal",
+    }
+    assert drive_sync.get_sync_folder_id() == "folder-summary"
+    assert drive_sync.get_sync_folder_id_for_category("Personal") == "folder-personal"
+
+
+def test_personal_observation_is_excluded_from_shared_lens_and_ledger(tmp_path):
+    store = StudentLensStore(db_path=tmp_path / "s.db")
+    sid = store.create_lens(display_name="Marco Bianchi")
+    _append_local(
+        store,
+        sid,
+        "t-local",
+        support_category="personal_context",
+        need_statement="Family-only context should stay restricted.",
+        evidence_summary="Restricted personal context.",
+    )
+
+    lens_data = store.export_lens(sid)
+    markdown = drive_sync.format_lens_markdown(lens_data)
+    ledger = drive_sync.build_ledger_ndjson(store, sid, "t-local")
+
+    assert "Family-only context" not in markdown
+    assert "Restricted personal context" not in markdown
+    assert "personal_context" not in ledger
+    assert "Family-only context" not in ledger
+    store.close()
+
+
+def test_personal_without_folder_is_queued_and_not_uploaded_elsewhere(tmp_path, monkeypatch):
+    _isolate(monkeypatch, tmp_path)
+    drive_sync.set_sync_folder_map({"student_summaries": "folder-summary"})
+    store = StudentLensStore()
+    sid = store.create_lens(display_name="Marco Bianchi")
+    _append_local(
+        store,
+        sid,
+        "t-local",
+        support_category="personal_context",
+        need_statement="Restricted family context.",
+        evidence_summary="Restricted family context.",
+    )
+    store.close()
+    uploads = []
+
+    def fake_upload(**kwargs):
+        uploads.append(kwargs)
+        return {"id": f"u-{len(uploads)}", "name": kwargs["filename"]}
+
+    monkeypatch.setattr("src.lingua_viva.google_drive_integration.upload_text_to_folder", fake_upload)
+
+    assert asyncio.run(drive_sync.sync_lens_to_drive(sid)) is True
+    assert all(upload["folder_id"] == "folder-summary" for upload in uploads)
+    assert not any(upload["filename"].endswith(".personal.md") for upload in uploads)
+    ledger = drive_sync.read_sync_ledger()["students"][sid]
+    assert ledger["last_status"] == "queued"
+    assert ledger["last_category"] == "personal"
+    assert "folder" in ledger["failure_reason"]
+
+
+def test_personal_with_folder_uploads_only_to_personal_folder(tmp_path, monkeypatch):
+    _isolate(monkeypatch, tmp_path)
+    drive_sync.set_sync_folder_map({
+        "student_summaries": "folder-summary",
+        "personal": "folder-personal",
+    })
+    store = StudentLensStore()
+    sid = store.create_lens(display_name="Marco Bianchi")
+    _append_local(
+        store,
+        sid,
+        "t-local",
+        support_category="personal_context",
+        need_statement="Restricted family context.",
+        evidence_summary="Restricted family context.",
+    )
+    store.close()
+    uploads = []
+
+    def fake_upload(**kwargs):
+        uploads.append(kwargs)
+        return {"id": f"u-{len(uploads)}", "name": kwargs["filename"]}
+
+    monkeypatch.setattr("src.lingua_viva.google_drive_integration.upload_text_to_folder", fake_upload)
+
+    assert asyncio.run(drive_sync.sync_lens_to_drive(sid)) is True
+    personal_uploads = [upload for upload in uploads if upload["folder_id"] == "folder-personal"]
+    shared_uploads = [upload for upload in uploads if upload["folder_id"] == "folder-summary"]
+    assert [upload["filename"] for upload in personal_uploads] == [f"{sid}.personal.md"]
+    assert all("Restricted family context" not in upload["content"] for upload in shared_uploads)
+
+
 # ---------------------------------------------------------------------------
 # 4. Deterministic triangulation signals
 # ---------------------------------------------------------------------------

@@ -29,11 +29,25 @@ from pathlib import Path
 from typing import Optional
 
 from src.lingua_viva.config import UNPROVISIONED_TEACHER_ID, lv_home
+from src.lingua_viva.runtime_paths import runtime_data_dir
 
 logger = logging.getLogger(__name__)
 
 SYNC_CONFIG_KEY = "drive_sync_folder_id"
+SYNC_FOLDER_MAP_KEY = "drive_sync_folder_map"
 PENDING_SYNCS_FILE = "pending_drive_syncs.json"
+SYNC_LEDGER_FILE = "drive_sync_ledger.json"
+
+FOLDER_CATEGORIES = {
+    "student_summaries": "Student Summaries",
+    "student_evidence": "Student Evidence",
+    "teacher_artifacts": "Teacher Artifacts",
+    "assigned": "Assigned Coursework",
+    "personal": "Personal",
+}
+DEFAULT_SHARED_CATEGORY = "student_summaries"
+PERSONAL_CATEGORY = "personal"
+PERSONAL_SUPPORT_CATEGORIES = {"personal_context", "personal", "confidential", "private"}
 
 # Multi-teacher triangulation (SPEC_LV_MULTI_TEACHER_TRIANGULATION_2026-08-01):
 # machine-readable per-teacher observation ledgers ride alongside the Markdown
@@ -52,30 +66,155 @@ _last_pull_at: dict = {}
 
 def get_sync_folder_id() -> Optional[str]:
     """Read the configured sync folder ID from config."""
-    config_path = lv_home() / "config" / "settings.json"
+    return get_sync_folder_map().get(DEFAULT_SHARED_CATEGORY)
+
+
+def _settings_path() -> Path:
+    return lv_home() / "config" / "settings.json"
+
+
+def _read_settings() -> dict:
+    config_path = _settings_path()
     if not config_path.exists():
-        return None
+        return {}
     try:
         data = json.loads(config_path.read_text(encoding="utf-8"))
-        folder_id = data.get(SYNC_CONFIG_KEY)
-        return str(folder_id).strip() if folder_id else None
     except (json.JSONDecodeError, OSError):
-        return None
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _write_settings(data: dict) -> None:
+    config_path = _settings_path()
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = config_path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
+    os.replace(tmp, config_path)
+
+
+def normalize_folder_category(category: str) -> str:
+    key = str(category or "").strip().lower().replace("-", "_")
+    if key == "general":
+        return DEFAULT_SHARED_CATEGORY
+    if key in {"confidential", "private", "personal_context"}:
+        return PERSONAL_CATEGORY
+    if key in FOLDER_CATEGORIES:
+        return key
+    raise ValueError(f"unknown Drive sync folder category: {category}")
+
+
+def is_personal_support_category(category: str) -> bool:
+    return str(category or "").strip().lower().replace("-", "_") in PERSONAL_SUPPORT_CATEGORIES
+
+
+def get_sync_folder_map() -> dict[str, str]:
+    data = _read_settings()
+    raw = data.get(SYNC_FOLDER_MAP_KEY)
+    folder_map: dict[str, str] = {}
+    if isinstance(raw, dict):
+        for category, folder_id in raw.items():
+            try:
+                normalized = normalize_folder_category(str(category))
+            except ValueError:
+                continue
+            if isinstance(folder_id, str) and folder_id.strip():
+                folder_map[normalized] = folder_id.strip()
+    legacy = data.get(SYNC_CONFIG_KEY)
+    if isinstance(legacy, str) and legacy.strip():
+        folder_map.setdefault(DEFAULT_SHARED_CATEGORY, legacy.strip())
+    return folder_map
+
+
+def set_sync_folder_map(folder_map: dict[str, str]) -> dict[str, str]:
+    cleaned: dict[str, str] = {}
+    for category, folder_id in (folder_map or {}).items():
+        normalized = normalize_folder_category(str(category))
+        value = str(folder_id or "").strip()
+        if value:
+            cleaned[normalized] = value
+    data = _read_settings()
+    data[SYNC_FOLDER_MAP_KEY] = cleaned
+    if cleaned.get(DEFAULT_SHARED_CATEGORY):
+        data[SYNC_CONFIG_KEY] = cleaned[DEFAULT_SHARED_CATEGORY]
+    elif SYNC_CONFIG_KEY in data:
+        data.pop(SYNC_CONFIG_KEY, None)
+    _write_settings(data)
+    return cleaned
+
+
+def get_sync_folder_id_for_category(category: str = DEFAULT_SHARED_CATEGORY) -> Optional[str]:
+    folder_map = get_sync_folder_map()
+    return folder_map.get(normalize_folder_category(category))
 
 
 def set_sync_folder_id(folder_id: str) -> None:
     """Write the sync folder ID to config."""
-    config_dir = lv_home() / "config"
-    config_dir.mkdir(parents=True, exist_ok=True)
-    config_path = config_dir / "settings.json"
-    data = {}
-    if config_path.exists():
-        try:
-            data = json.loads(config_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            pass
-    data[SYNC_CONFIG_KEY] = folder_id.strip()
-    config_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    data = _read_settings()
+    value = folder_id.strip()
+    if value:
+        data[SYNC_CONFIG_KEY] = value
+        folder_map = data.get(SYNC_FOLDER_MAP_KEY) if isinstance(data.get(SYNC_FOLDER_MAP_KEY), dict) else {}
+        folder_map[DEFAULT_SHARED_CATEGORY] = value
+        data[SYNC_FOLDER_MAP_KEY] = folder_map
+    else:
+        data.pop(SYNC_CONFIG_KEY, None)
+        folder_map = data.get(SYNC_FOLDER_MAP_KEY)
+        if isinstance(folder_map, dict):
+            folder_map.pop(DEFAULT_SHARED_CATEGORY, None)
+            data[SYNC_FOLDER_MAP_KEY] = folder_map
+    _write_settings(data)
+
+
+def _sync_ledger_path() -> Path:
+    return runtime_data_dir("drive_sync") / SYNC_LEDGER_FILE
+
+
+def read_sync_ledger() -> dict:
+    path = _sync_ledger_path()
+    if not path.exists():
+        return {"schema_version": 1, "students": {}}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {"schema_version": 1, "students": {}}
+    if not isinstance(data, dict):
+        return {"schema_version": 1, "students": {}}
+    if not isinstance(data.get("students"), dict):
+        data["students"] = {}
+    data.setdefault("schema_version", 1)
+    return data
+
+
+def _write_sync_ledger(data: dict) -> None:
+    path = _sync_ledger_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def record_sync_attempt(student_id: str, *, status: str, category: str, reason: str = "") -> None:
+    data = read_sync_ledger()
+    students = data.setdefault("students", {})
+    row = students.setdefault(student_id, {"history": []})
+    now = datetime.now(timezone.utc).isoformat()
+    row.update({
+        "student_id": student_id,
+        "last_attempt_at": now,
+        "last_status": status,
+        "last_category": category,
+        "failure_reason": reason,
+    })
+    history = row.setdefault("history", [])
+    if isinstance(history, list):
+        history.append({
+            "attempted_at": now,
+            "status": status,
+            "category": category,
+            "reason": reason,
+        })
+        row["history"] = history[-20:]
+    _write_sync_ledger(data)
 
 
 def format_lens_markdown(student_data: dict) -> str:
@@ -114,6 +253,9 @@ def format_lens_markdown(student_data: dict) -> str:
                 continue
             kept.append({**item, "_text": text})
         return kept
+
+    def is_personal_observation(obs: dict) -> bool:
+        return is_personal_support_category(str(obs.get("support_category") or ""))
 
     try:
         ethos_taxonomy = load_ethos()
@@ -212,6 +354,7 @@ def format_lens_markdown(student_data: dict) -> str:
         lines.append("")
 
     observations = student_data.get("observations") if isinstance(student_data.get("observations"), list) else []
+    observations = [obs for obs in observations if isinstance(obs, dict) and not is_personal_observation(obs)]
     if observations:
         lines.append("## Observation Log")
         lines.append("")
@@ -261,6 +404,52 @@ def _safe_filename(name: str) -> str:
     return safe.strip()[:50] or "student"
 
 
+def _personal_observation_markdown(student_id: str, observations: list[dict]) -> str:
+    updated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    lines = [
+        f"# Personal Observation Records - {student_id}",
+        "",
+        "These records are routed only to the mapped Personal folder.",
+        "",
+    ]
+    for obs in observations:
+        lines.extend([
+            f"## {obs.get('observation_id')}",
+            "",
+            f"- Student ID: `{student_id}`",
+            f"- Recorded: {str(obs.get('recorded_at') or '')}",
+            f"- Category: Personal",
+            f"- Template: {str(obs.get('template_type') or 'observation')}",
+            "",
+        ])
+        summary = str(obs.get("evidence_summary") or obs.get("need_statement") or "").strip()
+        if summary:
+            lines.extend(["### Whitewashed Summary", "", f"- {summary}", ""])
+    lines.extend([
+        "## Privacy Boundary",
+        "",
+        "- Raw narration is device-local and is not included.",
+        "- This artifact must stay in the restricted Personal Drive folder.",
+        "",
+        f"*Generated by Lingua Viva · {updated}*",
+    ])
+    return "\n".join(lines)
+
+
+def _personal_observations(lens_data: dict) -> list[dict]:
+    observations = lens_data.get("observations")
+    if not isinstance(observations, list):
+        return []
+    kept = []
+    for obs in observations:
+        if not isinstance(obs, dict):
+            continue
+        category = str(obs.get("support_category") or "").strip()
+        if is_personal_support_category(category):
+            kept.append(obs)
+    return kept
+
+
 async def sync_lens_to_drive(student_id: str) -> bool:
     """Push a student lens to the configured Drive sync folder.
 
@@ -269,8 +458,15 @@ async def sync_lens_to_drive(student_id: str) -> bool:
     it never raises.
     """
     try:
-        folder_id = get_sync_folder_id()
+        folder_map = get_sync_folder_map()
+        folder_id = folder_map.get(DEFAULT_SHARED_CATEGORY)
         if not folder_id:
+            record_sync_attempt(
+                student_id,
+                status="queued",
+                category=DEFAULT_SHARED_CATEGORY,
+                reason="student summaries folder is not configured",
+            )
             return False
 
         # Load the student lens (full export includes observations) and this
@@ -300,11 +496,16 @@ async def sync_lens_to_drive(student_id: str) -> bool:
         content = format_lens_markdown(lens_data)
         display_name = lens_data.get("display_name", student_id)
         filename = f"{_safe_filename(display_name)}_lens.md"
+        personal_obs = _personal_observations(lens_data)
+        personal_folder_id = folder_map.get(PERSONAL_CATEGORY)
 
         # Upload to Drive
         from src.lingua_viva.google_drive_integration import (
             upload_text_to_folder,
         )
+        from src.lingua_viva.privacy import assert_safe_for_external_output
+
+        assert_safe_for_external_output(content)
 
         await asyncio.to_thread(
             upload_text_to_folder,
@@ -313,11 +514,13 @@ async def sync_lens_to_drive(student_id: str) -> bool:
             content=content,
             mime_type="text/markdown",
         )
+        record_sync_attempt(student_id, status="pushed", category=DEFAULT_SHARED_CATEGORY)
 
         # Machine-readable ledger alongside the human-readable lens: same
         # data class, same destination — full-state overwrite each sync,
         # ID-only filename.
         for teacher_id, ledger in ledgers.items():
+            assert_safe_for_external_output(ledger)
             await asyncio.to_thread(
                 upload_text_to_folder,
                 folder_id=folder_id,
@@ -325,11 +528,37 @@ async def sync_lens_to_drive(student_id: str) -> bool:
                 content=ledger,
                 mime_type="application/x-ndjson",
             )
+        if personal_obs:
+            if not personal_folder_id:
+                record_sync_attempt(
+                    student_id,
+                    status="queued",
+                    category=PERSONAL_CATEGORY,
+                    reason="personal folder is not configured",
+                )
+                logger.warning("Personal observations for %s were not synced: no Personal folder configured", student_id)
+            else:
+                personal_content = _personal_observation_markdown(student_id, personal_obs)
+                assert_safe_for_external_output(personal_content)
+                await asyncio.to_thread(
+                    upload_text_to_folder,
+                    folder_id=personal_folder_id,
+                    filename=f"{student_id}.personal.md",
+                    content=personal_content,
+                    mime_type="text/markdown",
+                )
+                record_sync_attempt(student_id, status="pushed", category=PERSONAL_CATEGORY)
         logger.info(f"Synced lens for {student_id} to Drive folder {folder_id}")
         return True
 
     except Exception as exc:
         logger.warning(f"Drive sync failed for {student_id}: {exc}")
+        record_sync_attempt(
+            student_id,
+            status="failed",
+            category=DEFAULT_SHARED_CATEGORY,
+            reason=type(exc).__name__,
+        )
         _record_pending_sync(student_id)
         return False
 
@@ -354,6 +583,9 @@ def build_ledger_ndjson(store, student_id: str, teacher_id: str) -> str:
     }
     lines = [json.dumps(header, ensure_ascii=True)]
     for row in store.local_observation_rows(student_id, teacher_id):
+        category = str(row.get("support_category") or "").strip()
+        if is_personal_support_category(category):
+            continue
         lines.append(json.dumps(row, ensure_ascii=True))
     return "\n".join(lines) + "\n"
 

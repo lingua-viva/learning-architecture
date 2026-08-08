@@ -1881,10 +1881,10 @@
           body: JSON.stringify(lessonPayload())
         });
         state.lessonPacketDraft = data;
-        const markdown = data.packet && data.packet.markdown ? data.packet.markdown : "";
+        const rendered = data.packet && data.packet.html ? data.packet.html : "";
         output.innerHTML = `
           <div class="view-head"><div><h3>Printable Packet Preview</h3><p>Review the teacher cover page and student handouts before approving a local file.</p></div><span class="badge warn">draft</span></div>
-          <pre class="output" style="white-space:pre-wrap;max-height:520px;overflow:auto;">${escapeHtml(markdown)}</pre>
+          <div class="output lesson-packet-rendered" style="max-height:520px;overflow:auto;">${rendered}</div>
           <div class="row" style="margin-top:12px;">
             <button id="approve-lesson-packet" class="primary" type="button">Approve Local Packet</button>
           </div>`;
@@ -1901,12 +1901,12 @@
       try {
         const data = await api("/api/lesson-materials/packet/approve", {
           method: "POST",
-          body: JSON.stringify({...lessonPayload(), materials: draft.materials || []})
+          body: JSON.stringify({...lessonPayload(), materials: draft.materials || [], individual_support: draft.individual_support || []})
         });
-        const markdown = data.packet && data.packet.markdown ? data.packet.markdown : "";
+        const rendered = data.packet && data.packet.html ? data.packet.html : "";
         output.innerHTML = `
           <div class="source-line"><span class="badge ok">approved</span><span class="badge">local file</span><span class="voice-hint">${escapeHtml(data.packet.file_path || "")}</span></div>
-          <pre class="output" style="white-space:pre-wrap;max-height:520px;overflow:auto;">${escapeHtml(markdown)}</pre>`;
+          <div class="output lesson-packet-rendered" style="max-height:520px;overflow:auto;">${rendered}</div>`;
         showSaveToast("printable packet approved");
       } catch (error) {
         output.innerHTML = `<p>${escapeHtml(error.message)}</p>`;
@@ -4206,6 +4206,7 @@
             <span id="settings-sync-badge" class="badge">checking...</span>
           </div>
           <div id="settings-sync-status" style="margin-top:8px;"><p class="voice-hint">Checking sync queue...</p></div>
+          <div id="settings-folder-map" style="margin-top:12px;"><p class="voice-hint">Loading Drive folder routing...</p></div>
         </div>
         <div class="panel" style="margin-top:14px;">
           <div class="view-head">
@@ -4277,8 +4278,56 @@
         const sBadge = $("settings-sync-badge");
         const sStatus = $("settings-sync-status");
         if (sBadge) { sBadge.textContent = `${sq.pending || 0} pending`; sBadge.classList.toggle("ok", (sq.pending || 0) === 0); }
-        if (sStatus) sStatus.innerHTML = `<p class="voice-hint">${sq.pending ? `${sq.pending} item${sq.pending > 1 ? "s" : ""} waiting to sync.` : "All synced — nothing pending."} ${sq.last_drain ? `Last sync: ${sq.last_drain}.` : ""}</p>`;
+        const lensSync = sq.lens_sync || {};
+        const lensRows = (lensSync.students || []).slice(0, 5).map(row => `
+          <div class="item">
+            <strong>${escapeHtml(row.student_id || "student")}</strong>
+            <p>${escapeHtml(row.last_status || "unknown")} · ${escapeHtml(row.last_category || "sync")} ${row.failure_reason ? `· ${escapeHtml(row.failure_reason)}` : ""}</p>
+          </div>`).join("");
+        if (sStatus) sStatus.innerHTML = `
+          <p class="voice-hint">${sq.pending ? `${sq.pending} item${sq.pending > 1 ? "s" : ""} waiting to sync.` : "All synced — nothing pending."} ${sq.last_drain ? `Last sync: ${sq.last_drain}.` : ""}</p>
+          ${lensRows ? `<div class="list" style="margin-top:8px;">${lensRows}</div>` : ""}`;
       } catch { const sb = $("settings-sync-badge"); if (sb) sb.textContent = "offline"; }
+      await renderFolderMapControls();
+    }
+
+    async function renderFolderMapControls() {
+      const host = $("settings-folder-map");
+      if (!host) return;
+      try {
+        const data = await api("/api/google-drive/sync-folder-map");
+        const folderMap = data.folder_map || {};
+        const rows = (data.categories || []).map(cat => `
+          <label>${escapeHtml(cat.label)}
+            <input data-folder-map-category="${escapeHtml(cat.id)}" value="${escapeHtml(folderMap[cat.id] || "")}" placeholder="Drive folder ID">
+          </label>`).join("");
+        host.innerHTML = `
+          <h3>Drive Folder Routing</h3>
+          <p class="voice-hint">Student Summaries is the shared lens destination. Personal must point at a restricted folder; if it is blank, Personal observations are queued and written nowhere else.</p>
+          <div class="grid">${rows}</div>
+          <div class="row" style="margin-top:12px;"><button id="save-folder-map" class="primary" type="button">Save routing</button><span id="folder-map-status" class="voice-hint"></span></div>`;
+        $("save-folder-map").addEventListener("click", saveFolderMapControls);
+      } catch (error) {
+        host.innerHTML = `<p class="voice-hint">Could not read folder routing: ${escapeHtml(error.message || "unknown error")}</p>`;
+      }
+    }
+
+    async function saveFolderMapControls() {
+      const status = $("folder-map-status");
+      const folderMap = {};
+      document.querySelectorAll("[data-folder-map-category]").forEach(input => {
+        folderMap[input.dataset.folderMapCategory] = input.value.trim();
+      });
+      if (status) status.textContent = "Saving...";
+      try {
+        await api("/api/google-drive/sync-folder-map", {
+          method: "POST",
+          body: JSON.stringify({folder_map: folderMap})
+        });
+        if (status) status.textContent = "Saved.";
+      } catch (error) {
+        if (status) status.textContent = error.message || "Could not save routing.";
+      }
     }
 
     // --- Teacher identity (teacher-identity P1, 2026-08-02) ----------------

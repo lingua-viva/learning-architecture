@@ -3312,7 +3312,19 @@ async def voice_probe():
 async def sync_status_endpoint():
     """B4: Sync queue status for the Settings panel. Returns pending/pushed/failed counts."""
     from src.lingua_viva.docpipe.sync import sync_status as _sync_status
-    return _sync_status()
+    from src.lingua_viva.drive_sync import read_sync_ledger
+
+    status = _sync_status()
+    ledger = read_sync_ledger()
+    students = ledger.get("students", {}) if isinstance(ledger, dict) else {}
+    if isinstance(students, dict):
+        status["lens_sync"] = {
+            "students": list(students.values()),
+            "failed": sum(1 for row in students.values() if row.get("last_status") == "failed"),
+            "queued": sum(1 for row in students.values() if row.get("last_status") == "queued"),
+            "pushed": sum(1 for row in students.values() if row.get("last_status") == "pushed"),
+        }
+    return status
 
 
 @app.post("/api/voice/stt")
@@ -5379,7 +5391,7 @@ async def cohort_plans_list(request: Request, teacher_id: str = "local-teacher",
 async def lesson_materials_generate(request: Request, payload: dict):
     from src.lingua_viva.access_roles import effective_teacher_id
     from src.lingua_viva.lesson_materials import (
-        assign_tier_groups,
+        assign_roster_split,
         generate_lesson_materials,
         materials_as_dicts,
     )
@@ -5395,16 +5407,17 @@ async def lesson_materials_generate(request: Request, payload: dict):
     # Store phase in one thread hop (sqlite is thread-bound), seeded roster —
     # same store the cohort endpoints see. LLM phase runs async afterwards.
     def load(store):
-        return assign_tier_groups(store, teacher_id, student_ids)
+        return assign_roster_split(store, teacher_id, student_ids)
 
     try:
-        groups, roster_names = await asyncio.to_thread(_with_student_store, load)
+        split = await asyncio.to_thread(_with_student_store, load)
         result = await generate_lesson_materials(
             lesson=lesson,
             teacher_id=teacher_id,
             push_to_drive=push_to_drive,
-            tier_groups=groups,
-            roster_names=roster_names,
+            tier_groups=split.tier_groups,
+            roster_names=split.roster_names,
+            individual_support=split.individual_support,
         )
     except PermissionError as exc:
         return JSONResponse({"error": "unauthorized_student_ids", "detail": str(exc)}, status_code=422)
@@ -5413,6 +5426,7 @@ async def lesson_materials_generate(request: Request, payload: dict):
 
     return {
         "materials": materials_as_dicts(result),
+        "individual_support": [item.__dict__ for item in result.individual_support],
         "lesson_summary": result.lesson_summary,
         "sync_status": result.sync_status,
         "requires_teacher_approval": True,
@@ -5420,13 +5434,64 @@ async def lesson_materials_generate(request: Request, payload: dict):
     }
 
 
+@app.post("/api/lesson-materials/library/pull")
+async def lesson_materials_library_pull(request: Request, payload: dict):
+    from src.lingua_viva.lesson_materials import pull_course_library
+
+    folder_id = str(payload.get("folder_id") or "").strip()
+    grade = str(payload.get("grade") or "").strip()
+    subject = str(payload.get("subject") or "language").strip()
+    if not folder_id or not grade or not subject:
+        return JSONResponse({"error": "folder_id_grade_subject_required"}, status_code=400)
+    try:
+        result = await asyncio.to_thread(pull_course_library, folder_id, grade, subject)
+    except ValueError as exc:
+        return JSONResponse({"error": "invalid_library_request", "detail": str(exc)}, status_code=400)
+    except Exception as exc:
+        return JSONResponse({"error": "library_pull_failed", "detail": str(exc)}, status_code=422)
+    return result
+
+
+@app.get("/api/lesson-materials/library")
+async def lesson_materials_library_list(grade: str, subject: str = "language"):
+    from src.lingua_viva.lesson_materials import list_course_library
+
+    return list_course_library(str(grade or ""), str(subject or "language"))
+
+
+@app.post("/api/lesson-materials/today")
+async def lesson_materials_today(request: Request, payload: dict):
+    from src.lingua_viva.access_roles import effective_teacher_id
+    from src.lingua_viva.lesson_materials import read_todays_lesson_text, select_todays_lesson
+
+    teacher_id = effective_teacher_id(request, str(payload.get("teacher_id") or "local-teacher"))
+    try:
+        selection = await asyncio.to_thread(
+            select_todays_lesson,
+            teacher_id=teacher_id,
+            class_id=str(payload.get("class_id") or "default"),
+            grade=str(payload.get("grade") or ""),
+            subject=str(payload.get("subject") or "language"),
+            local_path=str(payload.get("local_path") or ""),
+        )
+        text = await asyncio.to_thread(read_todays_lesson_text, selection.local_path)
+    except ValueError as exc:
+        return JSONResponse({"error": "invalid_lesson_selection", "detail": str(exc)}, status_code=400)
+    return {
+        "selection": selection.__dict__,
+        "lesson_text": text,
+        "lesson_excerpt": text[:1000],
+    }
+
+
 @app.post("/api/lesson-materials/packet/preview")
 async def lesson_materials_packet_preview(request: Request, payload: dict):
     from src.lingua_viva.access_roles import effective_teacher_id
     from src.lingua_viva.lesson_materials import (
-        assign_tier_groups,
+        assign_roster_split,
         generate_lesson_materials,
         materials_as_dicts,
+        render_printable_packet_html,
         render_printable_packet_markdown,
     )
 
@@ -5438,18 +5503,25 @@ async def lesson_materials_packet_preview(request: Request, payload: dict):
     student_ids = payload.get("student_ids") if isinstance(payload.get("student_ids"), list) else None
 
     def load(store):
-        return assign_tier_groups(store, teacher_id, student_ids)
+        return assign_roster_split(store, teacher_id, student_ids)
 
     try:
-        groups, roster_names = await asyncio.to_thread(_with_student_store, load)
+        split = await asyncio.to_thread(_with_student_store, load)
         result = await generate_lesson_materials(
             lesson=lesson,
             teacher_id=teacher_id,
             push_to_drive=False,
-            tier_groups=groups,
-            roster_names=roster_names,
+            tier_groups=split.tier_groups,
+            roster_names=split.roster_names,
+            individual_support=split.individual_support,
         )
-        markdown = render_printable_packet_markdown(lesson, result.materials)
+        markdown = render_printable_packet_markdown(
+            lesson,
+            result.materials,
+            individual_support=result.individual_support,
+        )
+        html = render_printable_packet_html(markdown)
+        print_html = render_printable_packet_html(markdown, print_ready=True)
     except PermissionError as exc:
         return JSONResponse({"error": "unauthorized_student_ids", "detail": str(exc)}, status_code=422)
     except ValueError as exc:
@@ -5457,12 +5529,15 @@ async def lesson_materials_packet_preview(request: Request, payload: dict):
 
     return {
         "packet": {
-            "format": "markdown",
+            "format": "html+markdown",
             "markdown": markdown,
+            "html": html,
+            "print_html": print_html,
             "filename": None,
             "printable": True,
         },
         "materials": materials_as_dicts(result),
+        "individual_support": [item.__dict__ for item in result.individual_support],
         "lesson_summary": result.lesson_summary,
         "requires_teacher_approval": True,
         "writes": {"deliverables": 0, "audit_receipts": 0},
@@ -5480,12 +5555,15 @@ async def lesson_materials_packet_approve(request: Request, payload: dict):
     )
     from src.lingua_viva.deliverables.store import upsert_deliverable
     from src.lingua_viva.lesson_materials import (
-        assign_tier_groups,
+        IndividualSupportStudent,
+        assign_roster_split,
         generate_lesson_materials,
         material_from_dict,
         materials_as_dicts,
         printable_packet_hash,
+        render_printable_packet_html,
         render_printable_packet_markdown,
+        share_packet_to_drive,
         write_printable_packet,
     )
 
@@ -5496,6 +5574,16 @@ async def lesson_materials_packet_approve(request: Request, payload: dict):
         return JSONResponse({"error": "invalid_lesson", "detail": str(exc)}, status_code=400)
 
     materials_payload = payload.get("materials") if isinstance(payload.get("materials"), list) else []
+    support_payload = payload.get("individual_support") if isinstance(payload.get("individual_support"), list) else []
+    individual_support = [
+        IndividualSupportStudent(
+            student_id=str(item.get("student_id") or ""),
+            display_name=str(item.get("display_name") or item.get("student_id") or ""),
+            reason=str(item.get("reason") or ""),
+        )
+        for item in support_payload
+        if isinstance(item, dict)
+    ]
     try:
         if materials_payload:
             materials = [material_from_dict(item) for item in materials_payload if isinstance(item, dict)]
@@ -5505,25 +5593,34 @@ async def lesson_materials_packet_approve(request: Request, payload: dict):
             student_ids = payload.get("student_ids") if isinstance(payload.get("student_ids"), list) else None
 
             def load(store):
-                return assign_tier_groups(store, teacher_id, student_ids)
+                return assign_roster_split(store, teacher_id, student_ids)
 
-            groups, roster_names = await asyncio.to_thread(_with_student_store, load)
+            split = await asyncio.to_thread(_with_student_store, load)
             result = await generate_lesson_materials(
                 lesson=lesson,
                 teacher_id=teacher_id,
                 push_to_drive=False,
-                tier_groups=groups,
-                roster_names=roster_names,
+                tier_groups=split.tier_groups,
+                roster_names=split.roster_names,
+                individual_support=split.individual_support,
             )
             materials = result.materials
+            individual_support = result.individual_support
     except PermissionError as exc:
         return JSONResponse({"error": "unauthorized_student_ids", "detail": str(exc)}, status_code=422)
     except ValueError as exc:
         return JSONResponse({"error": "approval_failed", "detail": str(exc)}, status_code=422)
 
     try:
-        path = await asyncio.to_thread(write_printable_packet, lesson, materials)
+        path = await asyncio.to_thread(
+            write_printable_packet,
+            lesson,
+            materials,
+            individual_support=individual_support,
+        )
         markdown = Path(path).read_text(encoding="utf-8")
+        html = render_printable_packet_html(markdown)
+        print_html = render_printable_packet_html(markdown, print_ready=True)
     except ValueError as exc:
         return JSONResponse({"error": "approval_failed", "detail": str(exc)}, status_code=422)
 
@@ -5558,26 +5655,30 @@ async def lesson_materials_packet_approve(request: Request, payload: dict):
     sync_status = "not_requested"
     drive_result = None
     if bool(payload.get("push_to_drive", False)):
-        try:
-            from src.lingua_viva.google_drive_integration import upload_paths
-
-            drive_result = await asyncio.to_thread(
-                upload_paths,
-                [str(path)],
-                str(payload.get("folder_id") or ""),
-            )
-            sync_status = "pushed_to_drive" if drive_result.get("uploaded") else "push_failed"
-        except Exception:
-            sync_status = "push_failed"
+        drive_result = await asyncio.to_thread(
+            share_packet_to_drive,
+            lesson,
+            materials,
+            folder_map=payload.get("folder_map") if isinstance(payload.get("folder_map"), dict) else None,
+            folder_id=str(payload.get("folder_id") or ""),
+            class_id=str(payload.get("class_id") or "default"),
+            grade=str(payload.get("grade") or ""),
+            subject=str(payload.get("subject") or lesson.subject),
+            lesson_title=str(payload.get("lesson_title") or lesson.topic),
+        )
+        sync_status = str(drive_result.get("status") or "push_failed")
 
     return {
         "packet": {
-            "format": "markdown",
+            "format": "html+markdown",
             "markdown": markdown,
+            "html": html,
+            "print_html": print_html,
             "file_path": str(path),
             "printable": True,
         },
         "materials": materials_as_dicts(materials),
+        "individual_support": [item.__dict__ for item in individual_support],
         "deliverable": deliverable.as_dict(),
         "audit_receipt": receipt.as_dict(),
         "sync_status": sync_status,
@@ -6442,6 +6543,41 @@ async def get_drive_sync_folder():
 
     folder_id = get_sync_folder_id()
     return {"sync_folder_id": folder_id, "configured": bool(folder_id)}
+
+
+@app.get("/api/google-drive/sync-folder-map")
+async def get_drive_sync_folder_map():
+    from src.lingua_viva.drive_sync import FOLDER_CATEGORIES, get_sync_folder_map
+
+    folder_map = get_sync_folder_map()
+    return {
+        "folder_map": folder_map,
+        "categories": [
+            {"id": key, "label": label, "configured": bool(folder_map.get(key))}
+            for key, label in FOLDER_CATEGORIES.items()
+        ],
+    }
+
+
+@app.post("/api/google-drive/sync-folder-map")
+async def set_drive_sync_folder_map(payload: dict):
+    from src.lingua_viva.drive_sync import FOLDER_CATEGORIES, set_sync_folder_map
+
+    raw_map = payload.get("folder_map") if isinstance(payload, dict) else None
+    if not isinstance(raw_map, dict):
+        return JSONResponse({"error": "folder_map is required"}, status_code=400)
+    try:
+        folder_map = set_sync_folder_map({str(k): str(v) for k, v in raw_map.items()})
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    return {
+        "folder_map": folder_map,
+        "categories": [
+            {"id": key, "label": label, "configured": bool(folder_map.get(key))}
+            for key, label in FOLDER_CATEGORIES.items()
+        ],
+        "status": "configured",
+    }
 
 
 @app.post("/api/drive/pull-shared")
