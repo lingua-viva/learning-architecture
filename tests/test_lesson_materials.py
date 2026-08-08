@@ -133,6 +133,53 @@ def test_assign_roster_split_keeps_explicit_support_apart():
     assert split.individual_support[0].reason == "support_profile_flag"
 
 
+def test_tier_overrides_applied_and_recorded(tmp_path, monkeypatch):
+    """Spec G2: assignments are teacher-overridable per student per day,
+    and overrides are recorded (append-only, dated, teacher-attributed)."""
+    import json
+
+    from src.lingua_viva.lesson_materials import roster_overrides_path
+
+    monkeypatch.setenv("LV_ROSTER_OVERRIDES_PATH", str(tmp_path / "roster_overrides.ndjson"))
+    roster = [
+        _lens("student-a", "Student A", rti=1, cefr="A2"),   # would be on_track
+        _lens("student-b", "Student B", rti=3, cefr="A1"),   # would be support (RTI 3)
+        _lens("student-c", "Student C", rti=1, cefr="B2"),   # would be extended
+    ]
+    split = assign_roster_split(
+        FakeStore(roster),
+        "teacher-a",
+        overrides={
+            "student-a": "extended",            # tier -> tier
+            "student-b": "on_track",            # support -> tier (teacher wins)
+            "student-c": "individual_support",  # tier -> kept-apart group
+            "student-x": "on_track",            # not on roster: ignored, not applied
+            "student-a2": "bogus_tier",         # invalid value: dropped
+        },
+    )
+    assert split.tier_groups["extended"] == ["student-a"]
+    assert split.tier_groups["on_track"] == ["student-b"]
+    assert [s.student_id for s in split.individual_support] == ["student-c"]
+    assert split.individual_support[0].reason == "teacher_override"
+    assert split.overrides == {
+        "student-a": "extended",
+        "student-b": "on_track",
+        "student-c": "individual_support",
+    }
+    # Recorded: one dated, teacher-attributed line with exactly the applied set.
+    lines = roster_overrides_path().read_text(encoding="utf-8").strip().splitlines()
+    assert len(lines) == 1
+    record = json.loads(lines[0])
+    assert record["teacher_id"] == "teacher-a"
+    assert record["overrides"] == split.overrides
+    assert record["recorded_at"].endswith("Z")
+
+    # No overrides -> nothing applied, nothing appended (record stays 1 line).
+    clean = assign_roster_split(FakeStore(roster), "teacher-a")
+    assert clean.overrides == {}
+    assert len(roster_overrides_path().read_text(encoding="utf-8").strip().splitlines()) == 1
+
+
 def test_no_student_names_in_llm_prompts_or_content():
     engine = FakeEngine()
     result = _generate(engine=engine)

@@ -5450,6 +5450,16 @@ async def cohort_plans_list(request: Request, teacher_id: str = "local-teacher",
     return {"plans": read_cohort_plans(effective_id, limit=limit), "teacher_id": effective_id}
 
 
+def _tier_overrides_from_payload(payload: dict) -> dict | None:
+    """Teacher per-day tier overrides: {student_id: tier|"individual_support"}.
+
+    Value validation and the append-only override record both happen in
+    assign_roster_split (spec G2: overrides recorded).
+    """
+    raw = payload.get("tier_overrides")
+    return raw if isinstance(raw, dict) and raw else None
+
+
 @app.post("/api/lesson-materials/generate")
 async def lesson_materials_generate(request: Request, payload: dict):
     from src.lingua_viva.access_roles import effective_teacher_id
@@ -5465,12 +5475,13 @@ async def lesson_materials_generate(request: Request, payload: dict):
     except (TypeError, ValueError) as exc:
         return JSONResponse({"error": "invalid_lesson", "detail": str(exc)}, status_code=400)
     student_ids = payload.get("student_ids") if isinstance(payload.get("student_ids"), list) else None
+    tier_overrides = _tier_overrides_from_payload(payload)
     push_to_drive = bool(payload.get("push_to_drive", True))
 
     # Store phase in one thread hop (sqlite is thread-bound), seeded roster —
     # same store the cohort endpoints see. LLM phase runs async afterwards.
     def load(store):
-        return assign_roster_split(store, teacher_id, student_ids)
+        return assign_roster_split(store, teacher_id, student_ids, overrides=tier_overrides)
 
     try:
         split = await asyncio.to_thread(_with_student_store, load)
@@ -5490,6 +5501,7 @@ async def lesson_materials_generate(request: Request, payload: dict):
     return {
         "materials": materials_as_dicts(result),
         "individual_support": [item.__dict__ for item in result.individual_support],
+        "tier_overrides": split.overrides,
         "lesson_summary": result.lesson_summary,
         "sync_status": result.sync_status,
         "requires_teacher_approval": True,
@@ -5564,9 +5576,10 @@ async def lesson_materials_packet_preview(request: Request, payload: dict):
     except (TypeError, ValueError) as exc:
         return JSONResponse({"error": "invalid_lesson", "detail": str(exc)}, status_code=400)
     student_ids = payload.get("student_ids") if isinstance(payload.get("student_ids"), list) else None
+    tier_overrides = _tier_overrides_from_payload(payload)
 
     def load(store):
-        return assign_roster_split(store, teacher_id, student_ids)
+        return assign_roster_split(store, teacher_id, student_ids, overrides=tier_overrides)
 
     try:
         split = await asyncio.to_thread(_with_student_store, load)
@@ -5654,9 +5667,10 @@ async def lesson_materials_packet_approve(request: Request, payload: dict):
                 raise ValueError("materials must contain exactly three tiers")
         else:
             student_ids = payload.get("student_ids") if isinstance(payload.get("student_ids"), list) else None
+            tier_overrides = _tier_overrides_from_payload(payload)
 
             def load(store):
-                return assign_roster_split(store, teacher_id, student_ids)
+                return assign_roster_split(store, teacher_id, student_ids, overrides=tier_overrides)
 
             split = await asyncio.to_thread(_with_student_store, load)
             result = await generate_lesson_materials(

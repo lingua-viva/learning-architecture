@@ -113,6 +113,10 @@ class RosterSplit:
     tier_groups: dict[str, list[str]]
     roster_names: list[str]
     individual_support: list[IndividualSupportStudent]
+    # Teacher overrides actually applied to this split (student_id -> tier or
+    # "individual_support"). Recorded so per-day assignment changes are
+    # auditable, per SPEC_LV_TIERED_MATERIALS_FULL_CIRCLE G2.
+    overrides: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -237,12 +241,13 @@ def assign_roster_split(
     overrides = {
         str(key): str(value)
         for key, value in (overrides or {}).items()
-        if str(value) in TIERS
+        if str(value) in TIERS or str(value) == "individual_support"
     }
     diff = ContentDifferentiator()
     groups: dict[str, list[str]] = {tier: [] for tier in TIERS}
     names: list[str] = []
     individual_support: list[IndividualSupportStudent] = []
+    applied: dict[str, str] = {}
     for lens in roster:
         student_id = str(lens.get("student_id") or "")
         if not student_id:
@@ -251,7 +256,17 @@ def assign_roster_split(
         if display_name:
             names.append(display_name)
         if student_id in overrides:
-            groups[overrides[student_id]].append(student_id)
+            applied[student_id] = overrides[student_id]
+            if overrides[student_id] == "individual_support":
+                individual_support.append(
+                    IndividualSupportStudent(
+                        student_id=student_id,
+                        display_name=display_name or student_id,
+                        reason="teacher_override",
+                    )
+                )
+            else:
+                groups[overrides[student_id]].append(student_id)
             continue
         reason = _individual_support_reason(lens)
         if reason:
@@ -264,7 +279,35 @@ def assign_roster_split(
             )
             continue
         groups[diff.assign_tier_for_student(lens)].append(student_id)
-    return RosterSplit(groups, names, individual_support)
+    if applied:
+        record_roster_overrides(teacher_id, applied)
+    return RosterSplit(groups, names, individual_support, overrides=applied)
+
+
+def roster_overrides_path() -> Path:
+    override = os.environ.get("LV_ROSTER_OVERRIDES_PATH")
+    return Path(override).expanduser() if override else lesson_materials_runtime_dir() / "roster_overrides.ndjson"
+
+
+def record_roster_overrides(teacher_id: str, applied: dict[str, str]) -> None:
+    """Append-only record of teacher tier overrides actually applied.
+
+    One line per split that used overrides — dated, teacher-attributed, so
+    per-day assignment changes stay auditable (spec G2: "overrides recorded").
+    Contains student_ids and tier names only, never narration or lens content.
+    """
+    path = roster_overrides_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    line = json.dumps(
+        {"recorded_at": _now_z(), "teacher_id": teacher_id, "overrides": applied},
+        sort_keys=True,
+    )
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(line + "\n")
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
 
 
 def assign_tier_groups(
