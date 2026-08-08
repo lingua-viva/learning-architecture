@@ -23,7 +23,7 @@ def test_data_dir_redirects_out_of_bundle_in_electron_desktop_context(monkeypatc
     repo_data_dir = Path(__file__).resolve().parent.parent / "sanitizer" / "data"
     assert data_dir != repo_data_dir
     assert repo_data_dir not in data_dir.parents and data_dir != repo_data_dir
-    assert data_dir == tmp_path / "sanitizer"
+    assert data_dir == tmp_path / "runtime" / "sanitizer"
 
 
 def test_data_dir_never_defaults_to_stale_still_i_rise_home(monkeypatch, tmp_path):

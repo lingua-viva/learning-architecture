@@ -20,7 +20,6 @@ import json
 import logging
 import os
 import re
-import sys
 import time
 from collections import defaultdict
 from datetime import datetime
@@ -50,21 +49,10 @@ def _data_dir() -> Path:
     override = os.environ.get("LV_SANITIZER_DATA_DIR")
     if override:
         data_dir = Path(override)
-    elif getattr(sys, "frozen", False) or os.environ.get("ELECTRON_RUN_AS_NODE") or os.environ.get("LV_DESKTOP"):
-        # Electron/PyInstaller/desktop: never write inside the signed bundle.
-        # Use the same state home as the rest of the app.
-        lv_home = os.environ.get("LV_STATE_HOME") or str(Path.home() / ".lingua-viva")
-        data_dir = Path(lv_home) / "sanitizer"
     else:
-        # Dev mode: check if we're inside a signed/read-only bundle by testing
-        # whether __file__ is inside an .app or Resources path. If so, redirect.
-        here = Path(__file__).resolve()
-        in_bundle = ".app/" in str(here) or "/Resources/" in str(here)
-        if in_bundle:
-            lv_home = os.environ.get("LV_STATE_HOME") or str(Path.home() / ".lingua-viva")
-            data_dir = Path(lv_home) / "sanitizer"
-        else:
-            data_dir = Path(__file__).parent / "data"
+        from src.lingua_viva.runtime_paths import runtime_data_dir
+
+        data_dir = runtime_data_dir("sanitizer")
     data_dir.mkdir(parents=True, exist_ok=True)
     return data_dir
 
