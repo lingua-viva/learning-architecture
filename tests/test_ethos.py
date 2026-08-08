@@ -258,7 +258,7 @@ class TestStudentLensV21:
 
 
 # ----------------------------------------------------------------------
-# observation_capture.py — suggestion-only wiring, teacher authority
+# observation_capture.py — pending suggestion wiring, teacher authority
 # ----------------------------------------------------------------------
 
 
@@ -267,7 +267,7 @@ class TestCaptureWiring:
     def pipe(self, store):
         return ObservationCapturePipeline(store)
 
-    def test_capture_returns_suggestions_never_auto_writes(self, store, student, pipe):
+    def test_capture_returns_suggestions_and_writes_pending_evidence(self, store, student, pipe):
         r = pipe.capture(
             student_id=student,
             teacher_id="t1",
@@ -285,9 +285,11 @@ class TestCaptureWiring:
         }
         for s in sugs:
             assert s["confidence"] == "model_suggested"
-            assert s["status"] == "pending_teacher_confirmation"
-        # THE invariant: nothing written to the profile without a teacher
-        assert store.get_lens(student)["ethos_profile"]["traits"] == {}
+            assert s["status"] == "inferred_pending_review"
+        traits = store.get_lens(student)["ethos_profile"]["traits"]
+        assert traits["grit"]["evidence"][0]["confidence"] == "model_suggested"
+        assert traits["emotional_intelligence"]["evidence"][0]["confidence"] == "model_suggested"
+        assert traits["social_intelligence"]["evidence"][0]["confidence"] == "model_suggested"
 
     def test_confirm_writes_teacher_confirmed_with_source(self, store, student, pipe):
         r = pipe.capture(
@@ -305,6 +307,7 @@ class TestCaptureWiring:
         ev = ep["traits"]["grit"]["evidence"][0]
         assert ev["confidence"] == "teacher_confirmed"
         assert ev["source_observation_id"] == obs_id
+        assert len(ep["traits"]["grit"]["evidence"]) == 1
 
     def test_broken_taxonomy_never_breaks_capture(self, store, student, pipe):
         with open(os.environ["LV_ETHOS_PATH"], "w") as f:

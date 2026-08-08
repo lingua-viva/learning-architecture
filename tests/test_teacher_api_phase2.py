@@ -64,15 +64,18 @@ def test_observe_students_parents_and_reflect_endpoints(monkeypatch, tmp_path):
         "template_type": "cefr",
         "cefr_dimension": "speaking",
         "cefr_level_observed": "A2",
+        "ethos_trait_id": "grit",
     })
     assert obs.status_code == 200
     assert obs.json()["local_only"] is True
     assert obs.json()["lens_refresh"]["cefr_snapshot"]["speaking"] == "A2"
     assert obs.json()["lens_refresh"]["profile_version"] >= 2
+    assert obs.json()["ethos_trait_suggestions"][0]["status"] == "teacher_confirmed"
 
     lens = client.get(f"/api/students/{student_id}/lens")
     assert lens.status_code == 200
     assert lens.json()["observations"]
+    assert lens.json()["ethos_profile"]["traits"]["grit"]["evidence"][0]["confidence"] == "teacher_confirmed"
     assert lens.json()["rti_proposals"][0]["message"].startswith("System suggests")
 
     parent = client.post("/api/parents/recommendation", json={

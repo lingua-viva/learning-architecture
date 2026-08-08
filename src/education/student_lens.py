@@ -2326,10 +2326,68 @@ class StudentLensStore:
         # Idempotency: identical summary + source for the same trait is a
         # double-submit — return unchanged, no profile_version bump.
         for existing in trait_bucket["evidence"]:
+            same_source = (
+                existing.get("source_observation_id") == source_observation_id
+            )
             if (
                 existing.get("summary") == summary
-                and existing.get("source_observation_id") == source_observation_id
+                and same_source
             ):
+                return profile, existing
+            if (
+                same_source
+                and existing.get("confidence") == "model_suggested"
+                and confidence == "teacher_confirmed"
+            ):
+                existing["summary"] = summary
+                existing["evidence_type"] = evidence_type
+                existing["source_ref_ids"] = _validate_source_ref_ids(source_ref_ids)
+                existing["created_by"] = created_by
+                existing["confidence"] = confidence
+                if kind is None:
+                    kind = (
+                        "observation_ref"
+                        if source_observation_id
+                        else "teacher_feedback"
+                    )
+                if source_ref is None:
+                    source_ref = (
+                        {"observation_id": source_observation_id}
+                        if source_observation_id
+                        else None
+                    )
+                self._conn.execute(
+                    """
+                    UPDATE evidence_records SET
+                        teacher_id = ?,
+                        kind = ?,
+                        summary = ?,
+                        source_ref = ?,
+                        confidence_level = ?
+                    WHERE evidence_id = ?
+                    """,
+                    (
+                        created_by,
+                        kind,
+                        summary,
+                        json.dumps(source_ref) if source_ref is not None else None,
+                        confidence,
+                        existing["id"],
+                    ),
+                )
+                self._recompute_ethos_rollup(student_id, profile)
+                now = _now_iso()
+                self._conn.execute(
+                    """
+                    UPDATE students SET
+                        ethos_profile = ?,
+                        profile_version = profile_version + 1,
+                        updated_at = ?
+                    WHERE student_id = ?
+                    """,
+                    (json.dumps(profile), now, student_id),
+                )
+                self._conn.commit()
                 return profile, existing
         item = {
             "id": str(uuid.uuid4()),

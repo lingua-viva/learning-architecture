@@ -371,6 +371,9 @@ def test_drive_workspace_ui_mounts_controls():
         "Nothing is added to the student lens until you approve it",
         "student_lens_source",
         "curriculum_unit_source",
+        "obs-ethos-trait",
+        "Still I Rise Key",
+        "Infer if clear",
     ):
         assert text in html, f"missing UI mount: {text}"
 

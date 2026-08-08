@@ -192,6 +192,7 @@ class ObservationCapturePipeline:
         support_entries: Optional[list[dict]] = None,
         classification_guidance: Optional[dict] = None,
         teacher_feedback: Optional[dict] = None,
+        ethos_trait_id: Optional[str] = None,
     ) -> dict:
         """
         Classify + govern + sanitize-audit + persist one observation.
@@ -259,8 +260,12 @@ class ObservationCapturePipeline:
         )
 
         result = self.store.append_observation(observation)
-        result["ethos_trait_suggestions"] = self._suggest_ethos_traits(
-            text_for_classification
+        result["ethos_trait_suggestions"] = self._record_ethos_trait_mapping(
+            student_id=student_id,
+            teacher_id=teacher_id,
+            observation_id=observation.observation_id,
+            text=text_for_classification,
+            explicit_trait_id=ethos_trait_id,
         )
         result["category_suggestions"] = suggest_support_categories(
             text_for_classification
@@ -282,6 +287,54 @@ class ObservationCapturePipeline:
         }
         result["governance_note"] = governance_note
         return result
+
+    def _trait_summary(self, text: str) -> str:
+        cleaned = " ".join(str(text or "").split())
+        return cleaned[:240] or "Observation evidence"
+
+    def _record_ethos_trait_mapping(
+        self,
+        *,
+        student_id: str,
+        teacher_id: str,
+        observation_id: str,
+        text: str,
+        explicit_trait_id: Optional[str],
+    ) -> list[dict]:
+        suggestions = self._suggest_ethos_traits(text)
+        if suggestions and suggestions[0].get("status") == "taxonomy_error":
+            return suggestions
+        summary = self._trait_summary(text)
+        explicit_trait_id = str(explicit_trait_id or "").strip() or None
+        if explicit_trait_id:
+            self.store.add_ethos_evidence(
+                student_id,
+                explicit_trait_id,
+                summary,
+                teacher_id,
+                source_observation_id=observation_id,
+                confidence="teacher_confirmed",
+            )
+            return [{
+                "trait_id": explicit_trait_id,
+                "confidence": "teacher_confirmed",
+                "status": "teacher_confirmed",
+            }]
+        written = []
+        for suggestion in suggestions:
+            trait_id = suggestion.get("trait_id")
+            if not trait_id:
+                continue
+            self.store.add_ethos_evidence(
+                student_id,
+                trait_id,
+                summary,
+                teacher_id,
+                source_observation_id=observation_id,
+                confidence="model_suggested",
+            )
+            written.append({**suggestion, "status": "inferred_pending_review"})
+        return written
 
     def _autofile_strategy_outcome(
         self, observation: Observation, suggestions: list[dict]
@@ -345,11 +398,11 @@ class ObservationCapturePipeline:
 
     def _suggest_ethos_traits(self, text: str) -> list[dict]:
         """Deterministic (keyword-based, no LLM) school-ethos trait
-        suggestions for an observation. Suggestions are NEVER auto-written
-        to the student's ethos_profile — the teacher confirms each one via
-        confirm_ethos_suggestion(). A broken/invalid local ethos.yaml must
-        not break the capture write path, so taxonomy problems degrade to
-        zero suggestions with a note instead of raising."""
+        suggestions for an observation. The caller records these as
+        model_suggested evidence pending teacher review; explicit teacher
+        picks are recorded as teacher_confirmed evidence. A broken/invalid
+        local ethos.yaml must not break the capture write path, so taxonomy
+        problems degrade to zero suggestions with a note instead of raising."""
         from src.education import ethos as ethos_mod
 
         try:

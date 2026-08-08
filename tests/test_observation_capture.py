@@ -208,6 +208,46 @@ def test_observation_export_includes_structured_fields(pipeline):
     assert obs["source_type"] == "teacher_note"
 
 
+def test_grit_observation_lands_as_inferred_trait_evidence(pipeline):
+    sid = pipeline.store.create_lens()
+    result = pipeline.capture(
+        student_id=sid,
+        teacher_id="t1",
+        raw_transcript="She kept trying after a setback and showed grit.",
+        template_type="general",
+    )
+
+    assert result["ethos_trait_suggestions"][0]["trait_id"] == "grit"
+    assert result["ethos_trait_suggestions"][0]["status"] == "inferred_pending_review"
+
+    lens = pipeline.store.get_lens(sid)
+    evidence = lens["ethos_profile"]["traits"]["grit"]["evidence"][0]
+    assert evidence["confidence"] == "model_suggested"
+    assert evidence["source_observation_id"] == result["observation"]["observation_id"]
+
+
+def test_explicit_trait_dropdown_writes_teacher_confirmed_evidence(pipeline):
+    sid = pipeline.store.create_lens()
+    result = pipeline.capture(
+        student_id=sid,
+        teacher_id="t1",
+        raw_transcript="She used a checklist to organize the group task.",
+        template_type="general",
+        ethos_trait_id="self_organization",
+    )
+
+    assert result["ethos_trait_suggestions"] == [{
+        "trait_id": "self_organization",
+        "confidence": "teacher_confirmed",
+        "status": "teacher_confirmed",
+    }]
+
+    lens = pipeline.store.get_lens(sid)
+    evidence = lens["ethos_profile"]["traits"]["self_organization"]["evidence"][0]
+    assert evidence["confidence"] == "teacher_confirmed"
+    assert evidence["source_observation_id"] == result["observation"]["observation_id"]
+
+
 def test_capture_with_multiple_support_entries_updates_multiple_categories(pipeline):
     sid = pipeline.store.create_lens(display_name="Multi Category Test")
     result = pipeline.capture(

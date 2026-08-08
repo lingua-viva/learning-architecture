@@ -1916,6 +1916,10 @@
     async function renderObserve() {
       setTitle("Observe", "local observation");
       await ensureStudents();
+      const taxonomy = await ensureEthosTaxonomy();
+      const traitOptions = taxonomy.available
+        ? (taxonomy.traits || []).map(trait => `<option value="${escapeHtml(trait.id)}">${escapeHtml(trait.label)}</option>`).join("")
+        : "";
       $("content").innerHTML = `
         <div class="view-head"><div><h2>Capture Observation</h2><p>Record or type a short teacher note and attach it to a local student lens.</p></div><span class="badge ok">local only</span></div>
         <div class="grid two">
@@ -1940,6 +1944,7 @@
               <p id="support-guidance" class="voice-hint">Optional. Add only teacher-confirmed IEP-style evidence.</p>
               <div id="support-entry-list"></div>
             </div>
+            <label>Still I Rise Key<select id="obs-ethos-trait"><option value="">Infer if clear</option>${traitOptions}</select></label>
             <label class="row" style="margin:12px 0;"><input id="obs-urgency" type="checkbox" style="width:auto;"><span>Urgent follow-up needed</span><span id="obs-urgency-suggestion" class="badge">teacher must affirm</span></label>
             <button id="save-observation" class="primary" type="button">Save Observation</button>
           </div>
@@ -1985,7 +1990,7 @@
     }
 
     function clearObserveForm() {
-      ["obs-text", "obs-template", "obs-dim", "obs-level", "obs-direction", "obs-sel-domain", "obs-sel-valence"].forEach(id => {
+      ["obs-text", "obs-template", "obs-dim", "obs-level", "obs-direction", "obs-sel-domain", "obs-sel-valence", "obs-ethos-trait"].forEach(id => {
         if ($(id)) $(id).value = "";
       });
       if ($("obs-urgency")) $("obs-urgency").checked = false;
@@ -2169,7 +2174,8 @@
             sel_valence: $("obs-sel-valence").value || null,
             urgency_flag: $("obs-urgency").checked,
             source_type: "observation",
-            support_entries: collectSupportEntries(true)
+            support_entries: collectSupportEntries(true),
+            ethos_trait_id: $("obs-ethos-trait")?.value || null
           })
         });
         const feedback = result.feedback || {};
@@ -2180,7 +2186,8 @@
         const studentName = studentSelect.options[studentSelect.selectedIndex]?.text || studentSelect.value;
         const typeLabel = $("obs-template").options[$("obs-template").selectedIndex]?.text || templateType;
         const cefrBits = templateType === "cefr" ? ` · ${$("obs-dim").value} · ${$("obs-level").value}` : "";
-        $("obs-result").innerHTML = `<h3>Saved</h3><div class="source-line"><span class="badge ok">Saved locally. Not uploaded. Not shared.</span><span class="badge">Domain: observation</span></div><p><strong>Recorded for ${escapeHtml(studentName)}</strong> — ${escapeHtml(typeLabel)}${escapeHtml(cefrBits)}</p><p>Observation ${escapeHtml(result.observation.observation_id)} is attached to the local lens.</p><p>${escapeHtml(feedback.message || "Observation saved.")}</p>${categories ? `<p>Updated: ${escapeHtml(categories)}</p>` : ""}<div class="output">${escapeHtml(result.observation.raw_transcript)}</div>`;
+        const traitRows = (result.ethos_trait_suggestions || []).filter(t => t.trait_id).map(t => `<span class="badge ${t.confidence === "teacher_confirmed" ? "ok" : "warn"}">${escapeHtml(t.label || t.trait_id)} · ${escapeHtml(t.status || t.confidence || "suggested")}</span>`).join("");
+        $("obs-result").innerHTML = `<h3>Saved</h3><div class="source-line"><span class="badge ok">Saved locally. Not uploaded. Not shared.</span><span class="badge">Domain: observation</span>${traitRows}</div><p><strong>Recorded for ${escapeHtml(studentName)}</strong> — ${escapeHtml(typeLabel)}${escapeHtml(cefrBits)}</p><p>Observation ${escapeHtml(result.observation.observation_id)} is attached to the local lens.</p><p>${escapeHtml(feedback.message || "Observation saved.")}</p>${categories ? `<p>Updated: ${escapeHtml(categories)}</p>` : ""}<div class="output">${escapeHtml(result.observation.raw_transcript)}</div>`;
         $("obs-result").scrollIntoView({ behavior: "smooth", block: "nearest" });
         $("obs-result").classList.add("flash-success");
         setTimeout(() => $("obs-result").classList.remove("flash-success"), 2000);

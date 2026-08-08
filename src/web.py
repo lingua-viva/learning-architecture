@@ -4049,6 +4049,7 @@ async def observe_capture(request: Request, payload: dict):
             support_entries=payload.get("support_entries") or [],
             classification_guidance=payload.get("classification_guidance"),
             teacher_feedback=payload.get("teacher_feedback"),
+            ethos_trait_id=payload.get("ethos_trait_id"),
         )
 
     try:
