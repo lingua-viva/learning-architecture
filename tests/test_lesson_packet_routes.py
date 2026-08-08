@@ -48,6 +48,13 @@ def _payload() -> dict:
                 "teacher_note": "Invite transfer to a new context.",
             },
         ],
+        "individual_support": [
+            {
+                "student_id": "student-zoe",
+                "display_name": "Zoe",
+                "reason": "rti_current_tier_3",
+            }
+        ],
     }
 
 
@@ -67,5 +74,55 @@ def test_lesson_packet_approval_writes_deliverable_and_receipt(monkeypatch, tmp_
     assert body["deliverable"]["deliverable_id"] in body["audit_receipt"]["deliverable_ids"]
     assert body["audit_receipt"]["is_complete"] is True
     assert body["sync_status"] == "not_requested"
+    assert body["packet"]["format"] == "html+markdown"
+    assert "<h1>Printable Lesson Packet" in body["packet"]["html"]
     assert "# Student Handout -" in body["packet"]["markdown"]
+    assert "Teacher-Only Individual Support" in body["packet"]["markdown"]
     assert "student-nora" not in body["packet"]["markdown"]
+
+
+def test_lesson_packet_shareback_uploads_stripped_markdown_and_html(monkeypatch, tmp_path):
+    monkeypatch.setenv("LV_STATE_HOME", str(tmp_path / "lv_home"))
+    monkeypatch.setenv("LV_LESSON_PACKET_DIR", str(tmp_path / "packets"))
+    monkeypatch.setenv("LV_LESSON_UPLOAD_QUEUE_PATH", str(tmp_path / "queue.json"))
+    uploads = []
+
+    def fake_upload_text_to_folder(folder_id, filename, content, mime_type="text/markdown"):
+        uploads.append({
+            "folder_id": folder_id,
+            "filename": filename,
+            "content": content,
+            "mime_type": mime_type,
+        })
+        return {"id": filename}
+
+    monkeypatch.setattr(
+        "src.lingua_viva.google_drive_integration.upload_text_to_folder",
+        fake_upload_text_to_folder,
+    )
+
+    payload = {
+        **_payload(),
+        "push_to_drive": True,
+        "folder_map": {
+            "lesson_materials": {
+                "g3-a": {"G3": {"language": {"folder_id": "folder-output"}}}
+            }
+        },
+        "class_id": "g3-a",
+        "grade": "G3",
+        "subject": "language",
+    }
+
+    with TestClient(app) as client:
+        response = client.post("/api/lesson-materials/packet/approve", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["sync_status"] == "pushed_to_drive"
+    assert len(uploads) == 2
+    assert {item["mime_type"] for item in uploads} == {"text/markdown", "text/html"}
+    for item in uploads:
+        assert item["folder_id"] == "folder-output"
+        assert "Teacher-Only Individual Support" not in item["content"]
+        assert "Zoe" not in item["content"]

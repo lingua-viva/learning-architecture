@@ -23,9 +23,11 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import html
+import json
 import os
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -92,22 +94,133 @@ class TierMaterial:
 
 
 @dataclass
+class IndividualSupportStudent:
+    student_id: str
+    display_name: str
+    reason: str
+
+
+@dataclass
 class LessonMaterialsResult:
     materials: list[TierMaterial]
     lesson_summary: str
     sync_status: str  # "pushed_to_drive" | "drive_not_configured" | "push_failed" | "not_requested"
+    individual_support: list[IndividualSupportStudent] = field(default_factory=list)
 
 
-def assign_tier_groups(
+@dataclass
+class RosterSplit:
+    tier_groups: dict[str, list[str]]
+    roster_names: list[str]
+    individual_support: list[IndividualSupportStudent]
+
+
+@dataclass
+class CourseLibraryEntry:
+    drive_id: str
+    name: str
+    local_path: str
+    sha256: str
+    pulled_at: str
+    status: str
+
+
+@dataclass
+class LessonSelection:
+    selection_id: str
+    teacher_id: str
+    class_id: str
+    grade: str
+    subject: str
+    local_path: str
+    selected_at: str
+
+
+def lesson_materials_runtime_dir() -> Path:
+    override = os.environ.get("LV_LESSON_MATERIALS_DIR")
+    return Path(override).expanduser() if override else lv_home() / "runtime" / "lesson_materials"
+
+
+def course_library_root() -> Path:
+    override = os.environ.get("LV_COURSE_LIBRARY_DIR")
+    return Path(override).expanduser() if override else lesson_materials_runtime_dir() / "library"
+
+
+def lesson_selection_dir() -> Path:
+    override = os.environ.get("LV_LESSON_SELECTION_DIR")
+    return Path(override).expanduser() if override else lesson_materials_runtime_dir() / "selections"
+
+
+def lesson_upload_queue_path() -> Path:
+    override = os.environ.get("LV_LESSON_UPLOAD_QUEUE_PATH")
+    return Path(override).expanduser() if override else lesson_materials_runtime_dir() / "upload_queue.json"
+
+
+def _now_z() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _atomic_write_json(path: Path, data: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.tmp")
+    tmp.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
+    tmp.replace(path)
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+
+
+def _read_json(path: Path, default: dict | None = None) -> dict:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return dict(default or {})
+    return data if isinstance(data, dict) else dict(default or {})
+
+
+def _is_explicit_individual_support(lens: dict) -> bool:
+    profile = lens.get("support_profile") or {}
+    if not isinstance(profile, dict):
+        return False
+    for key in (
+        "needs_individual_support",
+        "individual_support",
+        "requires_individual_support",
+    ):
+        if profile.get(key) is True:
+            return True
+    flags = profile.get("flags")
+    if isinstance(flags, dict):
+        return any(
+            flags.get(key) is True
+            for key in ("needs_individual_support", "individual_support")
+        )
+    return False
+
+
+def _individual_support_reason(lens: dict) -> str | None:
+    try:
+        if int(lens.get("rti_current_tier") or 1) == 3:
+            return "rti_current_tier_3"
+    except (TypeError, ValueError):
+        pass
+    if _is_explicit_individual_support(lens):
+        return "support_profile_flag"
+    return None
+
+
+def assign_roster_split(
     store,
     teacher_id: str,
     student_ids: list[str] | None = None,
-) -> tuple[dict[str, list[str]], list[str]]:
-    """Group the teacher's roster (or the requested subset) by content tier.
+    overrides: dict[str, str] | None = None,
+) -> RosterSplit:
+    """Group the roster into three tiers plus kept-apart support.
 
-    Returns ({tier: [student_id, ...]}, [display_name, ...]). Display names
-    are used only for the post-generation name-leak scan — they are never
-    put anywhere near an LLM prompt.
+    Individual support is deliberately narrow: RTI tier 3 or an explicit
+    support-profile flag. General support notes alone do not remove a
+    student from classwide materials.
 
     Same roster-authorization semantics as cohort_planning.generate_cohort_plan:
     requesting a student outside the teacher's roster raises PermissionError.
@@ -121,18 +234,51 @@ def assign_tier_groups(
             raise PermissionError(f"unauthorized_student_ids:{','.join(unknown)}")
         roster = [roster_by_id[sid] for sid in requested]
 
+    overrides = {
+        str(key): str(value)
+        for key, value in (overrides or {}).items()
+        if str(value) in TIERS
+    }
     diff = ContentDifferentiator()
     groups: dict[str, list[str]] = {tier: [] for tier in TIERS}
     names: list[str] = []
+    individual_support: list[IndividualSupportStudent] = []
     for lens in roster:
         student_id = str(lens.get("student_id") or "")
         if not student_id:
             continue
-        groups[diff.assign_tier_for_student(lens)].append(student_id)
         display_name = str(lens.get("display_name") or "").strip()
         if display_name:
             names.append(display_name)
-    return groups, names
+        if student_id in overrides:
+            groups[overrides[student_id]].append(student_id)
+            continue
+        reason = _individual_support_reason(lens)
+        if reason:
+            individual_support.append(
+                IndividualSupportStudent(
+                    student_id=student_id,
+                    display_name=display_name or student_id,
+                    reason=reason,
+                )
+            )
+            continue
+        groups[diff.assign_tier_for_student(lens)].append(student_id)
+    return RosterSplit(groups, names, individual_support)
+
+
+def assign_tier_groups(
+    store,
+    teacher_id: str,
+    student_ids: list[str] | None = None,
+) -> tuple[dict[str, list[str]], list[str]]:
+    """Backward-compatible tier grouping wrapper.
+
+    RTI tier 3 / explicitly flagged individual-support students are kept
+    apart from the three classroom tiers.
+    """
+    split = assign_roster_split(store, teacher_id, student_ids)
+    return split.tier_groups, split.roster_names
 
 
 def _tier_prompt(tier: str, lesson: LessonInput, student_count: int) -> str:
@@ -252,9 +398,9 @@ def _materials_markdown(lesson: LessonInput, materials: list[TierMaterial]) -> s
 
 def _tier_display(tier: str) -> str:
     return {
-        "foundational": "Foundational Practice",
-        "on_track": "Core Practice",
-        "extended": "Extension Practice",
+        "foundational": "Foundational",
+        "on_track": "On Track",
+        "extended": "Extended",
     }.get(tier, tier.replace("_", " ").title())
 
 
@@ -263,11 +409,152 @@ def _safe_slug(value: str) -> str:
     return slug[:60] or "lesson"
 
 
+def _safe_library_filename(name: str) -> str:
+    candidate = re.sub(r"[^A-Za-z0-9._ -]+", "_", Path(name).name).strip(" .")
+    return candidate or "lesson.txt"
+
+
+def _library_dir(grade: str, subject: str) -> Path:
+    return course_library_root() / _safe_slug(grade) / _safe_slug(subject)
+
+
+def _library_manifest_path(grade: str, subject: str) -> Path:
+    return _library_dir(grade, subject) / "manifest.json"
+
+
+def pull_course_library(folder_id: str, grade: str, subject: str) -> dict:
+    """Mirror a Drive coursework folder into the local read-many library."""
+    from src.lingua_viva.google_drive_integration import download_file_text, list_folder_files
+
+    target_dir = _library_dir(grade, subject)
+    target_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = _library_manifest_path(grade, subject)
+    manifest = _read_json(manifest_path, {"files": {}})
+    files_by_id = manifest.get("files") if isinstance(manifest.get("files"), dict) else {}
+
+    pulled: list[dict] = []
+    skipped: list[dict] = []
+    failed: list[dict] = []
+    now = _now_z()
+    for meta in list_folder_files(folder_id):
+        drive_id = str(meta.get("id") or "").strip()
+        name = str(meta.get("name") or drive_id).strip() or drive_id
+        existing = files_by_id.get(drive_id) if isinstance(files_by_id, dict) else None
+        existing_path = Path(str((existing or {}).get("local_path") or ""))
+        if isinstance(existing, dict) and existing_path.exists():
+            skipped.append({**existing, "status": "unchanged"})
+            continue
+        try:
+            text = download_file_text(drive_id)
+            body = text.encode("utf-8")
+            digest = hashlib.sha256(body).hexdigest()
+            path = target_dir / _safe_library_filename(name)
+            if path.exists() and path.name != _safe_library_filename(name):
+                path = target_dir / f"{path.stem}-{drive_id[:8]}{path.suffix}"
+            path.write_bytes(body)
+            try:
+                os.chmod(path, 0o600)
+            except OSError:
+                pass
+            entry = CourseLibraryEntry(
+                drive_id=drive_id,
+                name=name,
+                local_path=str(path),
+                sha256=digest,
+                pulled_at=now,
+                status="pulled",
+            )
+            files_by_id[drive_id] = asdict(entry)
+            pulled.append(asdict(entry))
+        except Exception as exc:
+            failed.append({"drive_id": drive_id, "name": name, "status": "failed", "reason": str(exc)})
+
+    _atomic_write_json(
+        manifest_path,
+        {
+            "version": 1,
+            "folder_id": folder_id,
+            "grade": grade,
+            "subject": subject,
+            "updated_at": now,
+            "files": files_by_id,
+        },
+    )
+    return {
+        "grade": grade,
+        "subject": subject,
+        "library_dir": str(target_dir),
+        "manifest_path": str(manifest_path),
+        "pulled": pulled,
+        "skipped": skipped,
+        "failed": failed,
+    }
+
+
+def list_course_library(grade: str, subject: str) -> dict:
+    manifest_path = _library_manifest_path(grade, subject)
+    manifest = _read_json(manifest_path, {"files": {}})
+    files = manifest.get("files") if isinstance(manifest.get("files"), dict) else {}
+    entries = []
+    for entry in files.values():
+        if not isinstance(entry, dict):
+            continue
+        path = Path(str(entry.get("local_path") or ""))
+        entries.append({**entry, "exists": path.exists()})
+    return {
+        "grade": grade,
+        "subject": subject,
+        "library_dir": str(_library_dir(grade, subject)),
+        "manifest_path": str(manifest_path),
+        "files": sorted(entries, key=lambda item: str(item.get("name") or "").lower()),
+    }
+
+
+def select_todays_lesson(
+    *,
+    teacher_id: str,
+    class_id: str,
+    grade: str,
+    subject: str,
+    local_path: str,
+) -> LessonSelection:
+    path = Path(local_path).expanduser().resolve()
+    library_root = course_library_root().resolve()
+    if library_root not in path.parents:
+        raise ValueError("lesson_file_outside_course_library")
+    if not path.exists() or not path.is_file():
+        raise ValueError("lesson_file_missing")
+    selection = LessonSelection(
+        selection_id=hashlib.sha256(
+            f"{teacher_id}|{class_id}|{grade}|{subject}|{path}|{datetime.now(timezone.utc).date()}".encode("utf-8")
+        ).hexdigest()[:16],
+        teacher_id=teacher_id,
+        class_id=class_id,
+        grade=grade,
+        subject=subject,
+        local_path=str(path),
+        selected_at=_now_z(),
+    )
+    target = lesson_selection_dir() / f"{_safe_slug(teacher_id)}-{_safe_slug(class_id)}-{_safe_slug(grade)}-{_safe_slug(subject)}.json"
+    _atomic_write_json(target, {"version": 1, "selection": asdict(selection)})
+    return selection
+
+
+def read_todays_lesson_text(local_path: str) -> str:
+    path = Path(local_path).expanduser().resolve()
+    library_root = course_library_root().resolve()
+    if library_root not in path.parents:
+        raise ValueError("lesson_file_outside_course_library")
+    return path.read_text(encoding="utf-8")
+
+
 def render_printable_packet_markdown(
     lesson: LessonInput,
     materials: list[TierMaterial],
     *,
     status: str = "DRAFT",
+    individual_support: list[IndividualSupportStudent] | None = None,
+    include_support_section: bool = True,
 ) -> str:
     """Teacher-reviewable printable packet.
 
@@ -298,6 +585,15 @@ def render_printable_packet_markdown(
             f"- {_tier_display(material.tier)}: {len(material.student_ids)} assigned student(s). "
             f"{material.teacher_note}"
         )
+    if individual_support and include_support_section:
+        names = ", ".join(student.display_name for student in individual_support)
+        lines.extend([
+            "",
+            "### Teacher-Only Individual Support",
+            "",
+            f"- Keep separate from tier packets today: {names}.",
+            "- Prepare individual work directly; do not distribute this section.",
+        ])
     lines.extend([
         "",
         "### Review Checklist",
@@ -359,6 +655,83 @@ def _validate_printable_packet(markdown: str) -> None:
         raise ValueError("printable_packet_missing_student_work")
 
 
+def render_printable_packet_html(markdown: str, *, print_ready: bool = False) -> str:
+    """Render the canonical packet Markdown as readable HTML.
+
+    This intentionally supports the packet subset we generate instead of
+    adding a Markdown dependency to the desktop bundle.
+    """
+    body: list[str] = []
+    in_list = False
+
+    def close_list() -> None:
+        nonlocal in_list
+        if in_list:
+            body.append("</ul>")
+            in_list = False
+
+    for raw in str(markdown or "").splitlines():
+        line = raw.strip()
+        if not line:
+            close_list()
+            continue
+        if line == "---":
+            close_list()
+            body.append('<hr class="page-break">')
+            continue
+        if line.startswith("# "):
+            close_list()
+            body.append(f"<h1>{html.escape(line[2:])}</h1>")
+            continue
+        if line.startswith("## "):
+            close_list()
+            body.append(f"<h2>{html.escape(line[3:])}</h2>")
+            continue
+        if line.startswith("### "):
+            close_list()
+            body.append(f"<h3>{html.escape(line[4:])}</h3>")
+            continue
+        if line.startswith("- "):
+            if not in_list:
+                body.append("<ul>")
+                in_list = True
+            body.append(f"<li>{html.escape(line[2:])}</li>")
+            continue
+        close_list()
+        body.append(f"<p>{html.escape(line)}</p>")
+    close_list()
+    css = """
+      body { font-family: Georgia, 'Times New Roman', serif; color: #1f2933; line-height: 1.45; margin: 32px; }
+      h1 { font-size: 26px; margin: 0 0 18px; }
+      h2 { font-size: 20px; margin: 24px 0 10px; }
+      h3 { font-size: 15px; margin: 18px 0 8px; text-transform: uppercase; letter-spacing: 0; }
+      ul { margin: 0 0 14px 22px; padding: 0; }
+      li { margin: 4px 0; }
+      p { margin: 0 0 12px; }
+      hr { border: 0; border-top: 1px solid #cfd8dc; margin: 28px 0; }
+      @media print { .page-break { break-before: page; } body { margin: 18mm; } }
+    """
+    document = f"<style>{css}</style>\n<article class=\"lesson-packet\">\n{''.join(body)}\n</article>"
+    if not print_ready:
+        return document
+    return "<!doctype html><html><head><meta charset=\"utf-8\"><title>Printable Lesson Packet</title></head><body>" + document + "</body></html>"
+
+
+def render_shared_packet_markdown(
+    lesson: LessonInput,
+    materials: list[TierMaterial],
+    *,
+    status: str = "APPROVED",
+) -> str:
+    return render_printable_packet_markdown(
+        lesson,
+        materials,
+        status=status,
+        individual_support=[],
+        include_support_section=False,
+    )
+
+
 def lesson_packet_dir() -> Path:
     override = os.environ.get("LV_LESSON_PACKET_DIR")
     return Path(override).expanduser() if override else lv_home() / "runtime" / "lesson_packets"
@@ -374,11 +747,17 @@ def write_printable_packet(
     materials: list[TierMaterial],
     *,
     directory: Path | None = None,
+    individual_support: list[IndividualSupportStudent] | None = None,
 ) -> Path:
     target_dir = directory or lesson_packet_dir()
     target_dir.mkdir(parents=True, exist_ok=True)
     path = target_dir / lesson_packet_filename(lesson)
-    markdown = render_printable_packet_markdown(lesson, materials, status="APPROVED")
+    markdown = render_printable_packet_markdown(
+        lesson,
+        materials,
+        status="APPROVED",
+        individual_support=individual_support or [],
+    )
     tmp = path.with_name(f".{path.name}.tmp")
     tmp.write_text(markdown, encoding="utf-8")
     tmp.replace(path)
@@ -391,6 +770,90 @@ def write_printable_packet(
 
 def printable_packet_hash(markdown: str) -> str:
     return hashlib.sha256(str(markdown or "").encode("utf-8")).hexdigest()
+
+
+def _share_filename(lesson: LessonInput, suffix: str, *, grade: str = "", subject: str = "", lesson_title: str = "") -> str:
+    date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    grade_part = _safe_slug(grade or "class")
+    subject_part = _safe_slug(subject or lesson.subject)
+    title_part = _safe_slug(lesson_title or lesson.topic)
+    return f"{date}_{grade_part}_{subject_part}_{title_part}_tiered_packet.{suffix.lstrip('.')}"
+
+
+def _folder_from_map(folder_map: dict | None, *, class_id: str, grade: str, subject: str) -> str:
+    if not isinstance(folder_map, dict):
+        return ""
+    lesson_materials = folder_map.get("lesson_materials")
+    if not isinstance(lesson_materials, dict):
+        return ""
+    class_map = lesson_materials.get(class_id)
+    if isinstance(class_map, dict):
+        grade_map = class_map.get(grade)
+        if isinstance(grade_map, dict):
+            subject_map = grade_map.get(subject)
+            if isinstance(subject_map, dict):
+                return str(subject_map.get("folder_id") or "").strip()
+    return str(lesson_materials.get("default_folder_id") or "").strip()
+
+
+def _queue_upload_failure(entry: dict) -> None:
+    queue = _read_json(lesson_upload_queue_path(), {"queued": []})
+    queued = queue.get("queued") if isinstance(queue.get("queued"), list) else []
+    queued.append({**entry, "queued_at": _now_z()})
+    _atomic_write_json(lesson_upload_queue_path(), {"version": 1, "queued": queued})
+
+
+def share_packet_to_drive(
+    lesson: LessonInput,
+    materials: list[TierMaterial],
+    *,
+    folder_map: dict | None = None,
+    folder_id: str = "",
+    class_id: str = "default",
+    grade: str = "",
+    subject: str = "",
+    lesson_title: str = "",
+) -> dict:
+    from src.lingua_viva.google_drive_integration import upload_text_to_folder
+    from src.lingua_viva.privacy import assert_safe_for_external_output
+
+    destination = (folder_id or "").strip() or _folder_from_map(
+        folder_map,
+        class_id=class_id,
+        grade=grade,
+        subject=subject or lesson.subject,
+    )
+    if not destination:
+        result = {"status": "queued", "reason": "drive_folder_not_configured"}
+        _queue_upload_failure(result)
+        return result
+    markdown = render_shared_packet_markdown(lesson, materials)
+    html_doc = render_printable_packet_html(markdown, print_ready=True)
+    assert_safe_for_external_output(markdown)
+    assert_safe_for_external_output(html_doc)
+    try:
+        md_result = upload_text_to_folder(
+            folder_id=destination,
+            filename=_share_filename(lesson, "md", grade=grade, subject=subject, lesson_title=lesson_title),
+            content=markdown,
+            mime_type="text/markdown",
+        )
+        html_result = upload_text_to_folder(
+            folder_id=destination,
+            filename=_share_filename(lesson, "html", grade=grade, subject=subject, lesson_title=lesson_title),
+            content=html_doc,
+            mime_type="text/html",
+        )
+        return {
+            "status": "pushed_to_drive",
+            "folder_id": destination,
+            "uploaded": {"markdown": md_result, "html": html_result},
+            "support_section_stripped": True,
+        }
+    except Exception as exc:
+        result = {"status": "queued", "folder_id": destination, "reason": str(exc)}
+        _queue_upload_failure(result)
+        return result
 
 
 def material_from_dict(data: dict) -> TierMaterial:
@@ -445,6 +908,7 @@ async def generate_lesson_materials(
     engine=None,
     tier_groups: dict[str, list[str]] | None = None,
     roster_names: list[str] | None = None,
+    individual_support: list[IndividualSupportStudent] | None = None,
 ) -> LessonMaterialsResult:
     """Generate tier-differentiated student-facing materials for a lesson.
 
@@ -459,7 +923,7 @@ async def generate_lesson_materials(
         raise ValueError(f"Invalid LessonInput: {errors}")
 
     if tier_groups is None:
-        def _load() -> tuple[dict[str, list[str]], list[str]]:
+        def _load() -> RosterSplit:
             own_store = store is None
             active = store
             if own_store:
@@ -467,14 +931,18 @@ async def generate_lesson_materials(
 
                 active = StudentLensStore()
             try:
-                return assign_tier_groups(active, teacher_id, student_ids)
+                return assign_roster_split(active, teacher_id, student_ids)
             finally:
                 if own_store:
                     active.close()
 
-        tier_groups, roster_names = await asyncio.to_thread(_load)
+        split = await asyncio.to_thread(_load)
+        tier_groups = split.tier_groups
+        roster_names = split.roster_names
+        individual_support = split.individual_support
     groups = tier_groups
     roster_names = roster_names or []
+    individual_support = individual_support or []
 
     if engine is None:
         from src.lingua_viva.reasoning import ReasoningEngine
@@ -504,6 +972,7 @@ async def generate_lesson_materials(
         materials=materials,
         lesson_summary=lesson_summary,
         sync_status=sync_status,
+        individual_support=individual_support,
     )
 
 

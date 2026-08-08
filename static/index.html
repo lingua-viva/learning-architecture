@@ -1762,6 +1762,20 @@
           </div>
           <div id="prepare-privacy-preview" class="source-line" style="margin-top:10px;"></div>
         </div>
+        <div class="panel" style="margin-top:14px;">
+          <div class="view-head"><div><h3>Course Library</h3><p>Pull today&apos;s coursework from Drive once, then choose the local lesson file for packet generation.</p></div><span class="badge">local cache</span></div>
+          <div class="form-grid">
+            <label>Drive folder ID<input id="course-library-folder" placeholder="Google Drive folder ID"></label>
+            <label>Subject<input id="course-library-subject" value="language"></label>
+            <label class="full">Today&apos;s lesson file<select id="course-library-files"><option value="">No local files loaded</option></select></label>
+          </div>
+          <div class="row" style="margin-top:12px;">
+            <button id="pull-course-library" type="button">Pull Library</button>
+            <button id="refresh-course-library" type="button">Refresh Local Files</button>
+            <button id="select-todays-lesson" type="button">Use Selected Lesson</button>
+          </div>
+          <div id="course-library-output" class="source-line" style="margin-top:10px;"></div>
+        </div>
         <div id="activity-output" class="grid three" style="margin-top:14px;"></div>
         <div id="lesson-packet-output" class="panel" style="margin-top:14px;display:none;"></div>
         <div id="differentiated-groups" class="panel" style="margin-top:14px;"><h3>Differentiated Groups</h3><p>Loading tier assignments...</p></div>`;
@@ -1775,7 +1789,11 @@
       await populateUnitSelect("prep-unit");
       $("generate-activity").addEventListener("click", generateActivity);
       $("preview-lesson-packet").addEventListener("click", previewLessonPacket);
+      $("pull-course-library").addEventListener("click", pullCourseLibrary);
+      $("refresh-course-library").addEventListener("click", refreshCourseLibrary);
+      $("select-todays-lesson").addEventListener("click", selectTodaysLesson);
       await renderPrivacyPreview("generate_activity_pack", "prepare-privacy-preview");
+      await refreshCourseLibrary();
       await renderDifferentiatedGroups();
     }
 
@@ -1850,6 +1868,65 @@
           <div class="output">${item.tasks.map(task => `• ${task.type}: ${task.prompt}`).join("\n")}</div>
         </div>`;
       }).join("");
+    }
+
+    async function refreshCourseLibrary() {
+      const grade = $("prep-grade").value;
+      const subject = $("course-library-subject").value.trim() || "language";
+      const output = $("course-library-output");
+      try {
+        const data = await api(`/api/lesson-materials/library?grade=${encodeURIComponent(grade)}&subject=${encodeURIComponent(subject)}`);
+        const files = data.files || [];
+        $("course-library-files").innerHTML = files.length
+          ? files.map(file => `<option value="${escapeHtml(file.local_path || "")}">${escapeHtml(file.name || file.local_path || "")}</option>`).join("")
+          : '<option value="">No local files loaded</option>';
+        output.innerHTML = `<span class="badge">${files.length} local file${files.length === 1 ? "" : "s"}</span>`;
+      } catch (error) {
+        output.innerHTML = `<span>${escapeHtml(error.message)}</span>`;
+      }
+    }
+
+    async function pullCourseLibrary() {
+      const output = $("course-library-output");
+      output.innerHTML = `<span>Pulling coursework...</span>`;
+      try {
+        const data = await api("/api/lesson-materials/library/pull", {
+          method: "POST",
+          body: JSON.stringify({
+            folder_id: $("course-library-folder").value.trim(),
+            grade: $("prep-grade").value,
+            subject: $("course-library-subject").value.trim() || "language"
+          })
+        });
+        output.innerHTML = `<span class="badge ok">${(data.pulled || []).length} pulled</span><span class="badge">${(data.skipped || []).length} unchanged</span>`;
+        await refreshCourseLibrary();
+      } catch (error) {
+        output.innerHTML = `<span>${escapeHtml(error.message)}</span>`;
+      }
+    }
+
+    async function selectTodaysLesson() {
+      const output = $("course-library-output");
+      const select = $("course-library-files");
+      if (!select.value) {
+        output.innerHTML = `<span>Select a local lesson file first.</span>`;
+        return;
+      }
+      try {
+        const data = await api("/api/lesson-materials/today", {
+          method: "POST",
+          body: JSON.stringify({
+            class_id: $("prep-grade").value,
+            grade: $("prep-grade").value,
+            subject: $("course-library-subject").value.trim() || "language",
+            local_path: select.value
+          })
+        });
+        state.pendingPrepTopic = data.selection && data.selection.local_path ? select.selectedOptions[0].textContent : state.pendingPrepTopic;
+        output.innerHTML = `<span class="badge ok">today&apos;s lesson selected</span><span class="voice-hint">${escapeHtml((data.lesson_excerpt || "").slice(0, 140))}</span>`;
+      } catch (error) {
+        output.innerHTML = `<span>${escapeHtml(error.message)}</span>`;
+      }
     }
 
     function lessonPayload() {
