@@ -15,7 +15,7 @@ def test_teacher_sidebar_contract():
 
     assert "I am a coordinator" in html
     assert "I am a teacher" in html
-    assert "/api/prepare/activity" in html
+    assert "/api/lesson-materials/generate" in html
     assert "/api/observe/capture" in html
     assert "/api/observe/classify" in html
     assert "Support Profile Review" in html

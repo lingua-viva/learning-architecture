@@ -9,7 +9,7 @@ Validates:
   - Observe capture persists support_entries and returns structured feedback
   - Observe classify returns writes_made: 0 and teacher_confirmation_required: true
   - advanced_enrichment is isolated and does not alter RTI tier calculations
-  - static/index.html includes all required UI call sites and function handlers
+  - static/index.html includes current required UI call sites and function handlers
 """
 
 from pathlib import Path
@@ -34,7 +34,7 @@ def test_served_html_contains_required_ui_contract_elements():
     assert "/api/observe/classify" in html
     assert "/api/observe/capture" in html
     assert "support_entries" in html
-    assert "/api/students/support-summary" in html
+    assert "/api/lesson-materials/roster-split" in html
     
     # Verify canonical category IDs or labels appear in served HTML
     for cat_id in SUPPORT_CATEGORY_IDS:
