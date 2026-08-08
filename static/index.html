@@ -4046,7 +4046,7 @@
       const response = await fetch("/api/teacher/lens");
       if (!response.ok) {
         target.innerHTML = `
-          <div class="view-head"><div><h3>My Teaching Style</h3><p>Learned from your past exams, lesson plans, parent updates, and evaluations.</p></div><span class="badge warn">Confidence: no data yet</span></div>
+          <div class="view-head"><div><h3>My Teaching Style</h3><p>Learned from your past exams, lesson plans, student summaries, and evaluations.</p></div><span class="badge warn">Confidence: no data yet</span></div>
           <p>Ingest past teaching artifacts to build your style profile.</p>
           <div style="margin-top:12px;">
             <div class="form-grid">
@@ -4055,7 +4055,7 @@
                 <option value="auto">Auto-detect</option>
                 <option value="exam">Exam</option>
                 <option value="lesson_plan">Lesson Plan</option>
-                <option value="parent_update">Parent Update</option>
+                <option value="parent_update">Student Summary</option>
                 <option value="evaluation">Evaluation</option>
               </select></label>
             </div>
@@ -4086,7 +4086,7 @@
               <option value="auto">Auto-detect</option>
               <option value="exam">Exam</option>
               <option value="lesson_plan">Lesson Plan</option>
-              <option value="parent_update">Parent Update</option>
+              <option value="parent_update">Student Summary</option>
               <option value="evaluation">Evaluation</option>
             </select></label>
           </div>
