@@ -16,6 +16,12 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v125 (2026-08-08): Pair 1 Student Lens Full Circle — Observe ethos key
+#     dropdown, Drive class-folder lens ingest, routed folder map, and
+#     approved manual/daily lens sync controls.
+#   v124 (2026-08-08): Pair 2 tiered-materials full circle — rendered
+#     packet preview/approval, Prepare course-library browser/picker, local
+#     lesson selection routes, and routed Drive share-back support.
 #   v123 (2026-08-07): real deliverable hardening — Prepare printable packet
 #     preview/approval surface and Drive lens Markdown preview-before-share.
 #   v1 (2026-07-19): initial lock, MC-lessons pass baseline.
@@ -571,7 +577,7 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 123
+version: 125
 # v122 (2026-08-06): Failure-mode hardening. src/web.py: voice-act observation
 #   dedup guard (same 60s window as observe/capture, prevents network-retry
 #   duplicates). src/education/parent_report.py: personal_context evidence

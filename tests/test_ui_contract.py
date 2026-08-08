@@ -215,7 +215,7 @@ REPO = Path(__file__).resolve().parent.parent
 #     undo, G1-G12 Add Student, Settings Perplexity/Rime keys.
 #   v123 (2026-08-07): real deliverable hardening — Prepare printable packet
 #     preview/approval surface and Drive lens Markdown preview-before-share.
-EXPECTED_VERSION = 123
+EXPECTED_VERSION = 125
 
 
 def _html() -> str:

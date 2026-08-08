@@ -102,6 +102,14 @@ reachable_from_ui:
   - route: "DELETE /api/students/ingest/{job_id}"
     call_site: "/api/students/ingest/${state.ingestJob.job_id}"
     note: "Students import result panel: Undo this import archives exactly the students created by that job."
+  - route: "POST /api/students/ingest/class-folder"
+    call_site: 'api("/api/students/ingest/class-folder"'
+    note: "Google Drive panel: Build class lenses from the selected connected folder."
+
+  # Student Lens Full Circle G4 — Settings sync controls.
+  - route: "POST /api/drive/sync-now"
+    call_site: 'api("/api/drive/sync-now"'
+    note: "Settings Sync panel: manual sync and daily sync check buttons."
 
   # Slice 6 — Daily briefing widgets (renderDailyBriefing).
   - route: "GET /api/daily/briefing"
@@ -459,9 +467,29 @@ reachable_from_ui:
       validates call sites in the reachable direction, so the stale
       classification passed silently.
 
+  - route: "POST /api/lesson-materials/library/pull"
+    call_site: 'api("/api/lesson-materials/library/pull"'
+    note: "Prepare Course Library panel: pull mapped Drive coursework into the local read-many library."
+
+  - route: "GET /api/lesson-materials/library"
+    call_site: 'api(`/api/lesson-materials/library?'
+    note: "Prepare Course Library panel: refresh local grade/subject files."
+
+  - route: "POST /api/lesson-materials/today"
+    call_site: 'api("/api/lesson-materials/today"'
+    note: "Prepare Course Library panel: persist today's selected local lesson file."
+
   - route: "POST /api/provider/disconnect"
     call_site: 'api("/api/provider/disconnect"'
     note: "Same Settings form as POST /api/provider/connect (ff2401e)."
+
+  - route: "GET /api/google-drive/sync-folder-map"
+    call_site: 'api("/api/google-drive/sync-folder-map")'
+    note: "Settings sync-folder map panel: load category/class folder routing."
+
+  - route: "POST /api/google-drive/sync-folder-map"
+    call_site: 'api("/api/google-drive/sync-folder-map"'
+    note: "Settings sync-folder map panel: save category/class folder routing."
 
   - route: "POST /api/settings/keys"
     call_site: 'api("/api/settings/keys"'
@@ -503,6 +531,20 @@ intentionally_backend_only:
     reason: >-
       MVP sprint (2026-08-01). Returns current sync folder config;
       UI will read this to show sync status badge.
+
+  - route: "GET /api/drive/sync-schedule"
+    status: permanent
+    reason: >-
+      Programmatic schedule-status endpoint for local operator checks and
+      future settings editors. The current Settings panel receives the same
+      schedule data through GET /api/sync/status.
+
+  - route: "POST /api/drive/sync-schedule"
+    status: permanent
+    reason: >-
+      Programmatic schedule configuration endpoint. This build mounts manual
+      and daily-run controls; schedule editing remains an operator/API concern
+      until the pilot asks for adjustable cadence UI.
 
   - route: "POST /api/cohort-plans/preview"
     status: deferred_undecided
