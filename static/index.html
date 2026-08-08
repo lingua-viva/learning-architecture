@@ -5088,10 +5088,12 @@
           <div class="row" style="margin-top:12px;">
             <button id="list-drive-files" class="primary" type="button" ${ready ? "" : "disabled"}>Show files</button>
             <button id="import-drive-selected" type="button" ${ready ? "" : "disabled"}>Bring selected files in</button>
+            <button id="ingest-class-folder" type="button" ${ready ? "" : "disabled"}>Build class lenses</button>
           </div>
           <p class="voice-hint" id="drive-student-guardrail" style="display:none;margin-top:8px;">Nothing is added to the student lens until you approve it. Files come in first; you review before anything is saved.</p>
           <div id="drive-list-result" style="margin-top:12px;"></div>
           <div id="drive-import-result" style="margin-top:12px;"></div>
+          <div id="drive-class-ingest-result" style="margin-top:12px;"></div>
         </div>
         <div class="panel" style="margin-top:14px;">
           <h3>Share back to Drive</h3>
@@ -5210,6 +5212,7 @@
       inheritPurpose();
       $("list-drive-files").addEventListener("click", listGoogleDriveFiles);
       $("import-drive-selected").addEventListener("click", importSelectedGoogleDriveFiles);
+      $("ingest-class-folder").addEventListener("click", ingestSelectedClassFolder);
       $("share-lens-drive").addEventListener("click", shareStudentLensToDrive);
       $("drive-connect-btn").addEventListener("click", connectDriveFolder);
       const signinBtn = $("drive-signin-btn");
@@ -5322,6 +5325,34 @@
           renderShell();
           renderView();
         }));
+      } catch (error) {
+        result.innerHTML = `<p>${escapeHtml(error.message)}</p>`;
+      }
+    }
+
+    async function ingestSelectedClassFolder() {
+      const result = $("drive-class-ingest-result");
+      const folderId = $("drive-folder-select").value;
+      if (!folderId) {
+        result.innerHTML = `<span class="badge warn">Choose a connected folder first.</span>`;
+        return;
+      }
+      result.innerHTML = `<p>Reading the class folder into local student lenses...</p>`;
+      try {
+        const data = await api("/api/students/ingest/class-folder", {
+          method: "POST",
+          body: JSON.stringify({ folder_id: folderId, teacher_id: "teacher:drive" })
+        });
+        const updated = data.students_created_or_updated || [];
+        const unattributed = data.unattributed || [];
+        const failed = data.failed || [];
+        result.innerHTML = `
+          <div class="source-line"><span class="badge ok">local lenses updated ${updated.length}</span><span class="badge ${unattributed.length ? "warn" : "ok"}">unattributed ${unattributed.length}</span><span class="badge ${failed.length ? "warn" : "ok"}">failed ${failed.length}</span></div>
+          <div class="list">
+            ${updated.map(item => `<div class="item"><strong>${escapeHtml(item.display_name || item.student_id)}</strong><p>${escapeHtml(item.name || "")}</p><span class="badge">${escapeHtml(item.attribution_method || "attributed")}</span><span class="badge">${Number(item.attribution_confidence || 0).toFixed(2)}</span></div>`).join("")}
+            ${unattributed.map(item => `<div class="item"><strong>${escapeHtml(item.name || item.drive_id)}</strong><p>${escapeHtml(item.reason || "Needs manual assignment.")}</p><span class="badge warn">review</span></div>`).join("")}
+            ${failed.map(item => `<div class="item"><strong>${escapeHtml(item.name || item.drive_id)}</strong><p>${escapeHtml(item.message || item.status || "Failed")}</p><span class="badge warn">failed</span></div>`).join("")}
+          </div>`;
       } catch (error) {
         result.innerHTML = `<p>${escapeHtml(error.message)}</p>`;
       }

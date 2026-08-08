@@ -374,6 +374,9 @@ def test_drive_workspace_ui_mounts_controls():
         "obs-ethos-trait",
         "Still I Rise Key",
         "Infer if clear",
+        "/api/students/ingest/class-folder",
+        "Build class lenses",
+        "drive-class-ingest-result",
     ):
         assert text in html, f"missing UI mount: {text}"
 

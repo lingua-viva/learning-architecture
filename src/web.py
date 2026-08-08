@@ -2605,6 +2605,29 @@ async def students_ingest_undo(job_id: str):
     }
 
 
+@app.post("/api/students/ingest/class-folder")
+async def students_ingest_class_folder(payload: dict):
+    folder_id = str((payload or {}).get("folder_id") or "").strip()
+    teacher_id = str((payload or {}).get("teacher_id") or "teacher:drive").strip()
+    if not folder_id:
+        return JSONResponse({"error": "folder_id is required"}, status_code=400)
+
+    from src.lingua_viva.class_folder_ingest import ingest_class_folder
+    from src.lingua_viva.google_drive_integration import DriveAuthError, DriveConfigError
+
+    def run(store):
+        return ingest_class_folder(folder_id, teacher_id, store=store)
+
+    try:
+        return await asyncio.to_thread(_with_student_store, run)
+    except DriveConfigError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
+    except DriveAuthError:
+        return JSONResponse({"error": "Google Drive could not be reached safely."}, status_code=503)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+
+
 @app.get("/api/students/growth")
 async def students_growth():
     """Growth badge and any tier recommendation per student (Gap 6, Phase 1).

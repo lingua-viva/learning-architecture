@@ -648,7 +648,7 @@ def list_folder_files(
     transport = transport or default_transport()
     token = _access_token(settings, transport)
     params = {
-        "fields": "nextPageToken,files(id,name)",
+        "fields": "nextPageToken,files(id,name,mimeType,modifiedTime,size)",
         "pageSize": "100",
         "q": f"trashed = false and '{folder_id}' in parents",
     }
@@ -667,7 +667,7 @@ def list_folder_files(
         raw_files = data.get("files")
         if isinstance(raw_files, list):
             files.extend(
-                {"id": str(item.get("id") or ""), "name": str(item.get("name") or "")}
+                _file_metadata(item)
                 for item in raw_files
                 if isinstance(item, dict) and item.get("id")
             )
