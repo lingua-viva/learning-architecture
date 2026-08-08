@@ -804,6 +804,8 @@
       schoolProfile: null,
       askHistory: [],
       askMoreOffered: false,
+      tierOverrides: {},
+      rosterSplit: null,
       ingestJob: null
     };
 
@@ -1819,30 +1821,90 @@
       }
     }
 
+    const TIER_LABELS = {
+      foundational: "Foundational",
+      on_track: "On Track",
+      extended: "Extended",
+      individual_support: "Individual Support"
+    };
+
+    const PLACEMENT_SOURCE_LABELS = {
+      rti: "RTI evidence",
+      cefr: "CEFR evidence",
+      default: "default placement",
+      teacher_override: "teacher override",
+      rti_current_tier_3: "RTI tier 3",
+      support_profile_flag: "support profile flag"
+    };
+
+    function activeTierOverrides() {
+      return Object.fromEntries(Object.entries(state.tierOverrides || {}).filter(([_sid, tier]) => tier));
+    }
+
     async function renderDifferentiatedGroups() {
       const target = $("differentiated-groups");
-      const data = await api("/api/prepare/tier-assignments");
-      let summaryMap = {};
+      if (!target) return;
+      let data;
       try {
-        const sumData = await api("/api/students/support-summary");
-        (sumData.students || []).forEach(s => { summaryMap[s.student_id] = s; });
-      } catch {}
+        data = await api("/api/lesson-materials/roster-split", {
+          method: "POST",
+          body: JSON.stringify({ tier_overrides: activeTierOverrides() })
+        });
+      } catch (error) {
+        target.innerHTML = `<h3>Class groups for this lesson</h3><p>${escapeHtml(error.message)}</p>`;
+        return;
+      }
       const tiers = ["foundational", "on_track", "extended"];
-      const byTier = Object.fromEntries(tiers.map(t => [t, []]));
-      (data.assignments || []).forEach(a => { (byTier[a.assigned_tier] || byTier.foundational).push(a); });
+      const groups = data.groups || {};
+      const individualSupport = data.individual_support || [];
+      const total = tiers.reduce((sum, tier) => sum + ((groups[tier] || []).length), 0) + individualSupport.length;
+      state.rosterSplit = data;
+      const placementSelect = (studentId, currentPlacement) => `
+        <select data-tier-override="${escapeHtml(studentId)}" aria-label="Placement for ${escapeHtml(studentId)}">
+          ${["", "foundational", "on_track", "extended", "individual_support"].map(value => {
+            const label = value ? TIER_LABELS[value] : `Use suggested (${TIER_LABELS[currentPlacement] || "current"})`;
+            const selected = (state.tierOverrides || {})[studentId] === value ? "selected" : "";
+            return `<option value="${escapeHtml(value)}" ${selected}>${escapeHtml(label)}</option>`;
+          }).join("")}
+        </select>`;
+      const studentRow = (student, placement) => {
+        const override = (state.tierOverrides || {})[student.student_id];
+        const reason = student.source || student.reason || "default";
+        return `<div class="item">
+          <div class="row" style="justify-content:space-between;align-items:center;gap:8px;">
+            <div><strong>${escapeHtml(student.display_name || student.student_id)}</strong><br><span class="badge">${escapeHtml(PLACEMENT_SOURCE_LABELS[reason] || reason)}</span>${override ? `<span class="badge warn">teacher override</span>` : ""}</div>
+            <div class="row" style="gap:6px;">${placementSelect(student.student_id, placement)}${override ? `<button type="button" data-reset-tier="${escapeHtml(student.student_id)}">Reset</button>` : ""}</div>
+          </div>
+        </div>`;
+      };
       target.innerHTML = `
-        <div class="view-head"><div><h3>Differentiated Groups</h3><p>Who lands in which tier for the next activity pack, and why.</p></div></div>
+        <div class="view-head"><div><h3>Class groups for this lesson</h3><p>Foundational / On Track / Extended, with Individual Support kept apart for teacher planning.</p></div><span class="badge">${Object.keys(activeTierOverrides()).length} override${Object.keys(activeTierOverrides()).length === 1 ? "" : "s"}</span></div>
+        ${total ? "" : `<p>No roster observations yet. Generation can still continue with empty groups.</p>`}
         <div class="grid three">${tiers.map(tier => `
           <div class="item">
-            <h4>${tier.replace("_", " ")}</h4>
-            <div class="list">${byTier[tier].length ? byTier[tier].map(a => {
-              const info = summaryMap[a.student_id] || {};
-              const count = info.total_support_items || 0;
-              const hint = count ? `<br><span class="badge ok">${count} support hint${count === 1 ? "" : "s"}</span>` : "";
-              return `<div class="item"><strong>${escapeHtml(a.display_name || a.student_id)}</strong><br><span class="badge">support tier ${escapeHtml(String(a.rti_current_tier))}</span>${hint}</div>`;
-            }).join("") : "<p>No students in this group.</p>"}</div>
+            <h4>${escapeHtml(TIER_LABELS[tier])}</h4>
+            <div class="list">${(groups[tier] || []).length ? groups[tier].map(student => studentRow(student, tier)).join("") : "<p>No students in this group.</p>"}</div>
           </div>`).join("")}</div>
-        <p style="margin-top:10px;">${escapeHtml(data.logic || "")}</p>`;
+        <div class="item" id="individual-support-review" style="margin-top:12px;border-left:4px solid var(--warn);">
+          <h4>Individual Support</h4>
+          <p class="voice-hint">Kept apart from the three tier columns; this is not a fourth tier.</p>
+          <div class="list">${individualSupport.length ? individualSupport.map(student => studentRow(student, "individual_support")).join("") : "<p>No students currently need separate individual support planning.</p>"}</div>
+        </div>`;
+      target.querySelectorAll("[data-tier-override]").forEach(select => {
+        select.addEventListener("change", async event => {
+          const sid = event.target.dataset.tierOverride;
+          const value = event.target.value;
+          if (value) state.tierOverrides[sid] = value;
+          else delete state.tierOverrides[sid];
+          await renderDifferentiatedGroups();
+        });
+      });
+      target.querySelectorAll("[data-reset-tier]").forEach(button => {
+        button.addEventListener("click", async () => {
+          delete state.tierOverrides[button.dataset.resetTier];
+          await renderDifferentiatedGroups();
+        });
+      });
     }
 
     async function populateUnitSelect(id) {
@@ -1856,21 +1918,27 @@
     async function generateActivity() {
       const output = $("activity-output");
       output.innerHTML = `<div class="panel">Generating...</div>`;
-      const data = await api("/api/prepare/activity", {
+      const data = await api("/api/lesson-materials/generate", {
         method: "POST",
-        body: JSON.stringify({grade: $("prep-grade").value, unit_id: $("prep-unit").value, topic: $("prep-topic").value})
+        body: JSON.stringify(lessonPayload())
       });
       const tiers = ["foundational", "on_track", "extended"];
+      const byTier = {};
+      (data.materials || []).forEach(item => { byTier[item.tier] = item; });
+      const overrides = data.tier_overrides || {};
+      const overrideRows = Object.keys(overrides).length
+        ? `<div class="panel"><h3>Applied Overrides</h3><div class="source-line">${Object.entries(overrides).map(([studentId, tier]) => `<span class="badge warn">${escapeHtml((state.rosterSplit && state.rosterSplit.roster_names && state.rosterSplit.roster_names[studentId]) || studentId)} → ${escapeHtml(TIER_LABELS[tier] || tier)}</span>`).join("")}</div></div>`
+        : "";
       output.innerHTML = tiers.map(tier => {
-        const item = data.tiers[tier];
+        const item = byTier[tier] || {};
         return `<div class="panel">
-          <h3>${tier.replace("_", " ")}</h3>
-          ${sourceLine(data.source_citation)}
-          <p><strong>${escapeHtml(data.cefr_rule)}</strong></p>
-          <p>${escapeHtml(item.learning_objective)}</p>
-          <div class="output">${item.tasks.map(task => `• ${task.type}: ${task.prompt}`).join("\n")}</div>
+          <h3>${escapeHtml(TIER_LABELS[tier])}</h3>
+          <p>${escapeHtml(item.title || "No material generated.")}</p>
+          <p>${escapeHtml(item.instructions_for_student || "")}</p>
+          <div class="output">${escapeHtml(item.exercise_body || "")}</div>
+          ${(item.scaffolding || []).length ? `<p><strong>Scaffolds:</strong> ${escapeHtml((item.scaffolding || []).join(", "))}</p>` : ""}
         </div>`;
-      }).join("");
+      }).join("") + overrideRows;
     }
 
     async function refreshCourseLibrary() {
@@ -1938,6 +2006,7 @@
       return {
         grade: $("prep-grade").value,
         unit_id: unitSelect ? unitSelect.value : "",
+        tier_overrides: activeTierOverrides(),
         lesson: {
           ib_programme: "PYP",
           subject: "language",

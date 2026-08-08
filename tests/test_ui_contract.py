@@ -224,6 +224,43 @@ def _html() -> str:
     return (REPO / "static" / "index.html").read_text(encoding="utf-8")
 
 
+def test_roster_split_review_surface_stays_mounted():
+    import re
+
+    html = _html()
+    assert "/api/lesson-materials/roster-split" in html
+    assert "Class groups for this lesson" in html
+    assert "Foundational / On Track / Extended" in html
+    assert 'id="individual-support-review"' in html
+    assert "not a fourth tier" in html
+    assert 'data-tier-override="' in html
+    assert 'data-reset-tier="' in html
+    assert "teacher override" in html
+    assert "No roster observations yet. Generation can still continue with empty groups." in html
+
+    split_markup = re.search(
+        r'<div class="grid three">.*?id="individual-support-review"',
+        html,
+        flags=re.S,
+    )
+    assert split_markup, "Individual Support must render after the three tier columns, not as a fourth column"
+
+
+def test_lesson_materials_post_bodies_keep_tier_overrides():
+    import re
+
+    html = _html()
+    assert "tier_overrides: activeTierOverrides()" in html
+
+    calls = {
+        "/api/lesson-materials/generate": r'api\("/api/lesson-materials/generate".*?body:\s*JSON\.stringify\(lessonPayload\(\)\)',
+        "/api/lesson-materials/packet/preview": r'api\("/api/lesson-materials/packet/preview".*?body:\s*JSON\.stringify\(lessonPayload\(\)\)',
+        "/api/lesson-materials/packet/approve": r'api\("/api/lesson-materials/packet/approve".*?body:\s*JSON\.stringify\(\{\.\.\.lessonPayload\(\),',
+    }
+    for route, pattern in calls.items():
+        assert re.search(pattern, html, flags=re.S), f"{route} no longer posts lessonPayload() with tier_overrides"
+
+
 def test_version_bumped_exactly_one_from_live():
     contract = yaml.safe_load((REPO / "contracts" / "UI_CONTRACT.yaml").read_text(encoding="utf-8"))
     assert contract["version"] == EXPECTED_VERSION, (
