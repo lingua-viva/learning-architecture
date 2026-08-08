@@ -1424,12 +1424,22 @@ class StudentLensStore:
                 categories_updated.append(cat_id)
 
         self._recalculate_lens(observation.student_id, observation)
+        refreshed_lens = self.get_lens(observation.student_id)
         escalations = self._evaluate_rti_rules(observation.student_id)
 
         return {
             "observation": observation.to_row(),
             "validation_errors": errors,
             "escalations": escalations,
+            "lens_refresh": {
+                "student_id": observation.student_id,
+                "profile_version": refreshed_lens["profile_version"],
+                "updated_at": refreshed_lens["updated_at"],
+                "cefr_snapshot": refreshed_lens["cefr_snapshot"],
+                "cefr_trajectory_30d": refreshed_lens["cefr_trajectory_30d"],
+                "rti_current_tier": refreshed_lens["rti_current_tier"],
+                "sel_summary": refreshed_lens["sel_summary"],
+            },
             "feedback": {
                 "saved_entries": saved_entries,
                 "categories_updated": categories_updated,

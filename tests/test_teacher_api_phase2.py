@@ -67,6 +67,8 @@ def test_observe_students_parents_and_reflect_endpoints(monkeypatch, tmp_path):
     })
     assert obs.status_code == 200
     assert obs.json()["local_only"] is True
+    assert obs.json()["lens_refresh"]["cefr_snapshot"]["speaking"] == "A2"
+    assert obs.json()["lens_refresh"]["profile_version"] >= 2
 
     lens = client.get(f"/api/students/{student_id}/lens")
     assert lens.status_code == 200

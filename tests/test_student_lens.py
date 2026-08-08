@@ -66,6 +66,8 @@ def test_append_observation_updates_cefr_snapshot(store):
     )
     result = store.append_observation(obs)
     assert result["validation_errors"] == []
+    assert result["lens_refresh"]["cefr_snapshot"]["reading"] == "A2"
+    assert result["lens_refresh"]["profile_version"] == 2
     lens = store.get_lens(sid)
     assert lens["cefr_snapshot"]["reading"] == "A2"
     assert lens["cefr_snapshot"]["writing"] is None
