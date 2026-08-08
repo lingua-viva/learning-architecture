@@ -16,6 +16,10 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v126 (2026-08-08): Voice §1 Ask grounding surface — renderAnswerSafety
+#     tiers now mirror resolve_voice_tone exactly (0.8/0.4, verbatim
+#     prefixes), /api/ask bubble+speech routed through the shared gate,
+#     grounding badge on every signal-bearing answer, TTS defaults English.
 #   v125 (2026-08-08): Pair 1 Student Lens Full Circle — Observe ethos key
 #     dropdown, Drive class-folder lens ingest, routed folder map, and
 #     approved manual/daily lens sync controls.
@@ -577,7 +581,7 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 125
+version: 126
 # v122 (2026-08-06): Failure-mode hardening. src/web.py: voice-act observation
 #   dedup guard (same 60s window as observe/capture, prevents network-retry
 #   duplicates). src/education/parent_report.py: personal_context evidence

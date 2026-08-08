@@ -215,7 +215,9 @@ REPO = Path(__file__).resolve().parent.parent
 #     undo, G1-G12 Add Student, Settings Perplexity/Rime keys.
 #   v123 (2026-08-07): real deliverable hardening — Prepare printable packet
 #     preview/approval surface and Drive lens Markdown preview-before-share.
-EXPECTED_VERSION = 125
+#   v126 (2026-08-08): Voice §1 Ask grounding surface — shared safety gate
+#     mirrors resolve_voice_tone; /api/ask routed through it; TTS locale fix.
+EXPECTED_VERSION = 126
 
 
 def _html() -> str:

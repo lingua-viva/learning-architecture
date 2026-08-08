@@ -1160,9 +1160,12 @@
           .replace(/\s+/g, " ")
           .trim();
         const utterance = new SpeechSynthesisUtterance(clean);
-        // Language detection: refusal/system messages are English; student
-        // content and normal answers are Italian. Pick voice to match the text.
-        const looksEnglish = /\b(the|this|your|questions|answers|search|machine|section|web|student|support)\b/i.test(clean);
+        // Language detection (Voice §1 locale fix, QA 0.2.36-0.2.42): the old
+        // default was Italian-unless-proven-English, which spoke English
+        // answers in an Italian voice. Detect Italian markers instead and
+        // default to English — the app's answers are English unless shown otherwise.
+        const looksItalian = /\b(gli|della|delle|degli|nella|sono|questo|questa|perché|più|è|anche|però)\b/i.test(clean);
+        const looksEnglish = !looksItalian;
         const textLang = looksEnglish ? "en" : "it-IT";
         utterance.lang = textLang;
         const voices = window.speechSynthesis.getVoices();
@@ -3044,15 +3047,11 @@
           {role: "assistant", content: data.content}
         ];
         state.askMoreOffered = Boolean(data.more_available);
-        // GIR warning: if the backend signals low grounding confidence,
-        // prepend the tone_prefix so the teacher sees it (P0 fabrication visibility).
-        const girWarning = (data.tone_prefix && data.gir !== undefined && data.gir < 0.8)
-          ? `⚠️ ${data.tone_prefix}\n\n`
-          : "";
-        const displayContent = girWarning + data.content;
+        // Voice §1: no inline GIR logic here — the meta carries the verdict
+        // and renderMessage's shared safety gate renders it (bubble + badge).
         state.chat.push({
           role: "Lingua Viva",
-          text: displayContent,
+          text: data.content,
           askMore: Boolean(data.more_available),
           meta: {
             route: data.local_only ? "local" : "external",
@@ -3060,6 +3059,8 @@
             duration_ms: data.duration_ms || 0,
             sources: data.citations || data.sources_used || [],
             gir: data.gir,
+            tone_prefix: data.tone_prefix,
+            voice_tone: data.voice_tone,
             local_only: data.local_only
           }
         });
@@ -3076,18 +3077,15 @@
     }
 
     function speakAskAnswer(data, {offerMore = true} = {}) {
-      let text = data.type === "ask_result" ? data.content : (data.message || "");
+      const text = data.type === "ask_result" ? data.content : (data.message || "");
       if (!text) return;
-      // Prepend GIR warning to spoken output when grounding is low
-      if (data.tone_prefix && data.gir !== undefined && data.gir < 0.8) {
-        text = data.tone_prefix + " " + text;
-      }
       const spoken = data.type === "ask_result" && data.more_available && offerMore
         ? `${text} Would you like to hear more?`
         : text;
       const status = $("ask-voice-status");
       if (status) status.textContent = "Speaking… tap Ask to stop.";
-      voiceRuntime.speak(spoken);
+      // Voice §1: spoken text = prefixed text, through the same shared gate.
+      voiceRuntime.speak(spoken, renderAnswerSafety(data).speechPrefix);
     }
 
     async function submitAskExternal(text) {
@@ -3155,27 +3153,49 @@
 
     // F2 (Chip QA 0.2.32) / FM-B: ONE safety gate consumed by BOTH the text
     // renderer and the voice path, so the two channels can never diverge.
-    // GIR < 0.5 or any fabricated identifier means the teacher must see the
-    // warning wherever the answer lands — bubble and speech alike.
+    // Voice §1 (2026-08-08): tiers mirror resolve_voice_tone (voice_tone.py)
+    // EXACTLY — plain >= 0.8, clarify 0.4-0.8, name_boundary < 0.4. Any
+    // fabricated identifier forces the boundary tier. Every answer surface
+    // must render this verdict; no surface may drop it.
     function renderAnswerSafety(meta) {
       const gir = (meta && meta.grounding && meta.grounding.gir) || {};
       const fabricated = Array.isArray(gir.fabricated_identifiers) ? gir.fabricated_identifiers : [];
       // A null/absent score means "no GIR signal", not "score zero" — only a
       // real numeric score below threshold (or fabricated IDs) is unsafe.
-      const score = (gir.score === null || gir.score === undefined || Number.isNaN(Number(gir.score))) ? 1 : Number(gir.score);
-      const unsafe = score < 0.5 || fabricated.length > 0;
-      const tonePrefix = String((meta && meta.tone_prefix) || "").trim();
+      // Accept every backend shape: grounding.gir.score, gir_score, numeric gir.
+      const primaryScore = (gir.score === null || gir.score === undefined) ? undefined : gir.score;
+      const rawScore = [primaryScore, meta && meta.gir_score, meta && meta.gir]
+        .find(value => value !== null && value !== undefined && !Number.isNaN(Number(value)));
+      const hasSignal = rawScore !== undefined;
+      const score = hasSignal ? Number(rawScore) : 1;
+      const tier = fabricated.length > 0 ? "name_boundary"
+        : (score >= 0.8 ? "plain" : (score >= 0.4 ? "clarify" : "name_boundary"));
+      // Backend tone_prefix is authoritative; fallbacks match voice_tone.py verbatim.
+      const fallbackPrefix = tier === "clarify"
+        ? "I'm fairly sure, but let's double check this together. "
+        : (tier === "name_boundary"
+            ? "I don't have a solid source for this one, so take it as a starting point, not a final answer. "
+            : "");
+      const tonePrefix = String((meta && meta.tone_prefix) || fallbackPrefix).trim();
       const warningText = tonePrefix || "⚠️ I could not verify this against real records.";
       const fabricatedText = fabricated.length
         ? ` These identifiers do not match any real record: ${fabricated.join(", ")}.`
         : "";
+      const unsafe = tier !== "plain";
+      const badgeLabel = tier === "plain" ? "grounded" : (tier === "clarify" ? "double-check" : "unverified");
       return {
+        tier,
+        hasSignal,
+        score,
         unsafe,
         girBadgeClass: unsafe ? "badge warn" : "badge",
-        warningHtml: unsafe
-          ? `<p class="answer-safety"><span class="badge warn">unverified</span> ${escapeHtml(warningText + fabricatedText)}</p>`
+        girBadgeHtml: hasSignal
+          ? `<span class="${unsafe ? "badge warn" : "badge"}">${badgeLabel} · GIR ${score.toFixed(2)}</span>`
           : "",
-        speechPrefix: unsafe ? `${warningText}${fabricatedText} ` : (tonePrefix ? tonePrefix : "")
+        warningHtml: unsafe
+          ? `<p class="answer-safety"><span class="badge warn">${badgeLabel}</span> ${escapeHtml(warningText + fabricatedText)}</p>`
+          : "",
+        speechPrefix: unsafe ? `${warningText}${fabricatedText} ` : ""
       };
     }
 
@@ -3199,9 +3219,11 @@
         ? sources.map(source => `<span class="badge">${escapeHtml(source)}</span>`).join("")
         : '<span class="badge">no sources recorded</span>';
       const safety = renderAnswerSafety(message.meta || {});
+      // Voice §1: visible grounding state on EVERY answer that carries a GIR
+      // signal, whatever field shape the backend used — never silently plain.
       const grounding = message.meta && message.meta.grounding
         ? `<span class="badge">tier ${escapeHtml(message.meta.grounding.tier_used || "none")}</span><span class="${safety.girBadgeClass}">GIR ${Number(message.meta.grounding.gir?.score ?? 1).toFixed(2)}</span>`
-        : "";
+        : (safety.hasSignal ? safety.girBadgeHtml : "");
       const meta = message.meta ? `<div class="source-line">${routeBadge}<span class="badge">${escapeHtml(message.meta.model_used || "model unavailable")}</span><span class="badge">${((message.meta.duration_ms || 0) / 1000).toFixed(1)}s</span>${grounding}${sourceBadges}<button type="button" data-why="${escapeHtml(message.meta.trace_id || "")}">Why?</button></div>` : "";
       const moreButton = message.askMore
         ? `<div class="row" style="margin-top:8px;"><button type="button" data-ask-more>Hear more</button></div>`
