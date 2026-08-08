@@ -4,6 +4,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from src.education.student_lens import Observation, StudentLensStore
 from src.web import app
 
 
@@ -126,3 +127,53 @@ def test_lesson_packet_shareback_uploads_stripped_markdown_and_html(monkeypatch,
         assert item["folder_id"] == "folder-output"
         assert "Teacher-Only Individual Support" not in item["content"]
         assert "Zoe" not in item["content"]
+
+
+def test_roster_split_preview_returns_reasons_without_recording_overrides(monkeypatch, tmp_path):
+    monkeypatch.setenv("LV_STUDENT_DB_PATH", str(tmp_path / "students.db"))
+    monkeypatch.setenv("LV_ROSTER_OVERRIDES_PATH", str(tmp_path / "roster_overrides.ndjson"))
+    teacher_id = "teacher-a"
+    with StudentLensStore(db_path=tmp_path / "students.db") as store:
+        student_a = store.create_lens(display_name="Student A", rti_current_tier=1)
+        student_b = store.create_lens(display_name="Student B", rti_current_tier=2)
+        student_c = store.create_lens(display_name="Student C", rti_current_tier=3)
+        store.append_observation(
+            Observation(
+                student_id=student_a,
+                teacher_id=teacher_id,
+                template_type="cefr",
+                raw_transcript="Student A read the sentence.",
+                cefr_dimension="reading",
+                cefr_level_observed="A2",
+            )
+        )
+        for sid in (student_b, student_c):
+            store.append_observation(
+                Observation(
+                    student_id=sid,
+                    teacher_id=teacher_id,
+                    template_type="general",
+                    raw_transcript="Roster membership note.",
+                )
+            )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/lesson-materials/roster-split",
+            json={
+                "teacher_id": teacher_id,
+                "tier_overrides": {student_b: "extended"},
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["groups"]["on_track"][0]["student_id"] == student_a
+    assert body["groups"]["on_track"][0]["source"] == "cefr"
+    assert body["groups"]["extended"][0]["student_id"] == student_b
+    assert body["groups"]["extended"][0]["source"] == "teacher_override"
+    assert body["individual_support"][0]["student_id"] == student_c
+    assert body["individual_support"][0]["reason"] == "rti_current_tier_3"
+    assert body["overrides"] == {student_b: "extended"}
+    assert body["roster_names"][student_a] == "Student A"
+    assert not (tmp_path / "roster_overrides.ndjson").exists()

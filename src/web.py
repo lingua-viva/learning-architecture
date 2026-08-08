@@ -5460,6 +5460,50 @@ def _tier_overrides_from_payload(payload: dict) -> dict | None:
     return raw if isinstance(raw, dict) and raw else None
 
 
+def _roster_split_response(split) -> dict:
+    return {
+        "groups": {
+            tier: [item.__dict__ for item in split.group_members.get(tier, [])]
+            for tier in ("foundational", "on_track", "extended")
+        },
+        "individual_support": [item.__dict__ for item in split.individual_support],
+        "overrides": split.overrides,
+        "roster_names": {
+            item.student_id: item.display_name
+            for members in split.group_members.values()
+            for item in members
+        } | {
+            item.student_id: item.display_name
+            for item in split.individual_support
+        },
+    }
+
+
+@app.post("/api/lesson-materials/roster-split")
+async def lesson_materials_roster_split(request: Request, payload: dict):
+    from src.lingua_viva.access_roles import effective_teacher_id
+    from src.lingua_viva.lesson_materials import assign_roster_split
+
+    teacher_id = effective_teacher_id(request, str(payload.get("teacher_id") or "local-teacher"))
+    student_ids = payload.get("student_ids") if isinstance(payload.get("student_ids"), list) else None
+    tier_overrides = _tier_overrides_from_payload(payload)
+
+    def load(store):
+        return assign_roster_split(
+            store,
+            teacher_id,
+            student_ids,
+            overrides=tier_overrides,
+            record_overrides=False,
+        )
+
+    try:
+        split = await asyncio.to_thread(_with_student_store, load)
+    except PermissionError as exc:
+        return JSONResponse({"error": "unauthorized_student_ids", "detail": str(exc)}, status_code=422)
+    return _roster_split_response(split)
+
+
 @app.post("/api/lesson-materials/generate")
 async def lesson_materials_generate(request: Request, payload: dict):
     from src.lingua_viva.access_roles import effective_teacher_id
