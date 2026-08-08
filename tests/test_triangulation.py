@@ -463,6 +463,73 @@ def test_personal_with_folder_uploads_only_to_personal_folder(tmp_path, monkeypa
     assert all("Restricted family context" not in upload["content"] for upload in shared_uploads)
 
 
+def test_scheduled_sync_queues_unapproved_lens(tmp_path, monkeypatch):
+    _isolate(monkeypatch, tmp_path)
+    drive_sync.set_sync_folder_map({"student_summaries": "folder-summary"})
+    store = StudentLensStore()
+    sid = store.create_lens(display_name="Marco Bianchi")
+    _append_local(store, sid, "t-local")
+    store.close()
+
+    uploads = []
+    monkeypatch.setattr(
+        "src.lingua_viva.google_drive_integration.upload_text_to_folder",
+        lambda **kwargs: uploads.append(kwargs),
+    )
+
+    result = asyncio.run(drive_sync.sync_lenses_to_drive(scheduled=True))
+
+    assert result["pushed"] == []
+    assert result["queued"][0]["student_id"] == sid
+    assert uploads == []
+    ledger = drive_sync.read_sync_ledger()["students"][sid]
+    assert ledger["last_status"] == "queued"
+    assert "approval" in ledger["failure_reason"]
+
+
+def test_manual_sync_approves_and_daily_sync_skips_until_due(tmp_path, monkeypatch):
+    _isolate(monkeypatch, tmp_path)
+    drive_sync.set_sync_folder_map({"student_summaries": "folder-summary"})
+    store = StudentLensStore()
+    sid = store.create_lens(display_name="Marco Bianchi")
+    _append_local(store, sid, "t-local")
+    store.close()
+
+    uploads = []
+
+    def fake_upload(**kwargs):
+        uploads.append(kwargs)
+        return {"id": f"u-{len(uploads)}", "name": kwargs["filename"]}
+
+    monkeypatch.setattr("src.lingua_viva.google_drive_integration.upload_text_to_folder", fake_upload)
+
+    manual = asyncio.run(drive_sync.sync_lenses_to_drive(approve=True))
+    assert manual["pushed"] == [{"student_id": sid}]
+    assert sid in drive_sync.get_sync_approved_lenses()
+
+    scheduled = asyncio.run(drive_sync.sync_lenses_to_drive(scheduled=True))
+    assert scheduled["skipped"] == [{"student_id": sid, "reason": "not due"}]
+
+
+def test_drive_sync_now_route_runs_manual_approval(tmp_path, monkeypatch):
+    _isolate(monkeypatch, tmp_path)
+    drive_sync.set_sync_folder_map({"student_summaries": "folder-summary"})
+    store = StudentLensStore()
+    sid = store.create_lens(display_name="Marco Bianchi")
+    _append_local(store, sid, "t-local")
+    store.close()
+
+    monkeypatch.setattr(
+        "src.lingua_viva.google_drive_integration.upload_text_to_folder",
+        lambda **kwargs: {"id": "u-1", "name": kwargs["filename"]},
+    )
+
+    response = TestClient(app).post("/api/drive/sync-now", json={"approve": True})
+
+    assert response.status_code == 200
+    assert response.json()["pushed"] == [{"student_id": sid}]
+
+
 # ---------------------------------------------------------------------------
 # 4. Deterministic triangulation signals
 # ---------------------------------------------------------------------------

@@ -4213,6 +4213,11 @@
             <span id="settings-sync-badge" class="badge">checking...</span>
           </div>
           <div id="settings-sync-status" style="margin-top:8px;"><p class="voice-hint">Checking sync queue...</p></div>
+          <div class="row" style="margin-top:12px;">
+            <button id="drive-sync-now" type="button">Sync now</button>
+            <button id="drive-sync-daily" type="button">Run daily sync check</button>
+          </div>
+          <div id="drive-sync-action-result" style="margin-top:8px;"></div>
           <div id="settings-folder-map" style="margin-top:12px;"><p class="voice-hint">Loading Drive folder routing...</p></div>
         </div>
         <div class="panel" style="margin-top:14px;">
@@ -4292,10 +4297,27 @@
             <p>${escapeHtml(row.last_status || "unknown")} · ${escapeHtml(row.last_category || "sync")} ${row.failure_reason ? `· ${escapeHtml(row.failure_reason)}` : ""}</p>
           </div>`).join("");
         if (sStatus) sStatus.innerHTML = `
-          <p class="voice-hint">${sq.pending ? `${sq.pending} item${sq.pending > 1 ? "s" : ""} waiting to sync.` : "All synced — nothing pending."} ${sq.last_drain ? `Last sync: ${sq.last_drain}.` : ""}</p>
+          <p class="voice-hint">${sq.pending ? `${sq.pending} item${sq.pending > 1 ? "s" : ""} waiting to sync.` : "All synced — nothing pending."} ${sq.last_drain ? `Last sync: ${sq.last_drain}.` : ""} Drive lens sync: ${escapeHtml((sq.drive_sync_schedule || {}).enabled === false ? "daily off" : "daily on")}.</p>
           ${lensRows ? `<div class="list" style="margin-top:8px;">${lensRows}</div>` : ""}`;
+        $("drive-sync-now")?.addEventListener("click", () => runDriveSyncNow(false));
+        $("drive-sync-daily")?.addEventListener("click", () => runDriveSyncNow(true));
       } catch { const sb = $("settings-sync-badge"); if (sb) sb.textContent = "offline"; }
       await renderFolderMapControls();
+    }
+
+    async function runDriveSyncNow(scheduled) {
+      const target = $("drive-sync-action-result");
+      target.innerHTML = `<p>${scheduled ? "Checking daily sync..." : "Syncing approved lenses..."}</p>`;
+      try {
+        const data = await api("/api/drive/sync-now", {
+          method: "POST",
+          body: JSON.stringify({ approve: !scheduled, scheduled })
+        });
+        target.innerHTML = `<div class="source-line"><span class="badge ok">pushed ${(data.pushed || []).length}</span><span class="badge ${data.queued && data.queued.length ? "warn" : "ok"}">queued ${(data.queued || []).length}</span><span class="badge">${(data.skipped || []).length} skipped</span><span class="badge ${data.failed && data.failed.length ? "warn" : "ok"}">failed ${(data.failed || []).length}</span></div>`;
+        renderView();
+      } catch (error) {
+        target.innerHTML = `<p>${escapeHtml(error.message)}</p>`;
+      }
     }
 
     async function renderFolderMapControls() {

@@ -3335,7 +3335,11 @@ async def voice_probe():
 async def sync_status_endpoint():
     """B4: Sync queue status for the Settings panel. Returns pending/pushed/failed counts."""
     from src.lingua_viva.docpipe.sync import sync_status as _sync_status
-    from src.lingua_viva.drive_sync import read_sync_ledger
+    from src.lingua_viva.drive_sync import (
+        get_sync_approved_lenses,
+        get_sync_schedule,
+        read_sync_ledger,
+    )
 
     status = _sync_status()
     ledger = read_sync_ledger()
@@ -3347,7 +3351,42 @@ async def sync_status_endpoint():
             "queued": sum(1 for row in students.values() if row.get("last_status") == "queued"),
             "pushed": sum(1 for row in students.values() if row.get("last_status") == "pushed"),
         }
+    status["drive_sync_schedule"] = get_sync_schedule()
+    status["drive_sync_approved_count"] = len(get_sync_approved_lenses())
     return status
+
+
+@app.post("/api/drive/sync-now")
+async def drive_sync_now(payload: dict):
+    from src.lingua_viva.drive_sync import sync_lenses_to_drive
+
+    student_id = str((payload or {}).get("student_id") or "").strip() or None
+    approve = bool((payload or {}).get("approve", False))
+    scheduled = bool((payload or {}).get("scheduled", False))
+    try:
+        return await sync_lenses_to_drive(
+            student_id=student_id,
+            approve=approve,
+            scheduled=scheduled,
+        )
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+
+
+@app.get("/api/drive/sync-schedule")
+async def drive_sync_schedule_get():
+    from src.lingua_viva.drive_sync import get_sync_schedule
+
+    return {"schedule": get_sync_schedule()}
+
+
+@app.post("/api/drive/sync-schedule")
+async def drive_sync_schedule_set(payload: dict):
+    from src.lingua_viva.drive_sync import DEFAULT_SYNC_INTERVAL_SECONDS, set_sync_schedule
+
+    enabled = bool((payload or {}).get("enabled", True))
+    interval = int((payload or {}).get("interval_seconds") or DEFAULT_SYNC_INTERVAL_SECONDS)
+    return {"schedule": set_sync_schedule(enabled=enabled, interval_seconds=interval)}
 
 
 @app.post("/api/voice/stt")

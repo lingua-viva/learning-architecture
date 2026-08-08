@@ -35,8 +35,11 @@ logger = logging.getLogger(__name__)
 
 SYNC_CONFIG_KEY = "drive_sync_folder_id"
 SYNC_FOLDER_MAP_KEY = "drive_sync_folder_map"
+SYNC_APPROVED_KEY = "drive_sync_approved_lenses"
+SYNC_SCHEDULE_KEY = "drive_sync_schedule"
 PENDING_SYNCS_FILE = "pending_drive_syncs.json"
 SYNC_LEDGER_FILE = "drive_sync_ledger.json"
+DEFAULT_SYNC_INTERVAL_SECONDS = 24 * 60 * 60
 
 FOLDER_CATEGORIES = {
     "student_summaries": "Student Summaries",
@@ -162,6 +165,52 @@ def set_sync_folder_id(folder_id: str) -> None:
         if isinstance(folder_map, dict):
             folder_map.pop(DEFAULT_SHARED_CATEGORY, None)
             data[SYNC_FOLDER_MAP_KEY] = folder_map
+    _write_settings(data)
+
+
+def get_sync_schedule() -> dict:
+    raw = _read_settings().get(SYNC_SCHEDULE_KEY)
+    if not isinstance(raw, dict):
+        raw = {}
+    try:
+        interval_seconds = int(raw.get("interval_seconds", DEFAULT_SYNC_INTERVAL_SECONDS))
+    except (TypeError, ValueError):
+        interval_seconds = DEFAULT_SYNC_INTERVAL_SECONDS
+    return {
+        "enabled": bool(raw.get("enabled", True)),
+        "interval_seconds": max(300, interval_seconds),
+    }
+
+
+def set_sync_schedule(*, enabled: bool, interval_seconds: int = DEFAULT_SYNC_INTERVAL_SECONDS) -> dict:
+    schedule = {
+        "enabled": bool(enabled),
+        "interval_seconds": max(300, int(interval_seconds)),
+    }
+    data = _read_settings()
+    data[SYNC_SCHEDULE_KEY] = schedule
+    _write_settings(data)
+    return schedule
+
+
+def get_sync_approved_lenses() -> set[str]:
+    raw = _read_settings().get(SYNC_APPROVED_KEY)
+    if not isinstance(raw, list):
+        return set()
+    return {str(item) for item in raw if str(item).strip()}
+
+
+def set_lens_sync_approved(student_id: str, approved: bool = True) -> None:
+    student_id = str(student_id or "").strip()
+    if not student_id:
+        return
+    data = _read_settings()
+    approved_ids = get_sync_approved_lenses()
+    if approved:
+        approved_ids.add(student_id)
+    else:
+        approved_ids.discard(student_id)
+    data[SYNC_APPROVED_KEY] = sorted(approved_ids)
     _write_settings(data)
 
 
@@ -561,6 +610,99 @@ async def sync_lens_to_drive(student_id: str) -> bool:
         )
         _record_pending_sync(student_id)
         return False
+
+
+def _parse_iso(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _sync_due(student_id: str, *, interval_seconds: int) -> bool:
+    row = read_sync_ledger().get("students", {}).get(student_id, {})
+    last = _parse_iso(row.get("last_attempt_at")) if isinstance(row, dict) else None
+    if last is None:
+        return True
+    return (datetime.now(timezone.utc) - last).total_seconds() >= interval_seconds
+
+
+async def sync_lenses_to_drive(
+    *,
+    student_id: str | None = None,
+    approve: bool = False,
+    scheduled: bool = False,
+) -> dict:
+    """Run Drive lens sync for one student or the full local roster.
+
+    Manual calls can pass approve=True to satisfy the first-export teacher
+    approval gate. Scheduled calls never grant approval; unapproved lenses are
+    queued with a visible ledger reason.
+    """
+    from src.education.student_lens import StudentLensStore
+
+    schedule = get_sync_schedule()
+    if scheduled and not schedule["enabled"]:
+        return {
+            "status": "disabled",
+            "scheduled": True,
+            "pushed": [],
+            "queued": [],
+            "failed": [],
+            "skipped": [],
+        }
+
+    store = StudentLensStore()
+    try:
+        if student_id:
+            lens_ids = [student_id]
+            store.get_lens(student_id)
+        else:
+            lens_ids = [str(row["student_id"]) for row in store.list_lenses()]
+    finally:
+        store.close()
+
+    approved = get_sync_approved_lenses()
+    result = {
+        "status": "ok",
+        "scheduled": scheduled,
+        "pushed": [],
+        "queued": [],
+        "failed": [],
+        "skipped": [],
+    }
+    for sid in lens_ids:
+        if approve:
+            set_lens_sync_approved(sid, True)
+            approved.add(sid)
+        if sid not in approved:
+            reason = "teacher approval required before first Drive sync"
+            record_sync_attempt(
+                sid,
+                status="queued",
+                category=DEFAULT_SHARED_CATEGORY,
+                reason=reason,
+            )
+            result["queued"].append({"student_id": sid, "reason": reason})
+            continue
+        if scheduled and not _sync_due(
+            sid, interval_seconds=schedule["interval_seconds"]
+        ):
+            result["skipped"].append({"student_id": sid, "reason": "not due"})
+            continue
+        ok = await sync_lens_to_drive(sid)
+        if ok:
+            result["pushed"].append({"student_id": sid})
+        else:
+            row = read_sync_ledger().get("students", {}).get(sid, {})
+            bucket = "queued" if row.get("last_status") == "queued" else "failed"
+            result[bucket].append({
+                "student_id": sid,
+                "reason": row.get("failure_reason") or row.get("last_status") or "",
+            })
+    return result
 
 
 def build_ledger_ndjson(store, student_id: str, teacher_id: str) -> str:

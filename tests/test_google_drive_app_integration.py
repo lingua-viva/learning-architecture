@@ -377,6 +377,9 @@ def test_drive_workspace_ui_mounts_controls():
         "/api/students/ingest/class-folder",
         "Build class lenses",
         "drive-class-ingest-result",
+        "/api/drive/sync-now",
+        "Run daily sync check",
+        "drive-sync-action-result",
     ):
         assert text in html, f"missing UI mount: {text}"
 
