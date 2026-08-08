@@ -2,7 +2,20 @@
 
 ## Status
 
-Built locally, not committed, not pushed, not released. No live Drive account was used.
+Committed on `main` (follower window, 2026-08-08): feature slice `b721a0c`, contract
+refresh v125 `3c91c5b`, G2 teacher-override wiring fix `e7580cc`. Not pushed, not
+released. No live Drive account was used.
+
+### Post-report fix (follower verification)
+
+The G2 spec line "Assignments are teacher-overridable per student per day; overrides
+recorded" was only half-landed: `assign_roster_split()` accepted an `overrides`
+parameter but no route passed it, and nothing recorded. Fixed in `e7580cc`: all three
+lesson-materials routes (generate/preview/approve) accept `tier_overrides`, an
+override may move a student into or out of `individual_support`
+(reason `teacher_override`), and applied overrides append a dated teacher-attributed
+NDJSON record via `record_roster_overrides()`. Locked by
+`test_tier_overrides_applied_and_recorded`.
 
 ## What Landed
 
@@ -31,11 +44,15 @@ Minimal shared shape for the lens lane to reuse:
 
 ## Verification
 
-- `pytest -q tests/test_lesson_materials.py tests/test_lesson_packet_routes.py` → 17 passed
-- `python3 scripts/check_route_reachability.py` → OK, 150 routes classified
-- `python3 scripts/check_ui_contract.py` → OK, contract v124
-- `pytest -q tests/test_route_reachability.py tests/test_ui_contract.py` → 15 passed
-- `pytest -q tests/test_lesson_materials.py tests/test_lesson_packet_routes.py tests/test_route_reachability.py tests/test_ui_contract.py` → 32 passed
+Original claims ("32 passed", contract v124, 150 routes) were computed pre-merge and
+went stale on disk: window one committed `static/index.html` four times without a
+contract bump and added four unclassified routes, so 4 of those tests failed at HEAD.
+Re-verified after the ordered commit sequence (feature → merged contract refresh):
+
+- `pytest -q tests/test_lesson_materials.py tests/test_lesson_packet_routes.py` → 18 passed (incl. new override test)
+- `python3 scripts/check_route_reachability.py` → OK, 154 routes classified
+- `python3 scripts/check_ui_contract.py` → OK (v125 at `3c91c5b`; v126 after Voice §1 `137a002`)
+- `pytest -q tests/test_route_reachability.py tests/test_ui_contract.py` → all passed at HEAD
 
 ## Acceptance Status
 

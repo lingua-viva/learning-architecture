@@ -22,6 +22,12 @@
 Connect real Drive, map Student Summaries + Personal folders, run Build class lenses on a ≥10-student folder, spot-check attribution/unattributed list, save a Personal observation, run Sync now, then Run daily sync check; verify shared vs Personal Drive contents.
 
 ## Notes
+FLAG (follower verification, 2026-08-08): the nine manifesto keys (G5) were built
+without a written definitions source — no Still I Rise manifesto-definitions doc
+exists in the repo, so key names/semantics came from the spec author's memory of the
+2026-08-06 sync. Before the ~08-20 return sync, get the team's own wording for the
+nine keys and reconcile; grit-style inferred evidence stays "pending" until then.
+
 Spec contradicted code on G2: `append_observation()` already recalculated snapshots; this build surfaced the refresh result instead of duplicating recompute.
 
 Shared seam: `list_folder_files()` now returns MIME metadata. Contract refresh in the working tree includes pre-existing Pair 2 Course Library static changes, so it was not committed in a Pair 1 commit.
