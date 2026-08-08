@@ -101,6 +101,13 @@ class IndividualSupportStudent:
 
 
 @dataclass
+class RosterPlacement:
+    student_id: str
+    display_name: str
+    source: str
+
+
+@dataclass
 class LessonMaterialsResult:
     materials: list[TierMaterial]
     lesson_summary: str
@@ -113,6 +120,7 @@ class RosterSplit:
     tier_groups: dict[str, list[str]]
     roster_names: list[str]
     individual_support: list[IndividualSupportStudent]
+    group_members: dict[str, list[RosterPlacement]] = field(default_factory=dict)
     # Teacher overrides actually applied to this split (student_id -> tier or
     # "individual_support"). Recorded so per-day assignment changes are
     # auditable, per SPEC_LV_TIERED_MATERIALS_FULL_CIRCLE G2.
@@ -214,11 +222,25 @@ def _individual_support_reason(lens: dict) -> str | None:
     return None
 
 
+def _placement_source(lens: dict, tier: str) -> str:
+    try:
+        rti_tier = int(lens.get("rti_current_tier") or 1)
+    except (TypeError, ValueError):
+        rti_tier = 1
+    if rti_tier == 2:
+        return "rti"
+    cefr_snapshot = lens.get("cefr_snapshot")
+    if isinstance(cefr_snapshot, dict) and any(cefr_snapshot.values()):
+        return "cefr"
+    return "default"
+
+
 def assign_roster_split(
     store,
     teacher_id: str,
     student_ids: list[str] | None = None,
     overrides: dict[str, str] | None = None,
+    record_overrides: bool = True,
 ) -> RosterSplit:
     """Group the roster into three tiers plus kept-apart support.
 
@@ -245,6 +267,7 @@ def assign_roster_split(
     }
     diff = ContentDifferentiator()
     groups: dict[str, list[str]] = {tier: [] for tier in TIERS}
+    group_members: dict[str, list[RosterPlacement]] = {tier: [] for tier in TIERS}
     names: list[str] = []
     individual_support: list[IndividualSupportStudent] = []
     applied: dict[str, str] = {}
@@ -266,7 +289,15 @@ def assign_roster_split(
                     )
                 )
             else:
-                groups[overrides[student_id]].append(student_id)
+                tier = overrides[student_id]
+                groups[tier].append(student_id)
+                group_members[tier].append(
+                    RosterPlacement(
+                        student_id=student_id,
+                        display_name=display_name or student_id,
+                        source="teacher_override",
+                    )
+                )
             continue
         reason = _individual_support_reason(lens)
         if reason:
@@ -278,10 +309,24 @@ def assign_roster_split(
                 )
             )
             continue
-        groups[diff.assign_tier_for_student(lens)].append(student_id)
-    if applied:
+        tier = diff.assign_tier_for_student(lens)
+        groups[tier].append(student_id)
+        group_members[tier].append(
+            RosterPlacement(
+                student_id=student_id,
+                display_name=display_name or student_id,
+                source=_placement_source(lens, tier),
+            )
+        )
+    if applied and record_overrides:
         record_roster_overrides(teacher_id, applied)
-    return RosterSplit(groups, names, individual_support, overrides=applied)
+    return RosterSplit(
+        groups,
+        names,
+        individual_support,
+        group_members=group_members,
+        overrides=applied,
+    )
 
 
 def roster_overrides_path() -> Path:

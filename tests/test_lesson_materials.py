@@ -122,13 +122,23 @@ def test_generate_returns_three_tiers():
 def test_assign_roster_split_keeps_explicit_support_apart():
     roster = [
         _lens("student-a", "Student A", rti=1, cefr="A2"),
+        _lens("student-c", "Student C", rti=2, cefr="B1+"),
+        _lens("student-d", "Student D", rti=1, cefr=None),
         {
             **_lens("student-b", "Student B", rti=1, cefr="A2"),
             "support_profile": {"needs_individual_support": True},
         },
     ]
     split = assign_roster_split(FakeStore(roster), "teacher-a")
-    assert split.tier_groups["on_track"] == ["student-a"]
+    assert split.tier_groups["on_track"] == ["student-a", "student-c"]
+    assert split.tier_groups["foundational"] == ["student-d"]
+    assert split.group_members["on_track"][0].__dict__ == {
+        "student_id": "student-a",
+        "display_name": "Student A",
+        "source": "cefr",
+    }
+    assert split.group_members["on_track"][1].source == "rti"
+    assert split.group_members["foundational"][0].source == "default"
     assert split.individual_support[0].student_id == "student-b"
     assert split.individual_support[0].reason == "support_profile_flag"
 
@@ -159,6 +169,8 @@ def test_tier_overrides_applied_and_recorded(tmp_path, monkeypatch):
     )
     assert split.tier_groups["extended"] == ["student-a"]
     assert split.tier_groups["on_track"] == ["student-b"]
+    assert split.group_members["extended"][0].source == "teacher_override"
+    assert split.group_members["on_track"][0].source == "teacher_override"
     assert [s.student_id for s in split.individual_support] == ["student-c"]
     assert split.individual_support[0].reason == "teacher_override"
     assert split.overrides == {
@@ -178,6 +190,23 @@ def test_tier_overrides_applied_and_recorded(tmp_path, monkeypatch):
     clean = assign_roster_split(FakeStore(roster), "teacher-a")
     assert clean.overrides == {}
     assert len(roster_overrides_path().read_text(encoding="utf-8").strip().splitlines()) == 1
+
+
+def test_roster_split_preview_overrides_do_not_record(tmp_path, monkeypatch):
+    from src.lingua_viva.lesson_materials import roster_overrides_path
+
+    monkeypatch.setenv("LV_ROSTER_OVERRIDES_PATH", str(tmp_path / "roster_overrides.ndjson"))
+    roster = [_lens("student-a", "Student A", rti=1, cefr="A2")]
+    split = assign_roster_split(
+        FakeStore(roster),
+        "teacher-a",
+        overrides={"student-a": "extended"},
+        record_overrides=False,
+    )
+
+    assert split.overrides == {"student-a": "extended"}
+    assert split.group_members["extended"][0].source == "teacher_override"
+    assert not roster_overrides_path().exists()
 
 
 def test_no_student_names_in_llm_prompts_or_content():
