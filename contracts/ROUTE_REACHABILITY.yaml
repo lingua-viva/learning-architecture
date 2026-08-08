@@ -275,11 +275,13 @@ reachable_from_ui:
   - route: "POST /api/filemap/clear"
     call_site: 'api("/api/filemap/clear"'
 
-  - route: "POST /api/prepare/activity"
-    call_site: 'api("/api/prepare/activity"'
+  - route: "POST /api/lesson-materials/roster-split"
+    call_site: 'api("/api/lesson-materials/roster-split"'
+    note: "Prepare differentiated groups panel: previews current tier split and teacher overrides without recording preview-only choices."
 
-  - route: "GET /api/prepare/tier-assignments"
-    call_site: 'api("/api/prepare/tier-assignments")'
+  - route: "POST /api/lesson-materials/generate"
+    call_site: 'api("/api/lesson-materials/generate"'
+    note: "Prepare Generate Materials button; carries tier_overrides from the roster split review."
 
   - route: "GET /api/teacher/lens"
     call_site: 'fetch("/api/teacher/lens"'
@@ -410,9 +412,6 @@ reachable_from_ui:
   - route: "POST /api/query/stream"
     call_site: '"/api/query/stream"'
 
-  - route: "GET /api/students/support-summary"
-    call_site: 'api("/api/students/support-summary")'
-
   - route: "GET /api/google-drive/status"
     call_site: 'api("/api/google-drive/status")'
 
@@ -520,6 +519,28 @@ reachable_from_ui:
       archives the teacher's copy before replacing — never destroys work.
 
 intentionally_backend_only:
+  - route: "POST /api/prepare/activity"
+    status: permanent
+    reason: >-
+      Legacy activity-pack endpoint retained for programmatic tests and
+      operator diagnostics. The current Prepare UI uses the lesson-materials
+      roster split and packet preview routes for the teacher-facing flow.
+
+  - route: "GET /api/prepare/tier-assignments"
+    status: permanent
+    reason: >-
+      Legacy read-only tier-assignment snapshot retained for tests/operator
+      diagnostics. The teacher-facing Prepare panel now calls
+      POST /api/lesson-materials/roster-split so overrides and individual
+      support separation use the same current route.
+
+  - route: "GET /api/students/support-summary"
+    status: permanent
+    reason: >-
+      Programmatic support-summary endpoint retained for diagnostics and
+      older panels. The current Students and Prepare surfaces no longer call
+      it directly.
+
   - route: "POST /api/google-drive/sync-folder"
     status: deferred_undecided
     reason: >-
@@ -566,13 +587,6 @@ intentionally_backend_only:
       Cohort lesson-planning backend slice (2026-07-30). Lists locally saved
       teacher-owned plans for API/QA verification; UI workbench placement is
       deferred.
-
-  - route: "POST /api/lesson-materials/generate"
-    status: deferred_undecided
-    reason: >-
-      MVP sprint Spec 3 (2026-08-01). Raw generation API kept for API/QA
-      verification; the teacher-facing Prepare flow now uses the preview and
-      approval packet routes.
 
   - route: "POST /api/voice/act"
     status: deferred_undecided
