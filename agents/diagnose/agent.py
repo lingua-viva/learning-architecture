@@ -11,7 +11,6 @@ import json
 import re
 import time
 from dataclasses import dataclass, field
-from pathlib import Path
 
 
 @dataclass
@@ -54,8 +53,9 @@ class DiagnoseAgent:
     INTENT = "DIAGNOSE"
 
     def __init__(self):
-        self._diagnoses_file = Path(__file__).parent.parent.parent / "memory" / "data" / "diagnoses.ndjson"
-        self._diagnoses_file.parent.mkdir(parents=True, exist_ok=True)
+        from src.lingua_viva.runtime_paths import memory_data_dir
+
+        self._diagnoses_file = memory_data_dir() / "diagnoses.ndjson"
 
     def analyze(self, content: str, session_id: str, query_hash: str, confidence: float) -> DiagnosisRecord:
         """Parse model output into structured diagnosis."""

@@ -51,7 +51,9 @@ class NotesManager:
 
     def __init__(self, data_dir: Optional[Path] = None):
         if data_dir is None:
-            data_dir = Path(__file__).parent / "data" / "notes"
+            from src.lingua_viva.runtime_paths import memory_data_dir
+
+            data_dir = memory_data_dir() / "notes"
         self.data_dir = data_dir
         self.data_dir.mkdir(parents=True, exist_ok=True)
 

@@ -57,7 +57,11 @@ class SkillEvolutionEngine:
 
     def __init__(self, skills_dir: Optional[Path] = None, data_dir: Optional[Path] = None):
         self._skills_dir = skills_dir or Path(__file__).parent
-        self._data_dir = data_dir or Path(__file__).parent.parent / "memory" / "data" / "skill_evolution"
+        if data_dir is None:
+            from src.lingua_viva.runtime_paths import memory_data_dir
+
+            data_dir = memory_data_dir() / "skill_evolution"
+        self._data_dir = data_dir
         self._data_dir.mkdir(parents=True, exist_ok=True)
 
     def record_use(self, skill_name: str, path_record: PathRecord) -> Optional[dict]:

@@ -14,7 +14,6 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass, field
-from pathlib import Path
 
 
 @dataclass
@@ -58,8 +57,9 @@ class CreateAgent:
     INTENT = "CREATE"
 
     def __init__(self):
-        self._artifacts_file = Path(__file__).parent.parent.parent / "memory" / "data" / "artifacts.ndjson"
-        self._artifacts_file.parent.mkdir(parents=True, exist_ok=True)
+        from src.lingua_viva.runtime_paths import memory_data_dir
+
+        self._artifacts_file = memory_data_dir() / "artifacts.ndjson"
 
     def analyze(
         self,

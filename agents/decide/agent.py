@@ -12,7 +12,6 @@ import json
 import re
 import time
 from dataclasses import dataclass, field
-from pathlib import Path
 
 
 @dataclass
@@ -60,8 +59,9 @@ class DecideAgent:
     INTENT = "DECIDE"
 
     def __init__(self):
-        self._decisions_file = Path(__file__).parent.parent.parent / "memory" / "data" / "decisions.ndjson"
-        self._decisions_file.parent.mkdir(parents=True, exist_ok=True)
+        from src.lingua_viva.runtime_paths import memory_data_dir
+
+        self._decisions_file = memory_data_dir() / "decisions.ndjson"
 
     def analyze(self, content: str, session_id: str, query_hash: str, confidence: float) -> DecisionRecord:
         """Analyze model output for decision + reversibility."""

@@ -19,3 +19,14 @@ def runtime_data_dir(component: str = "") -> Path:
         base = base / (safe or "app")
     base.mkdir(parents=True, exist_ok=True)
     return base
+
+
+def memory_data_dir() -> Path:
+    """Sanctioned location for the path-memory NDJSON stores.
+
+    Replaces the ``memory/data`` source-tree default (third instance of the
+    ``Path(__file__)`` write-location class, closed 2026-08-08). Existing
+    dev-machine data must be moved once by the operator:
+    ``cp -r memory/data/* ~/.lingua-viva/runtime/memory/``.
+    """
+    return runtime_data_dir("memory")
