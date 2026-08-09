@@ -1257,7 +1257,9 @@ class StudentLensStore:
             return ["Observation timestamp is in the future"]
         return []
 
-    def append_observation(self, observation: Observation) -> dict:
+    def append_observation(
+        self, observation: Observation, duplicate_window_seconds: int = 0
+    ) -> dict:
         """
         Append one observation to a student's history and recalculate the
         lens snapshot from it. Never overwrites or deletes prior
@@ -1270,6 +1272,27 @@ class StudentLensStore:
 
         errors = observation.validate()
         errors.extend(self.validate_observation_timestamp(observation))
+
+        duplicate_row = self._find_recent_duplicate_observation(
+            observation, duplicate_window_seconds
+        )
+        if duplicate_row is not None:
+            existing = self._observation_row_to_dict(duplicate_row)
+            existing["duplicate"] = True
+            existing["deduplicated"] = True
+            return {
+                "observation": existing,
+                "validation_errors": existing.get("validation_errors", []),
+                "escalations": [],
+                "duplicate": True,
+                "deduplicated": True,
+                "feedback": {
+                    "saved_entries": 0,
+                    "categories_updated": [],
+                    "message": "Already saved.",
+                    "next_review_prompt": None,
+                },
+            }
 
         current_tier = row["rti_current_tier"]
         if observation.rti_tier is not None and observation.rti_tier != current_tier:
@@ -1447,6 +1470,40 @@ class StudentLensStore:
                 "next_review_prompt": _support_next_review_prompt(support_entries),
             },
         }
+
+    def _find_recent_duplicate_observation(
+        self, observation: Observation, duplicate_window_seconds: int
+    ) -> Optional[sqlite3.Row]:
+        if duplicate_window_seconds <= 0:
+            return None
+        try:
+            recorded = datetime.fromisoformat(observation.recorded_at)
+        except (TypeError, ValueError):
+            recorded = datetime.now(timezone.utc)
+        if recorded.tzinfo is None:
+            recorded = recorded.replace(tzinfo=timezone.utc)
+        cutoff = (recorded - timedelta(seconds=duplicate_window_seconds)).isoformat()
+        return self._conn.execute(
+            """
+            SELECT * FROM observations
+            WHERE student_id = ?
+              AND teacher_id = ?
+              AND template_type = ?
+              AND raw_transcript = ?
+              AND recorded_at >= ?
+              AND recorded_at <= ?
+            ORDER BY recorded_at DESC, observation_id DESC
+            LIMIT 1
+            """,
+            (
+                observation.student_id,
+                observation.teacher_id,
+                observation.template_type,
+                observation.raw_transcript,
+                cutoff,
+                recorded.isoformat(),
+            ),
+        ).fetchone()
 
     # ------------------------------------------------------------------
     # Read / export / delete (teacher rights)

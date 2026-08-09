@@ -193,6 +193,7 @@ class ObservationCapturePipeline:
         classification_guidance: Optional[dict] = None,
         teacher_feedback: Optional[dict] = None,
         ethos_trait_id: Optional[str] = None,
+        duplicate_window_seconds: int = 0,
     ) -> dict:
         """
         Classify + govern + sanitize-audit + persist one observation.
@@ -259,7 +260,14 @@ class ObservationCapturePipeline:
             teacher_feedback=teacher_feedback,
         )
 
-        result = self.store.append_observation(observation)
+        result = self.store.append_observation(
+            observation, duplicate_window_seconds=duplicate_window_seconds
+        )
+        if result.get("duplicate"):
+            result.setdefault("ethos_trait_suggestions", [])
+            result.setdefault("category_suggestions", [])
+            result.setdefault("strategy_outcome_parsed", {})
+            return result
         result["ethos_trait_suggestions"] = self._record_ethos_trait_mapping(
             student_id=student_id,
             teacher_id=teacher_id,
