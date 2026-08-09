@@ -16,6 +16,9 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v132 (2026-08-08): Student Summary finish — parent drafts fail closed on
+#     unknown students and now expose copy + print exits through the shared
+#     local print chokepoint.
 #   v131 (2026-08-08): Pending evidence review — Students lens now fetches
 #     model/import-suggested strengths and ethos evidence, renders a teacher
 #     confirm/dismiss queue, and posts one item at a time through review routes.
@@ -596,7 +599,7 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 131
+version: 132
 # v122 (2026-08-06): Failure-mode hardening. src/web.py: voice-act observation
 #   dedup guard (same 60s window as observe/capture, prevents network-retry
 #   duplicates). src/education/parent_report.py: personal_context evidence
