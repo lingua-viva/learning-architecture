@@ -100,7 +100,13 @@ def test_parent_summary_source_observation_ids_are_student_owned(monkeypatch, tm
 def test_parent_summary_exit_surface_stays_mounted():
     html = (REPO / "static" / "index.html").read_text(encoding="utf-8")
     assert "Copy final text" in html
+    assert "parentSummaryFinalText" in html
+    assert 'querySelector("textarea")' in html
+    assert "navigator.clipboard.writeText(text)" in html
+    assert "printParentSummaryFinalText" in html
     assert "printPacketHtml" in html
+    assert "printPacketHtml(doc, \"Student summary\")" in html
+    assert "textarea.value" in html
     assert "Select who this note is about before drafting." in html
     assert "window.print" not in html
     assert html.count(".print()") == 1

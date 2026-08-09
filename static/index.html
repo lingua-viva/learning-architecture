@@ -3895,7 +3895,43 @@
              <p class="voice-hint" style="margin-top:8px;">Replace it with &ldquo;your child&rdquo;, then send. This draft was not sent anywhere.</p>
            </div>`
         : "";
-      $("parent-output").innerHTML = `${warnings}<h3>${escapeHtml(data.subject_line)}</h3>${sourceLine(data.source_citation)}<textarea>${escapeHtml(data.body + "\n\n" + data.home_activities.join("\n"))}</textarea><p>${escapeHtml(data.review_label)}</p>`;
+      $("parent-output").innerHTML = `${warnings}<h3 id="parent-summary-subject">${escapeHtml(data.subject_line)}</h3>${sourceLine(data.source_citation)}<textarea>${escapeHtml(data.body + "\n\n" + data.home_activities.join("\n"))}</textarea><div class="row" style="margin-top:10px;"><button id="parent-copy-final" type="button">Copy final text</button><button id="parent-print-final" type="button">Print</button><span class="voice-hint">${escapeHtml(data.review_label)}</span></div>`;
+      $("parent-copy-final").addEventListener("click", copyParentSummaryFinalText);
+      $("parent-print-final").addEventListener("click", printParentSummaryFinalText);
+    }
+
+    function parentSummaryFinalText() {
+      const subject = $("parent-summary-subject") ? $("parent-summary-subject").textContent.trim() : "";
+      const textarea = $("parent-output") ? $("parent-output").querySelector("textarea") : null;
+      const body = textarea ? textarea.value.trim() : "";
+      return subject ? `${subject}\n\n${body}` : body;
+    }
+
+    async function copyParentSummaryFinalText() {
+      const text = parentSummaryFinalText();
+      if (!text) {
+        showToast("No summary text to copy.", "error");
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(text);
+        showSaveToast("summary copied");
+      } catch (error) {
+        showToast("Copy failed. Select the text and copy it manually.", "error");
+      }
+    }
+
+    function printParentSummaryFinalText() {
+      const subject = $("parent-summary-subject") ? $("parent-summary-subject").textContent.trim() : "Student Summary";
+      const textarea = $("parent-output") ? $("parent-output").querySelector("textarea") : null;
+      const body = textarea ? textarea.value : "";
+      if (!body.trim()) {
+        showToast("No summary text to print.", "error");
+        return;
+      }
+      const paragraphs = body.split(/\n{2,}/).map(part => `<p>${escapeHtml(part).replace(/\n/g, "<br>")}</p>`).join("");
+      const doc = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(subject)}</title><style>body{font-family:Georgia,'Times New Roman',serif;color:#1f2933;line-height:1.45;margin:18mm;}h1{font-size:24px;margin:0 0 18px;}p{margin:0 0 12px;}</style></head><body><h1>${escapeHtml(subject)}</h1>${paragraphs}</body></html>`;
+      printPacketHtml(doc, "Student summary");
     }
 
     function healthBadgeClass(status) {
