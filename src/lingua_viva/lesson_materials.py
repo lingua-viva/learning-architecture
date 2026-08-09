@@ -820,6 +820,29 @@ def render_shared_packet_markdown(
     )
 
 
+def render_packet_bundle(
+    lesson: LessonInput,
+    materials: list[TierMaterial],
+    *,
+    status: str,
+    individual_support: list[IndividualSupportStudent] | None,
+) -> dict[str, str]:
+    """Render teacher and student-safe packet variants at one chokepoint."""
+    markdown = render_printable_packet_markdown(
+        lesson,
+        materials,
+        status=status,
+        individual_support=individual_support or [],
+    )
+    student_markdown = render_shared_packet_markdown(lesson, materials, status=status)
+    return {
+        "markdown": markdown,
+        "html": render_printable_packet_html(markdown),
+        "print_html": render_printable_packet_html(markdown, print_ready=True),
+        "student_print_html": render_printable_packet_html(student_markdown, print_ready=True),
+    }
+
+
 def lesson_packet_dir() -> Path:
     override = os.environ.get("LV_LESSON_PACKET_DIR")
     return Path(override).expanduser() if override else lv_home() / "runtime" / "lesson_packets"

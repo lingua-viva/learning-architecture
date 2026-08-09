@@ -5685,8 +5685,7 @@ async def lesson_materials_packet_preview(request: Request, payload: dict):
         assign_roster_split,
         generate_lesson_materials,
         materials_as_dicts,
-        render_printable_packet_html,
-        render_printable_packet_markdown,
+        render_packet_bundle,
     )
 
     teacher_id = effective_teacher_id(request, str(payload.get("teacher_id") or "local-teacher"))
@@ -5710,13 +5709,12 @@ async def lesson_materials_packet_preview(request: Request, payload: dict):
             roster_names=split.roster_names,
             individual_support=split.individual_support,
         )
-        markdown = render_printable_packet_markdown(
+        packet = render_packet_bundle(
             lesson,
             result.materials,
+            status="DRAFT",
             individual_support=result.individual_support,
         )
-        html = render_printable_packet_html(markdown)
-        print_html = render_printable_packet_html(markdown, print_ready=True)
     except PermissionError as exc:
         return JSONResponse({"error": "unauthorized_student_ids", "detail": str(exc)}, status_code=422)
     except ValueError as exc:
@@ -5725,9 +5723,10 @@ async def lesson_materials_packet_preview(request: Request, payload: dict):
     return {
         "packet": {
             "format": "html+markdown",
-            "markdown": markdown,
-            "html": html,
-            "print_html": print_html,
+            "markdown": packet["markdown"],
+            "html": packet["html"],
+            "print_html": packet["print_html"],
+            "student_print_html": packet["student_print_html"],
             "filename": None,
             "printable": True,
         },
@@ -5756,8 +5755,7 @@ async def lesson_materials_packet_approve(request: Request, payload: dict):
         material_from_dict,
         materials_as_dicts,
         printable_packet_hash,
-        render_printable_packet_html,
-        render_printable_packet_markdown,
+        render_packet_bundle,
         share_packet_to_drive,
         write_printable_packet,
     )
@@ -5814,9 +5812,13 @@ async def lesson_materials_packet_approve(request: Request, payload: dict):
             materials,
             individual_support=individual_support,
         )
-        markdown = Path(path).read_text(encoding="utf-8")
-        html = render_printable_packet_html(markdown)
-        print_html = render_printable_packet_html(markdown, print_ready=True)
+        packet = render_packet_bundle(
+            lesson,
+            materials,
+            status="APPROVED",
+            individual_support=individual_support,
+        )
+        markdown = packet["markdown"]
     except ValueError as exc:
         return JSONResponse({"error": "approval_failed", "detail": str(exc)}, status_code=422)
 
@@ -5868,8 +5870,9 @@ async def lesson_materials_packet_approve(request: Request, payload: dict):
         "packet": {
             "format": "html+markdown",
             "markdown": markdown,
-            "html": html,
-            "print_html": print_html,
+            "html": packet["html"],
+            "print_html": packet["print_html"],
+            "student_print_html": packet["student_print_html"],
             "file_path": str(path),
             "printable": True,
         },
