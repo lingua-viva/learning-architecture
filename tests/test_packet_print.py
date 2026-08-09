@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
@@ -11,6 +12,9 @@ from src.lingua_viva.lesson_materials import (
     render_packet_bundle,
 )
 from src.web import app
+
+
+REPO = Path(__file__).resolve().parents[1]
 
 
 def _lesson() -> LessonInput:
@@ -168,3 +172,18 @@ def test_packet_approve_route_returns_both_print_variants(monkeypatch, tmp_path)
     assert "Teacher-Only Individual Support" in packet["print_html"]
     assert "Teacher-Only Individual Support" not in packet["student_print_html"]
     assert "Zoe Rivera" not in packet["student_print_html"]
+
+
+def test_packet_print_surface_uses_iframe_chokepoint():
+    html = (REPO / "static" / "index.html").read_text(encoding="utf-8")
+
+    assert "function printPacketHtml(printHtml, label)" in html
+    assert "packet.print_html" in html
+    assert "packet.student_print_html" in html
+    assert "Print teacher packet" in html
+    assert "Print student handouts" in html
+    assert "Student handouts exclude the teacher-only individual support section." in html
+    assert "document.createElement(\"iframe\")" in html
+    assert "srcdoc = printHtml" in html
+    assert "window.print" not in html
+    assert html.count(".print()") == 1

@@ -2034,17 +2034,54 @@
           body: JSON.stringify(lessonPayload())
         });
         state.lessonPacketDraft = data;
-        const rendered = data.packet && data.packet.html ? data.packet.html : "";
+        const packet = data.packet || {};
+        const rendered = packet.html || "";
+        const teacherPrintButton = packet.print_html ? `<button id="print-teacher-packet" type="button">Print teacher packet</button>` : "";
+        const studentPrintButton = packet.student_print_html ? `<button id="print-student-handouts" type="button">Print student handouts</button>` : "";
         output.innerHTML = `
           <div class="view-head"><div><h3>Printable Packet Preview</h3><p>Review the teacher cover page and student handouts before approving a local file.</p></div><span class="badge warn">draft</span></div>
           <div class="output lesson-packet-rendered" style="max-height:520px;overflow:auto;">${rendered}</div>
+          <div class="row" style="margin-top:12px;">${teacherPrintButton}${studentPrintButton}<span class="voice-hint">Student handouts exclude the teacher-only individual support section.</span></div>
           <div class="row" style="margin-top:12px;">
             <button id="approve-lesson-packet" class="primary" type="button">Approve Local Packet</button>
           </div>`;
         $("approve-lesson-packet").addEventListener("click", approveLessonPacket);
+        const teacherPrint = $("print-teacher-packet");
+        if (teacherPrint) teacherPrint.addEventListener("click", () => printPacketHtml(packet.print_html, "Teacher packet"));
+        const studentPrint = $("print-student-handouts");
+        if (studentPrint) studentPrint.addEventListener("click", () => printPacketHtml(packet.student_print_html, "Student handouts"));
       } catch (error) {
         output.innerHTML = `<p>${escapeHtml(error.message)}</p>`;
       }
+    }
+
+    function printPacketHtml(printHtml, label) {
+      if (!printHtml) {
+        showToast("Print document is not available yet.", "error");
+        return;
+      }
+      const frame = document.createElement("iframe");
+      frame.title = label || "Printable packet";
+      frame.style.position = "fixed";
+      frame.style.right = "0";
+      frame.style.bottom = "0";
+      frame.style.width = "0";
+      frame.style.height = "0";
+      frame.style.border = "0";
+      frame.style.visibility = "hidden";
+      frame.onload = () => {
+        const target = frame.contentWindow;
+        if (!target) {
+          frame.remove();
+          showToast("Print document could not be opened.", "error");
+          return;
+        }
+        target.focus();
+        target.print();
+        setTimeout(() => frame.remove(), 1000);
+      };
+      document.body.appendChild(frame);
+      frame.srcdoc = printHtml;
     }
 
     async function approveLessonPacket() {
@@ -2056,10 +2093,18 @@
           method: "POST",
           body: JSON.stringify({...lessonPayload(), materials: draft.materials || [], individual_support: draft.individual_support || []})
         });
-        const rendered = data.packet && data.packet.html ? data.packet.html : "";
+        const packet = data.packet || {};
+        const rendered = packet.html || "";
+        const teacherPrintButton = packet.print_html ? `<button id="print-approved-teacher-packet" type="button">Print teacher packet</button>` : "";
+        const studentPrintButton = packet.student_print_html ? `<button id="print-approved-student-handouts" type="button">Print student handouts</button>` : "";
         output.innerHTML = `
-          <div class="source-line"><span class="badge ok">approved</span><span class="badge">local file</span><span class="voice-hint">${escapeHtml(data.packet.file_path || "")}</span></div>
-          <div class="output lesson-packet-rendered" style="max-height:520px;overflow:auto;">${rendered}</div>`;
+          <div class="source-line"><span class="badge ok">approved</span><span class="badge">local file</span><span class="voice-hint">${escapeHtml(packet.file_path || "")}</span></div>
+          <div class="output lesson-packet-rendered" style="max-height:520px;overflow:auto;">${rendered}</div>
+          <div class="row" style="margin-top:12px;">${teacherPrintButton}${studentPrintButton}<span class="voice-hint">Student handouts exclude the teacher-only individual support section.</span></div>`;
+        const teacherPrint = $("print-approved-teacher-packet");
+        if (teacherPrint) teacherPrint.addEventListener("click", () => printPacketHtml(packet.print_html, "Approved teacher packet"));
+        const studentPrint = $("print-approved-student-handouts");
+        if (studentPrint) studentPrint.addEventListener("click", () => printPacketHtml(packet.student_print_html, "Approved student handouts"));
         showSaveToast("printable packet approved");
       } catch (error) {
         output.innerHTML = `<p>${escapeHtml(error.message)}</p>`;
