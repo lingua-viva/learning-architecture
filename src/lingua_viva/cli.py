@@ -486,6 +486,72 @@ def _golden_workflows(args: argparse.Namespace) -> int:
     return 0 if all(r.status in {"PASS", "SKIPPED_MISSING_CREDENTIALS"} for r in results) else 1
 
 
+def _library(args: argparse.Namespace) -> int:
+    from src.lingua_viva import library
+
+    if args.library_command == "add":
+        try:
+            entry = library.add_document(args.path, title=args.title)
+        except (FileNotFoundError, PermissionError, ValueError) as exc:
+            print(f"Refused: {exc}")
+            return 2
+        cats = ", ".join(f"{c['node_id']} ({c['domain']})" for c in entry["categories"]) or "none"
+        print(f"Ingested {entry['doc_id']}: \"{entry['title']}\" — {entry['chunk_count']} chunks; categories: {cats}")
+        return 0
+    if args.library_command == "search":
+        results = library.search(
+            args.query, category=args.category, role=args.role, limit=args.limit,
+        )
+        if args.json:
+            _print_json({"results": results})
+        elif not results:
+            print("No matching library documents.")
+        else:
+            for r in results:
+                primary = r["categories"][0]["node_id"] if r["categories"] else "-"
+                print(f"{r['doc_id']}  score={r['score']:.2f}  [{primary}]  {r['title']}")
+                if r["snippet"]:
+                    print(f"    {r['snippet'][:160]}")
+        return 0
+    if args.library_command == "status":
+        info = library.status()
+        if args.json:
+            _print_json(info)
+        else:
+            print(f"Library at {info['library_root']}")
+            print(f"Documents: {info['doc_count']}  Chunks: {info['chunk_count']}")
+            print(f"By source: {info['by_source'] or '{}'}")
+            print(f"By primary domain: {info['by_primary_domain'] or '{}'}")
+        return 0
+    return 1
+
+
+def _research(args: argparse.Namespace) -> int:
+    """Teacher-initiated external research (fail-closed perplexity gateway)."""
+    from src.lingua_viva import perplexity_gateway
+
+    try:
+        result = perplexity_gateway.research(args.query, dry_run=args.dry_run)
+    except perplexity_gateway.ResearchDisabledError as exc:
+        print(f"Refused: {exc}")
+        return 2
+    except perplexity_gateway.ResearchBlockedError as exc:
+        print(f"Blocked by sanitizer: {exc}")
+        return 2
+    except ValueError as exc:
+        print(f"Refused: {exc}")
+        return 2
+    if args.json:
+        _print_json(result)
+    else:
+        mode = "dry-run — no network call" if result["dry_run"] else "live"
+        doc = result["doc"]
+        print(f"Research stored ({mode}): {doc['doc_id']} \"{doc['title']}\"")
+        if result["scrubbed_students"]:
+            print(f"Student names scrubbed from the outbound query: {len(result['scrubbed_students'])}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="lv", description="Lingua Viva local runtime")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -574,6 +640,30 @@ def build_parser() -> argparse.ArgumentParser:
     exclude.add_argument("path")
     fmap_sub.add_parser("clear", help="Clear the file map")
 
+    lib = sub.add_parser("library", help="Per-machine knowledge library (ingest + categorized retrieval)")
+    lib_sub = lib.add_subparsers(dest="library_command", required=True)
+    lib_add = lib_sub.add_parser("add", help="Ingest a local pdf/md/txt file into the library")
+    lib_add.add_argument("path")
+    lib_add.add_argument("--title", default=None)
+    lib_search = lib_sub.add_parser("search", help="Search the library by query/category/role")
+    lib_search.add_argument("query", nargs="?", default=None)
+    lib_search.add_argument("--category", default=None, help="Ontology node id, domain, or node name")
+    lib_search.add_argument("--role", default=None, help="teacher | student | parent | admin")
+    lib_search.add_argument("--limit", type=int, default=10)
+    lib_search.add_argument("--json", action="store_true")
+    lib_status = lib_sub.add_parser("status", help="Show library counts by source/domain")
+    lib_status.add_argument("--json", action="store_true")
+
+    research = sub.add_parser(
+        "research",
+        help="Teacher-initiated external research via Perplexity "
+             "(disabled unless PERPLEXITY_API_KEY and LV_ALLOW_RESEARCH=1 are both set)",
+    )
+    research.add_argument("query")
+    research.add_argument("--dry-run", action="store_true",
+                          help="Sanitize + store a mock result without any network call")
+    research.add_argument("--json", action="store_true")
+
     return parser
 
 
@@ -606,6 +696,10 @@ def main(argv: list[str] | None = None) -> int:
         return _golden_workflows(args)
     if args.command == "filemap":
         return _filemap(args)
+    if args.command == "library":
+        return _library(args)
+    if args.command == "research":
+        return _research(args)
     return 1
 
 
