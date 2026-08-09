@@ -6138,21 +6138,21 @@ async def parent_recommendation(request: Request, payload: dict):
     from src.education.parent_report import ParentReportGenerator
     from src.lingua_viva.access_roles import effective_teacher_id
 
-    student_id = str(payload.get("student_id") or "student-nora")
+    student_id = str(payload.get("student_id") or "").strip()
+    if not student_id:
+        return JSONResponse({"error": "student_id_required"}, status_code=400)
     teacher_id = effective_teacher_id(
         request, str(payload.get("teacher_id") or "local-teacher")
     )
 
     def generate(store):
         generator = ParentReportGenerator(store)
-        target_student_id = student_id
         try:
-            lens = store.export_lens(target_student_id)
+            lens = store.export_lens(student_id)
         except Exception:
-            target_student_id = "student-nora"
-            lens = store.export_lens(target_student_id)
+            return {"__error__": "unknown_student", "__status__": 404}
         draft = generator.generate_draft(
-            target_student_id,
+            student_id,
             teacher_id,
             include_evidence_summaries=bool(payload.get("include_evidence_summaries")),
         )
@@ -6211,7 +6211,10 @@ async def parent_recommendation(request: Request, payload: dict):
             result["review_required"] = True
         return result
 
-    return await asyncio.to_thread(_with_student_store, generate)
+    result = await asyncio.to_thread(_with_student_store, generate)
+    if "__error__" in result:
+        return JSONResponse({"error": result["__error__"]}, status_code=result["__status__"])
+    return result
 
 
 @app.post("/api/reflect/note")
