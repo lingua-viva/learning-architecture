@@ -2376,6 +2376,12 @@
             ethos_trait_id: $("obs-ethos-trait")?.value || null
           })
         });
+        if (result.duplicate || (result.observation && result.observation.duplicate)) {
+          $("obs-result").innerHTML = `<h3>Already saved.</h3><div class="source-line"><span class="badge ok">One local record kept.</span></div><p>Observation ${escapeHtml(result.observation.observation_id)} was already attached to the local lens.</p>`;
+          $("obs-result").scrollIntoView({ behavior: "smooth", block: "nearest" });
+          showToast("Already saved.", "success");
+          return;
+        }
         const feedback = result.feedback || {};
         const categories = (feedback.categories_updated || []).map(id => SUPPORT_CATEGORY_LABELS[id] || id).join(", ");
         // BUG-5: confirm exactly what was recorded so a wrong type/level/
