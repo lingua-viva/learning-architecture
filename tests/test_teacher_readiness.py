@@ -52,6 +52,8 @@ def test_teacher_readiness_cli_dispatch(monkeypatch):
     called = {}
 
     class FakeReport:
+        checks = []  # exit code now derives from gating P0/P1 failures
+
         def as_dict(self):
             return {"ok": True}
 

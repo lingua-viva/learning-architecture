@@ -494,6 +494,24 @@ def _import_available(module_name: str) -> bool:
 def _write_reports(report: ReadinessReport) -> None:
     REPORT_MD.parent.mkdir(parents=True, exist_ok=True)
     REPORT_JSON.write_text(json.dumps(report.as_dict(), indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
+    # Append-only run history — the audit's root gap behind the 73.7-vs-84.2
+    # discrepancy hunt was that the harness kept no history (single overwritten
+    # file). One compact NDJSON line per run makes drift measurable.
+    history_line = {
+        "started_at": report.started_at,
+        "git_sha": report.git_sha,
+        "duration_ms": report.duration_ms,
+        "total": report.total,
+        "passed": report.passed,
+        "failed": report.failed,
+        "stubbed": report.stubbed,
+        "readiness_percent": report.readiness_percent,
+        "highest_severity": report.highest_severity,
+        "failed_checks": [c.check_id for c in report.checks if c.status == "FAIL"],
+    }
+    history_path = REPORT_JSON.parent / "TEACHER_READINESS_HISTORY.ndjson"
+    with history_path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(history_line, ensure_ascii=True, sort_keys=True) + "\n")
     lines = [
         "# Lingua Viva Teacher Readiness",
         "",

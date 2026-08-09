@@ -96,7 +96,9 @@ def _doctor(args: argparse.Namespace) -> int:
         _print_json(result)
     else:
         print(format_teacher_summary(result))
-    return 0 if result["status"] in ("OK", "WARN", "FIXABLE", "PRIVATE_RISK") else 1
+    # PRIVATE_RISK is a finding, not a pass — a gate that cannot gate is worse
+    # than no gate (wiring audit 2026-08-08, greenlight fix #1).
+    return 0 if result["status"] in ("OK", "WARN", "FIXABLE") else 1
 
 
 def _serve(args: argparse.Namespace) -> int:
@@ -115,7 +117,16 @@ def _eval(args: argparse.Namespace) -> int:
             _print_json(report.as_dict())
         else:
             print(print_summary(report))
-        return 0
+        # Exit 1 on any unexpected P0/P1 failure — the harness must be able to
+        # gate (wiring audit 2026-08-08, greenlight fix #2). Expected-fail and
+        # STUB checks report but never gate.
+        gating_failures = [
+            check for check in report.checks
+            if check.status == "FAIL"
+            and check.severity in ("P0", "P1")
+            and not check.expected_fail
+        ]
+        return 1 if gating_failures else 0
     if args.eval_command != "golden":
         return 1
     from ontology.engine import OntologyEngine
