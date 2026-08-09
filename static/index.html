@@ -2777,6 +2777,15 @@
       }
       await ensureSchoolProfile();
       const lens = await api(`/api/students/${state.selectedStudent}/lens`);
+      let pendingReview = null;
+      if (showDecisionControls) {
+        try {
+          const pendingData = await api(`/api/students/${state.selectedStudent}/evidence/pending`);
+          pendingReview = pendingData.pending_review || {};
+        } catch {
+          pendingReview = {error: true};
+        }
+      }
       // Multi-teacher triangulation (operator ruling 2026-08-01): full display
       // names in the UI, "you" for the local teacher. Stored on state so the
       // category/entry renderers below can badge authors.
@@ -2786,7 +2795,7 @@
       // (SPEC_LV_BASE_LENS_SCHOOL_CATEGORIES_2026-08-01); the compact
       // summary stays for the Observe side panel.
       const supportHtml = showDecisionControls
-        ? renderCategoryProfile(lens)
+        ? renderCategoryProfile(lens, pendingReview)
         : renderSupportProfileSummary(lens.support_profile || {});
       const warnings = lens.support_profile_warnings || [];
       const warningsHtml = warnings.length
@@ -2981,7 +2990,68 @@
       return items.map(item => `<div class="source-line" style="margin-top:4px;">${escapeHtml(item.text || "")} <span class="badge ok">${escapeHtml(item.confidence || "teacher confirmed")}</span></div>`).join("");
     }
 
-    function renderCategoryProfile(lens) {
+    function pendingEvidenceCount(pending) {
+      if (!pending || pending.error) return 0;
+      const strengths = (pending.academic_strengths || []).length + (pending.personal_strengths || []).length;
+      const traits = (pending.traits || []).reduce((total, group) => total + ((group.items || []).length), 0);
+      return strengths + traits;
+    }
+
+    function renderPendingEvidenceItem(item, target, groupId) {
+      const text = item.text || item.summary || "";
+      const date = item.created_at ? item.created_at.slice(0, 10) : "unknown date";
+      const attrs = target === "strength"
+        ? `data-pending-target="strength" data-kind="${escapeHtml(groupId)}"`
+        : `data-pending-target="trait" data-trait-id="${escapeHtml(groupId)}"`;
+      return `<div class="item">
+        <p style="margin:0 0 6px;">${escapeHtml(text)}</p>
+        <div class="source-line">
+          <span class="badge warn">${escapeHtml(item.confidence || "needs confirmation")}</span>
+          <span class="badge">${escapeHtml(item.evidence_type || "evidence")}</span>
+          <span class="badge">${escapeHtml(date)}</span>
+          ${item.created_by ? `<span class="badge">${escapeHtml(authorDisplayName(item.created_by))}</span>` : ""}
+        </div>
+        <div class="row" style="margin-top:8px;">
+          <button type="button" class="primary" data-pending-action="confirm" data-entry-id="${escapeHtml(item.id || "")}" ${attrs}>Confirm</button>
+          <button type="button" data-pending-action="dismiss" data-entry-id="${escapeHtml(item.id || "")}" ${attrs}>Dismiss</button>
+        </div>
+      </div>`;
+    }
+
+    function renderPendingStrengthGroup(label, kind, items) {
+      if (!items || !items.length) return "";
+      return `<h4 style="margin:10px 0 6px;">${escapeHtml(label)}</h4>
+        <div class="list">${items.map(item => renderPendingEvidenceItem(item, "strength", kind)).join("")}</div>`;
+    }
+
+    function renderPendingTraitGroup(group) {
+      const items = group.items || [];
+      if (!items.length) return "";
+      return `<h4 style="margin:10px 0 6px;">${escapeHtml(group.label || group.trait_id || "Trait evidence")}</h4>
+        <div class="list">${items.map(item => renderPendingEvidenceItem(item, "trait", group.trait_id || "")).join("")}</div>`;
+    }
+
+    function renderPendingEvidenceReview(pending) {
+      if (pending && pending.error) {
+        return `<section id="pending-evidence-review" style="margin-top:16px;">
+          <h3>Waiting for your confirmation (0)</h3>
+          <p class="voice-hint">Could not read pending evidence.</p>
+        </section>`;
+      }
+      const count = pendingEvidenceCount(pending);
+      const body = count ? [
+        renderPendingStrengthGroup("Academic strengths", "academic", pending.academic_strengths || []),
+        renderPendingStrengthGroup("Personal strengths", "personal", pending.personal_strengths || []),
+        ...(pending.traits || []).map(renderPendingTraitGroup)
+      ].filter(Boolean).join("") : `<p class="voice-hint">Nothing waiting for review.</p>`;
+      return `<section id="pending-evidence-review" style="margin-top:16px;">
+        <h3>Waiting for your confirmation (${count})</h3>
+        <p class="voice-hint">Kept out of parent reports until you confirm them.</p>
+        ${body}
+      </section>`;
+    }
+
+    function renderCategoryProfile(lens, pendingReview = {}) {
       const categories = (lens.support_profile || {}).categories || {};
       const hidden = (state.schoolProfile || {}).hidden_categories || ["advanced_enrichment"];
       const visibleRows = [];
@@ -2997,7 +3067,8 @@
         <h3 style="margin-top:16px;">Academic Strengths</h3>
         ${renderStrengthEntries(strengthsProfile.academic_strengths)}
         <h3 style="margin-top:16px;">Personal Strengths</h3>
-        ${renderStrengthEntries(strengthsProfile.personal_strengths)}`;
+        ${renderStrengthEntries(strengthsProfile.personal_strengths)}
+        ${renderPendingEvidenceReview(pendingReview || {})}`;
     }
 
     // --- Multi-teacher triangulation (SPEC_LV_MULTI_TEACHER_TRIANGULATION_2026-08-01) ---
@@ -3134,6 +3205,34 @@
           if (res.ok) { await loadLens(targetId, true); }
           else { button.disabled = false; button.textContent = "confirm failed — retry"; }
         } catch { button.disabled = false; button.textContent = "network error — retry"; }
+      }));
+      container.querySelectorAll("[data-pending-action]").forEach(button => button.addEventListener("click", async () => {
+        button.disabled = true;
+        const target = button.dataset.pendingTarget;
+        const payload = {
+          target,
+          action: button.dataset.pendingAction,
+          entry_id: button.dataset.entryId
+        };
+        if (target === "strength") payload.kind = button.dataset.kind;
+        if (target === "trait") payload.trait_id = button.dataset.traitId;
+        try {
+          const res = await fetch(`/api/students/${state.selectedStudent}/evidence/confirm`, {
+            method: "POST", headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(payload)
+          });
+          const data = await res.json().catch(() => ({}));
+          if (res.ok) {
+            showToast(payload.action === "confirm" ? "Evidence confirmed." : "Evidence dismissed.", "success");
+            await loadLens(targetId, true);
+          } else {
+            button.disabled = false;
+            showToast(data.error || "Could not update pending evidence.");
+          }
+        } catch {
+          button.disabled = false;
+          showToast("Network error — pending evidence was not updated.");
+        }
       }));
       const editButton = $("bg-edit");
       if (!editButton) return;

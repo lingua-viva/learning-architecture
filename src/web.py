@@ -4802,6 +4802,89 @@ async def confirm_support_entry(student_id: str, payload: dict):
     }
 
 
+@app.get("/api/students/{student_id}/evidence/pending")
+async def pending_student_evidence(student_id: str):
+    """Teacher review queue for model/import-suggested strengths and ethos evidence."""
+    from src.education.student_lens import LensNotFoundError
+
+    def do_export(store):
+        report = store.export_ethos_report(student_id, include_unconfirmed=True)
+        return report.get("pending_review", {})
+
+    try:
+        pending = await asyncio.to_thread(_with_student_store, do_export)
+    except LensNotFoundError:
+        return JSONResponse(
+            {"error": f"Student '{student_id}' not found."}, status_code=404
+        )
+
+    return {"student_id": student_id, "pending_review": pending}
+
+
+@app.post("/api/students/{student_id}/evidence/confirm")
+async def confirm_student_evidence(request: Request, student_id: str, payload: dict):
+    """Confirm or dismiss one pending strength/ethos evidence item."""
+    from src.education.student_lens import LensNotFoundError
+    from src.lingua_viva.access_roles import effective_teacher_id
+    from src.lingua_viva.privacy_log import log_event
+
+    if not isinstance(payload, dict):
+        return JSONResponse({"error": "payload must be an object"}, status_code=400)
+    teacher_id = effective_teacher_id(
+        request, str(payload.get("teacher_id") or "local-teacher")
+    )
+    target = str(payload.get("target") or "").strip()
+    action = str(payload.get("action") or "").strip().lower()
+    entry_id = str(payload.get("entry_id") or "").strip()
+    if target not in ("strength", "trait"):
+        return JSONResponse(
+            {"error": "target must be strength or trait"}, status_code=400
+        )
+    if action not in ("confirm", "dismiss"):
+        return JSONResponse(
+            {"error": "action must be confirm or dismiss"}, status_code=400
+        )
+    if not entry_id:
+        return JSONResponse({"error": "entry_id is required"}, status_code=400)
+
+    kind = str(payload.get("kind") or "").strip()
+    trait_id = str(payload.get("trait_id") or "").strip()
+    if target == "strength" and not kind:
+        return JSONResponse({"error": "kind is required for strength"}, status_code=400)
+    if target == "trait" and not trait_id:
+        return JSONResponse({"error": "trait_id is required for trait"}, status_code=400)
+
+    def do_review(store):
+        if target == "strength":
+            if action == "confirm":
+                return store.confirm_profile_strength(student_id, kind, entry_id)
+            return store.dismiss_profile_strength(student_id, kind, entry_id)
+        if action == "confirm":
+            return store.confirm_ethos_evidence(student_id, trait_id, entry_id)
+        return store.dismiss_ethos_evidence(student_id, trait_id, entry_id)
+
+    try:
+        await asyncio.to_thread(_with_student_store, do_review)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=422)
+    except LensNotFoundError:
+        return JSONResponse(
+            {"error": f"Student '{student_id}' not found."}, status_code=404
+        )
+
+    await asyncio.to_thread(
+        log_event,
+        f"pending_evidence_{action}ed",
+        query_text=f"{student_id}:{teacher_id}",
+    )
+    return {
+        "status": f"{action}ed",
+        "student_id": student_id,
+        "target": target,
+        "entry_id": entry_id,
+    }
+
+
 @app.post("/api/students/{student_id}/evidence")
 async def add_student_evidence(request: Request, student_id: str, payload: dict):
     """Append one record to the unified evidence ledger

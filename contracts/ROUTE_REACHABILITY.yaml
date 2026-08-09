@@ -319,6 +319,14 @@ reachable_from_ui:
     call_site: "/api/students/${state.selectedStudent}/support-entry/confirm"
     note: "Tap-to-confirm on model_suggested Category Profile entries."
 
+  - route: "GET /api/students/{student_id}/evidence/pending"
+    call_site: "/api/students/${state.selectedStudent}/evidence/pending"
+    note: "Students lens pending evidence review section."
+
+  - route: "POST /api/students/{student_id}/evidence/confirm"
+    call_site: "/api/students/${state.selectedStudent}/evidence/confirm"
+    note: "One-item confirm/dismiss loop for pending strengths and ethos evidence."
+
   - route: "GET /api/school-profile"
     call_site: 'api("/api/school-profile")'
     note: "Tier 2 school display config (labels + hidden categories)."

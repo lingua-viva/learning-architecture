@@ -2231,6 +2231,60 @@ class StudentLensStore:
         self._conn.commit()
         return profile
 
+    def confirm_profile_strength(
+        self, student_id: str, kind: str, entry_id: str
+    ) -> dict:
+        """Teacher confirms a suggested profile-level strength in place."""
+        return self._review_profile_strength(student_id, kind, entry_id, "confirm")
+
+    def dismiss_profile_strength(
+        self, student_id: str, kind: str, entry_id: str
+    ) -> dict:
+        """Teacher dismisses a suggested profile-level strength without deleting it."""
+        return self._review_profile_strength(student_id, kind, entry_id, "dismiss")
+
+    def _review_profile_strength(
+        self, student_id: str, kind: str, entry_id: str, action: str
+    ) -> dict:
+        if kind not in VALID_STRENGTH_KINDS:
+            raise ValueError(
+                f"Unknown strength kind '{kind}'. Allowed: {VALID_STRENGTH_KINDS}"
+            )
+        if action not in ("confirm", "dismiss"):
+            raise ValueError("action must be confirm or dismiss")
+        row = self._get_student_row(student_id, include_deleted=False)
+        if row is None:
+            raise LensNotFoundError(student_id)
+
+        profile = self._row_to_lens_dict(row)["strengths_profile"]
+        bucket = profile[f"{kind}_strengths"]
+        target = None
+        for entry in bucket:
+            if entry.get("id") == entry_id:
+                target = entry
+                break
+        if target is None:
+            raise ValueError(f"No strength entry '{entry_id}' in {kind} for this student")
+
+        if action == "confirm":
+            target["confidence"] = "teacher_confirmed"
+        else:
+            target["active"] = False
+
+        now = _now_iso()
+        self._conn.execute(
+            """
+            UPDATE students SET
+                strengths_profile = ?,
+                profile_version = profile_version + 1,
+                updated_at = ?
+            WHERE student_id = ?
+            """,
+            (json.dumps(profile), now, student_id),
+        )
+        self._conn.commit()
+        return profile
+
     def add_ethos_evidence(
         self,
         student_id: str,
@@ -2266,6 +2320,69 @@ class StudentLensStore:
             confidence=confidence,
             allowed_trait_ids=allowed_trait_ids,
         )
+        return profile
+
+    def confirm_ethos_evidence(
+        self, student_id: str, trait_id: str, evidence_id: str
+    ) -> dict:
+        """Teacher confirms suggested ethos-trait evidence in profile and ledger."""
+        return self._review_ethos_evidence(student_id, trait_id, evidence_id, "confirm")
+
+    def dismiss_ethos_evidence(
+        self, student_id: str, trait_id: str, evidence_id: str
+    ) -> dict:
+        """Teacher dismisses suggested ethos-trait evidence without deleting it."""
+        return self._review_ethos_evidence(student_id, trait_id, evidence_id, "dismiss")
+
+    def _review_ethos_evidence(
+        self, student_id: str, trait_id: str, evidence_id: str, action: str
+    ) -> dict:
+        if action not in ("confirm", "dismiss"):
+            raise ValueError("action must be confirm or dismiss")
+        row = self._get_student_row(student_id, include_deleted=False)
+        if row is None:
+            raise LensNotFoundError(student_id)
+
+        profile = self._row_to_lens_dict(row)["ethos_profile"]
+        trait_data = profile["traits"].get(trait_id)
+        if trait_data is None:
+            raise ValueError(f"Unknown ethos trait '{trait_id}' for this student")
+
+        target = None
+        for item in trait_data.get("evidence", []):
+            if item.get("id") == evidence_id:
+                target = item
+                break
+        if target is None:
+            raise ValueError(
+                f"No evidence '{evidence_id}' in ethos trait '{trait_id}' for this student"
+            )
+
+        if action == "confirm":
+            target["confidence"] = "teacher_confirmed"
+            self._conn.execute(
+                """
+                UPDATE evidence_records SET confidence_level = ?
+                WHERE evidence_id = ? AND student_id = ?
+                """,
+                ("teacher_confirmed", evidence_id, student_id),
+            )
+        else:
+            target["active"] = False
+
+        self._recompute_ethos_rollup(student_id, profile)
+        now = _now_iso()
+        self._conn.execute(
+            """
+            UPDATE students SET
+                ethos_profile = ?,
+                profile_version = profile_version + 1,
+                updated_at = ?
+            WHERE student_id = ?
+            """,
+            (json.dumps(profile), now, student_id),
+        )
+        self._conn.commit()
         return profile
 
     def _append_ethos_evidence_item(
@@ -2771,7 +2888,11 @@ class StudentLensStore:
         def _pending(items: list[dict], text_key: str) -> list[dict]:
             return [
                 {
+                    "id": item.get("id"),
                     text_key: item.get(text_key),
+                    "evidence_type": item.get("evidence_type"),
+                    "source_observation_id": item.get("source_observation_id"),
+                    "created_by": item.get("created_by"),
                     "confidence": item.get("confidence"),
                     "created_at": item.get("created_at"),
                 }

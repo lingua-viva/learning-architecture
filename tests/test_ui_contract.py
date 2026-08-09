@@ -217,7 +217,7 @@ REPO = Path(__file__).resolve().parent.parent
 #     preview/approval surface and Drive lens Markdown preview-before-share.
 #   v126 (2026-08-08): Voice §1 Ask grounding surface — shared safety gate
 #     mirrors resolve_voice_tone; /api/ask routed through it; TTS locale fix.
-EXPECTED_VERSION = 130
+EXPECTED_VERSION = 131
 
 
 def _html() -> str:
