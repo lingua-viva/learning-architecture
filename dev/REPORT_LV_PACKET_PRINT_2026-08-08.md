@@ -29,8 +29,15 @@ Run from clean detached worktree `/tmp/lv-packet-print-verify-3eAPMj` at `fd370a
 - `python3 scripts/check_route_reachability.py` — OK, 157 routes classified
 - `pytest -q tests/` — `2057 passed, 13 skipped`
 
+Current merged-tree checks after the concurrent pending-evidence commit advanced the UI contract to v131:
+
+- `pytest -q tests/test_lesson_materials.py tests/test_lesson_packet_routes.py tests/test_packet_print.py tests/test_ui_contract.py tests/test_route_reachability.py` — `42 passed`
+- `python3 scripts/check_ui_contract.py` — OK, contract v131
+- `python3 scripts/check_route_reachability.py` — OK, 159 routes classified
+- `pytest -q tests/` — `2066 passed, 13 skipped`
+
 ## Manual / Context
 
 - No push performed.
 - Actual OS/browser paper-print confirmation remains operator-run.
-- During final verification, another window began pending-evidence edits in `src/web.py`, `static/index.html`, contract files, and related tests. Packet-print verification was run in a clean worktree at the committed packet-print state to avoid mixing those unrelated in-flight changes.
+- A concurrent pending-evidence commit landed after the packet-print v130 commit and advanced the UI contract to v131. Packet-print was verified both at its clean committed state and again on the merged tree.
