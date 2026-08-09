@@ -16,6 +16,19 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v136 (2026-08-09): Safeguarding severity gate LIVE-WIRED — all three
+#     production capture sites (voice observe, /api/observe/capture, Slack
+#     bot) now route through capture_with_safeguarding: RED transcripts go
+#     ONLY to the restricted ledger (coordinator+), never the lens store;
+#     restricted responses skip routing memory, Drive sync, sources ledger.
+#   v135 (2026-08-09): Daily brief extensions — daily_briefing appends
+#     brief_extensions.extra_widgets(window): absence escalations (anonymous
+#     refs), knowledge-library status, recent coursework artifacts. Fail-soft;
+#     safeguarding restricted ledger deliberately never read by the brief.
+#   v134 (2026-08-09): Router plug-in point — src/web.py now imports
+#     src/lingua_viva/routers/ROUTER_MODULES and includes each module's
+#     APIRouter at startup. No route, UI, or behavior change while the list
+#     is empty; enables parallel feature-router builds without web.py edits.
 #   v133 (2026-08-08): Observation double-save idempotency — Observe save
 #     handler now recognizes duplicate capture responses and tells the
 #     teacher "Already saved." without refreshing the lens a second time.
@@ -602,7 +615,7 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 133
+version: 136
 # v122 (2026-08-06): Failure-mode hardening. src/web.py: voice-act observation
 #   dedup guard (same 60s window as observe/capture, prevents network-retry
 #   duplicates). src/education/parent_report.py: personal_context evidence

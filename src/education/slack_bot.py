@@ -118,6 +118,10 @@ ACK_NEEDS_OBSERVATION_TEXT = (
 ACK_OBSERVATION_TOO_LONG = (
     "⚠️ This observation is too long to save safely as one note — split it into smaller notes."
 )
+ACK_RESTRICTED = (
+    "✓ Noted and routed for coordinator review only. It will not appear in "
+    "the student's regular record — follow your school's safeguarding process."
+)
 
 
 class InvalidSlackSignatureError(PermissionError):
@@ -357,7 +361,12 @@ class SlackObservationBot:
             return {"ok": True, "skipped": "missing_observation_text"}
 
         try:
-            result = self.capture_pipeline.capture(
+            # Severity gate (2026-08-09): RED transcripts are diverted to the
+            # restricted safeguarding ledger before the pipeline ever runs.
+            from src.lingua_viva.safeguarding import capture_with_safeguarding
+
+            result = capture_with_safeguarding(
+                self.capture_pipeline,
                 student_id=student_id,
                 teacher_id=teacher_id,
                 raw_transcript=observation_text,
@@ -380,6 +389,13 @@ class SlackObservationBot:
         # continuation window for this sender.
         if sender_key is not None:
             self._last_student_by_sender[sender_key] = (student_id, now)
+
+        if result.get("restricted"):
+            # RED: nothing entered the lens store, and nothing else here
+            # (sources ledger, escalation ack) may record or reference the
+            # content. Content-free ack only.
+            self._post_acknowledgement(channel, ACK_RESTRICTED)
+            return {"ok": True, "restricted": True, "entry_id": result.get("entry_id")}
 
         if result["escalations"]:
             acknowledgement_delivered = self._post_acknowledgement(

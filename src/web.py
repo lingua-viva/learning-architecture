@@ -48,6 +48,21 @@ if str(LV_ROOT) not in sys.path:
 app = FastAPI(title="Lingua Viva", docs_url=None, redoc_url=None)
 STUDENT_GRADE_LEVELS = tuple(f"G{grade}" for grade in range(1, 13))
 
+# ── Feature router plug-in point ──────────────────────────────────────────
+# New feature areas register an APIRouter in src/lingua_viva/routers/ and add
+# their module name to ROUTER_MODULES there. Contract: router modules must
+# NEVER import src.web (circular); they import runtime modules directly.
+# The role-gate middleware below covers router-registered paths like any other.
+try:
+    from src.lingua_viva.routers import ROUTER_MODULES as _LV_ROUTER_MODULES
+    import importlib as _importlib
+
+    for _mod_name in _LV_ROUTER_MODULES:
+        _mod = _importlib.import_module(f"src.lingua_viva.routers.{_mod_name}")
+        app.include_router(_mod.router)
+except ImportError:
+    pass  # routers package optional until first feature lands
+
 
 # ── Global JSON error handler ─────────────────────────────────────────────
 # Guarantees every unhandled exception returns JSON (never bare text "Internal
@@ -2920,6 +2935,14 @@ async def daily_briefing(days: int = 7):
             },
         ]
 
+        # 2026-08-09 wave: absence escalations / knowledge library / coursework
+        # artifacts. Fail-soft inside the module — a broken extension degrades
+        # its widget only. Safeguarding is deliberately absent (restricted
+        # ledger is never read here — containment by store separation).
+        from src.lingua_viva.brief_extensions import extra_widgets
+
+        widgets.extend(extra_widgets(window))
+
         return {
             "readable": readable,
             "window_days": window,
@@ -3630,10 +3653,15 @@ async def voice_act(request: Request, payload: dict):
 
         def capture(store):
             from src.education.observation_capture import ObservationCapturePipeline
+            from src.lingua_viva.safeguarding import capture_with_safeguarding
 
+            # Severity gate (2026-08-09): RED transcripts go ONLY to the
+            # restricted safeguarding ledger — never into the student lens
+            # store that the brief / parent output read.
             pipeline = ObservationCapturePipeline(store=store)
             if has_cefr_evidence:
-                return pipeline.capture(
+                return capture_with_safeguarding(
+                    pipeline,
                     student_id=student_id,
                     teacher_id=teacher_id,
                     raw_transcript=transcript,
@@ -3643,7 +3671,8 @@ async def voice_act(request: Request, payload: dict):
                     cefr_direction=str(ctx.get("direction")) if ctx.get("direction") else None,
                     duplicate_window_seconds=300,
                 )
-            return pipeline.capture(
+            return capture_with_safeguarding(
+                pipeline,
                 student_id=student_id,
                 teacher_id=teacher_id,
                 raw_transcript=transcript,
@@ -3653,6 +3682,21 @@ async def voice_act(request: Request, payload: dict):
 
         result = await asyncio.to_thread(_with_student_store, capture)
         result["local_only"] = True
+        if result.get("restricted"):
+            # Spoken line stays content-free; the item is coordinator-only.
+            return {
+                "intent": "observation",
+                "action_taken": "restricted",
+                "spoken_confirmation": (
+                    "Noted, and routed for coordinator review only."
+                ),
+                "tone_prefix": "",
+                "result": result,
+                "routing_decision_ids": {
+                    "intent": intent_decision_id,
+                    "student_detect": detect_decision_id,
+                },
+            }
         if result.get("duplicate"):
             return {
                 "intent": "observation",
@@ -4128,8 +4172,13 @@ async def observe_capture(request: Request, payload: dict):
         )
 
     def capture(store):
+        from src.lingua_viva.safeguarding import capture_with_safeguarding
+
+        # Severity gate (2026-08-09): RED transcripts go ONLY to the
+        # restricted safeguarding ledger, never the student lens store.
         pipeline = ObservationCapturePipeline(store=store)
-        return pipeline.capture(
+        return capture_with_safeguarding(
+            pipeline,
             student_id=student_id,
             teacher_id=teacher_id,
             raw_transcript=transcript,
@@ -4164,6 +4213,10 @@ async def observe_capture(request: Request, payload: dict):
             )
         raise
     result["local_only"] = True
+    if result.get("restricted"):
+        # RED: nothing entered the lens store — skip routing memory and
+        # Drive sync entirely. The response note explains the routing.
+        return result
     if result.get("duplicate"):
         return result
 

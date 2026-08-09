@@ -217,7 +217,13 @@ REPO = Path(__file__).resolve().parent.parent
 #     preview/approval surface and Drive lens Markdown preview-before-share.
 #   v126 (2026-08-08): Voice §1 Ask grounding surface — shared safety gate
 #     mirrors resolve_voice_tone; /api/ask routed through it; TTS locale fix.
-EXPECTED_VERSION = 133
+#   v134 (2026-08-09): Router plug-in point in src/web.py (ROUTER_MODULES
+#     include loop) — enables sources/safeguarding/artifacts feature routers.
+#   v135 (2026-08-09): Daily brief extensions — absence escalations, knowledge
+#     library, coursework artifacts widgets via brief_extensions (fail-soft).
+#   v136 (2026-08-09): Safeguarding severity gate live-wired into all three
+#     capture sites (voice observe, observe/capture, Slack bot).
+EXPECTED_VERSION = 136
 
 
 def _html() -> str:

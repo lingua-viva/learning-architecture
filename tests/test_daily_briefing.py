@@ -29,11 +29,21 @@ client = TestClient(app)
 def test_briefing_returns_its_widgets_in_order():
     """Was three widgets; Gap 6 added tier_recommendations between the
     support decisions and the confirmations, so a teacher reads
-    "who needs looking at" before "what needs confirming"."""
+    "who needs looking at" before "what needs confirming". The 2026-08-09
+    wave appends the fail-soft extension widgets (brief_extensions) after
+    the student-facing four: escalations, then library, then artifacts."""
     payload = client.get("/api/daily/briefing").json()
     assert payload["readable"] is True
     ids = [widget["id"] for widget in payload["widgets"]]
-    assert ids == ["unobserved", "rti_pending", "tier_recommendations", "confirmations"]
+    assert ids == [
+        "unobserved",
+        "rti_pending",
+        "tier_recommendations",
+        "confirmations",
+        "absence_escalations",
+        "knowledge_library",
+        "coursework_artifacts",
+    ]
 
 
 def test_every_widget_has_a_count_and_a_readable_detail():
