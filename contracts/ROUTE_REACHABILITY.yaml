@@ -478,6 +478,14 @@ reachable_from_ui:
     call_site: 'api("/api/lesson-materials/today"'
     note: "Prepare Course Library panel: persist today's selected local lesson file."
 
+  - route: "GET /api/students/ingest/unattributed"
+    call_site: 'api("/api/students/ingest/unattributed"'
+    note: "Students review panel: persistent queue of Drive-ingested documents needing manual assignment."
+
+  - route: "POST /api/students/ingest/attribute"
+    call_site: 'api("/api/students/ingest/attribute"'
+    note: "Students and Drive ingest review cards: assign or dismiss unattributed documents."
+
   - route: "POST /api/provider/disconnect"
     call_site: 'api("/api/provider/disconnect"'
     note: "Same Settings form as POST /api/provider/connect (ff2401e)."

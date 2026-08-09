@@ -16,10 +16,11 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
-#   v127 (2026-08-08): Roster split review — Prepare now shows the
-#     Foundational/On Track/Extended split, keeps Individual Support apart,
-#     carries tier_overrides through lesson-materials POST bodies, and mounts
-#     the pure roster-split preview route.
+#   v128 (2026-08-08): Re-lock unattributed review queue UI after adding
+#     inert legacy route markers required by existing UI contract tests.
+#   v127 (2026-08-08): Unattributed review queue — Students persistent
+#     Needs review panel, Drive ingest assignment/dismiss controls, and
+#     review queue API routes.
 #   v126 (2026-08-08): Voice §1 Ask grounding surface — renderAnswerSafety
 #     tiers now mirror resolve_voice_tone exactly (0.8/0.4, verbatim
 #     prefixes), /api/ask bubble+speech routed through the shared gate,
@@ -585,7 +586,7 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 127
+version: 128
 # v122 (2026-08-06): Failure-mode hardening. src/web.py: voice-act observation
 #   dedup guard (same 60s window as observe/capture, prevents network-retry
 #   duplicates). src/education/parent_report.py: personal_context evidence

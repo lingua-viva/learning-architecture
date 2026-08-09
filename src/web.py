@@ -2497,6 +2497,102 @@ async def students_ingest(request: Request, background_tasks: BackgroundTasks):
     return {"job_id": job["job_id"], "source_id": source.source_id, "status": job["status"]}
 
 
+@app.post("/api/students/ingest/class-folder")
+async def students_ingest_class_folder(payload: dict):
+    folder_id = str((payload or {}).get("folder_id") or "").strip()
+    teacher_id = str((payload or {}).get("teacher_id") or "teacher:drive").strip()
+    if not folder_id:
+        return JSONResponse({"error": "folder_id is required"}, status_code=400)
+
+    from src.lingua_viva.class_folder_ingest import ingest_class_folder
+    from src.lingua_viva.google_drive_integration import DriveAuthError, DriveConfigError
+
+    def run(store):
+        return ingest_class_folder(folder_id, teacher_id, store=store)
+
+    try:
+        return await asyncio.to_thread(_with_student_store, run)
+    except DriveConfigError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
+    except DriveAuthError:
+        return JSONResponse({"error": "Google Drive could not be reached safely."}, status_code=503)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+
+
+@app.get("/api/students/ingest/unattributed")
+async def students_ingest_unattributed(teacher_id: str = ""):
+    from src.lingua_viva.ingest_review import list_open_items
+
+    return {"items": list_open_items(str(teacher_id or "") or None)}
+
+
+@app.post("/api/students/ingest/attribute")
+async def students_ingest_attribute(payload: dict):
+    from src.education.student_lens import LensNotFoundError
+    from src.lingua_viva.class_folder_ingest import attribute_extraction_to_student
+    from src.lingua_viva.docpipe import vault as docpipe_vault
+    from src.lingua_viva.ingest_review import (
+        current_items,
+        mark_assigned,
+        mark_dismissed,
+    )
+
+    data = payload or {}
+    source_id = str(data.get("source_id") or "").strip()
+    drive_id = str(data.get("drive_id") or "").strip()
+    teacher_id = str(data.get("teacher_id") or "teacher:drive").strip() or "teacher:drive"
+    if not source_id or not drive_id:
+        return JSONResponse({"error": "source_id and drive_id are required"}, status_code=400)
+
+    if bool(data.get("dismiss")):
+        event = mark_dismissed(source_id=source_id, drive_id=drive_id, teacher_id=teacher_id)
+        return {"status": "dismissed", "event": event}
+
+    student_id = str(data.get("student_id") or "").strip()
+    if not student_id:
+        return JSONResponse({"error": "student_id is required"}, status_code=400)
+
+    item = current_items().get(f"{drive_id}|{source_id}") or {}
+
+    def assign(store):
+        try:
+            lens = store.get_lens(student_id)
+        except LensNotFoundError as exc:
+            raise PermissionError("off_roster_student") from exc
+        extraction = docpipe_vault.get_extraction(source_id)
+        created = attribute_extraction_to_student(
+            extraction,
+            store=store,
+            student_id=student_id,
+            student_name=str(lens.get("display_name") or student_id),
+            teacher_id=teacher_id,
+            drive_id=drive_id,
+            name=str(item.get("name") or data.get("name") or drive_id),
+            attribution_method="manual_teacher",
+            attribution_confidence=1.0,
+            confidence_level="teacher_confirmed",
+        )
+        event = mark_assigned(
+            source_id=source_id,
+            drive_id=drive_id,
+            student_id=student_id,
+            teacher_id=teacher_id,
+            evidence_id=created["evidence_id"],
+        )
+        return created, event
+
+    try:
+        created, event = await asyncio.to_thread(_with_student_store, assign)
+    except PermissionError:
+        return JSONResponse({"error": "off_roster_student"}, status_code=422)
+    except FileNotFoundError:
+        return JSONResponse({"error": "extraction_not_found"}, status_code=404)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    return {"status": "assigned", "assignment": created, "event": event}
+
+
 @app.get("/api/students/ingest/{job_id}")
 async def students_ingest_status(job_id: str):
     job = _ingest_job(job_id)
@@ -2603,29 +2699,6 @@ async def students_ingest_undo(job_id: str):
         "students_archived": archived,
         "skipped": skipped,
     }
-
-
-@app.post("/api/students/ingest/class-folder")
-async def students_ingest_class_folder(payload: dict):
-    folder_id = str((payload or {}).get("folder_id") or "").strip()
-    teacher_id = str((payload or {}).get("teacher_id") or "teacher:drive").strip()
-    if not folder_id:
-        return JSONResponse({"error": "folder_id is required"}, status_code=400)
-
-    from src.lingua_viva.class_folder_ingest import ingest_class_folder
-    from src.lingua_viva.google_drive_integration import DriveAuthError, DriveConfigError
-
-    def run(store):
-        return ingest_class_folder(folder_id, teacher_id, store=store)
-
-    try:
-        return await asyncio.to_thread(_with_student_store, run)
-    except DriveConfigError as exc:
-        return JSONResponse({"error": str(exc)}, status_code=503)
-    except DriveAuthError:
-        return JSONResponse({"error": "Google Drive could not be reached safely."}, status_code=503)
-    except ValueError as exc:
-        return JSONResponse({"error": str(exc)}, status_code=400)
 
 
 @app.get("/api/students/growth")

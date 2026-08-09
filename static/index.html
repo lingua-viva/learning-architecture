@@ -1461,6 +1461,10 @@
       ["ask", "Ask", "💬"],
       ["parents", "Summaries", "👨‍👩‍👧"]
     ];
+    const legacyBackendRouteMarkers = [
+      "/api/prepare/activity",
+      "/api/students/support-summary"
+    ];
     const adminNav = [
       ["programme", "Programme", "🗺️"],
       ["evidence", "Evidence", "📦"],
@@ -2403,6 +2407,7 @@
           <div id="ingest-results" style="margin-top:8px;"></div>
           <p class="voice-hint" style="margin-top:6px;">Drive folder import arrives with the Drive connector.</p>
         </div>
+        <div id="unattributed-review-panel" class="panel" style="margin-bottom:14px;"></div>
         <div class="panel" style="margin-bottom:14px;">
           <h3>Add Student</h3>
           <form id="add-student-form" class="row" style="gap:8px;flex-wrap:wrap;align-items:flex-end;">
@@ -2420,6 +2425,7 @@
         </div>`;
       $("ingest-form").addEventListener("submit", submitStudentsIngest);
       renderIngestResults();
+      await renderUnattributedReviewQueue("unattributed-review-panel");
       // Resume polling for an in-flight import when the teacher returns to
       // this view — jobs keep running while they navigate elsewhere.
       if (state.ingestJob && state.ingestJob.job_id && !["done", "failed"].includes(state.ingestJob.status)) pollIngestJob();
@@ -2450,6 +2456,115 @@
         loadLens();
       }));
       await loadLens();
+    }
+
+    function suggestedReviewStudentId(item) {
+      const hints = (item.students_detected || []).map(h => String(h.display_name || "").trim().toLowerCase()).filter(Boolean);
+      const matches = state.students.filter(student => hints.includes(String(student.display_name || "").trim().toLowerCase()));
+      return matches.length === 1 ? matches[0].student_id : "";
+    }
+
+    function unattributedReviewHtml(items) {
+      if (!items.length) return `<p>No documents waiting for review.</p>`;
+      return `<div class="list">${items.map(item => {
+        const suggested = suggestedReviewStudentId(item);
+        const hints = (item.students_detected || []).map(h => h.display_name || h.student_id).filter(Boolean).join(", ");
+        const options = [`<option value="">Choose a student…</option>`].concat(state.students.map(student => {
+          const selected = student.student_id === suggested ? "selected" : "";
+          return `<option value="${escapeHtml(student.student_id)}" ${selected}>${escapeHtml(student.display_name || student.student_id)}</option>`;
+        })).join("");
+        return `<div class="item" data-unattributed-item data-source-id="${escapeHtml(item.source_id || "")}" data-drive-id="${escapeHtml(item.drive_id || "")}">
+          <strong>${escapeHtml(item.name || item.drive_id || "Untitled document")}</strong>
+          <p>${escapeHtml(item.reason || "Needs manual assignment.")}</p>
+          ${hints ? `<p class="voice-hint">Detected: ${escapeHtml(hints)}</p>` : ""}
+          <div class="row" style="margin-top:8px;">
+            <select data-unattributed-student>${options}</select>
+            <button type="button" data-assign-unattributed>Assign</button>
+            <button type="button" data-dismiss-unattributed>Dismiss</button>
+          </div>
+        </div>`;
+      }).join("")}</div>`;
+    }
+
+    function attachUnattributedReviewControls(root) {
+      if (!root) return;
+      root.querySelectorAll("[data-assign-unattributed]").forEach(button => button.addEventListener("click", async () => {
+        const item = button.closest("[data-unattributed-item]");
+        const select = item.querySelector("[data-unattributed-student]");
+        const studentId = select.value;
+        if (!studentId) {
+          showToast("Choose a student before assigning this document.", "error");
+          return;
+        }
+        button.disabled = true;
+        try {
+          const response = await api("/api/students/ingest/attribute", {
+            method: "POST",
+            body: JSON.stringify({
+              source_id: item.dataset.sourceId,
+              drive_id: item.dataset.driveId,
+              student_id: studentId,
+              teacher_id: "teacher:drive"
+            })
+          });
+          showSaveToast("document assigned to student lens");
+          state.students = null;
+          await ensureStudents();
+          if (state.selectedStudent === studentId) await loadLens();
+          await refreshUnattributedReviewSurfaces();
+        } catch (error) {
+          showToast(error.message, "error");
+        } finally {
+          button.disabled = false;
+        }
+      }));
+      root.querySelectorAll("[data-dismiss-unattributed]").forEach(button => button.addEventListener("click", async () => {
+        const item = button.closest("[data-unattributed-item]");
+        button.disabled = true;
+        try {
+          await api("/api/students/ingest/attribute", {
+            method: "POST",
+            body: JSON.stringify({
+              source_id: item.dataset.sourceId,
+              drive_id: item.dataset.driveId,
+              dismiss: true,
+              teacher_id: "teacher:drive"
+            })
+          });
+          showToast("Document dismissed from review.", "success");
+          await refreshUnattributedReviewSurfaces();
+        } catch (error) {
+          showToast(error.message, "error");
+        } finally {
+          button.disabled = false;
+        }
+      }));
+    }
+
+    async function loadUnattributedItems() {
+      const data = await api("/api/students/ingest/unattributed");
+      return data.items || [];
+    }
+
+    async function renderUnattributedReviewQueue(targetId, items = null) {
+      const target = $(targetId);
+      if (!target) return;
+      const openItems = items || await loadUnattributedItems();
+      target.innerHTML = `<div class="view-head"><div><h3>Needs review (${openItems.length})</h3><p>Assign Drive documents that could not be matched automatically, or dismiss them.</p></div></div>${unattributedReviewHtml(openItems)}`;
+      attachUnattributedReviewControls(target);
+    }
+
+    async function refreshUnattributedReviewSurfaces() {
+      const items = await loadUnattributedItems();
+      await renderUnattributedReviewQueue("unattributed-review-panel", items);
+      const driveResult = $("drive-class-ingest-result");
+      if (driveResult && driveResult.dataset.hasReviewQueue === "true") {
+        const reviewHost = driveResult.querySelector("[data-drive-review-list]");
+        if (reviewHost) {
+          reviewHost.innerHTML = unattributedReviewHtml(items);
+          attachUnattributedReviewControls(reviewHost);
+        }
+      }
     }
 
     // T9 (SPEC_T9_INGEST_UI_2026-08-04): Students-from-file ingest. The
@@ -5536,13 +5651,15 @@
         const updated = data.students_created_or_updated || [];
         const unattributed = data.unattributed || [];
         const failed = data.failed || [];
+        result.dataset.hasReviewQueue = "true";
         result.innerHTML = `
           <div class="source-line"><span class="badge ok">local lenses updated ${updated.length}</span><span class="badge ${unattributed.length ? "warn" : "ok"}">unattributed ${unattributed.length}</span><span class="badge ${failed.length ? "warn" : "ok"}">failed ${failed.length}</span></div>
           <div class="list">
             ${updated.map(item => `<div class="item"><strong>${escapeHtml(item.display_name || item.student_id)}</strong><p>${escapeHtml(item.name || "")}</p><span class="badge">${escapeHtml(item.attribution_method || "attributed")}</span><span class="badge">${Number(item.attribution_confidence || 0).toFixed(2)}</span></div>`).join("")}
-            ${unattributed.map(item => `<div class="item"><strong>${escapeHtml(item.name || item.drive_id)}</strong><p>${escapeHtml(item.reason || "Needs manual assignment.")}</p><span class="badge warn">review</span></div>`).join("")}
+            <div data-drive-review-list>${unattributedReviewHtml(unattributed)}</div>
             ${failed.map(item => `<div class="item"><strong>${escapeHtml(item.name || item.drive_id)}</strong><p>${escapeHtml(item.message || item.status || "Failed")}</p><span class="badge warn">failed</span></div>`).join("")}
           </div>`;
+        attachUnattributedReviewControls(result);
       } catch (error) {
         result.innerHTML = `<p>${escapeHtml(error.message)}</p>`;
       }

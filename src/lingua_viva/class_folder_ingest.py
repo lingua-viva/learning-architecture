@@ -43,8 +43,8 @@ def ingest_class_folder(
     """
     from src.lingua_viva import google_drive_integration as drive
     from src.lingua_viva.docpipe import extract as docpipe_extract
-    from src.lingua_viva.docpipe import lens as docpipe_lens
     from src.lingua_viva.docpipe import vault as docpipe_vault
+    from src.lingua_viva.ingest_review import enqueue_unattributed
 
     teacher = str(teacher_id or "teacher:drive").strip() or "teacher:drive"
     roster = _roster(store)
@@ -86,44 +86,33 @@ def ingest_class_folder(
 
         attributions = _attribute_document(file_meta, extraction, roster)
         if not attributions:
-            unattributed.append({
+            item = {
                 "drive_id": file_id,
+                "source_id": source.source_id,
                 "name": name,
                 "reason": "No exact roster or document-name match.",
                 "students_detected": [
                     s for s in extraction.data.get("structure", {}).get("students_detected", [])
                     if isinstance(s, dict)
                 ],
-            })
+            }
+            enqueue_unattributed(item, teacher_id=teacher, folder_id=folder_id)
+            unattributed.append(item)
             continue
 
         for attribution in attributions:
-            record = docpipe_lens.create_from_extraction(
+            created = attribute_extraction_to_student(
                 extraction,
+                store=store,
                 student_id=attribution.student_id,
                 student_name=attribution.display_name,
-                added_by=teacher,
-                student_store=store,
+                teacher_id=teacher,
+                drive_id=file_id,
+                name=name,
+                attribution_method=attribution.method,
+                attribution_confidence=attribution.confidence,
+                confidence_level="imported_verified",
             )
-            evidence_id = store.append_evidence({
-                "student_id": attribution.student_id,
-                "teacher_id": teacher,
-                "kind": "document",
-                "target_type": "background",
-                "target_id": None,
-                "summary": (
-                    f"Drive document '{name}' attributed by "
-                    f"{attribution.method} ({attribution.confidence:.2f})."
-                ),
-                "source_ref": {
-                    "source_type": "drive",
-                    "drive_file_id": file_id,
-                    "source_id": source.source_id,
-                    "attribution_method": attribution.method,
-                    "attribution_confidence": attribution.confidence,
-                },
-                "confidence_level": "imported_verified",
-            })
             created_or_updated.append({
                 "student_id": attribution.student_id,
                 "display_name": attribution.display_name,
@@ -131,8 +120,8 @@ def ingest_class_folder(
                 "name": name,
                 "attribution_method": attribution.method,
                 "attribution_confidence": attribution.confidence,
-                "evidence_id": evidence_id,
-                "fields_populated": _populated_fields(record.data),
+                "evidence_id": created["evidence_id"],
+                "fields_populated": created["fields_populated"],
             })
 
     return {
@@ -144,6 +133,65 @@ def ingest_class_folder(
         "unattributed": unattributed,
         "failed": failed,
         "truncated": len(files) > max_files,
+    }
+
+
+def attribute_extraction_to_student(
+    extraction: ExtractionRecord,
+    *,
+    store: StudentLensStore,
+    student_id: str,
+    student_name: str,
+    teacher_id: str,
+    drive_id: str,
+    name: str,
+    attribution_method: str,
+    attribution_confidence: float,
+    confidence_level: str,
+) -> dict[str, Any]:
+    """Apply one persisted extraction to one student lens.
+
+    Used by both automatic class-folder attribution and manual review queue
+    assignment so evidence shape cannot drift between the two paths.
+    """
+    from src.lingua_viva.docpipe import lens as docpipe_lens
+
+    record = docpipe_lens.create_from_extraction(
+        extraction,
+        student_id=student_id,
+        student_name=student_name,
+        added_by=teacher_id,
+        student_store=store,
+    )
+    evidence_id = store.append_evidence({
+        "student_id": student_id,
+        "teacher_id": teacher_id,
+        "kind": "document",
+        "target_type": "background",
+        "target_id": None,
+        "summary": (
+            f"Drive document '{name}' attributed by "
+            f"{attribution_method} ({attribution_confidence:.2f})."
+        ),
+        "source_ref": {
+            "source_type": "drive",
+            "drive_file_id": drive_id,
+            "source_id": extraction.source_id,
+            "attribution_method": attribution_method,
+            "attribution_confidence": attribution_confidence,
+        },
+        "confidence_level": confidence_level,
+    })
+    return {
+        "student_id": student_id,
+        "display_name": student_name,
+        "drive_id": drive_id,
+        "name": name,
+        "attribution_method": attribution_method,
+        "attribution_confidence": attribution_confidence,
+        "confidence_level": confidence_level,
+        "evidence_id": evidence_id,
+        "fields_populated": _populated_fields(record.data),
     }
 
 
