@@ -13,7 +13,14 @@ Built, tested, and committed locally. Not pushed, not tagged, not released.
   - `GET /api/students/ingest/unattributed`
   - `POST /api/students/ingest/attribute`
 - Added UI controls in Drive ingest results and a persistent Students → Needs review panel with roster dropdown, Assign, and Dismiss actions.
-- Classified routes and bumped UI contract to v128.
+- Classified routes and bumped UI contract to v129 after hardening.
+
+## Hardening Loop
+
+The requested 7-10 pass review found two real defects after the initial commit:
+
+1. Current queue state was keyed by `drive_id|source_id`, but re-ingesting the same Drive file creates a new `source_id`. Fixed by collapsing current state by `drive_id`, so dismiss/re-ingest reopens exactly one current item.
+2. Manual assignment could still write lens evidence for a stale/dismissed item. Fixed by requiring the current item to be open and source-matched before any vault or lens write.
 
 ## Acceptance
 
@@ -22,15 +29,19 @@ Built, tested, and committed locally. Not pushed, not tagged, not released.
 3. Dismiss removes item without lens writes: covered.
 4. Off-roster assignment returns 422 with zero writes: covered.
 5. Duplicate re-ingest does not create duplicate open items: covered.
+6. Dismiss then re-ingest reopens one current item: covered.
+7. Assignment of a stale/dismissed item returns 409 with zero writes: covered.
 
 ## Verification
 
-- `pytest -q tests/test_class_folder_ingest.py tests/test_unattributed_review_queue.py` → 8 passed
-- `pytest -q tests/test_students_ingest.py tests/test_class_folder_ingest.py tests/test_unattributed_review_queue.py tests/test_runtime_write_locations.py tests/test_ui_contract.py tests/test_route_reachability.py` → 46 passed
-- `python3 scripts/check_ui_contract.py` → OK, contract v128
+- `pytest -q tests/test_class_folder_ingest.py tests/test_unattributed_review_queue.py` → 9 passed
+- `pytest -q tests/test_students_ingest.py tests/test_class_folder_ingest.py tests/test_unattributed_review_queue.py tests/test_runtime_write_locations.py tests/test_ui_contract.py tests/test_route_reachability.py` → 50 passed
+- `python3 scripts/check_ui_contract.py` → OK, contract v129
 - `python3 scripts/check_route_reachability.py` → OK, 157 routes classified
 - First full suite exposed stale contract expectations, then fixed.
 - Final `pytest -q tests/` → 2050 passed, 13 skipped in 1018.72s
+- Hardening subset after fixes: `pytest -q tests/test_students_ingest.py tests/test_class_folder_ingest.py tests/test_unattributed_review_queue.py tests/test_google_drive_app_integration.py tests/test_lens_ui_api_contract.py tests/test_teacher_ui_phase2.py tests/test_lv_preflight.py tests/test_ui_contract.py tests/test_route_reachability.py tests/test_runtime_write_locations.py` → 85 passed
+- `python3 -m src.lingua_viva.cli preflight` → 6/6
 
 ## Manual
 

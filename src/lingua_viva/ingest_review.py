@@ -60,10 +60,10 @@ def read_events() -> list[dict[str, Any]]:
 def current_items() -> dict[str, dict[str, Any]]:
     state: dict[str, dict[str, Any]] = {}
     for event in read_events():
-        key = _key(event)
-        if not key.strip("|"):
+        drive_id = str(event.get("drive_id") or "")
+        if not drive_id:
             continue
-        state[key] = event
+        state[drive_id] = event
     return state
 
 
@@ -102,12 +102,9 @@ def enqueue_unattributed(
     }
     if not event["drive_id"] or not event["source_id"]:
         raise ValueError("unattributed item requires drive_id and source_id")
-    for existing in current_items().values():
-        if (
-            existing.get("status") == "open"
-            and existing.get("drive_id") == event["drive_id"]
-        ):
-            return existing
+    existing = current_items().get(event["drive_id"])
+    if existing and existing.get("status") == "open":
+        return existing
     _append_event(event)
     return event
 

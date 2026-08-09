@@ -2553,7 +2553,9 @@ async def students_ingest_attribute(payload: dict):
     if not student_id:
         return JSONResponse({"error": "student_id is required"}, status_code=400)
 
-    item = current_items().get(f"{drive_id}|{source_id}") or {}
+    item = current_items().get(drive_id) or {}
+    if item.get("status") != "open" or item.get("source_id") != source_id:
+        return JSONResponse({"error": "review_item_not_open"}, status_code=409)
 
     def assign(store):
         try:

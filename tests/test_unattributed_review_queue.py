@@ -120,6 +120,43 @@ def test_off_roster_assignment_writes_nothing(monkeypatch, tmp_path):
     assert client.get("/api/students/ingest/unattributed").json()["items"][0]["status"] == "open"
 
 
+def test_assignment_requires_current_open_item(monkeypatch, tmp_path):
+    monkeypatch.setenv("LV_STATE_HOME", str(tmp_path / "state"))
+    monkeypatch.setenv("LV_STUDENT_DB_PATH", str(tmp_path / "students.db"))
+    _patch_drive(monkeypatch, tmp_path, {"unknown-file": "Anonymous exit ticket."})
+    with StudentLensStore(db_path=tmp_path / "students.db") as store:
+        student_id = store.create_lens(display_name="Nora Rossi")
+        result = ingest_class_folder("root-folder", "teacher:olga", store=store)
+    item = result["unattributed"][0]
+
+    client = TestClient(app)
+    dismissed = client.post(
+        "/api/students/ingest/attribute",
+        json={
+            "source_id": item["source_id"],
+            "drive_id": item["drive_id"],
+            "dismiss": True,
+            "teacher_id": "teacher:olga",
+        },
+    )
+    assert dismissed.status_code == 200
+    before = review_queue_path().read_text(encoding="utf-8")
+
+    response = client.post(
+        "/api/students/ingest/attribute",
+        json={
+            "source_id": item["source_id"],
+            "drive_id": item["drive_id"],
+            "student_id": student_id,
+            "teacher_id": "teacher:olga",
+        },
+    )
+    assert response.status_code == 409
+    assert review_queue_path().read_text(encoding="utf-8") == before
+    with StudentLensStore(db_path=tmp_path / "students.db") as store:
+        assert store.list_evidence(student_id, target_type="background") == []
+
+
 def test_reingest_does_not_duplicate_open_queue_item(monkeypatch, tmp_path):
     monkeypatch.setenv("LV_STATE_HOME", str(tmp_path / "state"))
     monkeypatch.setenv("LV_STUDENT_DB_PATH", str(tmp_path / "students.db"))
@@ -130,6 +167,37 @@ def test_reingest_does_not_duplicate_open_queue_item(monkeypatch, tmp_path):
         ingest_class_folder("root-folder", "teacher:olga", store=store)
 
     assert len(list_open_items()) == 1
+
+
+def test_reingest_after_dismiss_reopens_one_current_item(monkeypatch, tmp_path):
+    monkeypatch.setenv("LV_STATE_HOME", str(tmp_path / "state"))
+    monkeypatch.setenv("LV_STUDENT_DB_PATH", str(tmp_path / "students.db"))
+    _patch_drive(monkeypatch, tmp_path, {"unknown-file": "Anonymous exit ticket."})
+    with StudentLensStore(db_path=tmp_path / "students.db") as store:
+        store.create_lens(display_name="Nora Rossi")
+        result = ingest_class_folder("root-folder", "teacher:olga", store=store)
+    item = result["unattributed"][0]
+
+    client = TestClient(app)
+    response = client.post(
+        "/api/students/ingest/attribute",
+        json={
+            "source_id": item["source_id"],
+            "drive_id": item["drive_id"],
+            "dismiss": True,
+            "teacher_id": "teacher:olga",
+        },
+    )
+    assert response.status_code == 200
+
+    with StudentLensStore(db_path=tmp_path / "students.db") as store:
+        ingest_class_folder("root-folder", "teacher:olga", store=store)
+
+    open_items = list_open_items()
+    assert len(open_items) == 1
+    assert open_items[0]["drive_id"] == "unknown-file"
+    assert open_items[0]["status"] == "open"
+    assert open_items[0]["source_id"] != item["source_id"]
 
 
 def test_dismiss_removes_item_without_lens_write(monkeypatch, tmp_path):
