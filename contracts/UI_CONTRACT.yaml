@@ -16,6 +16,9 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v133 (2026-08-08): Observation double-save idempotency — Observe save
+#     handler now recognizes duplicate capture responses and tells the
+#     teacher "Already saved." without refreshing the lens a second time.
 #   v132 (2026-08-08): Student Summary finish — parent drafts fail closed on
 #     unknown students and now expose copy + print exits through the shared
 #     local print chokepoint.
@@ -599,7 +602,7 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 132
+version: 133
 # v122 (2026-08-06): Failure-mode hardening. src/web.py: voice-act observation
 #   dedup guard (same 60s window as observe/capture, prevents network-retry
 #   duplicates). src/education/parent_report.py: personal_context evidence
