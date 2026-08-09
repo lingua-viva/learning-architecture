@@ -25,15 +25,22 @@ Roster split review / override surface for Prepare.
 
 ## Verification
 
-Run from clean detached worktree `/tmp/lv-roster-verify2-iMZtya` at `d839294`:
+Roster-split window checks, run from clean detached worktree `/tmp/lv-roster-verify2-iMZtya` at `d839294`:
 
 - `pytest -q tests/test_lesson_materials.py tests/test_lesson_packet_routes.py tests/test_ui_contract.py tests/test_route_reachability.py` — `37 passed`
 - `python3 scripts/check_ui_contract.py` — OK, contract v127
 - `python3 scripts/check_route_reachability.py` — OK, 155 routes classified
 - `pytest -q tests/` — `2045 passed, 13 skipped`
 
+Current merged-tree checks after the concurrent unattributed-review commits:
+
+- `pytest -q tests/test_lesson_materials.py tests/test_lesson_packet_routes.py tests/test_ui_contract.py tests/test_route_reachability.py` — `37 passed`
+- `python3 scripts/check_ui_contract.py` — OK, contract v129
+- `python3 scripts/check_route_reachability.py` — OK, 157 routes classified
+- `pytest -q tests/` — `2052 passed, 13 skipped`
+
 ## Manual / Context
 
 - Confirmed `98d1c95`, `42cbfd8`, `137a002`, and `e7580cc` in local git history before implementation.
 - No push performed.
-- The main worktree still contains unrelated concurrent unattributed-review edits in `src/web.py`, `static/index.html`, contract files, and ingest-review files. Roster-split commits were hunk-isolated; verification used a clean worktree to avoid those unrelated dirty files.
+- Concurrent unattributed-review commits landed after the roster-split commits and advanced the UI contract to v129. The v127 bump-log entry was restored to describe the roster-split contract commit; v128/v129 remain attributed to the ingest work.
