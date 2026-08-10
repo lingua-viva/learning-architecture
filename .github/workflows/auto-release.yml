@@ -71,19 +71,13 @@ jobs:
           next="desktop-v${major}.${minor}.${patch}"
           echo "tag=$next" >> "$GITHUB_OUTPUT"
 
-      - name: Pin live site to new tag
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import os, re
-          path = Path("docs/index.html")
-          tag = os.environ["NEXT_TAG"]
-          text = path.read_text(encoding="utf-8")
-          text = re.sub(r"desktop-v[0-9]+\.[0-9]+\.[0-9]+", tag, text)
-          path.write_text(text, encoding="utf-8")
-          PY
-        env:
-          NEXT_TAG: ${{ steps.tag.outputs.tag }}
+      # Pin-ordering fix (2026-08-10): the site pin used to happen HERE,
+      # before any build ran — so a failed build (e.g. v0.2.49's hdiutil
+      # flake) left the live download button pointing at a release that
+      # did not exist (404) until someone intervened. The pin now lives in
+      # the pin-site job below, which runs only after desktop-release
+      # succeeds AND every asset answers 200. Until then the site keeps
+      # serving the previous good release.
 
       # Class-3 fix (QA blast radius, 2026-08-02): desktop/package.json sat
       # frozen at an old version while tags advanced, so the app's About/
@@ -104,13 +98,16 @@ jobs:
         env:
           NEXT_TAG: ${{ steps.tag.outputs.tag }}
 
-      - name: Commit site pin
+      # The package.json sync must be IN the tagged commit (desktop-release's
+      # version-match gate checks it), so it commits before tagging. The
+      # docs/index.html pin deliberately does NOT — see pin-site below.
+      - name: Commit desktop version sync
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if ! git diff --quiet docs/index.html desktop/package.json; then
-            git add docs/index.html desktop/package.json
-            git commit -m "chore(release): pin ${{ steps.tag.outputs.tag }}"
+          if ! git diff --quiet desktop/package.json; then
+            git add desktop/package.json
+            git commit -m "chore(release): prepare ${{ steps.tag.outputs.tag }}"
             git push origin main
           fi
 
@@ -135,3 +132,63 @@ jobs:
     with:
       tag: ${{ needs.auto-release.outputs.tag }}
     secrets: inherit
+
+  # Pin-ordering fix (2026-08-10): the live site only advances to the new
+  # tag after the release exists AND every asset is provably downloadable
+  # (Rule 0: pushed = downloadable, nothing else counts). A failed build
+  # leaves the site on the previous good release instead of a 404.
+  pin-site:
+    needs: [auto-release, desktop-release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Verify every release asset answers 200
+        run: |
+          tag="${{ needs.auto-release.outputs.tag }}"
+          for asset in LinguaViva.dmg LinguaViva-Setup.exe LinguaViva.AppImage; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" -L \
+              "https://github.com/${{ github.repository }}/releases/download/$tag/$asset")
+            if [ "$code" != "200" ]; then
+              echo "::error::$asset for $tag returned HTTP $code — refusing to pin the site to a release that is not fully downloadable"
+              exit 1
+            fi
+            echo "✓ $asset: 200"
+          done
+
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Pin live site to released tag
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import os, re
+          path = Path("docs/index.html")
+          tag = os.environ["NEXT_TAG"]
+          text = path.read_text(encoding="utf-8")
+          text = re.sub(r"desktop-v[0-9]+\.[0-9]+\.[0-9]+", tag, text)
+          path.write_text(text, encoding="utf-8")
+          PY
+        env:
+          NEXT_TAG: ${{ needs.auto-release.outputs.tag }}
+
+      - name: Commit and push site pin
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet docs/index.html; then
+            echo "site already pinned to ${{ needs.auto-release.outputs.tag }}"
+            exit 0
+          fi
+          git add docs/index.html
+          git commit -m "chore(release): pin ${{ needs.auto-release.outputs.tag }}"
+          # main may have advanced while the builds ran — rebase the one-line
+          # pin commit rather than failing non-fast-forward.
+          for attempt in 1 2 3; do
+            if git push origin main; then exit 0; fi
+            git pull --rebase origin main
+          done
+          git push origin main

@@ -221,7 +221,24 @@ jobs:
           rm -rf "$STAGE" && mkdir -p "$STAGE"
           cp -R "$APP" "$STAGE/"
           ln -s /Applications "$STAGE/Applications"
-          hdiutil create -volname "Lingua Viva" -srcfolder "$STAGE" -ov -format UDZO "$DMG"
+          # Retry loop (2026-08-10): hdiutil create intermittently fails with
+          # "Resource busy" on GitHub macOS runners when a diskimages-helper
+          # from electron-builder's earlier DMG build is still winding down —
+          # it killed the v0.2.49 first run after notarization had already
+          # been Accepted. Transient by nature; back off and retry.
+          created=""
+          for attempt in 1 2 3 4 5; do
+            if hdiutil create -volname "Lingua Viva" -srcfolder "$STAGE" -ov -format UDZO "$DMG"; then
+              created=1
+              break
+            fi
+            echo "hdiutil create failed (attempt $attempt/5) — retrying in $((attempt * 5))s"
+            sleep $((attempt * 5))
+          done
+          if [ -z "$created" ]; then
+            echo "::error::hdiutil create failed after 5 attempts"
+            exit 1
+          fi
           echo "✓ DMG rebuilt from stapled .app: $DMG"
 
       - name: Notarize macOS DMG
