@@ -385,12 +385,17 @@ def _tier_prompt(tier: str, lesson: LessonInput, student_count: int) -> str:
         f"- Scaffolding level: {profile['scaffolding_description']}\n"
         f"- Students at this tier: {student_count}\n"
         "\n"
-        "Output exactly this format:\n"
+        "Output exactly this format and nothing else:\n"
         "TITLE: (a short, student-friendly title)\n"
-        "INSTRUCTIONS: (1-3 sentences telling the student what to do)\n"
+        "INSTRUCTIONS: (1-2 short sentences telling the student what to do)\n"
         "EXERCISE:\n"
-        "(the main activity — 5-15 lines of actual exercise content)\n"
+        "(the main activity — 5 to 8 short lines of actual exercise content)\n"
         "SCAFFOLDING NOTES: (comma-separated list of supports included)\n"
+        "\n"
+        # C8 (teacher-readiness): a small local model must finish inside the
+        # 60s reasoning budget even with three tier calls queued on one
+        # Ollama. Keep the requested output short and bound it hard.
+        "Keep the entire response under 120 words.\n"
     )
 
 
@@ -488,7 +493,10 @@ async def _generate_tier_material(
     student_ids: list[str],
 ) -> TierMaterial:
     prompt = _tier_prompt(tier, lesson, len(student_ids))
-    result = await engine.reason(prompt, context={}, system_prompt=SYSTEM_PROMPT)
+    # max_tokens matches the slimmed prompt's <120-word ask: 400 tokens is
+    # generous headroom for the four sections while capping the generation
+    # time that made qwen2.5:3b blow the 60s budget (C8 root cause).
+    result = await engine.reason(prompt, context={}, system_prompt=SYSTEM_PROMPT, max_tokens=400)
 
     content = getattr(result, "content", "") or ""
     model_used = str(getattr(result, "model_used", "") or "")
