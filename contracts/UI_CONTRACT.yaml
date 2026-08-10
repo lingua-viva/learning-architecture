@@ -16,6 +16,9 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v138 (2026-08-09): PoI progression panel mounted in the selected
+#     student lens; consumes /api/poi/progression/{student_id} and renders
+#     objective phases, trend, and consolidate-next guidance.
 #   v136 (2026-08-09): Safeguarding severity gate LIVE-WIRED — all three
 #     production capture sites (voice observe, /api/observe/capture, Slack
 #     bot) now route through capture_with_safeguarding: RED transcripts go
@@ -615,7 +618,7 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 136
+version: 138
 # v122 (2026-08-06): Failure-mode hardening. src/web.py: voice-act observation
 #   dedup guard (same 60s window as observe/capture, prevents network-retry
 #   duplicates). src/education/parent_report.py: personal_context evidence

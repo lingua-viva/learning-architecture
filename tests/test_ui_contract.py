@@ -223,7 +223,10 @@ REPO = Path(__file__).resolve().parent.parent
 #     library, coursework artifacts widgets via brief_extensions (fail-soft).
 #   v136 (2026-08-09): Safeguarding severity gate live-wired into all three
 #     capture sites (voice observe, observe/capture, Slack bot).
-EXPECTED_VERSION = 136
+#   v138 (2026-08-09): PoI progression panel mounted in the selected student
+#     lens; consumes /api/poi/progression/{student_id} and renders objective
+#     phases, trend, and consolidate-next guidance.
+EXPECTED_VERSION = 138
 
 
 def _html() -> str:
@@ -265,6 +268,15 @@ def test_lesson_materials_post_bodies_keep_tier_overrides():
     }
     for route, pattern in calls.items():
         assert re.search(pattern, html, flags=re.S), f"{route} no longer posts lessonPayload() with tier_overrides"
+
+
+def test_poi_progression_surface_stays_mounted_in_student_lens():
+    html = _html()
+    assert 'id="poi-progression-panel"' in html
+    assert "renderPoiProgression(targetId, state.selectedStudent)" in html
+    assert "/api/poi/progression/" in html
+    assert "Consolidate next" in html
+    assert "data-poi-objective" in html
 
 
 def test_version_bumped_exactly_one_from_live():

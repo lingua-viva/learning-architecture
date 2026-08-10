@@ -2835,8 +2835,10 @@
         ${showDecisionControls ? '<div id="evidence-panel" style="margin-top:16px;"></div>' : ""}
         <h3 style="margin-top:16px;">Grouping</h3>
         <p>Avoid-pairing notes: ${escapeHtml((lens.avoid_pairing_with || []).join(", ") || "none")}</p>
+        ${showDecisionControls ? '<section id="poi-progression-panel" style="margin-top:16px;"></section>' : ""}
         ${showDecisionControls ? `<div class="row" style="margin-top:16px;"><button type="button" id="archive-student">Archive student</button><span id="archive-student-status" class="voice-hint" aria-live="polite">Removes them from rosters and recommendations. Observations are kept.</span></div>` : ""}`;
       if (!showDecisionControls) return;
+      await renderPoiProgression(targetId, state.selectedStudent);
       $("archive-student").addEventListener("click", async () => {
         if (!window.confirm(`Archive ${lens.display_name}? They disappear from your roster, grouping, and recommendations. Their observation history is kept for records.`)) return;
         $("archive-student").disabled = true;
@@ -2887,6 +2889,61 @@
         }
       }
       $("rti-set-tier").addEventListener("click", handleSetTier);
+    }
+
+    function phaseBadge(phase, currentLevel) {
+      const active = phase === currentLevel ? " ok" : "";
+      return `<span class="badge${active}">${escapeHtml(phase)}</span>`;
+    }
+
+    function objectiveLabel(objective) {
+      return String(objective || "").replace(/_/g, " ");
+    }
+
+    function renderPoiObjective(summary, scale) {
+      const current = summary.current_level || "not recorded";
+      const trend = summary.trend || "insufficient_data";
+      return `<div class="item" data-poi-objective="${escapeHtml(summary.objective || "")}">
+        <div class="row" style="justify-content:space-between;align-items:flex-start;gap:8px;">
+          <div>
+            <strong>${escapeHtml(objectiveLabel(summary.objective))}</strong>
+            <p class="voice-hint" style="margin:4px 0 0;">${escapeHtml(summary.unit_id || "unit pending")}</p>
+          </div>
+          <span class="badge">${escapeHtml(trend)}</span>
+        </div>
+        <div class="source-line" style="margin-top:6px;">
+          ${(scale || []).map(phase => phaseBadge(phase, summary.current_level)).join("")}
+          <span class="badge">current: ${escapeHtml(current)}</span>
+          <span class="badge">${Number(summary.iteration_count || 0)} iteration${Number(summary.iteration_count || 0) === 1 ? "" : "s"}</span>
+        </div>
+      </div>`;
+    }
+
+    async function renderPoiProgression(targetId, studentId) {
+      const container = $(targetId);
+      const host = container ? container.querySelector("#poi-progression-panel") : $("poi-progression-panel");
+      if (!host || !studentId) return;
+      host.innerHTML = `<h3>Programme of Inquiry Progression</h3><p class="voice-hint">Loading progression...</p>`;
+      try {
+        const data = await api(`/api/poi/progression/${encodeURIComponent(studentId)}`);
+        const objectives = data.objectives || [];
+        const scale = data.progression_scale || ["beginning", "developing", "consolidating", "secure"];
+        const consolidate = data.consolidate_next || [];
+        const objectiveRows = objectives.length
+          ? `<div class="list">${objectives.map(summary => renderPoiObjective(summary, scale)).join("")}</div>`
+          : `<p class="voice-hint">No PoI activity iterations recorded yet.</p>`;
+        const nextRows = consolidate.length
+          ? `<div class="list">${consolidate.map(item => `<div class="item"><strong>${escapeHtml(objectiveLabel(item.objective))}</strong><p>${escapeHtml(item.suggestion || "")}</p><div class="source-line"><span class="badge">${escapeHtml(item.unit_id || "")}</span><span class="badge">${escapeHtml(item.current_level || "")}</span><span class="badge">${escapeHtml(item.trend || "")}</span></div></div>`).join("")}</div>`
+          : `<p class="voice-hint">Nothing needs consolidation ahead of new material.</p>`;
+        host.innerHTML = `
+          <div class="view-head"><div><h3>Programme of Inquiry Progression</h3><p>Objective phases, trend, and what to consolidate next.</p></div><span class="badge">${objectives.length} objective${objectives.length === 1 ? "" : "s"}</span></div>
+          <div class="source-line">${scale.map(phase => `<span class="badge">${escapeHtml(phase)}</span>`).join("")}</div>
+          ${objectiveRows}
+          <h3 style="margin-top:16px;">Consolidate next</h3>
+          ${nextRows}`;
+      } catch (error) {
+        host.innerHTML = `<h3>Programme of Inquiry Progression</h3><p>${escapeHtml(error.message)}</p>`;
+      }
     }
 
     function renderSupportProfileSummary(profile) {
