@@ -81,6 +81,36 @@ async def drain_notifications_route(request: Request):
     return drain_notifications()
 
 
+@router.post("/safeguarding/restricted/{entry_id}/status")
+async def restricted_status_route(entry_id: str, request: Request):
+    """Coordinator review workflow for restricted safeguarding entries."""
+    from src.lingua_viva.safeguarding import update_restricted_status
+
+    denied = _coordinator_gate(request)
+    if denied is not None:
+        return denied
+    try:
+        body = await request.json()
+    except Exception:  # noqa: BLE001 — malformed body is a client error
+        body = None
+    if not isinstance(body, dict):
+        return JSONResponse({"error": "JSON body required"}, status_code=400)
+    ctx = access_context_from_request(request)
+    reviewed_by = str(body.get("reviewed_by") or ctx.user_id or "local").strip()
+    try:
+        entry = update_restricted_status(
+            entry_id=entry_id,
+            status=str(body.get("status") or ""),
+            reviewed_by=reviewed_by,
+            closed_reason=str(body.get("closed_reason") or ""),
+        )
+    except KeyError:
+        return JSONResponse({"error": "restricted entry not found"}, status_code=404)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    return {"updated": True, "entry": entry}
+
+
 @router.get("/sharing/check")
 async def sharing_check(info_type: str = "", role: str = ""):
     """Look up the sharing matrix: what view does this role get?"""

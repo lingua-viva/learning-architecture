@@ -207,6 +207,72 @@ def test_read_restricted_goes_through_chokepoint(state_home):
     assert len(sg.read_restricted("admin")) == 1
 
 
+def test_restricted_status_lifecycle_preserves_original_content(state_home):
+    entry = sg.record_red_observation(
+        student_id="s-nora",
+        teacher_id="teacher_1",
+        raw_transcript="Nora said someone hurt her.",
+        teacher_edited_transcript="Nora said someone hurt her at home.",
+    )
+    acknowledged = sg.update_restricted_status(
+        entry_id=entry["entry_id"],
+        status="acknowledged",
+        reviewed_by="coordinator-1",
+    )
+    assert acknowledged["status"] == "acknowledged"
+    assert acknowledged["raw_transcript"] == "Nora said someone hurt her."
+    assert acknowledged["teacher_edited_transcript"] == "Nora said someone hurt her at home."
+    assert acknowledged["review_audit"][0]["from"] == "open"
+    assert acknowledged["review_audit"][0]["to"] == "acknowledged"
+
+    closed = sg.update_restricted_status(
+        entry_id=entry["entry_id"],
+        status="closed",
+        reviewed_by="coordinator-1",
+        closed_reason="Transferred to the school's designated safeguarding lead.",
+    )
+    assert closed["status"] == "closed"
+    assert closed["closed_reason"].startswith("Transferred")
+    assert len(closed["review_audit"]) == 2
+    assert closed["review_audit"][1]["to"] == "closed"
+    reread = sg.read_restricted("coordinator")[0]
+    assert reread["raw_transcript"] == entry["raw_transcript"]
+    assert reread["severity"] == entry["severity"]
+
+
+def test_restricted_status_rewrite_accepts_legacy_open_status(state_home):
+    legacy = {
+        "entry_id": "sg-legacy",
+        "student_id": "s-nora",
+        "teacher_id": "teacher_1",
+        "raw_transcript": "restricted narrative",
+        "status": "awaiting_coordinator_review",
+    }
+    ledger = state_home / "safeguarding" / "restricted.ndjson"
+    ledger.parent.mkdir(parents=True)
+    ledger.write_text(json.dumps(legacy) + "\n", encoding="utf-8")
+
+    updated = sg.update_restricted_status(
+        entry_id="sg-legacy",
+        status="acknowledged",
+        reviewed_by="coordinator-1",
+    )
+    assert updated["status"] == "acknowledged"
+    assert updated["review_audit"][0]["from"] == "open"
+
+
+def test_restricted_status_requires_close_reason(state_home):
+    entry = sg.record_red_observation(
+        student_id="s-nora", teacher_id="teacher_1", raw_transcript="disclosure"
+    )
+    with pytest.raises(ValueError, match="closed_reason"):
+        sg.update_restricted_status(
+            entry_id=entry["entry_id"],
+            status="closed",
+            reviewed_by="coordinator-1",
+        )
+
+
 # ---------------------------------------------------------------------------
 # Route: /api/safeguarding/restricted
 # ---------------------------------------------------------------------------
@@ -256,6 +322,37 @@ def test_restricted_route_coordinator_sees_items(client, state_home, monkeypatch
     body = response.json()
     assert body["count"] == 1
     assert body["items"][0]["student_id"] == "s-nora"
+
+
+def test_restricted_status_route_forbidden_for_teacher(client, state_home, monkeypatch):
+    monkeypatch.setenv("LV_AUTH_MODE", "local_header")
+    entry = sg.record_red_observation(
+        student_id="s-nora", teacher_id="teacher_1", raw_transcript="disclosure"
+    )
+    response = client.post(
+        f"/api/safeguarding/restricted/{entry['entry_id']}/status",
+        headers=_headers("teacher"),
+        json={"status": "acknowledged"},
+    )
+    assert response.status_code == 403
+
+
+def test_restricted_status_route_coordinator_updates_entry(client, state_home, monkeypatch):
+    monkeypatch.setenv("LV_AUTH_MODE", "local_header")
+    entry = sg.record_red_observation(
+        student_id="s-nora", teacher_id="teacher_1", raw_transcript="disclosure"
+    )
+    response = client.post(
+        f"/api/safeguarding/restricted/{entry['entry_id']}/status",
+        headers=_headers("coordinator", user="coord-1"),
+        json={"status": "acknowledged"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["updated"] is True
+    assert body["entry"]["status"] == "acknowledged"
+    assert body["entry"]["reviewed_by"] == "coord-1"
+    assert body["entry"]["review_audit"][0]["reviewed_by"] == "coord-1"
 
 
 def test_household_adult_violence_disclosure_is_red():

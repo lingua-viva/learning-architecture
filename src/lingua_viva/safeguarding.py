@@ -73,6 +73,17 @@ RED = "RED"
 
 _TIER_RANK = {GREEN: 0, AMBER: 1, RED: 2}
 
+RESTRICTED_STATUS_OPEN = "open"
+RESTRICTED_STATUS_ACKNOWLEDGED = "acknowledged"
+RESTRICTED_STATUS_CLOSED = "closed"
+RESTRICTED_STATUSES = frozenset(
+    {
+        RESTRICTED_STATUS_OPEN,
+        RESTRICTED_STATUS_ACKNOWLEDGED,
+        RESTRICTED_STATUS_CLOSED,
+    }
+)
+
 # ---------------------------------------------------------------------------
 # Indicator taxonomy — reviewable data, not scattered strings.
 # Each entry: (category, pattern, note). Categories cite the recognized
@@ -328,6 +339,19 @@ def _read_ndjson(path: Path) -> list[dict]:
     return items
 
 
+def _write_ndjson(path: Path, entries: list[dict]) -> None:
+    """Rewrite an NDJSON ledger after verified, in-place metadata updates.
+
+    Pattern matches notification_drain._write_all: parse every row, update
+    structured fields, then rewrite the complete NDJSON file. Restricted
+    narrative fields are preserved on the same entry; they are never copied
+    to a public audit stream.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = "".join(json.dumps(entry, ensure_ascii=False) + "\n" for entry in entries)
+    path.write_text(text, encoding="utf-8")
+
+
 _COORDINATOR_LEVEL = ROLE_HIERARCHY["coordinator"]
 
 
@@ -368,10 +392,102 @@ def record_red_observation(
         "teacher_edited_transcript": teacher_edited_transcript,
         "severity": severity.to_dict(),
         "extra": dict(extra or {}),
-        "status": "awaiting_coordinator_review",
+        "status": RESTRICTED_STATUS_OPEN,
+        "status_updated_at": _now(),
+        "review_audit": [],
     }
     _append_ndjson(restricted_ledger_path(), entry)
     return entry
+
+
+def _normalized_restricted_status(entry: dict) -> str:
+    status = str(entry.get("status") or "").strip()
+    if status == "awaiting_coordinator_review":
+        return RESTRICTED_STATUS_OPEN
+    if status in RESTRICTED_STATUSES:
+        return status
+    return RESTRICTED_STATUS_OPEN
+
+
+def update_restricted_status(
+    *,
+    entry_id: str,
+    status: str,
+    reviewed_by: str,
+    closed_reason: str = "",
+) -> dict:
+    """Update coordinator review status for one restricted ledger entry.
+
+    Allowed lifecycle: open -> acknowledged -> closed. Coordinators may also
+    close directly from open when the review is completed in one pass. Closed
+    entries are terminal. Every transition is recorded on the restricted entry
+    itself, so no narrative leaves the restricted store.
+    """
+    entry_id = str(entry_id or "").strip()
+    next_status = str(status or "").strip()
+    reviewer = str(reviewed_by or "").strip()
+    reason = str(closed_reason or "").strip()
+    if not entry_id:
+        raise ValueError("entry_id is required")
+    if next_status not in RESTRICTED_STATUSES:
+        raise ValueError("status must be open, acknowledged, or closed")
+    if not reviewer:
+        raise ValueError("reviewed_by is required")
+    if next_status == RESTRICTED_STATUS_CLOSED and not reason:
+        raise ValueError("closed_reason is required when closing an entry")
+
+    entries = _read_ndjson(restricted_ledger_path())
+    updated: dict | None = None
+    now = _now()
+    for entry in entries:
+        if str(entry.get("entry_id") or "") != entry_id:
+            continue
+        current_status = _normalized_restricted_status(entry)
+        allowed = {
+            RESTRICTED_STATUS_OPEN: {
+                RESTRICTED_STATUS_OPEN,
+                RESTRICTED_STATUS_ACKNOWLEDGED,
+                RESTRICTED_STATUS_CLOSED,
+            },
+            RESTRICTED_STATUS_ACKNOWLEDGED: {
+                RESTRICTED_STATUS_ACKNOWLEDGED,
+                RESTRICTED_STATUS_CLOSED,
+            },
+            RESTRICTED_STATUS_CLOSED: {RESTRICTED_STATUS_CLOSED},
+        }[current_status]
+        if next_status not in allowed:
+            raise ValueError(f"cannot move restricted entry from {current_status} to {next_status}")
+        if current_status == RESTRICTED_STATUS_CLOSED and next_status == RESTRICTED_STATUS_CLOSED:
+            raise ValueError("restricted entry is already closed")
+
+        audit = entry.get("review_audit")
+        if not isinstance(audit, list):
+            audit = []
+        audit.append(
+            {
+                "from": current_status,
+                "to": next_status,
+                "at": now,
+                "reviewed_by": reviewer,
+                "closed_reason": reason if next_status == RESTRICTED_STATUS_CLOSED else "",
+            }
+        )
+        entry["status"] = next_status
+        entry["status_updated_at"] = now
+        entry["reviewed_by"] = reviewer
+        if next_status == RESTRICTED_STATUS_ACKNOWLEDGED:
+            entry["acknowledged_at"] = now
+        if next_status == RESTRICTED_STATUS_CLOSED:
+            entry["closed_at"] = now
+            entry["closed_reason"] = reason
+        entry["review_audit"] = audit
+        updated = entry
+        break
+
+    if updated is None:
+        raise KeyError(entry_id)
+    _write_ndjson(restricted_ledger_path(), entries)
+    return updated
 
 
 def read_restricted(role: str) -> list[dict]:
