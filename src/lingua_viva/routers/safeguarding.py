@@ -168,3 +168,14 @@ async def pending_escalations_route(request: Request):
         return denied
     pending = check_escalations()
     return {"pending_escalations": pending, "count": len(pending)}
+
+
+@router.get("/absences/calendar")
+async def absence_calendar_route(request: Request):
+    """Configured attendance holiday calendar — coordinator+ only."""
+    from src.lingua_viva.absence_escalation import load_holiday_calendar
+
+    denied = _coordinator_gate(request)
+    if denied is not None:
+        return denied
+    return load_holiday_calendar()

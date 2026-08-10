@@ -9,9 +9,10 @@ threshold is crossed:
     ``window_days`` (default 20) school days.
 
 School days are weekdays (Mon-Fri); a Friday absence followed by a
-Monday absence is consecutive. Term-calendar holidays are out of scope
-for this slice — a weekday holiday counts as a school day, which can
-only make escalation MORE eager (fail closed in the safe direction).
+Monday absence is consecutive. When an optional holiday calendar exists
+under ``<LV_STATE_HOME>/calendar/holidays.yaml`` or ``.json``, those dates
+are skipped as non-school days too. With no calendar file, behavior stays
+weekday-only.
 
 Escalations are queued through the same local notification outbox as
 safeguarding (src/lingua_viva/safeguarding.py — docpipe sync-queue
@@ -55,6 +56,18 @@ def escalations_path() -> Path:
     return _absence_dir() / "escalations.ndjson"
 
 
+def calendar_dir() -> Path:
+    return _state_home() / "calendar"
+
+
+def holiday_calendar_path() -> Path | None:
+    for name in ("holidays.yaml", "holidays.yml", "holidays.json"):
+        path = calendar_dir() / name
+        if path.exists():
+            return path
+    return None
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -89,6 +102,73 @@ def _parse_date(value) -> date:
     return date.fromisoformat(str(value).strip())
 
 
+def _expand_holiday_entry(entry: dict) -> tuple[set[date], dict]:
+    start_raw = entry.get("start") or entry.get("date")
+    end_raw = entry.get("end") or start_raw
+    start = _parse_date(start_raw)
+    end = _parse_date(end_raw)
+    if end < start:
+        raise ValueError("holiday end before start")
+    label = str(entry.get("label") or entry.get("name") or "holiday").strip()
+    days = {start + timedelta(days=offset) for offset in range((end - start).days + 1)}
+    return days, {"start": start.isoformat(), "end": end.isoformat(), "label": label}
+
+
+def load_holiday_calendar() -> dict:
+    """Load optional local holiday dates/ranges.
+
+    Accepted shapes:
+    - {"holidays": [{"start": "YYYY-MM-DD", "end": "YYYY-MM-DD", "label": "..."}]}
+    - [{"date": "YYYY-MM-DD", "label": "..."}]
+
+    Invalid files fail closed to no holidays but report the error through the
+    status route; escalation behavior remains weekday-only rather than
+    crashing attendance checks.
+    """
+    path = holiday_calendar_path()
+    if path is None:
+        return {"configured": False, "path": "", "holidays": [], "holiday_dates": [], "error": ""}
+    try:
+        if path.suffix == ".json":
+            loaded = json.loads(path.read_text(encoding="utf-8"))
+        else:
+            import yaml
+
+            loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
+        entries = loaded.get("holidays") if isinstance(loaded, dict) else loaded
+        if entries is None:
+            entries = []
+        if not isinstance(entries, list):
+            raise ValueError("holiday calendar must be a list or contain holidays: []")
+        holidays: list[dict] = []
+        dates: set[date] = set()
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            expanded, normalized = _expand_holiday_entry(entry)
+            dates.update(expanded)
+            holidays.append(normalized)
+    except Exception as exc:  # noqa: BLE001 — route reports; checks degrade
+        return {
+            "configured": True,
+            "path": str(path),
+            "holidays": [],
+            "holiday_dates": [],
+            "error": str(exc),
+        }
+    return {
+        "configured": True,
+        "path": str(path),
+        "holidays": holidays,
+        "holiday_dates": [d.isoformat() for d in sorted(dates)],
+        "error": "",
+    }
+
+
+def _is_school_day(day: date, holidays: set[date] | None = None) -> bool:
+    return day.weekday() < 5 and day not in (holidays or set())
+
+
 def record_absence(student_id: str, absence_date) -> dict:
     """Record one absence day. Idempotent per (student_id, date)."""
     student = str(student_id or "").strip()
@@ -108,25 +188,25 @@ def record_absence(student_id: str, absence_date) -> dict:
     return {**entry, "duplicate": False}
 
 
-def _next_school_day(day: date) -> date:
+def _next_school_day(day: date, holidays: set[date] | None = None) -> date:
     step = day + timedelta(days=1)
-    while step.weekday() >= 5:  # Sat=5, Sun=6
+    while not _is_school_day(step, holidays):
         step += timedelta(days=1)
     return step
 
 
-def _school_days_back(from_day: date, count: int) -> date:
+def _school_days_back(from_day: date, count: int, holidays: set[date] | None = None) -> date:
     """The date `count` school days before from_day (inclusive window start)."""
     day = from_day
     remaining = count - 1
     while remaining > 0:
         day -= timedelta(days=1)
-        if day.weekday() < 5:
+        if _is_school_day(day, holidays):
             remaining -= 1
     return day
 
 
-def _max_consecutive_run(days: list[date]) -> tuple[int, list[date]]:
+def _max_consecutive_run(days: list[date], holidays: set[date] | None = None) -> tuple[int, list[date]]:
     """Longest run of consecutive school-day absences."""
     if not days:
         return 0, []
@@ -134,7 +214,7 @@ def _max_consecutive_run(days: list[date]) -> tuple[int, list[date]]:
     best_run: list[date] = [ordered[0]]
     run: list[date] = [ordered[0]]
     for day in ordered[1:]:
-        if day == _next_school_day(run[-1]):
+        if day == _next_school_day(run[-1], holidays):
             run.append(day)
         else:
             run = [day]
@@ -153,7 +233,9 @@ def check_escalations(
     """Evaluate thresholds, persist NEW escalations (queued to the
     coordinator via the notification outbox), return ALL pending ones."""
     today = today or date.today()
-    window_start = _school_days_back(today, max(1, int(window_days)))
+    calendar = load_holiday_calendar()
+    holidays = {_parse_date(value) for value in calendar.get("holiday_dates") or []}
+    window_start = _school_days_back(today, max(1, int(window_days)), holidays)
 
     by_student: dict[str, list[date]] = {}
     for entry in _read(absences_path()):
@@ -174,9 +256,9 @@ def check_escalations(
     for student, days in sorted(by_student.items()):
         if not student:
             continue
-        weekday_days = [d for d in days if d.weekday() < 5]
+        weekday_days = [d for d in days if _is_school_day(d, holidays)]
 
-        run_length, run_days = _max_consecutive_run(weekday_days)
+        run_length, run_days = _max_consecutive_run(weekday_days, holidays)
         if run_length >= max(1, int(consecutive_threshold)) and (student, "consecutive") not in pending_keys:
             new_escalations.append({
                 "student_id": student,

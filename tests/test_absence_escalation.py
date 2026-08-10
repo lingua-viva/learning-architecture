@@ -73,6 +73,34 @@ def test_weekend_gap_still_counts_as_consecutive(state_home):
     )
 
 
+def test_absent_holiday_calendar_preserves_weekday_behavior(state_home):
+    assert ae.load_holiday_calendar()["configured"] is False
+    for day in (MON, TUE, WED):
+        ae.record_absence("s-nora", day)
+    pending = ae.check_escalations(today=THU)
+    assert any(e["student_id"] == "s-nora" and e["reason"] == "consecutive" for e in pending)
+
+
+def test_holiday_break_skips_school_days_and_prevents_false_consecutive(state_home):
+    calendar = state_home / "calendar" / "holidays.yaml"
+    calendar.parent.mkdir(parents=True)
+    calendar.write_text(
+        "holidays:\n"
+        "  - start: 2026-08-04\n"
+        "    end: 2026-08-06\n"
+        "    label: Midweek break\n",
+        encoding="utf-8",
+    )
+    for day in (MON, TUE, WED):
+        ae.record_absence("s-nora", day)
+
+    loaded = ae.load_holiday_calendar()
+    assert loaded["configured"] is True
+    assert "2026-08-05" in loaded["holiday_dates"]
+    pending = ae.check_escalations(today=FRI)
+    assert not any(e["student_id"] == "s-nora" and e["reason"] == "consecutive" for e in pending)
+
+
 def test_nonconsecutive_gap_resets_run(state_home):
     for day in (MON, WED, FRI):  # gaps on Tue/Thu
         ae.record_absence("s-marco", day)
@@ -173,3 +201,20 @@ def test_post_absence_allowed_for_teacher_in_auth_mode(client, state_home, monke
         headers=_headers("teacher"),
     )
     assert response.status_code == 200
+
+
+def test_absence_calendar_route_reports_configured_holidays(client, state_home, monkeypatch):
+    monkeypatch.setenv("LV_AUTH_MODE", "local_header")
+    calendar = state_home / "calendar" / "holidays.json"
+    calendar.parent.mkdir(parents=True)
+    calendar.write_text(
+        json.dumps({"holidays": [{"date": "2026-08-04", "label": "Campus closure"}]}),
+        encoding="utf-8",
+    )
+    denied = client.get("/api/absences/calendar", headers=_headers("teacher"))
+    assert denied.status_code == 403
+    response = client.get("/api/absences/calendar", headers=_headers("coordinator"))
+    assert response.status_code == 200
+    body = response.json()
+    assert body["configured"] is True
+    assert body["holiday_dates"] == ["2026-08-04"]
