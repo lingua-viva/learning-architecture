@@ -118,6 +118,26 @@ def test_search_by_query_category_and_role(lv_state, tmp_path):
     assert library.search("zzz qqq xxyyzz") == []
 
 
+def test_search_ranking_uses_term_frequency_not_just_overlap(lv_state, tmp_path):
+    focused = tmp_path / "focused.txt"
+    broad = tmp_path / "broad.txt"
+    focused.write_text(
+        "Reading fluency fluency fluency assessment. Fluency routines and repeated reading.",
+        encoding="utf-8",
+    )
+    broad.write_text(
+        "Reading assessment includes vocabulary, comprehension, speaking, listening, and one fluency note.",
+        encoding="utf-8",
+    )
+    focused_doc = library.add_document(focused, title="Reading fluency assessment routines")
+    broad_doc = library.add_document(broad, title="General reading assessment")
+
+    results = library.search("reading fluency assessment", limit=2)
+
+    assert [r["doc_id"] for r in results] == [focused_doc["doc_id"], broad_doc["doc_id"]]
+    assert results[0]["score"] > results[1]["score"]
+
+
 def test_status_counts(lv_state, tmp_path):
     (tmp_path / "unit_plan.md").write_text(UNIT_PLAN_MD, encoding="utf-8")
     library.add_document(tmp_path / "unit_plan.md")

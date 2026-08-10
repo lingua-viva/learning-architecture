@@ -25,9 +25,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import re
 import threading
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -361,6 +363,27 @@ def _category_matches(entry: dict[str, Any], category: str) -> bool:
     return False
 
 
+def _tokens(value: str) -> list[str]:
+    return [token.lower() for token in _TOKENIZE.findall(str(value or ""))]
+
+
+def _bm25_score(query_terms: list[str], doc_terms: list[str], idf: dict[str, float], avg_len: float) -> float:
+    if not query_terms or not doc_terms:
+        return 0.0
+    freqs = Counter(doc_terms)
+    doc_len = len(doc_terms)
+    k1 = 1.4
+    b = 0.75
+    score = 0.0
+    for term in query_terms:
+        tf = freqs.get(term, 0)
+        if tf <= 0:
+            continue
+        denom = tf + k1 * (1 - b + b * (doc_len / max(avg_len, 1.0)))
+        score += idf.get(term, 0.0) * ((tf * (k1 + 1)) / denom)
+    return score
+
+
 def search(
     query: Optional[str] = None,
     *,
@@ -379,19 +402,46 @@ def search(
         entries = [e for e in entries if wanted in [r.lower() for r in e.get("roles", [])]]
 
     results: list[dict[str, Any]] = []
-    query_tokens = set(_TOKENIZE.findall(query.lower())) if query else set()
+    query_terms = _tokens(query) if query else []
+    query_token_set = set(query_terms)
+    chunk_cache: dict[str, list[dict[str, Any]]] = {}
+    chunk_tokens_by_doc: dict[str, list[list[str]]] = {}
+    if query_terms:
+        all_chunk_terms: list[list[str]] = []
+        for entry in entries:
+            chunks = load_chunks(entry["doc_id"])
+            chunk_cache[entry["doc_id"]] = chunks
+            tokenized = [_tokens(chunk.get("text", "")) for chunk in chunks]
+            chunk_tokens_by_doc[entry["doc_id"]] = tokenized
+            all_chunk_terms.extend(tokenized)
+        doc_count = max(1, len(all_chunk_terms))
+        avg_len = sum(len(tokens) for tokens in all_chunk_terms) / doc_count
+        doc_freq = {
+            term: sum(1 for tokens in all_chunk_terms if term in set(tokens))
+            for term in query_token_set
+        }
+        idf = {
+            term: math.log(1 + (doc_count - freq + 0.5) / (freq + 0.5))
+            for term, freq in doc_freq.items()
+        }
+    else:
+        avg_len = 0.0
+        idf = {}
     for entry in entries:
         best_score = 0.0
         best_chunk: Optional[dict[str, Any]] = None
-        if query_tokens:
-            title_tokens = set(_TOKENIZE.findall(str(entry.get("title", "")).lower()))
-            title_score = len(query_tokens & title_tokens) / len(query_tokens)
-            for chunk in load_chunks(entry["doc_id"]):
-                chunk_tokens = set(_TOKENIZE.findall(chunk.get("text", "").lower()))
-                score = len(query_tokens & chunk_tokens) / len(query_tokens)
+        if query_terms:
+            title_tokens = set(_tokens(str(entry.get("title", ""))))
+            title_score = 0.35 * len(query_token_set & title_tokens)
+            chunks = chunk_cache.get(entry["doc_id"]) or load_chunks(entry["doc_id"])
+            tokenized_chunks = chunk_tokens_by_doc.get(entry["doc_id"]) or [
+                _tokens(chunk.get("text", "")) for chunk in chunks
+            ]
+            for chunk, chunk_tokens in zip(chunks, tokenized_chunks):
+                score = _bm25_score(query_terms, chunk_tokens, idf, avg_len)
                 if score > best_score or best_chunk is None:
                     best_score, best_chunk = score, chunk
-            best_score = max(best_score, title_score)
+            best_score = best_score + title_score
             if best_score <= 0.0:
                 continue
         snippet = ""
@@ -411,8 +461,8 @@ def search(
             "chunk_index": chunk_index,
         })
 
-    if query_tokens:
-        results.sort(key=lambda r: r["score"], reverse=True)
+    if query_terms:
+        results.sort(key=lambda r: (-r["score"], r["title"], r["doc_id"]))
     else:
         results.sort(key=lambda r: r["ingested_at"], reverse=True)
     return results[: max(0, int(limit))]
