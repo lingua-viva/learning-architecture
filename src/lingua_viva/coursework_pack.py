@@ -27,6 +27,7 @@ Output PDFs land under <LV_STATE_HOME>/artifacts/coursework/.
 from __future__ import annotations
 
 import re
+import asyncio
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -45,6 +46,7 @@ from src.education.content_differentiator import (
 _KNOWLEDGE_DIR = Path(__file__).resolve().parents[2] / "knowledge" / "education"
 
 DRAFT_LABEL = "draft — teacher review required"
+ENRICHMENT_MAX_CHARS = 240
 
 # Deterministic activity scaffolds cycled per unit. Each produces a real,
 # runnable classroom activity from the unit topic; the differentiator then
@@ -180,7 +182,64 @@ def _background_reading(unit: dict, max_entries: int = 3) -> list[dict]:
         return []
 
 
-def _build_activity(index: int, unit: dict, cefr_target: str, differentiator: ContentDifferentiator) -> dict:
+def _clean_enrichment_text(text: str) -> str:
+    cleaned = " ".join(str(text or "").split())
+    cleaned = re.sub(r"^(extension prompt|enrichment|suggestion)\s*:\s*", "", cleaned, flags=re.I)
+    return cleaned[:ENRICHMENT_MAX_CHARS].rstrip(" ,;")
+
+
+async def _enrichment_from_model(engine, activity: dict, unit: dict, cefr_target: str) -> dict:
+    prompt = (
+        "Create one concise, student-safe extension prompt for this Italian "
+        "coursework activity. Do not mention AI, diagnostics, RTI, student names, "
+        "or private context. Return plain text only.\n"
+        f"Unit: {unit.get('title', '')}\n"
+        f"Focus: {unit.get('focus', '')}\n"
+        f"Activity: {activity.get('title', '')}\n"
+        f"CEFR target: {cefr_target}\n"
+    )
+    result = await engine.reason(
+        prompt,
+        context={"surface": "coursework_pack_enrichment"},
+        system_prompt="You write short classroom prompts for local teacher review.",
+        local_only=True,
+        max_tokens=80,
+    )
+    if getattr(result, "error", "") or str(getattr(result, "model_used", "")).startswith("none"):
+        return {"mode": "deterministic", "model_used": getattr(result, "model_used", "none"), "text": ""}
+    text = _clean_enrichment_text(getattr(result, "content", ""))
+    if not text:
+        return {"mode": "deterministic", "model_used": getattr(result, "model_used", ""), "text": ""}
+    from src.education.help_artifacts import _validate_safe_text
+
+    try:
+        _validate_safe_text(text)
+    except ValueError:
+        return {"mode": "deterministic", "model_used": getattr(result, "model_used", ""), "text": ""}
+    return {"mode": "enriched", "model_used": getattr(result, "model_used", ""), "text": text}
+
+
+def _apply_optional_enrichment(activity: dict, unit: dict, cefr_target: str, engine) -> dict:
+    activity["enrichment"] = {"mode": "deterministic", "model_used": "", "text": ""}
+    if engine is None:
+        return activity
+    try:
+        enrichment = asyncio.run(_enrichment_from_model(engine, activity, unit, cefr_target))
+    except Exception:  # noqa: BLE001 — enrichment is optional; pack still builds
+        return activity
+    activity["enrichment"] = enrichment
+    if enrichment["mode"] == "enriched" and enrichment["text"]:
+        activity["instructions"] = f"{activity['instructions']} Extension prompt: {enrichment['text']}"
+    return activity
+
+
+def _build_activity(
+    index: int,
+    unit: dict,
+    cefr_target: str,
+    differentiator: ContentDifferentiator,
+    enrichment_engine=None,
+) -> dict:
     template = _ACTIVITY_TEMPLATES[index % len(_ACTIVITY_TEMPLATES)]
     topic = unit.get("title", "the unit topic")
     terms = _key_terms_from_unit(unit)
@@ -196,7 +255,7 @@ def _build_activity(index: int, unit: dict, cefr_target: str, differentiator: Co
     )
     content_pack = differentiator.generate(lesson)
 
-    return {
+    activity = {
         "activity_id": f"{unit.get('unit_id', 'unit')}-act-{index + 1}",
         "kind": template["kind"],
         "title": template["title"].format(topic=topic),
@@ -210,6 +269,7 @@ def _build_activity(index: int, unit: dict, cefr_target: str, differentiator: Co
         ],
         "teacher_notes": list(template["teacher_notes"]),
     }
+    return _apply_optional_enrichment(activity, unit, cefr_target, enrichment_engine)
 
 
 def build_pack(
@@ -218,6 +278,8 @@ def build_pack(
     unit_id: Optional[str] = None,
     activities_per_unit: int = 3,
     matrix_path: Optional[Path | str] = None,
+    include_model_enrichment: bool = False,
+    enrichment_engine=None,
 ) -> dict:
     """Assemble the master (teacher-audience) coursework pack structure.
 
@@ -235,13 +297,17 @@ def build_pack(
 
     grade = units[0].get("grade", str(class_ref))
     differentiator = ContentDifferentiator()
+    if include_model_enrichment and enrichment_engine is None:
+        from src.lingua_viva.reasoning import ReasoningEngine
+
+        enrichment_engine = ReasoningEngine()
     activities_per_unit = max(1, min(int(activities_per_unit), len(_ACTIVITY_TEMPLATES) * 2))
 
     pack_units = []
     for unit in units:
         cefr_target = _cefr_from_wording(unit.get("cefr_target", ""))
         activities = [
-            _build_activity(i, unit, cefr_target, differentiator)
+            _build_activity(i, unit, cefr_target, differentiator, enrichment_engine)
             for i in range(activities_per_unit)
         ]
         pack_units.append({
@@ -308,6 +374,8 @@ def generate_class_pack(
     include_student_version: bool = True,
     matrix_path: Optional[Path | str] = None,
     output_dir: Optional[Path | str] = None,
+    include_model_enrichment: bool = False,
+    enrichment_engine=None,
 ) -> dict:
     """Build the pack and write teacher (+ optional student) PDFs.
 
@@ -319,6 +387,8 @@ def generate_class_pack(
         unit_id=unit_id,
         activities_per_unit=activities_per_unit,
         matrix_path=matrix_path,
+        include_model_enrichment=include_model_enrichment,
+        enrichment_engine=enrichment_engine,
     )
     out_dir = Path(output_dir) if output_dir else artifacts_dir("coursework")
     out_dir.mkdir(parents=True, exist_ok=True)

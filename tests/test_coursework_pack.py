@@ -12,6 +12,30 @@ from pathlib import Path
 import pytest
 
 from src.lingua_viva import coursework_pack as cwp
+from src.lingua_viva.reasoning import ReasonResult
+
+
+class FakeEnrichmentEngine:
+    def __init__(self, content="Ask a partner to add one reason using perché.", model_used="ollama/qwen2.5:3b", error=""):
+        self.content = content
+        self.model_used = model_used
+        self.error = error
+        self.calls = []
+
+    async def reason(self, query, context=None, model=None, default_model=None, system_prompt=None, local_only=False, max_tokens=2000):
+        self.calls.append({
+            "query": query,
+            "context": context or {},
+            "system_prompt": system_prompt,
+            "local_only": local_only,
+            "max_tokens": max_tokens,
+        })
+        return ReasonResult(
+            content=self.content,
+            confidence=0.8,
+            model_used=self.model_used,
+            error=self.error,
+        )
 
 
 @pytest.fixture(autouse=True)
@@ -77,6 +101,53 @@ def test_student_view_strips_teacher_only_material():
     # Master pack untouched (no mutation).
     assert pack["audience"] == "teacher"
     assert pack["units"][0]["activities"][0]["answer_key"]
+
+
+def test_optional_local_model_enrichment_marks_activity_provenance():
+    engine = FakeEnrichmentEngine()
+    pack = cwp.build_pack(
+        "G3",
+        unit_id="g3-unit-1",
+        activities_per_unit=1,
+        include_model_enrichment=True,
+        enrichment_engine=engine,
+    )
+    activity = pack["units"][0]["activities"][0]
+    assert engine.calls
+    assert engine.calls[0]["local_only"] is True
+    assert activity["enrichment"]["mode"] == "enriched"
+    assert activity["enrichment"]["model_used"] == "ollama/qwen2.5:3b"
+    assert "Extension prompt:" in activity["instructions"]
+
+
+def test_enrichment_failure_degrades_to_deterministic_pack():
+    engine = FakeEnrichmentEngine(content="", model_used="none:local_only", error="timeout")
+    pack = cwp.build_pack(
+        "G3",
+        unit_id="g3-unit-1",
+        activities_per_unit=1,
+        include_model_enrichment=True,
+        enrichment_engine=engine,
+    )
+    activity = pack["units"][0]["activities"][0]
+    assert activity["enrichment"]["mode"] == "deterministic"
+    assert "Extension prompt:" not in activity["instructions"]
+
+
+def test_student_safe_enrichment_never_adds_content_teacher_lacks():
+    pack = cwp.build_pack(
+        "G3",
+        unit_id="g3-unit-1",
+        activities_per_unit=1,
+        include_model_enrichment=True,
+        enrichment_engine=FakeEnrichmentEngine(),
+    )
+    student = cwp.student_view(pack)
+    teacher_activity = pack["units"][0]["activities"][0]
+    student_activity = student["units"][0]["activities"][0]
+    assert student_activity["instructions"] == teacher_activity["instructions"]
+    assert student_activity["enrichment"] == teacher_activity["enrichment"]
+    assert "answer_key" not in student_activity
 
 
 def test_generate_class_pack_writes_pdfs_to_state_home(tmp_path, monkeypatch):

@@ -38,6 +38,7 @@ class CourseworkPackRequest(BaseModel):
     unit_id: Optional[str] = None
     activities_per_unit: int = Field(default=3, ge=1, le=6)
     include_student_version: bool = True
+    include_model_enrichment: bool = False
 
 
 class PoIRecordRequest(BaseModel):
@@ -58,6 +59,7 @@ def create_coursework_pack(payload: CourseworkPackRequest) -> dict:
             unit_id=payload.unit_id,
             activities_per_unit=payload.activities_per_unit,
             include_student_version=payload.include_student_version,
+            include_model_enrichment=payload.include_model_enrichment,
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc.args[0] if exc.args else exc))
