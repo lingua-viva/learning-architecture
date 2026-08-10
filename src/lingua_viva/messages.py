@@ -43,6 +43,19 @@ def local_only_no_model_message() -> str:
     )
 
 
+def blocked_provider_message(provider: str) -> str:
+    """A configured AI provider is not on Lingua Viva's supported list.
+    The request is refused on this machine — the wording must say "blocked"
+    plainly so teachers (and the readiness harness) can see nothing left."""
+    return (
+        f"The configured AI provider {provider} is not one Lingua Viva "
+        "supports, so this request was blocked before anything left this "
+        "computer. Lingua Viva only talks to Ollama running locally, or to "
+        "OpenAI, Groq, or Mistral when you set them up in Settings. Nothing "
+        "was sent externally."
+    )
+
+
 def model_unreachable_message(model: str, reason: str = "connection failed") -> str:
     """What the teacher sees/hears when a configured local model exists but
     cannot be reached right now. Do not imply installation is missing."""

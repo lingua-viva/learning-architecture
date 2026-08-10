@@ -216,6 +216,13 @@ def save_service_api_keys(keys: dict[str, str]) -> dict:
     return service_key_status()
 
 
+# The only providers Lingua Viva knows how to talk to (local Ollama plus
+# the external SUPPORTED_PROVIDERS above). Anything else configured in
+# providers.json is refused locally (see requested_blocked_provider),
+# never silently ignored.
+KNOWN_PROVIDER_NAMES = ("ollama", "openai", "groq", "mistral")
+
+
 def resolve_provider_model() -> Optional[str]:
     config = read_provider_config()
     if not config:
@@ -225,8 +232,32 @@ def resolve_provider_model() -> Optional[str]:
     model_name = entry.get("model") if isinstance(entry, dict) else None
     if not model_name or not isinstance(model_name, str):
         return None
-    if default_provider in ("ollama", "openai", "groq", "mistral"):
+    if default_provider in KNOWN_PROVIDER_NAMES:
         return f"{default_provider}/{model_name}"
+    return None
+
+
+def requested_blocked_provider() -> Optional[str]:
+    """Return the configured provider request when it names a provider that
+    is not on the supported list (e.g. {"provider": "anthropic/claude-3.5"}).
+
+    resolve_provider_model() returns None for these shapes, which used to
+    mean an unsupported provider was silently ignored and the query fell
+    through to normal model resolution with no warning (teacher-readiness
+    C10). Surfacing the request lets the reasoning chokepoint refuse it
+    locally with an explicit "blocked" message before any model is resolved.
+    """
+    config = read_provider_config()
+    if not config:
+        return None
+    for key in ("provider", "default_provider"):
+        value = config.get(key)
+        if not isinstance(value, str) or not value.strip():
+            continue
+        requested = value.strip()
+        provider_name = requested.split("/", 1)[0].lower()
+        if provider_name not in KNOWN_PROVIDER_NAMES:
+            return requested
     return None
 
 

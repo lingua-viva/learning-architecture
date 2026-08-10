@@ -16,6 +16,9 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v139 (2026-08-09): Query timeout honesty marker — /api/query timeout
+#     errors now state that no model answered, carry model_used="none", and
+#     report external_calls=0 only when configuration is provably local-only.
 #   v138 (2026-08-09): PoI progression panel mounted in the selected
 #     student lens; consumes /api/poi/progression/{student_id} and renders
 #     objective phases, trend, and consolidate-next guidance.
@@ -618,7 +621,7 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 138
+version: 139
 # v122 (2026-08-06): Failure-mode hardening. src/web.py: voice-act observation
 #   dedup guard (same 60s window as observe/capture, prevents network-retry
 #   duplicates). src/education/parent_report.py: personal_context evidence

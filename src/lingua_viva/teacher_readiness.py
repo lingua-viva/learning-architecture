@@ -257,6 +257,7 @@ def _chain_observe_ask(client, ids: dict[str, str], checks: list[ReadinessCheck]
 def _chain_observe_materials(client, ids: dict[str, str], checks: list[ReadinessCheck]) -> None:
     chain = "observe_materials"
     start = time.monotonic()
+    capture_start = time.monotonic()
     capture = _capture(
         client,
         ids["Nora Rossi"],
@@ -265,6 +266,7 @@ def _chain_observe_materials(client, ids: dict[str, str], checks: list[Readiness
         cefr_dimension="speaking",
         cefr_level_observed="A2",
     )
+    capture_ms = int((time.monotonic() - capture_start) * 1000)
     payload = {
         "teacher_id": "teacher-readiness",
         "student_ids": [ids["Marco Bianchi"], ids["Nora Rossi"]],
@@ -280,7 +282,9 @@ def _chain_observe_materials(client, ids: dict[str, str], checks: list[Readiness
             "language_of_instruction": "en",
         },
     }
+    materials_start = time.monotonic()
     response = client.post("/api/lesson-materials/generate", json=payload)
+    materials_ms = int((time.monotonic() - materials_start) * 1000)
     materials = _jsonish(response)
     materials["_status_code"] = response.status_code
     elapsed = int((time.monotonic() - start) * 1000)
@@ -295,6 +299,8 @@ def _chain_observe_materials(client, ids: dict[str, str], checks: list[Readiness
         severity="P1",
         evidence={
             "duration_ms": elapsed,
+            "capture_duration_ms": capture_ms,
+            "materials_duration_ms": materials_ms,
             "capture_status": capture.get("_status_code"),
             "materials_status": response.status_code,
             "materials_error": materials.get("error") or materials.get("detail"),
@@ -305,11 +311,15 @@ def _chain_observe_materials(client, ids: dict[str, str], checks: list[Readiness
 def _chain_parent_report(client, ids: dict[str, str], checks: list[ReadinessCheck]) -> None:
     chain = "observe_parent_report"
     start = time.monotonic()
+    capture_start = time.monotonic()
     capture = _capture(client, ids["Nora Rossi"], "Nora Rossi initiated a greeting and used a complete sentence.")
+    capture_ms = int((time.monotonic() - capture_start) * 1000)
+    report_start = time.monotonic()
     response = client.post(
         "/api/parents/recommendation",
         json={"student_id": ids["Nora Rossi"], "teacher_id": "teacher-readiness", "include_evidence_summaries": True},
     )
+    report_ms = int((time.monotonic() - report_start) * 1000)
     report = _jsonish(response)
     report["_status_code"] = response.status_code
     elapsed = int((time.monotonic() - start) * 1000)
@@ -318,7 +328,7 @@ def _chain_parent_report(client, ids: dict[str, str], checks: list[ReadinessChec
     existing = set(_existing_observation_ids(client, ids["Nora Rossi"]))
     _add_check(checks, "C1", "No bracket placeholder reaches parent report", not PLACEHOLDER_RE.search(body), chain=chain, severity="P0")
     _add_check(checks, "C6", "Parent report source observation ids belong to student", bool(source_ids) and set(source_ids).issubset(existing), chain=chain, severity="P1", evidence={"source_observation_ids": source_ids, "known_observation_ids": sorted(existing), "capture_observation_id": (capture.get("observation") or {}).get("observation_id")})
-    _add_check(checks, "C8", "Observe -> Parent report latency envelope", elapsed < 120_000, chain=chain, severity="P1", evidence={"duration_ms": elapsed, "status": response.status_code})
+    _add_check(checks, "C8", "Observe -> Parent report latency envelope", elapsed < 120_000, chain=chain, severity="P1", evidence={"duration_ms": elapsed, "capture_duration_ms": capture_ms, "report_duration_ms": report_ms, "status": response.status_code})
 
 
 def _chain_cold_ask(client, ids: dict[str, str], checks: list[ReadinessCheck]) -> None:
@@ -326,12 +336,14 @@ def _chain_cold_ask(client, ids: dict[str, str], checks: list[ReadinessCheck]) -
     _ = ids
     cold_id = _create_student(client, "Luca Verdi")
     start = time.monotonic()
+    query_start = time.monotonic()
     query = _post_query(client, "What observations prove Luca Verdi is ready for independent reading?")
+    query_ms = int((time.monotonic() - query_start) * 1000)
     elapsed = int((time.monotonic() - start) * 1000)
     body = _body_text(query).lower()
     invented_observation_claim = "luca" in body and any(term in body for term in ("observed", "observation shows", "evidence shows"))
     _add_check(checks, "C5", "Cold Ask does not invent observations", not invented_observation_claim, chain=chain, severity="P1", evidence={"student_id": cold_id, "response_preview": body[:400]})
-    _add_check(checks, "C8", "Cold Ask latency envelope", elapsed < 120_000, chain=chain, severity="P1", evidence={"duration_ms": elapsed})
+    _add_check(checks, "C8", "Cold Ask latency envelope", elapsed < 120_000, chain=chain, severity="P1", evidence={"duration_ms": elapsed, "query_duration_ms": query_ms})
 
 
 def _run_probe_checks(client, checks: list[ReadinessCheck]) -> None:
@@ -405,7 +417,17 @@ def _run_model_failure_checks(client, checks: list[ReadinessCheck]) -> None:
     # concatenated.
     honest_refusal = has_no_model and not has_deterministic
     honest_banner = sentinel and has_banner and not has_no_model
-    _add_check(checks, "C9", "Ollama-down degradation does not mix no-model with deterministic output", honest_refusal or honest_banner, chain=chain, severity="P1", expected_fail=True, evidence={"model_used": query.get("model_used"), "has_no_model": has_no_model, "has_deterministic_terms": has_deterministic, "sentinel_seen": sentinel, "banner_seen": has_banner})
+    # If a real model genuinely answered inside the budget there is no
+    # degradation to shape-check: the blend rule only applies to degraded
+    # output. model_used "none"/"none:*" and the timeout path stay covered.
+    model_used_val = str(query.get("model_used") or "")
+    model_answered = (
+        query.get("type") == "result"
+        and bool(model_used_val)
+        and model_used_val != "none"
+        and not model_used_val.startswith("none:")
+    )
+    _add_check(checks, "C9", "Ollama-down degradation does not mix no-model with deterministic output", model_answered or honest_refusal or honest_banner, chain=chain, severity="P1", expected_fail=True, evidence={"model_used": query.get("model_used"), "model_answered": model_answered, "has_no_model": has_no_model, "has_deterministic_terms": has_deterministic, "sentinel_seen": sentinel, "banner_seen": has_banner})
 
     provider_dir = Path(os.environ["LV_CONFIG_HOME"]) / "config"
     provider_dir.mkdir(parents=True, exist_ok=True)

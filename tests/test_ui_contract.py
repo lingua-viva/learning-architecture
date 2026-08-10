@@ -226,7 +226,10 @@ REPO = Path(__file__).resolve().parent.parent
 #   v138 (2026-08-09): PoI progression panel mounted in the selected student
 #     lens; consumes /api/poi/progression/{student_id} and renders objective
 #     phases, trend, and consolidate-next guidance.
-EXPECTED_VERSION = 138
+#   v139 (2026-08-09): Query timeout honesty marker — timeout errors state
+#     no model answered, carry model_used="none", and report external_calls=0
+#     only when configuration is provably local-only.
+EXPECTED_VERSION = 139
 
 
 def _html() -> str:

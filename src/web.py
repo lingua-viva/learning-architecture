@@ -7002,15 +7002,30 @@ def _generate_intent_gate(query_text: str) -> dict | None:
 
 
 def _query_timeout_error() -> dict:
-    return {
+    # C9 (teacher-readiness): a timeout is a degraded state and must carry
+    # the same honesty markers as every other no-answer path — no model
+    # answered (model_used="none"), and when the configuration is provably
+    # local-only, external_calls is asserted as 0. When an external provider
+    # IS configured, a call may have been in flight when the budget expired,
+    # so the field is omitted rather than guessed.
+    from src.lingua_viva import config as lv_config
+    from src.lingua_viva.model_gate import is_external_model
+
+    error: dict = {
         "type": "error",
         "error": (
             "That took longer than expected — the local AI model may still be "
-            "loading. Wait a few seconds and ask again."
+            "loading. No model answered this question yet; wait a few seconds "
+            "and ask again."
         ),
         "timeout": True,
+        "model_used": "none",
         "timestamp": time.time(),
     }
+    candidates = (lv_config.resolve_provider_model(), os.environ.get("LV_REASON_MODEL"))
+    if not any(c and is_external_model(c) for c in candidates):
+        error["external_calls"] = 0
+    return error
 
 
 def _query_unavailable_error() -> dict:

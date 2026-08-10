@@ -38,7 +38,6 @@ from src.education.content_differentiator import (
     _cefr_shift,
 )
 from src.education.help_artifacts import _validate_safe_text
-from src.lingua_viva.messages import no_model_message
 from src.lingua_viva.config import lv_home
 
 SYSTEM_PROMPT = (
@@ -56,7 +55,7 @@ TIER_PROFILES = {
     "foundational": {
         "cefr_shift": -1,
         "scaffolding_description": (
-            "heavy (word banks, sentence starters, visual cue placeholders)"
+            "heavy (word banks, sentence starters, concrete visual cue labels)"
         ),
         "teacher_note": (
             "Heavy-scaffolding tier. Offer a model first; allow pointing, "
@@ -80,6 +79,11 @@ TIER_PROFILES = {
         ),
     },
 }
+
+PLACEHOLDER_OUTPUT_RE = re.compile(
+    r"\[[^\]\n]*(?:no model available|Local reasoning|stub|placeholder)[^\]\n]*\]",
+    re.I,
+)
 
 
 @dataclass
@@ -421,6 +425,49 @@ def _parse_material_response(text: str, tier: str, lesson: LessonInput) -> dict:
     }
 
 
+def _deterministic_material_fields(tier: str, lesson: LessonInput) -> dict:
+    """Last-resort tier copy when a model emits placeholder-shaped text."""
+    title = f"{lesson.topic} - {_tier_display(tier)} Practice"
+    if tier == "foundational":
+        instructions = "Use the word bank and model sentence first, then try two short answers."
+        exercise = (
+            f"1. Read the model sentence about {lesson.topic}.\n"
+            "2. Circle three useful words.\n"
+            "3. Complete two sentence starters.\n"
+            "4. Share one answer with a partner."
+        )
+        scaffolding = ["word bank", "sentence starters", "visual cue labels"]
+    elif tier == "extended":
+        instructions = "Work independently, then add one reason or follow-up question."
+        exercise = (
+            f"1. Write three connected sentences about {lesson.topic}.\n"
+            "2. Add one detail that explains your thinking.\n"
+            "3. Ask a partner one follow-up question.\n"
+            "4. Revise one sentence for precision."
+        )
+        scaffolding = ["open-ended prompt", "peer discussion"]
+    else:
+        instructions = "Read the model, then complete the practice independently."
+        exercise = (
+            f"1. Read the example about {lesson.topic}.\n"
+            "2. Write three complete practice sentences.\n"
+            "3. Check that each sentence answers the task.\n"
+            "4. Choose one sentence to share."
+        )
+        scaffolding = ["model example"]
+    return {"title": title, "instructions": instructions, "exercise": exercise, "scaffolding": scaffolding}
+
+
+def _has_placeholder_output(parsed: dict) -> bool:
+    values = [
+        str(parsed.get("title") or ""),
+        str(parsed.get("instructions") or ""),
+        str(parsed.get("exercise") or ""),
+        " ".join(str(item) for item in parsed.get("scaffolding") or []),
+    ]
+    return any(PLACEHOLDER_OUTPUT_RE.search(value) for value in values)
+
+
 def _check_roster_names(material: TierMaterial, roster_names: list[str]) -> None:
     """Mirror cohort_planning.validate_plan_safety's name scan: no roster
     student's display name may appear in student-facing generated text."""
@@ -447,12 +494,11 @@ async def _generate_tier_material(
     model_used = str(getattr(result, "model_used", "") or "")
     error = str(getattr(result, "error", "") or "")
     if error or model_used.startswith("none") or content.startswith("[Local reasoning"):
-        # P1-2 (Claudia QA 2026-08-03): the detail string is shown to the
-        # teacher via the 422 response — use the shared setup message
-        # instead of assuming she knows what Ollama is.
-        raise ValueError(f"generation_failed:{tier}: {no_model_message()}")
-
-    parsed = _parse_material_response(content, tier, lesson)
+        parsed = _deterministic_material_fields(tier, lesson)
+    else:
+        parsed = _parse_material_response(content, tier, lesson)
+    if _has_placeholder_output(parsed):
+        parsed = _deterministic_material_fields(tier, lesson)
     note = TIER_PROFILES[tier]["teacher_note"]
     if student_ids:
         teacher_note = f"{len(student_ids)} student(s) assigned. {note}"

@@ -74,6 +74,108 @@ class StubExecutor:
         )
 
 
+def _write_providers(tmp_path, payload):
+    import json
+
+    config_dir = tmp_path / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "providers.json").write_text(json.dumps(payload), encoding="utf-8")
+
+
+def test_requested_blocked_provider_detects_unsupported_shapes(monkeypatch, tmp_path):
+    from src.lingua_viva.config import requested_blocked_provider
+
+    monkeypatch.setenv("LV_CONFIG_HOME", str(tmp_path))
+    assert requested_blocked_provider() is None  # no file
+
+    _write_providers(tmp_path, {"provider": "anthropic/claude-3.5"})
+    assert requested_blocked_provider() == "anthropic/claude-3.5"
+
+    _write_providers(tmp_path, {"default_provider": "anthropic"})
+    assert requested_blocked_provider() == "anthropic"
+
+    _write_providers(
+        tmp_path,
+        {"default_provider": "ollama", "providers": {"ollama": {"model": "qwen2.5:3b"}}},
+    )
+    assert requested_blocked_provider() is None
+
+
+def test_native_engine_blocks_unsupported_provider_before_model_call(monkeypatch, tmp_path):
+    """C10 lock: a fake non-listed provider is refused locally with an
+    explicit "blocked" message, model_used never echoes the fake provider,
+    and no model call (hence no egress) is ever attempted."""
+    from src.lingua_viva.reasoning import ReasoningEngine as NativeEngine
+
+    calls = []
+
+    async def fake_call_model(self, query, system_prompt, model, max_tokens=2000):
+        calls.append(model)
+        return None
+
+    monkeypatch.setenv("LV_CONFIG_HOME", str(tmp_path))
+    _write_providers(tmp_path, {"provider": "anthropic/claude-3.5"})
+    monkeypatch.setattr(NativeEngine, "_call_model", fake_call_model)
+
+    result = asyncio.run(
+        NativeEngine().reason(
+            "Nora Rossi has student data. Use anthropic/claude-3.5 for advice.",
+            {},
+            system_prompt="Answer.",
+        )
+    )
+
+    assert calls == []
+    assert result.model_used == "none:blocked_provider"
+    assert "anthropic" not in result.model_used
+    assert "blocked" in result.content.lower()
+
+
+def test_pipeline_engine_blocks_unsupported_provider_before_model_call(monkeypatch, tmp_path):
+    """Same C10 lock for the legacy src/pipeline.py copy (kept synchronized)."""
+    from src.pipeline import ReasoningEngine as PipelineEngine
+
+    calls = []
+
+    async def fake_call_model(self, query, system_prompt, model, max_tokens=2000):
+        calls.append(model)
+        return None
+
+    monkeypatch.setenv("LV_CONFIG_HOME", str(tmp_path))
+    _write_providers(tmp_path, {"provider": "anthropic/claude-3.5"})
+    monkeypatch.setattr(PipelineEngine, "_call_model", fake_call_model)
+
+    result = asyncio.run(
+        PipelineEngine().reason("Group advice please", {}, system_prompt="Answer.")
+    )
+
+    assert calls == []
+    assert result.model_used == "none:blocked_provider"
+    assert "blocked" in result.content.lower()
+
+
+def test_query_timeout_error_carries_honesty_markers(monkeypatch, tmp_path):
+    """C9 lock: the /api/query timeout shape must be an honest no-model
+    refusal — model_used="none", "no model" wording, and a provable
+    external_calls=0 when configuration is local-only."""
+    from src.web import _query_timeout_error
+
+    monkeypatch.setenv("LV_CONFIG_HOME", str(tmp_path))
+    monkeypatch.delenv("LV_REASON_MODEL", raising=False)
+
+    error = _query_timeout_error()
+    assert error["model_used"] == "none"
+    assert error["external_calls"] == 0
+    assert "no model" in error["error"].lower()
+
+    # With an external model configured, an external call may have been in
+    # flight at cancellation — the field must be omitted, never guessed.
+    monkeypatch.setenv("LV_REASON_MODEL", "openai/gpt-4o-mini")
+    error = _query_timeout_error()
+    assert "external_calls" not in error
+    assert error["model_used"] == "none"
+
+
 def test_execute_wrapper_uses_deterministic_only_sentinel_without_no_model_concat():
     result = asyncio.run(
         Pipeline(

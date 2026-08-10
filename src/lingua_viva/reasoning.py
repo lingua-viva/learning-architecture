@@ -10,7 +10,12 @@ from urllib import error, request
 
 from . import config
 from .filemap import build_filemap_context, infer_education_domain
-from .messages import local_only_no_model_message, model_unreachable_message, no_model_message
+from .messages import (
+    blocked_provider_message,
+    local_only_no_model_message,
+    model_unreachable_message,
+    no_model_message,
+)
 from .model_gate import exit_destination, is_external_model, is_provably_local_model
 from .privacy_log import log_event
 from .traces import append_trace, new_trace
@@ -68,6 +73,27 @@ class ReasoningEngine:
         """
         context = context or {}
         start = time.time()
+
+        # C10 (teacher-readiness): a providers.json that names a provider we
+        # do not support (e.g. "anthropic/...") must be refused HERE, loudly
+        # and locally, before any model resolution — not silently ignored
+        # while the query falls through to normal routing.
+        blocked_provider = config.requested_blocked_provider()
+        if blocked_provider:
+            try:
+                log_event("blocked_provider_refused")
+            except Exception:
+                pass
+            result = ReasonResult(
+                content=blocked_provider_message(blocked_provider),
+                confidence=0.0,
+                model_used="none:blocked_provider",
+                error="blocked_provider",
+                error_detail=blocked_provider,
+            )
+            self._append_trace(query, context, result, start)
+            return result
+
         resolved_model = (
             model
             or config.resolve_provider_model()

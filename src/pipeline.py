@@ -326,6 +326,27 @@ class ReasoningEngine:
         OpenAI/Groq/Mistral while the entry gate — which only guards the
         research/gateway path — reported the data as blocked.
         """
+        # C10 (teacher-readiness): refuse an unsupported configured provider
+        # here, before model resolution — kept synchronized with
+        # src.lingua_viva.reasoning.ReasoningEngine.reason().
+        from src.lingua_viva.config import requested_blocked_provider
+
+        blocked_provider = requested_blocked_provider()
+        if blocked_provider:
+            try:
+                from src.lingua_viva.privacy_log import log_event
+
+                log_event("blocked_provider_refused")
+            except Exception:
+                pass
+            from src.lingua_viva.messages import blocked_provider_message
+
+            return ReasonResult(
+                content=blocked_provider_message(blocked_provider),
+                confidence=0.0,
+                model_used="none:blocked_provider",
+            )
+
         resolved_model = (
             model
             or self._resolve_provider_model()

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 
 import pytest
@@ -239,6 +240,21 @@ def test_safety_check_rejects_unsafe():
         _generate(engine=FakeEngine(content=unsafe))
 
 
+def test_placeholder_shaped_model_copy_falls_back_to_deterministic_material():
+    placeholder = (
+        "TITLE: [Placeholder title]\n"
+        "INSTRUCTIONS: Complete [placeholder instruction].\n"
+        "EXERCISE:\n"
+        "[Local reasoning placeholder - replace this later]\n"
+        "SCAFFOLDING NOTES: [placeholder support]"
+    )
+    result = _generate(engine=FakeEngine(content=placeholder))
+    serialized = json.dumps([material.__dict__ for material in result.materials])
+    assert "[Placeholder" not in serialized
+    assert "[Local reasoning" not in serialized
+    assert "Describing daily routines in Italian" in result.materials[0].title
+
+
 def test_cefr_tier_mapping():
     engine = FakeEngine()
     _generate(engine=engine)
@@ -258,10 +274,12 @@ def test_empty_roster_still_returns_materials():
         assert material.exercise_body
 
 
-def test_no_model_available_raises_generation_failed():
+def test_no_model_available_uses_deterministic_materials():
     engine = FakeEngine(content="[Local reasoning for lingua-viva - no model available]", model_used="none")
-    with pytest.raises(ValueError, match="generation_failed"):
-        _generate(engine=engine)
+    result = _generate(engine=engine)
+    assert len(result.materials) == 3
+    assert result.materials[0].title.endswith("Foundational Practice")
+    assert "Local reasoning" not in result.materials[0].exercise_body
 
 
 def test_unknown_student_id_raises_permission_error():
