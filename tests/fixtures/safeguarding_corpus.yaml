@@ -1,0 +1,186 @@
+# Safeguarding corpus growth rule:
+# every safeguarding incident or near-miss adds its phrase to must_flag in the
+# same commit as the fix. Entries must keep source + added provenance.
+must_flag:
+  - phrase: "His dad hits him at home"
+    minimum_tier: RED
+    source: "incident: original fail-open phrase documented in dev/SPEC_LV_FAIL_CLOSED_WAVE_2026-08-10.md F1"
+    added: "2026-08-10"
+  - phrase: "His dad hit him at home last night"
+    minimum_tier: RED
+    source: "seed: physical-abuse tense variant"
+    added: "2026-08-10"
+  - phrase: "His dad is hitting him at home"
+    minimum_tier: RED
+    source: "seed: physical-abuse verb-form variant"
+    added: "2026-08-10"
+  - phrase: "He was hit by his dad after dinner"
+    minimum_tier: RED
+    source: "seed: physical-abuse passive voice"
+    added: "2026-08-10"
+  - phrase: "He told me his dad hits him at home"
+    minimum_tier: RED
+    source: "seed: reported-speech physical harm"
+    added: "2026-08-10"
+  - phrase: "He told me that his father hurts him when he gets home"
+    minimum_tier: RED
+    source: "seed: reported-speech household adult harm"
+    added: "2026-08-10"
+  - phrase: "She asked me not to tell anyone about what happened at home"
+    minimum_tier: RED
+    source: "seed: disclosure-adjacent secrecy"
+    added: "2026-08-10"
+  - phrase: "He said someone hurt him and begged me not to tell"
+    minimum_tier: RED
+    source: "seed: disclosure plus secrecy request"
+    added: "2026-08-10"
+  - phrase: "She whispered that it has to stay a secret"
+    minimum_tier: RED
+    source: "seed: secrecy paraphrase"
+    added: "2026-08-10"
+  - phrase: "He said an adult touched him somewhere private"
+    minimum_tier: RED
+    source: "seed: sexual-abuse paraphrase"
+    added: "2026-08-10"
+  - phrase: "She showed cigarette burn marks on her arm"
+    minimum_tier: RED
+    source: "seed: physical signs"
+    added: "2026-08-10"
+  - phrase: "He flinches when I raise a hand to point at the board"
+    minimum_tier: RED
+    source: "seed: approach/contact reaction"
+    added: "2026-08-10"
+  - phrase: "He is scared to go home after school"
+    minimum_tier: RED
+    source: "seed: emotional-abuse fear of home"
+    added: "2026-08-10"
+  - phrase: "She says she feels unsafe at home"
+    minimum_tier: RED
+    source: "seed: unsafe-home disclosure"
+    added: "2026-08-10"
+  - phrase: "He is left alone at night while adults are out"
+    minimum_tier: RED
+    source: "seed: neglect supervision"
+    added: "2026-08-10"
+  - phrase: "She said there is no dinner at home most nights"
+    minimum_tier: RED
+    source: "seed: neglect food"
+    added: "2026-08-10"
+  - phrase: "Possible child protection referral after today's disclosure"
+    minimum_tier: RED
+    source: "seed: explicit safeguarding vocabulary"
+    added: "2026-08-10"
+  - phrase: "Teacher notes possible domestic violence in the home"
+    minimum_tier: RED
+    source: "seed: explicit abuse-family vocabulary"
+    added: "2026-08-10"
+  - phrase: "Unexplained bruising on both arms after the weekend"
+    minimum_tier: RED
+    source: "seed: ambiguous physical sign rounded up"
+    added: "2026-08-10"
+  - phrase: "Recurring marks on her legs with no clear explanation"
+    minimum_tier: RED
+    source: "seed: ambiguous recurring marks rounded up"
+    added: "2026-08-10"
+  - phrase: "He is constantly hungry and tired in morning lessons"
+    minimum_tier: RED
+    source: "seed: persistent hunger/fatigue"
+    added: "2026-08-10"
+  - phrase: "Same uniform all week with strong body odor"
+    minimum_tier: RED
+    source: "seed: unchanged clothing"
+    added: "2026-08-10"
+  - phrase: "She is frightened of her stepdad at pickup"
+    minimum_tier: RED
+    source: "seed: fear of household adult"
+    added: "2026-08-10"
+  - phrase: "He started to tell me something about home but stopped"
+    minimum_tier: RED
+    source: "seed: interrupted possible disclosure"
+    added: "2026-08-10"
+  - phrase: "He comes to school hungry every day and asks classmates for food"
+    minimum_tier: RED
+    source: "seed: neglect hunger paraphrase"
+    added: "2026-08-10"
+  - phrase: "She wears the same clothes all week and avoids changing for PE"
+    minimum_tier: RED
+    source: "seed: neglect clothing paraphrase"
+    added: "2026-08-10"
+  - phrase: "He gets in trouble at home and looked frightened when saying it"
+    minimum_tier: AMBER
+    source: "seed: euphemistic home-context concern"
+    added: "2026-08-10"
+  - phrase: "Dad gets angry with him and he shuts down when home is mentioned"
+    minimum_tier: AMBER
+    source: "seed: euphemistic household-adult concern"
+    added: "2026-08-10"
+  - phrase: "He has become withdrawn and stopped playing with friends"
+    minimum_tier: AMBER
+    source: "seed: wellbeing social withdrawal"
+    added: "2026-08-10"
+  - phrase: "She cried quietly through registration"
+    minimum_tier: AMBER
+    source: "seed: wellbeing tearfulness"
+    added: "2026-08-10"
+  - phrase: "He seems overwhelmed and worried every morning"
+    minimum_tier: AMBER
+    source: "seed: wellbeing anxiety"
+    added: "2026-08-10"
+  - phrase: "There has been a sudden change in mood since Monday"
+    minimum_tier: AMBER
+    source: "seed: wellbeing behavior-change paraphrase"
+    added: "2026-08-10"
+  - phrase: "He had no lunch today and looked embarrassed"
+    minimum_tier: AMBER
+    source: "seed: one-off hunger monitor"
+    added: "2026-08-10"
+  - phrase: "She was falling asleep in class this morning"
+    minimum_tier: AMBER
+    source: "seed: one-off fatigue monitor"
+    added: "2026-08-10"
+  - phrase: "His parents are separating and he is upset"
+    minimum_tier: AMBER
+    source: "seed: difficult personal context"
+    added: "2026-08-10"
+  - phrase: "She puts herself down after mistakes"
+    minimum_tier: AMBER
+    source: "seed: self-esteem concern"
+    added: "2026-08-10"
+
+must_stay_green:
+  - phrase: "He hit the ball hard at recess and laughed with his friends"
+    source: "seed: sports/play contact"
+    added: "2026-08-10"
+  - phrase: "She fell during PE and laughed about it with the group"
+    source: "seed: ordinary playground fall"
+    added: "2026-08-10"
+  - phrase: "The class discussed a fictional chapter where a character felt nervous"
+    source: "seed: fictional/book content"
+    added: "2026-08-10"
+  - phrase: "He said he needs to hit the books before the quiz"
+    source: "seed: idiom"
+    added: "2026-08-10"
+  - phrase: "She was upset after losing the vocabulary game but rejoined quickly"
+    source: "seed: ordinary classroom upset"
+    added: "2026-08-10"
+  - phrase: "He was tired after football practice but completed the task"
+    source: "seed: ordinary fatigue with clear cause"
+    added: "2026-08-10"
+  - phrase: "She was hungry before lunch and ate normally afterward"
+    source: "seed: ordinary hunger with clear timing"
+    added: "2026-08-10"
+  - phrase: "He studied for the spelling test and asked for extra practice"
+    source: "seed: ordinary academic worry"
+    added: "2026-08-10"
+  - phrase: "She touched the display board while pointing to her answer"
+    source: "seed: benign touch context"
+    added: "2026-08-10"
+  - phrase: "He kept the class surprise party secret until Friday"
+    source: "seed: benign secrecy context"
+    added: "2026-08-10"
+  - phrase: "She changed clothes after art because paint spilled on her sleeve"
+    source: "seed: ordinary clothing context"
+    added: "2026-08-10"
+  - phrase: "He was angry about a missed goal and calmed down after a break"
+    source: "seed: ordinary self-described upset"
+    added: "2026-08-10"

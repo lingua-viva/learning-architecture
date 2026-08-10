@@ -449,6 +449,21 @@ def _run_dual_routing_check(checks: list[ReadinessCheck]) -> None:
     _add_check(checks, "DR", "Single shared external-model routing predicate", len([loc for loc in locations if "def _is_external_model" in loc]) <= 1, chain="preflight", severity="P0", expected_fail=True, evidence={"locations": locations})
 
 
+def _run_safeguarding_corpus_check(checks: list[ReadinessCheck]) -> None:
+    from src.lingua_viva.safeguarding_corpus import evaluate_safeguarding_corpus
+
+    verdict = evaluate_safeguarding_corpus()
+    _add_check(
+        checks,
+        "C12",
+        "Adversarial safeguarding corpus holds fail-closed classifier",
+        verdict.ok,
+        chain="preflight",
+        severity="P0",
+        evidence=verdict.as_evidence(),
+    )
+
+
 def _gir_tone_ok(response: dict[str, Any]) -> bool:
     gir = response.get("gir") or {}
     if not gir:
@@ -574,6 +589,7 @@ def run_teacher_readiness() -> ReadinessReport:
     _configure_isolated_state(state)
     checks: list[ReadinessCheck] = []
     _run_dual_routing_check(checks)
+    _run_safeguarding_corpus_check(checks)
 
     from fastapi.testclient import TestClient
     from src.web import app

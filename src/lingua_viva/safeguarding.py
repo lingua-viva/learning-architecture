@@ -102,6 +102,8 @@ RED_INDICATORS: list[tuple[str, str, str]] = [
      "secrecy request around a concern"),
     ("disclosure", r"\b(keep|it'?s) (this |a )?secret\b",
      "secrecy framing by the child"),
+    ("disclosure", r"\b(has|needs) to stay (a )?secret\b",
+     "secrecy framing by the child"),
     ("disclosure", r"\bsaid (that )?(someone|he|she|they) (hurt|hurts|touched) (him|her|them|me)\b",
      "reported harm to self"),
     # -- Physical abuse indicators.
@@ -145,6 +147,8 @@ AMBIGUOUS_INDICATORS: list[tuple[str, str, str]] = [
      "bruising mentioned in a school observation — cause unknown here"),
     ("neglect", r"\b(always|often|constantly|persistently) (hungry|tired|exhausted|unwashed|dirty)\b",
      "persistent hunger/fatigue/poor care pattern"),
+    ("neglect", r"\b(comes to school )?hungry every day\b",
+     "persistent hunger pattern"),
     ("neglect", r"\bsame (clothes|uniform) (all week|for days|every day)\b",
      "persistent unchanged clothing"),
     ("emotional_abuse", r"\b(scared|afraid|frightened) of (his|her|their) (dad|father|mum|mom|mother|uncle|aunt|stepdad|stepmum|carer|caregiver)\b",
@@ -172,6 +176,10 @@ AMBER_INDICATORS: list[tuple[str, str, str]] = [
      "difficult personal context affecting wellbeing"),
     ("wellbeing", r"\blow self[- ]esteem|puts? (himself|herself|themselves) down\b",
      "self-esteem concern"),
+    ("wellbeing", r"\bgets in trouble at home\b",
+     "home-context euphemism worth monitoring"),
+    ("wellbeing", r"\b(dad|daddy|father|mum|mom|mommy|mother|stepdad|stepfather|stepmum|stepmother|carer|caregiver) gets angry with (him|her|them|me)\b",
+     "household-adult anger reported by child"),
 ]
 
 

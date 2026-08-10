@@ -48,6 +48,21 @@ def test_report_counts_expected_failures():
     assert report.readiness_percent == 50.0
 
 
+def test_safeguarding_corpus_check_records_c12():
+    checks: list[tr.ReadinessCheck] = []
+    tr._run_safeguarding_corpus_check(checks)
+    assert len(checks) == 1
+    check = checks[0]
+    assert check.check_id == "C12"
+    assert check.status == "PASS"
+    assert check.severity == ""
+    assert check.chain == "preflight"
+    assert check.evidence["must_flag"] >= 25
+    assert check.evidence["must_stay_green"] >= 10
+    assert check.evidence["under_classified"] == []
+    assert check.evidence["over_classified"] == []
+
+
 def test_teacher_readiness_cli_dispatch(monkeypatch):
     called = {}
 
