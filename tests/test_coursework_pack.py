@@ -6,6 +6,7 @@ committed. Synthetic data only, per publication-policy.md.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 
@@ -36,6 +37,12 @@ class FakeEnrichmentEngine:
             model_used=self.model_used,
             error=self.error,
         )
+
+
+class SlowEnrichmentEngine(FakeEnrichmentEngine):
+    async def reason(self, *args, **kwargs):
+        await asyncio.sleep(cwp.ENRICHMENT_TIMEOUT_SECONDS + 0.5)
+        return await super().reason(*args, **kwargs)
 
 
 @pytest.fixture(autouse=True)
@@ -128,6 +135,20 @@ def test_enrichment_failure_degrades_to_deterministic_pack():
         activities_per_unit=1,
         include_model_enrichment=True,
         enrichment_engine=engine,
+    )
+    activity = pack["units"][0]["activities"][0]
+    assert activity["enrichment"]["mode"] == "deterministic"
+    assert "Extension prompt:" not in activity["instructions"]
+
+
+def test_slow_enrichment_times_out_to_deterministic_pack(monkeypatch):
+    monkeypatch.setattr(cwp, "ENRICHMENT_TIMEOUT_SECONDS", 0.01)
+    pack = cwp.build_pack(
+        "G3",
+        unit_id="g3-unit-1",
+        activities_per_unit=1,
+        include_model_enrichment=True,
+        enrichment_engine=SlowEnrichmentEngine(),
     )
     activity = pack["units"][0]["activities"][0]
     assert activity["enrichment"]["mode"] == "deterministic"

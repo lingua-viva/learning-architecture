@@ -47,6 +47,7 @@ _KNOWLEDGE_DIR = Path(__file__).resolve().parents[2] / "knowledge" / "education"
 
 DRAFT_LABEL = "draft — teacher review required"
 ENRICHMENT_MAX_CHARS = 240
+ENRICHMENT_TIMEOUT_SECONDS = 2.0
 
 # Deterministic activity scaffolds cycled per unit. Each produces a real,
 # runnable classroom activity from the unit topic; the differentiator then
@@ -224,7 +225,10 @@ def _apply_optional_enrichment(activity: dict, unit: dict, cefr_target: str, eng
     if engine is None:
         return activity
     try:
-        enrichment = asyncio.run(_enrichment_from_model(engine, activity, unit, cefr_target))
+        enrichment = asyncio.run(asyncio.wait_for(
+            _enrichment_from_model(engine, activity, unit, cefr_target),
+            timeout=ENRICHMENT_TIMEOUT_SECONDS,
+        ))
     except Exception:  # noqa: BLE001 — enrichment is optional; pack still builds
         return activity
     activity["enrichment"] = enrichment
