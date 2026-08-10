@@ -10,7 +10,7 @@ import {
   ensureOllamaModel,
   installPythonWindows,
   installOllamaWindows,
-  installPythonDeps,
+  ensurePythonEnv,
   verifyPythonDeps,
   refreshWindowsPath,
   startBackend,
@@ -129,8 +129,14 @@ async function runSetupFlow(root: string, window: BrowserWindow): Promise<void> 
   }
 
   // Step 2: Ollama detection
+  // LV_SKIP_OLLAMA=1: headless/CI boot gate (packaged-artifact fresh-install
+  // test in desktop-release.yml) — the Ollama step waits on a wizard click,
+  // which never comes without a human. Skipping it only skips the model; the
+  // dependency install + backend boot under test are unaffected.
   emitProgress(window, "ollama", "Checking for Ollama...");
-  const ollamaCheck = await checkOllama();
+  const ollamaCheck = process.env.LV_SKIP_OLLAMA === "1"
+    ? { ok: false, detail: "skipped (LV_SKIP_OLLAMA=1)" }
+    : await checkOllama();
 
   // P1-1 (Claudia QA 2026-08-03): the model pull used to be fire-and-forget
   // with .catch(() => {}) — a failed or timed-out pull left the teacher with
@@ -146,6 +152,8 @@ async function runSetupFlow(root: string, window: BrowserWindow): Promise<void> 
       modelPull = ensureOllamaModel(process.env.LV_OLLAMA_MODEL || undefined)
         .catch((err) => ({ ok: false, detail: String(err instanceof Error ? err.message : err) }));
     }
+  } else if (process.env.LV_SKIP_OLLAMA === "1") {
+    emitProgress(window, "ollama_skipped");
   } else {
     emitProgress(window, "ollama_warn");
     // Wait for user decision (install or skip)
@@ -158,19 +166,33 @@ async function runSetupFlow(root: string, window: BrowserWindow): Promise<void> 
     }
   }
 
-  // Step 3: Install Python deps + start server
+  // Step 3: Install Python deps + start server.
+  // D1-P0-001 (2026-08-10): this used to be fire-and-forget — the installer
+  // resolved even when every pip attempt failed (Ubuntu ships python3 with
+  // no pip at all), the backend then died on `import fastapi`, and the
+  // wizard showed a generic message. Now the install FAILS CLOSED: setup
+  // stops here with the real error and a Retry button, and the backend runs
+  // from Lingua Viva's own venv so the machine's pip situation is irrelevant.
   emitProgress(window, "server", "Installing dependencies...");
-  await installPythonDeps(pythonCmd, root);
+  const envReady = await ensurePythonEnv(pythonCmd, (msg) => emitProgress(window, "server", msg));
+  if (!envReady.ok) {
+    emitProgress(window, "server_fail",
+      `Dependencies did not install: ${envReady.detail} (full log: ~/.lingua-viva/logs/setup.log)`);
+    await waitForRetry(window, root);
+    return;
+  }
+  pythonCmd = envReady.pythonCmd;
 
-  // P0-1 (Claudia QA 2026-08-03): pip runs --quiet and resolves even on
-  // failure. Verify every critical package actually imports in the Python
-  // that will run the server, and say so plainly when voice deps are missing
-  // — the backend boots fine without them, so nothing else would ever tell
-  // the teacher why her mic does nothing.
+  // P0-1 (Claudia QA 2026-08-03): verify every critical package actually
+  // imports in the Python that will run the server, and say so plainly when
+  // voice deps are missing — the backend boots fine without them, so nothing
+  // else would ever tell the teacher why her mic does nothing.
   const depCheck = await verifyPythonDeps(pythonCmd);
   if (depCheck.missingServer.length > 0) {
-    emitProgress(window, "deps_warn",
-      `Some components did not install (${depCheck.missingServer.join(", ")}). The app may not start — use Retry setup if it doesn't.`);
+    emitProgress(window, "server_fail",
+      `Required components are missing after install (${depCheck.missingServer.join(", ")}). See ~/.lingua-viva/logs/setup.log, then Retry setup.`);
+    await waitForRetry(window, root);
+    return;
   }
   if (depCheck.missingVoice.length > 0) {
     emitProgress(window, "voice_warn",

@@ -324,8 +324,66 @@ jobs:
           name: desktop-${{ matrix.os }}
           path: desktop/release/${{ matrix.rename_to }}
 
-  release:
+  # D1-P0-001 gate (2026-08-10): backend-smoke boots src/web.py from the
+  # checkout with CI-installed deps — it can never catch a broken packaged
+  # install. v0.2.48–0.2.51 all shipped green while every Linux fresh install
+  # was dead (Ubuntu ships python3 with NO pip; the old dep installer failed
+  # silently and fail-open). This job boots the ACTUAL AppImage artifact in a
+  # fresh HOME and requires /api/health to answer before anything is
+  # released. Known gap: Mac/Windows packaged paths are still unexercised.
+  appimage-fresh-boot:
     needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: desktop-ubuntu-latest
+          path: artifact/
+
+      - name: Install xvfb
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq xvfb
+
+      - name: Boot packaged AppImage from a fresh HOME, require /api/health
+        run: |
+          chmod +x artifact/LinguaViva.AppImage
+          FRESH=$(mktemp -d)
+          mkdir -p "$FRESH/home"
+          export HOME="$FRESH/home"
+          export XDG_CONFIG_HOME="$FRESH/xdg-config"
+          export XDG_DATA_HOME="$FRESH/xdg-data"
+          export XDG_CACHE_HOME="$FRESH/xdg-cache"
+          # Skip the Ollama/model steps only — they wait on a wizard click.
+          # The dependency install + backend boot under test are unaffected.
+          export LV_SKIP_OLLAMA=1
+          export LV_SKIP_MODEL_PULL=1
+          xvfb-run -a artifact/LinguaViva.AppImage --appimage-extract-and-run --no-sandbox > "$FRESH/app.log" 2>&1 &
+          APP_PID=$!
+          # First run creates a venv and pip-installs the pinned deps
+          # (including compiled voice wheels) — allow up to 15 minutes.
+          for i in $(seq 1 180); do
+            sleep 5
+            CODE=$(curl -s -o /tmp/health.json -w "%{http_code}" http://127.0.0.1:8787/api/health || true)
+            if [ "$CODE" = "200" ]; then
+              echo "✓ packaged AppImage booted from a fresh HOME, /api/health=200"
+              head -c 300 /tmp/health.json; echo
+              kill $APP_PID 2>/dev/null || true
+              exit 0
+            fi
+            if ! kill -0 $APP_PID 2>/dev/null; then
+              echo "::error::app process exited before the backend became healthy"
+              break
+            fi
+          done
+          echo "::error::packaged AppImage never answered /api/health from a fresh HOME (D1-P0-001 class failure)"
+          echo "=== app.log (tail) ==="; tail -100 "$FRESH/app.log" || true
+          echo "=== setup.log ==="; tail -100 "$HOME/.lingua-viva/logs/setup.log" 2>/dev/null || echo "(none)"
+          echo "=== backend.log (tail) ==="; tail -50 "$HOME/.lingua-viva/logs/backend.log" 2>/dev/null || echo "(none)"
+          kill $APP_PID 2>/dev/null || true
+          exit 1
+
+  release:
+    needs: [build, appimage-fresh-boot]
     runs-on: ubuntu-latest
     permissions:
       contents: write

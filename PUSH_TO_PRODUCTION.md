@@ -341,7 +341,7 @@ will show "Server did not start" even if the download/signing/notarization are p
 2. If missing → download .pkg → open → poll until detected
 3. Detect Ollama (checkOllama via HTTP localhost:11434)
 4. If missing → download → install → poll (or skip)
-5. Install pip dependencies (installPythonDeps — 4-strategy cascade)
+5. Install pip dependencies (ensurePythonEnv — dedicated venv under ~/.lingua-viva/pyenv, pip bootstrapped from PyPA zipapp, fails CLOSED with the real error; D1-P0-001 fix 2026-08-10)
 6. Start server (startBackend — spawn web.py on port 8787)
 7. Poll /api/health until 200
 8. Load the app UI
@@ -404,7 +404,7 @@ lsof -i :8787
 | File | What it does |
 |---|---|
 | `desktop/electron/main.ts` | Setup flow, Python/Ollama detection, install handlers |
-| `desktop/electron/bootstrap.ts` | `checkPython`, `checkOllama`, `installPythonDeps`, `startBackend` |
+| `desktop/electron/bootstrap.ts` | `checkPython`, `checkOllama`, `ensurePythonEnv`, `startBackend` |
 | `desktop/electron/setup-wizard.html` | Wizard UI states and button actions |
 | `src/web.py` | The backend server (health endpoint at `/api/health`) |
 | `doctor/support_loop/doctor.py` | Health checks (must never crash in packaged mode) |
