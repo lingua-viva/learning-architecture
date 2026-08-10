@@ -1,0 +1,20 @@
+{
+  "created": "2026-08-10",
+  "synthetic": true,
+  "purpose": "Teacher-readiness test packet for Lingua Viva \u2014 56 checks (S, A-M) full end-to-end pass; includes safeguarding routing, parent artifacts, coursework packs, library search, PoI progression, and the fresh-install gate (D1-P0-001 Mac data point). Last content update: 2026-08-10.",
+  "supersedes": "lingua-viva-teacher-readiness-test-packet-2026-08-01",
+  "tester": "Chip (DontWriteDown)",
+  "app_source": "linguaviva.art (fresh download each session)",
+  "expected_min_version": "desktop-v0.2.51",
+  "report_destination": "pretendhome/mission-canvas qa/ folder",
+  "files": [
+    "START_HERE_CHIP.md",
+    "QA_TESTING_PLAN.md",
+    "HARNESS_PROMPT.md",
+    "MANIFEST.json",
+    "documents/G3_family_relationships_unit.pdf",
+    "documents/student_record_marco_bianchi.md",
+    "documents/student_record_nora_rossi.md"
+  ],
+  "canonical_location": "lingua-viva/learning-architecture:qa/teacher-readiness-packet/ (continuously updated; repo is the source of truth, local zips are obsolete)"
+}
