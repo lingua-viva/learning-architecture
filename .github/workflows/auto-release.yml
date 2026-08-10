@@ -21,6 +21,8 @@ jobs:
   auto-release:
     if: ${{ !startsWith(github.event.head_commit.message, 'chore(release):') }}
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -113,18 +115,23 @@ jobs:
           fi
 
       - name: Create release tag
-        # KNOWN GAP (found 2026-07-29): this push uses the default
-        # GITHUB_TOKEN via actions/checkout's persisted credentials. GitHub
-        # deliberately does NOT fire other workflows (incl. this repo's
-        # desktop-release.yml, which triggers on `push: tags: ['desktop-v*']`)
-        # for pushes authored by GITHUB_TOKEN, to prevent recursive workflow
-        # chains. Net effect: this step creates the tag, but desktop-release.yml
-        # never runs from it -- confirmed by a real failed run that sat with
-        # zero triggered builds. Until a PAT-backed secret (repo+workflow
-        # scope) replaces GITHUB_TOKEN here, or desktop-release.yml is
-        # restructured as a `workflow_call` invoked directly from this job,
-        # every tag this step creates needs a manual re-push (delete + push
-        # again with non-Actions credentials) to actually build.
+        # GAP CLOSED (2026-08-09, first found 2026-07-29): this push uses the
+        # default GITHUB_TOKEN, and GitHub deliberately does NOT fire other
+        # workflows (incl. desktop-release.yml's `push: tags:` trigger) for
+        # GITHUB_TOKEN pushes, to prevent recursive workflow chains — so
+        # desktop-v0.2.46 and v0.2.47 both needed manual tag re-pushes to
+        # build. Fix: the desktop-release job below invokes
+        # desktop-release.yml directly via `workflow_call` with this tag, so
+        # the build no longer depends on the tag push firing anything. The
+        # tag itself is still pushed here first — the called workflow checks
+        # out `inputs.tag`, which must exist on origin.
         run: |
           git tag "${{ steps.tag.outputs.tag }}"
           git push origin "${{ steps.tag.outputs.tag }}"
+
+  desktop-release:
+    needs: auto-release
+    uses: ./.github/workflows/desktop-release.yml
+    with:
+      tag: ${{ needs.auto-release.outputs.tag }}
+    secrets: inherit

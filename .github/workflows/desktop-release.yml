@@ -2,6 +2,18 @@ name: Desktop Release
 on:
   push:
     tags: ['desktop-v*']
+  # Invoked directly by auto-release.yml (2026-08-09). Tags pushed with the
+  # default GITHUB_TOKEN never fire the `push: tags:` trigger (GitHub blocks
+  # recursive workflow chains), so auto-release calls this workflow as a job
+  # instead. The tag input names the release tag, which by then exists on
+  # origin — every checkout below resolves `inputs.tag || github.ref_name`
+  # so both entry paths build the exact tagged commit.
+  workflow_call:
+    inputs:
+      tag:
+        description: "desktop-v* release tag (already pushed to origin)"
+        required: true
+        type: string
 
 # Adapted from mission-canvas/.github/workflows/desktop-release.yml.
 # Builds the Electron desktop app (setup wizard + embedded LV server).
@@ -28,8 +40,12 @@ jobs:
   # suite (run against the dev env) never see. Gates all platform builds.
   backend-smoke:
     runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
 
       # Class-3 gate (2026-08-02): the tag version and desktop/package.json
       # must agree, or the app reports a version that doesn't match the
@@ -37,7 +53,7 @@ jobs:
       # tagging; this catches manual tags cut from a stale checkout.
       - name: Tag / package.json version match
         run: |
-          TAG_VERSION="${GITHUB_REF_NAME#desktop-v}"
+          TAG_VERSION="${RELEASE_TAG#desktop-v}"
           PKG_VERSION="$(node -p "require('./desktop/package.json').version")"
           if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
             echo "::error::Tag version ($TAG_VERSION) != desktop/package.json version ($PKG_VERSION). Sync desktop/package.json before tagging."
@@ -104,6 +120,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
 
       - uses: actions/setup-node@v4
         with:
@@ -306,6 +324,10 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
+          # Explicit tag_name: under workflow_call the triggering ref is
+          # `main`, so the default (github.ref) would try to release "main"
+          # instead of the desktop-v* tag.
+          tag_name: ${{ inputs.tag || github.ref_name }}
           files: |
             artifacts/LinguaViva.dmg
             artifacts/LinguaViva-Setup.exe
