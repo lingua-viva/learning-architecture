@@ -229,7 +229,10 @@ REPO = Path(__file__).resolve().parent.parent
 #   v139 (2026-08-09): Query timeout honesty marker — timeout errors state
 #     no model answered, carry model_used="none", and report external_calls=0
 #     only when configuration is provably local-only.
-EXPECTED_VERSION = 139
+#   v140 (2026-08-09): Parent recommendation route now passes the final
+#     parent-safe draft through sharing_matrix.filter_payload(role=parent)
+#     before returning the legacy flat response shape.
+EXPECTED_VERSION = 140
 
 
 def _html() -> str:

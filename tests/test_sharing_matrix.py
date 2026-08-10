@@ -104,6 +104,19 @@ def test_filter_payload_unknown_role_gets_nothing():
     assert sm.filter_payload(PAYLOAD, "visitor") == {}
 
 
+def test_parent_recommendation_route_uses_sharing_matrix():
+    from pathlib import Path
+
+    html_or_py = (Path(__file__).resolve().parents[1] / "src" / "web.py").read_text(
+        encoding="utf-8"
+    )
+    route_block = html_or_py.split('@app.post("/api/parents/recommendation")', 1)[1].split(
+        '@app.post("/api/reflect/note")', 1
+    )[0]
+    assert "filter_payload(matrix_payload, \"parent\")" in route_block
+    assert '"safeguarding": result.get("safeguarding")' in route_block
+
+
 # ---------------------------------------------------------------------------
 # Route: /api/sharing/check
 # ---------------------------------------------------------------------------

@@ -6229,7 +6229,22 @@ async def parent_recommendation(request: Request, payload: dict):
         if safety["blocked"]:
             result["safety_warnings"] = safety["violations"]
             result["review_required"] = True
-        return result
+        from src.lingua_viva.sharing_matrix import filter_payload
+
+        matrix_payload = {
+            "academic_progress": {
+                "summary": result,
+            },
+            # Defense in depth: if a future edit tries to attach restricted
+            # content to this parent route, the matrix row for safeguarding
+            # still drops it for role=parent.
+            "safeguarding": result.get("safeguarding"),
+        }
+        filtered = filter_payload(matrix_payload, "parent")
+        shared = (filtered.get("academic_progress") or {}).get("summary")
+        if not isinstance(shared, dict):
+            return {"__error__": "sharing_matrix_blocked_parent_payload", "__status__": 500}
+        return shared
 
     result = await asyncio.to_thread(_with_student_store, generate)
     if "__error__" in result:
