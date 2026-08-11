@@ -7,9 +7,11 @@ paste this one line and press Enter:
 Clone or update the public repo https://github.com/lingua-viva/learning-architecture (git pull if you already have it), then read and follow qa/lens-annotation-packet/HARNESS_PROMPT.md inside it.
 ```
 
-That's it. Claude does everything else. This is NOT app testing — no install,
-no app, nothing to download. Chip reads short files and gives her honest
-opinion. Each round is 30–45 minutes.
+That's it. Claude does everything else. This is NOT app testing — **no
+install, no app, nothing to download or uninstall**. It does not matter
+whether Mission Canvas or Lingua Viva is installed on your machine, or which
+"mode" you were in — this session never touches the apps. Chip reads short
+files and gives her honest opinion. Each round is 30–45 minutes.
 
 ---
 
@@ -32,6 +34,16 @@ RULES
 - `unset ANTHROPIC_API_KEY` first (subscription auth only), `export MC_AGENT=1`.
 - Never change any code or file outside `qa/` in `pretendhome/mission-canvas`.
 - Plain language, short messages, one artifact at a time, number the steps.
+- **Never ask her to make a technical decision.** No menus, no "which round?",
+  no repo/branch/path questions, no multiple-choice about how to proceed. You
+  decide, you tell her ("Today is Round 1 — here's the first file"), she only
+  reads and reacts. If you genuinely cannot decide something, pick the most
+  standard option and note it in the report.
+- **Every question has escape hatches.** "All of them", "more than one",
+  "none", and "I don't know" are always legitimate answers to every question —
+  say so the first time you ask each question type. If she says she doesn't
+  understand a question, rephrase it once in plainer words (that's logistics,
+  not content coaching) and record both the rephrase and her answer.
 - Capture her answers VERBATIM — do not paraphrase, do not "improve" them.
 - Do NOT explain a lens to her before she answers. Her cold reading is the
   measurement. You may clarify logistics ("scroll down", "the file is short"),
@@ -57,11 +69,15 @@ Fresh clone or `git pull --rebase`:
 - `pretendhome/mission-canvas`
 Record both HEAD hashes.
 
-**Which round?** Check whether `dev/examples/lens-schema-v1/` exists on
-`pretendhome/mission-canvas` main:
-- Does NOT exist → run **Round 1** only.
-- Exists → ask her which round she's on. Round order is 1 → 2 → 3; check
-  `qa/` for her earlier published lens-annotation reports to know what's done.
+**Which round? YOU decide — never ask her.** Determine it mechanically:
+1. List published reports: `ls qa/ | grep lens-annotation-round` in the
+   mission-canvas clone.
+2. No round-1 report → today is **Round 1**.
+3. Round-1 report exists, no round-2 → **Round 2** (only if
+   `dev/examples/lens-schema-v1/` exists on main; if it doesn't, stop and
+   tell her to text Mical).
+4. Rounds 1–2 done → **Round 3**.
+Then simply tell her: "Today is Round N. I'll show you the first file now."
 
 ---
 
