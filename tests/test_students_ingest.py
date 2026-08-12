@@ -533,7 +533,7 @@ def test_import_affordance_present_no_manual_entry():
     assert "Import students from a file" in HTML
     assert 'id="ingest-file"' in HTML
     assert '"/api/students/ingest"' in HTML
-    assert "Nothing was invented" in HTML
+    assert "No student names found" in HTML
     assert ".xlsx,.docx,.csv,.txt,.md,.markdown,.pdf" in HTML
 
 
