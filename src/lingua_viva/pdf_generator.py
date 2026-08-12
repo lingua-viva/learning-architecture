@@ -43,11 +43,11 @@ from reportlab.platypus import (
     TableStyle,
 )
 
-BRAND = "Lingua Viva"
-FOOTER_NOTE = "Generated locally by Lingua Viva — no data left this device."
+BRAND = "Still I Rise"
+FOOTER_NOTE = "Generated locally — no student data left this device."
 
-_BRAND_COLOR = colors.HexColor("#1a5276")
-_ACCENT_COLOR = colors.HexColor("#7f8c8d")
+_BRAND_COLOR = colors.HexColor("#F06820")
+_ACCENT_COLOR = colors.HexColor("#555555")
 
 
 def state_home() -> Path:
@@ -447,3 +447,117 @@ def render_coursework_pack_pdf(
         sections=sections,
         output_path=output_path,
     )
+
+
+# ── Per-tier student-ready PDFs (E2E differentiation flow) ────────────
+
+
+_TIER_LABELS = {
+    "foundational": "Foundational",
+    "on_track": "On Track",
+    "extended": "Extended",
+}
+
+
+def render_tier_pdf(
+    tier_name: str,
+    tier_data: dict,
+    lesson: dict,
+    output_path: Optional[Path | str] = None,
+) -> bytes | Path:
+    """Render a single student-ready PDF for one differentiation tier.
+
+    This is what gets printed and handed to students. Clean, friendly,
+    no internal jargon.
+    """
+    label = _TIER_LABELS.get(tier_name, tier_name.replace("_", " ").title())
+
+    sections: list[dict] = []
+
+    # Learning objective — front and center
+    obj = tier_data.get("learning_objective", "")
+    if obj:
+        sections.append({
+            "heading": "What you will learn",
+            "paragraphs": [obj],
+        })
+
+    # Vocabulary
+    vocab = tier_data.get("vocabulary_list", []) or []
+    if vocab:
+        vocab_bullets = []
+        for v in vocab:
+            term = v.get("term", "")
+            defn = v.get("tier_definition_style", v.get("definition", ""))
+            if term:
+                vocab_bullets.append(f"{term} — {defn}" if defn else term)
+        if vocab_bullets:
+            sections.append({
+                "heading": "Key vocabulary",
+                "bullets": vocab_bullets,
+            })
+
+    # Tasks / activities
+    tasks = tier_data.get("tasks", []) or []
+    if tasks:
+        task_section: dict = {"heading": "Activities", "bullets": []}
+        for i, task in enumerate(tasks, 1):
+            prompt = task.get("prompt", "")
+            minutes = task.get("chunk_minutes", "")
+            line = f"{i}. {prompt}"
+            if minutes:
+                line += f"  ({minutes} min)"
+            task_section["bullets"].append(line)
+        sections.append(task_section)
+
+    # Scaffolding hints (student-friendly)
+    scaffolds = tier_data.get("scaffolding", []) or []
+    if scaffolds:
+        sections.append({
+            "heading": "Support",
+            "bullets": scaffolds,
+        })
+
+    return render_document(
+        title=f"{lesson.get('unit_title', 'Lesson')} — {label}",
+        metadata={
+            "Subject": lesson.get("subject", ""),
+            "Topic": lesson.get("topic", ""),
+            "Level": label,
+        },
+        sections=sections,
+        output_path=output_path,
+    )
+
+
+def render_differentiated_pack(
+    pack_dict: dict,
+    output_dir: Optional[Path | str] = None,
+) -> dict[str, Path]:
+    """Render a full ContentPack into 3 separate per-tier student PDFs.
+
+    Returns {tier_name: Path} for each generated PDF.
+    This is the E2E function: differentiator output -> printable PDFs.
+    """
+    if output_dir is None:
+        output_dir = artifacts_dir("lessons")
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    lesson = pack_dict.get("lesson", {})
+    tiers = pack_dict.get("tiers", {})
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M")
+    slug = (lesson.get("unit_title", "lesson") or "lesson")
+    slug = "".join(c if c.isalnum() or c in "-_ " else "" for c in slug).strip().replace(" ", "_")[:40]
+
+    paths: dict[str, Path] = {}
+    for tier_name in ("foundational", "on_track", "extended"):
+        tier_data = tiers.get(tier_name)
+        if not tier_data:
+            continue
+        filename = f"{slug}_{tier_name}_{ts}.pdf"
+        path = output_dir / filename
+        render_tier_pdf(tier_name, tier_data, lesson, output_path=path)
+        paths[tier_name] = path
+
+    return paths

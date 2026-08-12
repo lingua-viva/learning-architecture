@@ -4042,6 +4042,127 @@ async def tier_assignments():
     return result
 
 
+@app.post("/api/prepare/differentiated-pdf")
+async def prepare_differentiated_pdf(payload: dict):
+    """E2E: lesson input → 3-tier differentiation → per-tier PDFs.
+
+    Optionally pushes the PDFs to a Google Drive folder.
+    Returns download paths for each tier.
+    """
+    from src.education.content_differentiator import ContentDifferentiator, LessonInput
+    from src.lingua_viva.pdf_generator import render_differentiated_pack
+
+    required = ("subject", "unit_title", "topic")
+    missing = [f for f in required if not payload.get(f)]
+    if missing:
+        return JSONResponse({"error": f"Missing required fields: {missing}"}, status_code=400)
+
+    lesson = LessonInput(
+        ib_programme=str(payload.get("ib_programme", "MYP")),
+        subject=str(payload["subject"]),
+        unit_title=str(payload["unit_title"]),
+        topic=str(payload["topic"]),
+        atl_skills=list(payload.get("atl_skills", ["Communication"])),
+        cefr_target=str(payload.get("cefr_target", "B1")),
+        duration_minutes=int(payload.get("duration_minutes", 50)),
+        language_of_instruction=str(payload.get("language", "en")),
+        created_by=str(payload.get("created_by", "teacher")),
+    )
+
+    errors = lesson.validate()
+    if errors:
+        return JSONResponse({"error": errors}, status_code=400)
+
+    def generate_and_render():
+        diff = ContentDifferentiator()
+
+        # Try document-backed if retriever available
+        try:
+            from src.lingua_viva.ingest import document_retriever
+            retriever = document_retriever()
+            if retriever is not None:
+                pack = diff.generate_from_documents(lesson, retriever, domain="curriculum")
+            else:
+                pack = diff.generate(lesson)
+        except Exception:
+            pack = diff.generate(lesson)
+
+        pack_dict = pack.to_dict()
+        paths = render_differentiated_pack(pack_dict)
+        return pack_dict, paths
+
+    pack_dict, paths = await asyncio.to_thread(generate_and_render)
+
+    # Optionally push to Drive
+    drive_folder = payload.get("drive_folder_id")
+    if drive_folder:
+        try:
+            from src.lingua_viva.google_drive_integration import upload_text_to_folder
+            for tier_name, path in paths.items():
+                pdf_bytes = path.read_bytes()
+                # Upload as application/pdf — Drive stores it natively
+                import base64
+                from urllib import request as urllib_request, parse
+                from src.lingua_viva.google_drive_integration import (
+                    ensure_configured, default_transport, _access_token,
+                    DRIVE_API, DriveConfigError,
+                )
+                settings = ensure_configured()
+                transport = default_transport()
+                token = _access_token(settings, transport)
+                filename = path.name
+
+                # Check if exists
+                existing_id = None
+                try:
+                    query = f"name='{filename}' and '{drive_folder}' in parents and trashed=false"
+                    search_url = f"{DRIVE_API}/files?q={parse.quote(query)}&fields=files(id,name)"
+                    req = urllib_request.Request(search_url, headers={"Authorization": f"Bearer {token}"})
+                    with urllib_request.urlopen(req, timeout=20) as response:
+                        data = json.loads(response.read())
+                        files = data.get("files", [])
+                        if files:
+                            existing_id = files[0]["id"]
+                except Exception:
+                    pass
+
+                if existing_id:
+                    url = f"https://www.googleapis.com/upload/drive/v3/files/{existing_id}?uploadType=media"
+                    req = urllib_request.Request(
+                        url, data=pdf_bytes,
+                        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/pdf"},
+                        method="PATCH",
+                    )
+                else:
+                    boundary = "----LVPDFUpload"
+                    meta_json = json.dumps({"name": filename, "parents": [drive_folder]})
+                    body = (
+                        f"--{boundary}\r\nContent-Type: application/json\r\n\r\n{meta_json}\r\n"
+                        f"--{boundary}\r\nContent-Type: application/pdf\r\n\r\n"
+                    ).encode() + pdf_bytes + f"\r\n--{boundary}--".encode()
+                    url = f"https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart"
+                    req = urllib_request.Request(
+                        url, data=body,
+                        headers={
+                            "Authorization": f"Bearer {token}",
+                            "Content-Type": f"multipart/related; boundary={boundary}",
+                        },
+                    )
+                urllib_request.urlopen(req, timeout=30)
+        except Exception as e:
+            # Drive push is best-effort — PDFs are still generated locally
+            import logging
+            logging.getLogger("lv.web").warning(f"Drive PDF push failed: {e}")
+
+    return {
+        "status": "ok",
+        "tiers": {name: str(path) for name, path in paths.items()},
+        "pack_id": pack_dict.get("pack_id", ""),
+        "source_mode": pack_dict.get("source_mode", ""),
+        "drive_pushed": bool(drive_folder),
+    }
+
+
 def _teacher_lens_storage_dir() -> Path:
     override = os.environ.get("LV_TEACHER_LENS_STORAGE_PATH")
     if override:
