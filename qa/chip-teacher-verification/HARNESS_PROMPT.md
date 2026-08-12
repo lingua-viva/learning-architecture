@@ -33,23 +33,43 @@ RULES:
 ## STEP 0 — Pre-flight
 
 1. Confirm the app is running: `curl -s http://127.0.0.1:8787/api/health 2>/dev/null || echo "NOT RUNNING"`
-2. Record the version: `curl -s http://127.0.0.1:8787/api/version 2>/dev/null`
+2. Record the version: there is no `/api/version` endpoint. The install is pinned —
+   linguaviva.art serves exactly one release (`desktop-v0.2.55`, verified 2026-08-11).
+   Record the health payload's `mode` field and note the version as desktop-v0.2.55.
 3. Check Drive connected: `curl -s http://127.0.0.1:8787/api/google-drive/status 2>/dev/null`
-4. Start a fresh trace log watcher:
+4. Start the activity watcher. Two stores matter, both directly under
+   `~/.lingua-viva/` (NOT under `runtime/`):
+   - `request_events.ndjson` — every API call she triggers (`method`, `path_template`, `status`) — this is the per-click activity feed
+   - `traces.ndjson` — reasoning traces (`classification_domain`, `model_used`, `duration_ms`, `route`) — fires on LLM-backed work like differentiation
    ```bash
    LV_HOME="${LV_STATE_HOME:-$HOME/.lingua-viva}"
-   TRACE_LOG="$LV_HOME/runtime/traces.ndjson"
-   echo "Watching: $TRACE_LOG"
-   tail -f "$TRACE_LOG" 2>/dev/null | python3 -c "
+   REQ_LOG="$LV_HOME/request_events.ndjson"
+   TRACE_LOG="$LV_HOME/traces.ndjson"
+   # Liveness rule: verify the files exist BEFORE tailing — tail -f on a
+   # missing path with stderr suppressed looks alive while watching nothing.
+   for f in "$REQ_LOG" "$TRACE_LOG"; do
+     [ -f "$f" ] || echo "WARNING: $f does not exist — watcher will be blind to it"
+   done
+   tail -n 0 -f "$REQ_LOG" | python3 -c "
    import sys, json
    for line in sys.stdin:
        try:
            t = json.loads(line.strip())
-           ts = t.get('timestamp','')[-8:]
-           print(f'{ts} | {t.get(\"event_type\",\"?\"):20s} | {t.get(\"student_id\",\"-\"):20s} | {t.get(\"status\",\"\")}')
-       except: pass
+           ts = t.get('timestamp','')[11:19]
+           print(f'{ts} | {t.get(\"method\",\"?\"):4s} {t.get(\"path_template\",\"?\"):40s} | {t.get(\"status\",\"\")}')
+       except Exception: pass
    " &
    WATCHER_PID=$!
+   tail -n 0 -f "$TRACE_LOG" | python3 -c "
+   import sys, json
+   for line in sys.stdin:
+       try:
+           t = json.loads(line.strip())
+           ts = t.get('timestamp','')[11:19]
+           print(f'{ts} | TRACE {t.get(\"classification_domain\",\"?\"):12s} | {t.get(\"model_used\",\"?\"):22s} | {t.get(\"duration_ms\",0)}ms | {t.get(\"route\",\"\")}')
+       except Exception: pass
+   " &
+   TRACE_WATCHER_PID=$!
    ```
 5. Tell Chip: "We're going to walk through everything a teacher does in the app,
    start to finish. I'll give you one thing to try at a time. Just tell me what
@@ -74,7 +94,7 @@ RULES:
    ```
 2. "Click Import on the Students page and pick that file."
 3. Record: did students appear? How many? Any error?
-4. Backend check: `curl -s http://127.0.0.1:8787/api/students | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'{len(d)} students')" 2>/dev/null`
+4. Backend check: `curl -s http://127.0.0.1:8787/api/students | python3 -c "import sys,json; d=json.load(sys.stdin); print(f\"{len(d.get('students',[]))} students\")" 2>/dev/null`
 
 ### Task 1.2 — Import a Word doc or PDF
 1. Ask Chip: "Do you have a Word document or PDF with student names on your
@@ -97,7 +117,9 @@ RULES:
 
 ## ROUND 2 — Google Drive Import
 
-**Skip this round if Drive is not connected (Step 0.3 returned disconnected).**
+**If Step 0.3 showed Drive already connected, skip Task 2.1 and go straight to
+2.2. If connecting fails in Task 2.1, record the failure and skip the rest of
+this round (and Task 4.4).**
 
 ### Task 2.1 — Connect Drive
 1. "Go to Settings, then the Sources/Drive section."
@@ -119,7 +141,8 @@ RULES:
    topic sentences today and helped David reorganize his paragraph.'"
 3. "Hit Save."
 4. Record: did it save? What confirmation did she see?
-5. Backend: check the trace log for the observation event.
+5. Backend: the watcher should show the observation POST in the request feed
+   (`request_events.ndjson`); confirm a line appeared when she hit Save.
 
 ### Task 3.2 — Voice observation (if mic works)
 1. "Now try the microphone button instead of typing."
