@@ -16,6 +16,8 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v141 (2026-08-12): Still I Rise branding (orange #F06820, sidebar SIR mark,
+#     welcome dialog), pdf_generator brand update, differentiated-pdf E2E route
 #   v140 (2026-08-09): Parent recommendation route now passes the final
 #     parent-safe draft through sharing_matrix.filter_payload(role=parent)
 #     before returning the legacy flat response shape.
@@ -624,7 +626,7 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 140
+version: 141
 # v122 (2026-08-06): Failure-mode hardening. src/web.py: voice-act observation
 #   dedup guard (same 60s window as observe/capture, prevents network-retry
 #   duplicates). src/education/parent_report.py: personal_context evidence
