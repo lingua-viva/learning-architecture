@@ -3,30 +3,30 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#17463b">
+  <meta name="theme-color" content="#F06820">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="Lingua Viva">
+  <meta name="apple-mobile-web-app-title" content="Still I Rise">
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
-  <title>Lingua Viva</title>
+  <title>Still I Rise</title>
   <style>
     * { box-sizing: border-box; }
     :root {
       color-scheme: light;
-      --ink: #17211f;
-      --muted: #66736f;
-      --line: #d8dfdc;
+      --ink: #1a1a1a;
+      --muted: #666666;
+      --line: #e0e0e0;
       --panel: #ffffff;
-      --surface: #f5f7f4;
-      --brand: #17463b;
-      --brand-2: #2f6b5c;
-      --accent: #b24b31;
+      --surface: #f5f5f0;
+      --brand: #F06820;
+      --brand-2: #d95a18;
+      --accent: #F06820;
       --warn: #8a5b00;
       --ok: #1f6f4a;
       --risk: #a3222c;
-      --shadow: 0 8px 24px rgba(23, 33, 31, .08);
+      --shadow: 0 8px 24px rgba(0, 0, 0, .08);
       --lv-sidebar-width: 200px;
       --lv-voice-width: 200px;
       --lv-voice-collapsed-width: 60px;
@@ -141,9 +141,9 @@
       min-height: var(--lv-nav-row-min-height);
     }
     .nav button.active {
-      background: #e8f1ed;
+      background: #fdf0e8;
       color: var(--brand);
-      border-color: #cae0d8;
+      border-color: #f5d5c0;
       font-weight: 700;
     }
     .nav button:focus-visible {
@@ -729,9 +729,9 @@
   <div class="app">
     <aside class="sidebar">
       <button class="brand" id="brand-home" type="button">
-        <div class="mark">LV</div>
+        <div class="mark" style="border-radius:50%;font-size:11px;letter-spacing:.02em">SIR</div>
         <div>
-          <strong>Lingua Viva</strong>
+          <strong>Still I Rise</strong>
           <span id="role-label">Teacher</span>
         </div>
       </button>
@@ -754,7 +754,7 @@
   <aside id="voice-companion" class="voice-companion" aria-label="Voice companion">
     <button id="vc-collapse" class="vc-collapse" type="button" aria-label="Collapse voice panel" title="Collapse">▶</button>
     <div class="vc-avatar-container">
-      <img src="/assets/mc-avatar.png" alt="Lingua Viva Voice" class="vc-avatar">
+      <img src="/assets/mc-avatar.png" alt="Voice Assistant" class="vc-avatar">
       <div id="vc-visor" class="vc-visor"></div>
     </div>
     <button id="vc-mic" class="vc-mic" type="button" aria-label="Start voice input" aria-pressed="false" title="Start voice input">Mic</button>
@@ -765,10 +765,10 @@
 
   <div id="role-choice" class="role-choice">
       <div class="role-dialog">
-        <h2>🌱 Lingua Viva</h2>
-        <p>A teacher workbench for Italian language instruction.</p>
+        <h2>Still I Rise</h2>
+        <p>World-class tools for world-class schools.</p>
         <p>Everything stays on your machine. No student data leaves. Ever.</p>
-        <p>Start from the work you already do: planning, observing, documenting, and sharing learning with care.</p>
+        <p>Start from the work you already do: planning, observing, documenting, and differentiating with care.</p>
         <p>I am a:</p>
       <div class="role-actions">
         <button class="primary" data-role="teacher" type="button">I am a teacher</button>
@@ -880,7 +880,7 @@
       // through captureLocalStt, so the gate lives here, and
       // applySttAvailability() repaints every visible mic surface.
       sttAvailable: null,
-      sttUnavailableText: "Voice input isn't set up on this computer yet. You can type everything instead. Restart Lingua Viva to retry voice setup.",
+      sttUnavailableText: "Voice input isn't set up on this computer yet. You can type everything instead. Restart the app to retry voice setup.",
       async probeStt() {
         try {
           const response = await fetch("/api/voice/probe");
@@ -1679,7 +1679,7 @@
         ${showSourcesNudge ? `
         <div class="panel" id="sources-nudge" style="margin-bottom:14px;">
           <h3>Connect your teaching folders</h3>
-          <p>Tell Lingua Viva where your teaching materials live. It looks at folder names and file names only — it never opens your files.</p>
+          <p>Tell the app where your teaching materials live. It looks at folder names and file names only — it never opens your files.</p>
           <div class="row">
             <button id="nudge-open-sources" class="primary" type="button">Open Sources</button>
             <button id="nudge-dismiss" type="button">Not now</button>
@@ -3358,7 +3358,7 @@
     async function renderAsk() {
       setTitle("Ask", "web research route");
       $("content").innerHTML = `
-        <div class="view-head"><div><h2>Ask Lingua Viva</h2><p>Ask answers general teaching questions from the web. Nothing about your students is ever sent — questions that name a student are answered from their lens instead.</p></div><span class="badge warn">answers come from the web</span></div>
+        <div class="view-head"><div><h2>Ask</h2><p>Ask answers general teaching questions from the web. Nothing about your students is ever sent — questions that name a student are answered from their lens instead.</p></div><span class="badge warn">answers come from the web</span></div>
         <div class="panel">
           <div id="chat-log" class="chat-log">${state.chat.map(renderMessage).join("")}</div>
           <div id="ask-voice-status" class="voice-hint" aria-live="polite" style="margin-top:12px;">Tap Ask to speak, or type below.</div>
