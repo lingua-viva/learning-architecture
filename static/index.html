@@ -2631,7 +2631,7 @@
       if (job.status === "failed") return job.error || "Import failed.";
       if (job.status === "done") {
         const created = (job.students_created || []).length;
-        if (!job.students_found) return `No students found in ${job.source_name}. Nothing was invented — check that the document names your students.`;
+        if (!job.students_found) return `No student names found in ${job.source_name}. The app looks for first and last names in the document text. If this is a scanned PDF, it may not have extractable text — try a Word or text version instead.`;
         if ((job.needs_confirmation || []).length) return `${job.needs_confirmation.length} name${job.needs_confirmation.length === 1 ? "" : "s"} found in ${job.source_name}. Review before creating student profiles.`;
         return `${created} student${created === 1 ? "" : "s"} added from ${job.source_name}.`;
       }
@@ -2750,6 +2750,8 @@
         if ($("ingest-status")) $("ingest-status").textContent = "Choose a file first.";
         return;
       }
+      const importBtn = event.target.querySelector("button[type=submit]");
+      if (importBtn) { importBtn.disabled = true; importBtn.textContent = "Importing…"; }
       if ($("ingest-status")) $("ingest-status").textContent = `Uploading ${file.name}…`;
       const body = new FormData();
       body.append("file", file);
@@ -2759,10 +2761,12 @@
         data = await response.json();
         if (!response.ok) throw new Error(data.error || "import failed");
       } catch (error) {
-        state.ingestJob = {status: "failed", error: error.message || "Import failed.", source_name: file.name, job_id: null};
+        if (importBtn) { importBtn.disabled = false; importBtn.textContent = "Import"; }
+        state.ingestJob = {status: "failed", error: error.message || "Import failed — check if the file is a supported format (PDF, Word, Excel, CSV, or text).", source_name: file.name, job_id: null};
         renderIngestResults();
         return;
       }
+      if (importBtn) { importBtn.disabled = false; importBtn.textContent = "Import"; }
       if (data.status === "failed") {
         state.ingestJob = {status: "failed", error: data.error, source_name: file.name, job_id: null};
         renderIngestResults();

@@ -2444,7 +2444,10 @@ async def _run_ingest_job(job: dict, source, content: bytes) -> None:
         _save_ingest_job(job)
     except Exception as error:
         job["status"] = "failed"
-        job["error"] = f"Could not read this document: {error}"
+        msg = str(error)
+        if "no extractable text" in msg:
+            msg += " If this is a scanned document, try a Word or text version instead."
+        job["error"] = f"Could not read this document: {msg}"
         _save_ingest_job(job)
 
 
