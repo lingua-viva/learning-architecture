@@ -1,20 +1,20 @@
 /* Lingua Viva - standalone landing page */
 :root {
   color-scheme: dark;
-  --color-bg: #10231f;
-  --color-surface: #17312b;
-  --color-surface-offset: #203d35;
-  --color-panel: #f4efe6;
-  --color-panel-soft: #e8dfd0;
-  --color-border: rgba(244,239,230,0.12);
-  --color-border-strong: rgba(244,239,230,0.22);
-  --color-text: #f4efe6;
-  --color-text-muted: #c8c1b4;
-  --color-text-faint: #8f978e;
-  --color-ink: #13211f;
-  --color-primary: #7cc7b2;
-  --color-primary-dim: rgba(124,199,178,0.14);
-  --color-gold: #f2bf5e;
+  --color-bg: #1a1a1a;
+  --color-surface: #222222;
+  --color-surface-offset: #2a2a2a;
+  --color-panel: #F06820;
+  --color-panel-soft: #e05a15;
+  --color-border: rgba(255,255,255,0.10);
+  --color-border-strong: rgba(255,255,255,0.20);
+  --color-text: #ffffff;
+  --color-text-muted: #b0b0b0;
+  --color-text-faint: #808080;
+  --color-ink: #ffffff;
+  --color-primary: #F06820;
+  --color-primary-dim: rgba(240,104,32,0.14);
+  --color-gold: #F06820;
   --color-blue: #88a8d8;
   --color-red: #d96b5f;
   --font-display: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -49,18 +49,18 @@
 
 [data-theme="light"] {
   color-scheme: light;
-  --color-bg: #edf4f2;
-  --color-surface: #fbfdf9;
-  --color-surface-offset: #dbe9e5;
-  --color-panel: #17312b;
-  --color-panel-soft: #203d35;
-  --color-border: rgba(19,33,31,0.1);
-  --color-border-strong: rgba(19,33,31,0.18);
-  --color-text: #13211f;
-  --color-text-muted: #52615b;
-  --color-text-faint: #7a837e;
-  --color-ink: #f4efe6;
-  --shadow-lg: 0 20px 70px rgba(19,33,31,0.16), 0 5px 20px rgba(19,33,31,0.1);
+  --color-bg: #f5f5f0;
+  --color-surface: #ffffff;
+  --color-surface-offset: #eeeeea;
+  --color-panel: #F06820;
+  --color-panel-soft: #e05a15;
+  --color-border: rgba(26,26,26,0.1);
+  --color-border-strong: rgba(26,26,26,0.18);
+  --color-text: #1a1a1a;
+  --color-text-muted: #555555;
+  --color-text-faint: #888888;
+  --color-ink: #ffffff;
+  --shadow-lg: 0 20px 70px rgba(0,0,0,0.12), 0 5px 20px rgba(0,0,0,0.08);
 }
 
 *,
@@ -195,7 +195,7 @@ main:focus { outline: none; }
 }
 .btn:hover { transform: translateY(-1px); }
 .btn-primary { background: var(--color-panel); color: var(--color-ink); }
-.btn-primary:hover { background: var(--color-primary); }
+.btn-primary:hover { background: var(--color-panel-soft); }
 .btn-ghost {
   color: var(--color-text);
   border-color: var(--color-border-strong);
@@ -227,9 +227,9 @@ main:focus { outline: none; }
   color: var(--color-text-muted);
   white-space: nowrap;
 }
-.chip-local { color: var(--color-primary); background: rgba(124,199,178,0.12); border-color: rgba(124,199,178,0.35); }
-.chip-open { color: var(--color-gold); background: rgba(242,191,94,0.12); border-color: rgba(242,191,94,0.35); }
-.chip-education { color: var(--color-blue); background: rgba(136,168,216,0.12); border-color: rgba(136,168,216,0.35); }
+.chip-local { color: var(--color-primary); background: rgba(240,104,32,0.12); border-color: rgba(240,104,32,0.35); }
+.chip-open { color: var(--color-primary); background: rgba(240,104,32,0.08); border-color: rgba(240,104,32,0.25); }
+.chip-education { color: var(--color-primary); background: rgba(240,104,32,0.12); border-color: rgba(240,104,32,0.35); }
 .chip-lens { color: var(--color-text); background: rgba(244,239,230,0.08); }
 
 .section-label {
