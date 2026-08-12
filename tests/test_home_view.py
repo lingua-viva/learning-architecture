@@ -34,7 +34,7 @@ def test_logo_click_returns_to_home():
 def test_first_launch_welcome_explains_privacy_and_lands_on_home():
     html = (ROOT / "static" / "index.html").read_text()
 
-    assert "A teacher workbench for Italian language instruction." in html
+    assert "World-class tools for world-class schools." in html
     assert "Everything stays on your machine. No student data leaves. Ever." in html
     assert "I am a:" in html
     assert 'state.view = role === "coordinator" ? "programme" : "home"' in html

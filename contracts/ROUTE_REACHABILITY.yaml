@@ -535,6 +535,13 @@ reachable_from_ui:
       archives the teacher's copy before replacing — never destroys work.
 
 intentionally_backend_only:
+  - route: "POST /api/prepare/differentiated-pdf"
+    status: permanent
+    reason: >-
+      E2E differentiation-to-PDF endpoint. Generates 3 per-tier student-ready
+      PDFs and optionally pushes them to a Google Drive folder. Called from
+      CLI/API; UI integration in a later wave.
+
   - route: "POST /api/prepare/activity"
     status: permanent
     reason: >-

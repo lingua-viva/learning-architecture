@@ -167,4 +167,4 @@ def test_state_home_and_artifacts_dir_respect_env(tmp_path, monkeypatch):
 
 
 def test_brand_is_generic_no_institution_name():
-    assert BRAND == "Lingua Viva"
+    assert BRAND == "Still I Rise"
