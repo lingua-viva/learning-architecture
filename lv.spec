@@ -46,6 +46,26 @@ a = Analysis(
         # it lazily inside _start_web_server(), which PyInstaller's static
         # analysis can't see.
         'src.web',
+        # ── Router modules (same blind spot as src.web) ──────────────
+        # web.py loads these via importlib.import_module(), so PyInstaller's
+        # static analysis can't see them.  Without these, the packaged app
+        # silently swallows the ImportError and registers zero routers —
+        # every /api/sources/*, /api/safeguarding/*, /api/artifacts/*,
+        # and /api/poi/* route 404s in the desktop build.
+        #
+        # PACT: every module added to ROUTER_MODULES in
+        # src/lingua_viva/routers/__init__.py MUST also be added here.
+        # If you add a router and skip this file, the route will work in
+        # dev (python src/web.py) and silently vanish in the packaged app.
+        'src.lingua_viva.routers',
+        'src.lingua_viva.routers.sources',
+        'src.lingua_viva.routers.safeguarding',
+        'src.lingua_viva.routers.artifacts',
+        # Transitive dependencies of the router modules that PyInstaller
+        # also can't trace through the dynamic import:
+        'src.lingua_viva.poi_progression',
+        'src.lingua_viva.coursework_pack',
+        'src.lingua_viva.pdf_generator',
         # Pulled in transitively by pdfplumber's dependency chain through
         # pkg_resources's runtime hook (pyi_rth_pkgres) — modern setuptools
         # de-vendored its pkg_resources.extern names (see

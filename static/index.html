@@ -1564,6 +1564,13 @@
 
     function switchView(view) {
       state.view = view;
+      // Clear student selection on every tab switch so student identity
+      // context never leaks across navigation boundaries.  This is a
+      // deliberate privacy-safety choice: a teacher must re-select the
+      // student when returning to a tab.  Without this, a stale
+      // selectedStudent causes auto-loads (and potential 404 error pages)
+      // on the Students tab when the student was picked in Observe.
+      state.selectedStudent = "";
       // View changes end the conversational thread — clear the
       // last-mentioned-student memory (detection v2 rule).
       voiceLastStudent = null;
@@ -2188,6 +2195,7 @@
     }
 
     function clearObserveForm() {
+      state.selectedStudent = "";
       ["obs-text", "obs-template", "obs-dim", "obs-level", "obs-direction", "obs-sel-domain", "obs-sel-valence", "obs-ethos-trait"].forEach(id => {
         if ($(id)) $(id).value = "";
       });
@@ -2506,7 +2514,23 @@
         state.selectedStudent = button.dataset.student;
         loadLens();
       }));
-      await loadLens();
+      // Guard: only auto-load a lens if the selected student actually exists
+      // in the current roster.  Truthiness alone is not enough — a stale ID
+      // from an archived or deleted student passes the truthiness check but
+      // 404s on the API call, which can replace the entire page with an error.
+      const studentInRoster = state.selectedStudent
+        && (state.students || []).some(s => s.student_id === state.selectedStudent);
+      if (studentInRoster) {
+        try {
+          await loadLens();
+        } catch (err) {
+          console.warn("Lens load failed for student:", state.selectedStudent, err);
+          const lensEl = $("lens");
+          if (lensEl) lensEl.innerHTML = '<div class="panel"><p>Could not load student lens. Please re-select the student.</p></div>';
+        }
+      } else {
+        await loadLens();  // loadLens handles empty selectedStudent gracefully (shows placeholder)
+      }
     }
 
     function suggestedReviewStudentId(item) {
@@ -2946,7 +2970,13 @@
           <h3 style="margin-top:16px;">Consolidate next</h3>
           ${nextRows}`;
       } catch (error) {
-        host.innerHTML = `<h3>Programme of Inquiry Progression</h3><p>${escapeHtml(error.message)}</p>`;
+        // 404 means no PoI data exists yet (or the route isn't registered in
+        // the packaged build) — degrade to an honest empty state, not a red
+        // error.  Any other failure (500, network) should still surface.
+        const is404 = error.message && error.message.includes("404");
+        host.innerHTML = is404
+          ? `<h3>Programme of Inquiry Progression</h3><p class="voice-hint">No PoI activity recorded yet.</p>`
+          : `<h3>Programme of Inquiry Progression</h3><p>${escapeHtml(error.message)}</p>`;
       }
     }
 

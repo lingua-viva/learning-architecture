@@ -53,15 +53,35 @@ STUDENT_GRADE_LEVELS = tuple(f"G{grade}" for grade in range(1, 13))
 # their module name to ROUTER_MODULES there. Contract: router modules must
 # NEVER import src.web (circular); they import runtime modules directly.
 # The role-gate middleware below covers router-registered paths like any other.
+_routers_loaded = 0
+_routers_expected = 0
 try:
     from src.lingua_viva.routers import ROUTER_MODULES as _LV_ROUTER_MODULES
     import importlib as _importlib
+    import logging as _logging
 
+    _routers_expected = len(_LV_ROUTER_MODULES)
     for _mod_name in _LV_ROUTER_MODULES:
-        _mod = _importlib.import_module(f"src.lingua_viva.routers.{_mod_name}")
-        app.include_router(_mod.router)
+        try:
+            _mod = _importlib.import_module(f"src.lingua_viva.routers.{_mod_name}")
+            app.include_router(_mod.router)
+            _routers_loaded += 1
+        except ImportError as _e:
+            _logging.getLogger("lv.web").error(
+                "Router '%s' failed to import — its routes will 404: %s", _mod_name, _e
+            )
+    if _routers_loaded < _routers_expected:
+        _logging.getLogger("lv.web").warning(
+            "Routers loaded: %d/%d — missing routers mean missing API routes",
+            _routers_loaded, _routers_expected,
+        )
 except ImportError:
-    pass  # routers package optional until first feature lands
+    import logging as _logging
+    _logging.getLogger("lv.web").error(
+        "Router registry (src.lingua_viva.routers) failed to import — "
+        "ALL feature routes will 404. In packaged builds, ensure lv.spec "
+        "lists every router module in hiddenimports."
+    )
 
 
 # ── Global JSON error handler ─────────────────────────────────────────────
@@ -283,11 +303,16 @@ async def static_asset(name: str):
 async def health():
     try:
         from doctor.support_loop.doctor import run_doctor
-        return await asyncio.to_thread(run_doctor)
+        result = await asyncio.to_thread(run_doctor)
     except Exception as e:
         # Never let the health endpoint crash — a crashing health probe
         # fills stdio pipes and deadlocks the Electron wrapper (Bug 2, v0.2.4 report).
-        return {"status": "degraded", "error": str(e)}
+        result = {"status": "degraded", "error": str(e)}
+    # Surface router registration state so packaged-build failures are visible
+    # in /api/health instead of silently 404ing every feature route.
+    result["routers_loaded"] = _routers_loaded
+    result["routers_expected"] = _routers_expected
+    return result
 
 
 @app.get("/api/slack/status")

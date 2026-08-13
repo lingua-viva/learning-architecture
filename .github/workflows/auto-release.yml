@@ -48,11 +48,24 @@ jobs:
           python3 src/web.py 8787 > /tmp/lv-web.log 2>&1 &
           echo $! > /tmp/lv-web.pid
           for i in {1..30}; do
-            if curl -fsS http://127.0.0.1:8787/api/health >/dev/null; then exit 0; fi
+            if curl -fsS http://127.0.0.1:8787/api/health >/dev/null; then break; fi
             sleep 1
+            if [ $i -eq 30 ]; then cat /tmp/lv-web.log; exit 1; fi
           done
-          cat /tmp/lv-web.log
-          exit 1
+          # Canary: verify routers registered (sources, safeguarding, artifacts).
+          # Without this gate, the lv.spec hiddenimports gap silently drops all
+          # feature routes — the health endpoint passes but every /api/poi/*,
+          # /api/sources/*, /api/safeguarding/* route 404s.
+          ROUTERS=$(curl -fsS http://127.0.0.1:8787/api/health | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('routers_loaded',0), d.get('routers_expected',0))")
+          LOADED=$(echo "$ROUTERS" | cut -d' ' -f1)
+          EXPECTED=$(echo "$ROUTERS" | cut -d' ' -f2)
+          if [ "$LOADED" != "$EXPECTED" ] || [ "$LOADED" = "0" ]; then
+            echo "FAIL: routers_loaded=$LOADED routers_expected=$EXPECTED — feature routes are missing"
+            cat /tmp/lv-web.log
+            exit 1
+          fi
+          echo "Routers OK: $LOADED/$EXPECTED"
+          kill "$(cat /tmp/lv-web.pid)" 2>/dev/null || true
 
       - uses: actions/setup-node@v4
         with:

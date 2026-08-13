@@ -16,6 +16,10 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v143 (2026-08-12): Fix Observe→Students state leak (Chip QA P0): clear
+#     selectedStudent on tab switch, guard loadLens with roster membership check,
+#     graceful POI 404 degradation; router registration logging in web.py; router
+#     canary in CI smoke test
 #   v142 (2026-08-12): File upload UX hardening — button disables during import,
 #     better error messages for scanned PDFs and no-students-found cases
 #   v141 (2026-08-12): Still I Rise branding (orange #F06820, sidebar SIR mark,
@@ -628,7 +632,7 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 142
+version: 143
 # v122 (2026-08-06): Failure-mode hardening. src/web.py: voice-act observation
 #   dedup guard (same 60s window as observe/capture, prevents network-retry
 #   duplicates). src/education/parent_report.py: personal_context evidence
