@@ -633,6 +633,99 @@ def pull_course_library(folder_id: str, grade: str, subject: str) -> dict:
     }
 
 
+_LOCAL_IMPORT_EXTENSIONS = {".md", ".txt", ".pdf", ".docx", ".csv", ".xlsx"}
+
+
+def pull_local_folder(folder_path: str, grade: str, subject: str) -> dict:
+    """Import lesson files from a local folder into the course library.
+
+    Same downstream effect as pull_course_library (Drive): files are copied
+    into the library dir, manifest is updated, and everything from Refresh
+    Local Files onward works identically.
+    """
+    source = Path(folder_path).expanduser().resolve()
+    if not source.is_dir():
+        raise ValueError(f"Not a folder or does not exist: {source}")
+
+    target_dir = _library_dir(grade, subject)
+    target_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = _library_manifest_path(grade, subject)
+    manifest = _read_json(manifest_path, {"files": {}})
+    files_by_id = manifest.get("files") if isinstance(manifest.get("files"), dict) else {}
+
+    pulled: list[dict] = []
+    skipped: list[dict] = []
+    failed: list[dict] = []
+    now = _now_z()
+
+    for src_file in sorted(source.iterdir()):
+        if not src_file.is_file():
+            continue
+        if src_file.suffix.lower() not in _LOCAL_IMPORT_EXTENSIONS:
+            continue
+        name = src_file.name
+        # Use a stable key derived from the absolute source path so re-pulls
+        # of the same folder skip already-imported files.
+        local_id = f"local:{hashlib.sha256(str(src_file).encode()).hexdigest()[:16]}"
+        existing = files_by_id.get(local_id) if isinstance(files_by_id, dict) else None
+        existing_path = Path(str((existing or {}).get("local_path") or ""))
+        if isinstance(existing, dict) and existing_path.exists():
+            # Check if content changed by comparing sha256.
+            try:
+                new_digest = hashlib.sha256(src_file.read_bytes()).hexdigest()
+                if existing.get("sha256") == new_digest:
+                    skipped.append({**existing, "status": "unchanged"})
+                    continue
+            except OSError:
+                skipped.append({**existing, "status": "unchanged"})
+                continue
+        try:
+            body = src_file.read_bytes()
+            digest = hashlib.sha256(body).hexdigest()
+            dest = target_dir / _safe_library_filename(name)
+            if dest.exists() and dest.name != _safe_library_filename(name):
+                dest = target_dir / f"{dest.stem}-{local_id[:8]}{dest.suffix}"
+            dest.write_bytes(body)
+            try:
+                os.chmod(dest, 0o600)
+            except OSError:
+                pass
+            entry = CourseLibraryEntry(
+                drive_id=local_id,
+                name=name,
+                local_path=str(dest),
+                sha256=digest,
+                pulled_at=now,
+                status="pulled",
+            )
+            files_by_id[local_id] = asdict(entry)
+            pulled.append(asdict(entry))
+        except Exception as exc:
+            failed.append({"name": name, "status": "failed", "reason": str(exc)})
+
+    _atomic_write_json(
+        manifest_path,
+        {
+            "version": 1,
+            "source_folder": str(source),
+            "grade": grade,
+            "subject": subject,
+            "updated_at": now,
+            "files": files_by_id,
+        },
+    )
+    return {
+        "grade": grade,
+        "subject": subject,
+        "source_folder": str(source),
+        "library_dir": str(target_dir),
+        "manifest_path": str(manifest_path),
+        "pulled": pulled,
+        "skipped": skipped,
+        "failed": failed,
+    }
+
+
 def list_course_library(grade: str, subject: str) -> dict:
     manifest_path = _library_manifest_path(grade, subject)
     manifest = _read_json(manifest_path, {"files": {}})

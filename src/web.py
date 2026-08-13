@@ -5898,6 +5898,24 @@ async def lesson_materials_library_pull(request: Request, payload: dict):
     return result
 
 
+@app.post("/api/lesson-materials/library/pull-local")
+async def lesson_materials_library_pull_local(request: Request, payload: dict):
+    from src.lingua_viva.lesson_materials import pull_local_folder
+
+    folder_path = str(payload.get("folder_path") or "").strip()
+    grade = str(payload.get("grade") or "").strip()
+    subject = str(payload.get("subject") or "language").strip()
+    if not folder_path or not grade:
+        return JSONResponse({"error": "folder_path and grade are required"}, status_code=400)
+    try:
+        result = await asyncio.to_thread(pull_local_folder, folder_path, grade, subject)
+    except ValueError as exc:
+        return JSONResponse({"error": "invalid_folder", "detail": str(exc)}, status_code=400)
+    except Exception as exc:
+        return JSONResponse({"error": "local_pull_failed", "detail": str(exc)}, status_code=422)
+    return result
+
+
 @app.get("/api/lesson-materials/library")
 async def lesson_materials_library_list(grade: str, subject: str = "language"):
     from src.lingua_viva.lesson_materials import list_course_library

@@ -478,6 +478,10 @@ reachable_from_ui:
     call_site: 'api("/api/lesson-materials/library/pull"'
     note: "Prepare Course Library panel: pull mapped Drive coursework into the local read-many library."
 
+  - route: "POST /api/lesson-materials/library/pull-local"
+    call_site: 'api("/api/lesson-materials/library/pull-local"'
+    note: "Prepare Course Library panel: import lesson files from a local folder into the library."
+
   - route: "GET /api/lesson-materials/library"
     call_site: 'api(`/api/lesson-materials/library?'
     note: "Prepare Course Library panel: refresh local grade/subject files."

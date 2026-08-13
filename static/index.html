@@ -1779,15 +1779,17 @@
           <div id="prepare-privacy-preview" class="source-line" style="margin-top:10px;"></div>
         </div>
         <div class="panel" style="margin-top:14px;">
-          <div class="view-head"><div><h3>Course Library</h3><p>Pull today&apos;s coursework from Drive once, then choose the local lesson file for packet generation.</p></div><span class="badge">local cache</span></div>
+          <div class="view-head"><div><h3>Course Library</h3><p>Import lesson materials from a local folder or Google Drive, then choose today&apos;s lesson for packet generation.</p></div><span class="badge">local cache</span></div>
           <div class="form-grid">
-            <label>Drive folder ID<input id="course-library-folder" placeholder="Google Drive folder ID"></label>
+            <label class="full">Local folder<input id="course-library-local-folder" placeholder="Path to folder on this computer, e.g. ~/Documents/IB-materials"></label>
+            <label>Drive folder ID (optional)<input id="course-library-folder" placeholder="Google Drive folder ID"></label>
             <label>Subject<input id="course-library-subject" value="language"></label>
             <label class="full">Today&apos;s lesson file<select id="course-library-files"><option value="">No local files loaded</option></select></label>
           </div>
           <div class="row" style="margin-top:12px;">
-            <button id="pull-course-library" type="button">Pull Library</button>
-            <button id="refresh-course-library" type="button">Refresh Local Files</button>
+            <button id="pull-local-library" class="primary" type="button">Import from Folder</button>
+            <button id="pull-course-library" type="button">Pull from Drive</button>
+            <button id="refresh-course-library" type="button">Refresh</button>
             <button id="select-todays-lesson" type="button">Use Selected Lesson</button>
           </div>
           <div id="course-library-output" class="source-line" style="margin-top:10px;"></div>
@@ -1805,6 +1807,7 @@
       await populateUnitSelect("prep-unit");
       $("generate-activity").addEventListener("click", generateActivity);
       $("preview-lesson-packet").addEventListener("click", previewLessonPacket);
+      $("pull-local-library").addEventListener("click", pullLocalLibrary);
       $("pull-course-library").addEventListener("click", pullCourseLibrary);
       $("refresh-course-library").addEventListener("click", refreshCourseLibrary);
       $("select-todays-lesson").addEventListener("click", selectTodaysLesson);
@@ -1963,6 +1966,30 @@
           ? files.map(file => `<option value="${escapeHtml(file.local_path || "")}">${escapeHtml(file.name || file.local_path || "")}</option>`).join("")
           : '<option value="">No local files loaded</option>';
         output.innerHTML = `<span class="badge">${files.length} local file${files.length === 1 ? "" : "s"}</span>`;
+      } catch (error) {
+        output.innerHTML = `<span>${escapeHtml(error.message)}</span>`;
+      }
+    }
+
+    async function pullLocalLibrary() {
+      const output = $("course-library-output");
+      const folderPath = ($("course-library-local-folder").value || "").trim();
+      if (!folderPath) {
+        output.innerHTML = `<span>Enter a folder path first (e.g. ~/Documents/IB-materials).</span>`;
+        return;
+      }
+      output.innerHTML = `<span>Importing from local folder...</span>`;
+      try {
+        const data = await api("/api/lesson-materials/library/pull-local", {
+          method: "POST",
+          body: JSON.stringify({
+            folder_path: folderPath,
+            grade: $("prep-grade").value,
+            subject: $("course-library-subject").value.trim() || "language"
+          })
+        });
+        output.innerHTML = `<span class="badge ok">${(data.pulled || []).length} imported</span><span class="badge">${(data.skipped || []).length} unchanged</span>${(data.failed || []).length ? `<span class="badge warn">${data.failed.length} failed</span>` : ""}`;
+        await refreshCourseLibrary();
       } catch (error) {
         output.innerHTML = `<span>${escapeHtml(error.message)}</span>`;
       }

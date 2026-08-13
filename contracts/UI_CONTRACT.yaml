@@ -16,6 +16,10 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v145 (2026-08-12): Local folder import for Course Library — teachers can
+#     import lesson materials from a local folder (IB downloads, etc.) without
+#     requiring Google Drive. New endpoint POST /api/lesson-materials/library/
+#     pull-local, "Import from Folder" button in Prepare tab.
 #   v144 (2026-08-12): Fix safeguarding UI feedback (Claudia QA P1): restricted
 #     save response has no "observation" key — handle restricted result before
 #     accessing result.observation.observation_id; calm confirmation UI.
@@ -635,7 +639,7 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 144
+version: 145
 # v122 (2026-08-06): Failure-mode hardening. src/web.py: voice-act observation
 #   dedup guard (same 60s window as observe/capture, prevents network-retry
 #   duplicates). src/education/parent_report.py: personal_context evidence
