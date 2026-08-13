@@ -2384,6 +2384,16 @@
             ethos_trait_id: $("obs-ethos-trait")?.value || null
           })
         });
+        // Safeguarding gate: RED observations are routed to the restricted
+        // ledger and never enter the student lens.  The response shape has
+        // no "observation" key — show a calm, content-free confirmation.
+        if (result.restricted) {
+          $("obs-result").innerHTML = `<h3>Noted</h3><div class="source-line"><span class="badge warn">Routed for coordinator review only.</span></div><p>${escapeHtml(result.note || "This item has been recorded securely and is visible to coordinators only.")}</p>`;
+          $("obs-result").scrollIntoView({ behavior: "smooth", block: "nearest" });
+          showToast("Noted and routed for review.", "info");
+          clearObserveForm();
+          return;
+        }
         if (result.duplicate || (result.observation && result.observation.duplicate)) {
           $("obs-result").innerHTML = `<h3>Already saved.</h3><div class="source-line"><span class="badge ok">One local record kept.</span></div><p>Observation ${escapeHtml(result.observation.observation_id)} was already attached to the local lens.</p>`;
           $("obs-result").scrollIntoView({ behavior: "smooth", block: "nearest" });

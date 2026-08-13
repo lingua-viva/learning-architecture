@@ -16,6 +16,9 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v144 (2026-08-12): Fix safeguarding UI feedback (Claudia QA P1): restricted
+#     save response has no "observation" key — handle restricted result before
+#     accessing result.observation.observation_id; calm confirmation UI.
 #   v143 (2026-08-12): Fix Observe→Students state leak (Chip QA P0): clear
 #     selectedStudent on tab switch, guard loadLens with roster membership check,
 #     graceful POI 404 degradation; router registration logging in web.py; router
@@ -632,7 +635,7 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 143
+version: 144
 # v122 (2026-08-06): Failure-mode hardening. src/web.py: voice-act observation
 #   dedup guard (same 60s window as observe/capture, prevents network-retry
 #   duplicates). src/education/parent_report.py: personal_context evidence
