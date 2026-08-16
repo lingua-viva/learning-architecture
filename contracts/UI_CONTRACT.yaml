@@ -648,7 +648,7 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 147
+version: 148
 # v122 (2026-08-06): Failure-mode hardening. src/web.py: voice-act observation
 #   dedup guard (same 60s window as observe/capture, prevents network-retry
 #   duplicates). src/education/parent_report.py: personal_context evidence
@@ -808,6 +808,9 @@ version: 147
 #     schoolProfile/triangulation), un-provisioned nudge in the lens
 #     triangulation section. Ledger export/pull now skip the un-provisioned
 #     sentinel (drive_sync guards, config own_teacher_id seam).
+# v148 (2026-08-16): launch verification — removed demo fallback
+#     (student-marco) from POST /api/observe/capture; now returns 400 when
+#     student_id is missing. No route shape or UI change.
 files:
   - static/index.html
   - static/sw.js

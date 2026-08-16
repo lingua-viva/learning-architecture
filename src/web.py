@@ -4347,7 +4347,9 @@ async def observe_capture(request: Request, payload: dict):
     from src.education.observation_capture import ObservationCapturePipeline
     from src.lingua_viva.access_roles import effective_teacher_id
 
-    student_id = str(payload.get("student_id") or "student-marco")
+    student_id = str(payload.get("student_id") or "").strip()
+    if not student_id:
+        return JSONResponse({"error": "student_id is required"}, status_code=400)
     teacher_id = effective_teacher_id(
         request, str(payload.get("teacher_id") or "local-teacher")
     )

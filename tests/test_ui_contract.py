@@ -232,7 +232,7 @@ REPO = Path(__file__).resolve().parent.parent
 #   v140 (2026-08-09): Parent recommendation route now passes the final
 #     parent-safe draft through sharing_matrix.filter_payload(role=parent)
 #     before returning the legacy flat response shape.
-EXPECTED_VERSION = 147
+EXPECTED_VERSION = 148
 
 
 def _html() -> str:
