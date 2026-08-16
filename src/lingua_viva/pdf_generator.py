@@ -474,12 +474,21 @@ def render_tier_pdf(
 
     sections: list[dict] = []
 
-    # Learning objective — front and center
+    # Learning objective — front and center. Accept both ContentDifferentiator
+    # tier payloads and lesson_materials.TierMaterial dicts.
     obj = tier_data.get("learning_objective", "")
     if obj:
         sections.append({
             "heading": "What you will learn",
             "paragraphs": [obj],
+        })
+
+    instructions = tier_data.get("instructions_for_student", "")
+    exercise = tier_data.get("exercise_body", "")
+    if instructions or exercise:
+        sections.append({
+            "heading": tier_data.get("title") or "Activity",
+            "paragraphs": [p for p in [instructions, exercise] if p],
         })
 
     # Vocabulary
@@ -525,6 +534,102 @@ def render_tier_pdf(
             "Topic": lesson.get("topic", ""),
             "Level": label,
         },
+        sections=sections,
+        output_path=output_path,
+    )
+
+
+def render_student_lens_pdf(
+    lens_view: dict,
+    *,
+    audience: str = "teacher",
+    output_path: Optional[Path | str] = None,
+) -> bytes | Path:
+    """Render a share-scope filtered student lens view.
+
+    The caller is responsible for passing a view already filtered for the
+    audience. This renderer adds immutable PDF packaging only.
+    """
+    support_profile = lens_view.get("support_profile") or {}
+    categories = support_profile.get("categories") or {}
+    sections: list[dict] = []
+
+    summary_bits = [
+        f"RTI tier: {lens_view.get('rti_current_tier', '')}",
+        f"CEFR: {lens_view.get('cefr_snapshot', {})}",
+    ]
+    sections.append({
+        "heading": "Learning Snapshot",
+        "paragraphs": [bit for bit in summary_bits if bit],
+    })
+
+    for category_id, category in categories.items():
+        bullets: list[str] = []
+        for bucket in ("strengths", "needs", "strategies_worked", "strategies_not_worked", "evidence", "open_questions"):
+            for item in category.get(bucket, []) or []:
+                text_value = (
+                    item.get("text")
+                    or item.get("summary")
+                    or item.get("strategy")
+                    or item.get("question")
+                )
+                if text_value:
+                    bullets.append(f"{bucket.replace('_', ' ').title()}: {text_value}")
+        if bullets:
+            sections.append({
+                "heading": str(category.get("label") or category_id).replace("_", " ").title(),
+                "bullets": bullets,
+            })
+
+    return render_document(
+        title=f"Student lens — {lens_view.get('display_name') or lens_view.get('student_id', '')}",
+        metadata={
+            "Audience": audience,
+            "Generated": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        },
+        sections=sections,
+        output_path=output_path,
+    )
+
+
+def render_simple_artifact_pdf(
+    artifact: dict,
+    *,
+    artifact_type: str,
+    output_path: Optional[Path | str] = None,
+) -> bytes | Path:
+    """Render simple internal artifacts such as help artifacts, portfolio
+    entries, and assessment rubrics into immutable PDF form.
+    """
+    title = str(artifact.get("title") or artifact.get("assessment_id") or artifact_type.replace("_", " ").title())
+    sections: list[dict] = []
+    if artifact.get("instructions") or artifact.get("student_prompt"):
+        sections.append({
+            "heading": "Student Copy",
+            "paragraphs": [p for p in [artifact.get("instructions"), artifact.get("student_prompt")] if p],
+        })
+    if artifact.get("body"):
+        sections.append({"heading": "Body", "paragraphs": [artifact["body"]]})
+    if artifact.get("teacher_notes"):
+        sections.append({"heading": "Teacher Notes", "bullets": list(artifact.get("teacher_notes") or [])})
+    if artifact.get("criteria"):
+        rows = [[k, v] for k, v in (artifact.get("criteria") or {}).items()]
+        sections.append({"heading": "Criteria", "table": {"header": ["Criterion", "Descriptor"], "rows": rows}})
+    if artifact.get("band_descriptors"):
+        rows = [[k, v] for k, v in (artifact.get("band_descriptors") or {}).items()]
+        sections.append({"heading": "Bands", "table": {"header": ["Band", "Descriptor"], "rows": rows}})
+    tier_assessments = artifact.get("tier_assessments") or {}
+    for tier, data in tier_assessments.items():
+        sections.append({
+            "heading": str(tier).replace("_", " ").title(),
+            "paragraphs": [
+                f"Target band: {data.get('target_band', '')}",
+                f"Task: {data.get('task_prompt', '')}",
+            ],
+        })
+    return render_document(
+        title=title,
+        metadata={"Artifact": artifact_type},
         sections=sections,
         output_path=output_path,
     )

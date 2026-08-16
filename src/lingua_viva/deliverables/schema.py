@@ -14,6 +14,7 @@ DELIVERABLE_TYPES = (
     "portfolio_entry",
     "cohort_lesson_plan",
     "lesson_material_packet",
+    "student_lens",
     "none",
 )
 STATUSES = ("created", "updated", "sent", "exported", "failed", "not_applicable")

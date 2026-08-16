@@ -16,6 +16,15 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v147 (2026-08-15): Artifact idempotency — lesson packet PDFs, student
+#     lens PDFs, and rubric PDFs now reuse the existing artifact path when
+#     canonical content is unchanged; changed content still creates a new
+#     immutable PDF.
+#   v146 (2026-08-15): Artifact PDF hardening — approved lesson packets now
+#     create teacher + per-tier student PDFs, student lens exports can be
+#     materialized as share-scoped PDFs (teacher/family exclude Personal
+#     Context, HR includes it), and assessment rubrics can be exported as
+#     deliverable-backed PDFs.
 #   v145 (2026-08-12): Local folder import for Course Library — teachers can
 #     import lesson materials from a local folder (IB downloads, etc.) without
 #     requiring Google Drive. New endpoint POST /api/lesson-materials/library/
@@ -639,7 +648,7 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 145
+version: 147
 # v122 (2026-08-06): Failure-mode hardening. src/web.py: voice-act observation
 #   dedup guard (same 60s window as observe/capture, prevents network-retry
 #   duplicates). src/education/parent_report.py: personal_context evidence

@@ -70,7 +70,14 @@ def test_lesson_packet_approval_writes_deliverable_and_receipt(monkeypatch, tmp_
     body = response.json()
     packet_path = Path(body["packet"]["file_path"])
     assert packet_path.exists()
-    assert packet_path.suffix == ".md"
+    assert packet_path.suffix == ".pdf"
+    assert packet_path.read_bytes().startswith(b"%PDF")
+    assert Path(body["packet"]["markdown_path"]).suffix == ".md"
+    assert Path(body["packet"]["markdown_path"]).exists()
+    tier_paths = body["packet"]["pdf_paths"]["student_tiers"]
+    assert set(tier_paths) == {"foundational", "on_track", "extended"}
+    for tier_path in tier_paths.values():
+        assert Path(tier_path).read_bytes().startswith(b"%PDF")
     assert body["deliverable"]["type"] == "lesson_material_packet"
     assert body["deliverable"]["deliverable_id"] in body["audit_receipt"]["deliverable_ids"]
     assert body["audit_receipt"]["is_complete"] is True
@@ -80,6 +87,12 @@ def test_lesson_packet_approval_writes_deliverable_and_receipt(monkeypatch, tmp_
     assert "# Student Handout -" in body["packet"]["markdown"]
     assert "Teacher-Only Individual Support" in body["packet"]["markdown"]
     assert "student-nora" not in body["packet"]["markdown"]
+
+    with TestClient(app) as client:
+        repeated = client.post("/api/lesson-materials/packet/approve", json=_payload())
+    assert repeated.status_code == 200
+    assert repeated.json()["packet"]["file_path"] == body["packet"]["file_path"]
+    assert repeated.json()["packet"]["pdf_paths"] == body["packet"]["pdf_paths"]
 
 
 def test_lesson_packet_shareback_uploads_stripped_markdown_and_html(monkeypatch, tmp_path):

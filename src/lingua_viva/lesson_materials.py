@@ -1000,6 +1000,16 @@ def lesson_packet_filename(lesson: LessonInput) -> str:
     return f"lesson-packet-{_safe_slug(lesson.topic)}-{stamp}.md"
 
 
+def lesson_packet_pdf_stem(lesson: LessonInput, materials: list[TierMaterial]) -> str:
+    lesson_identity = asdict(lesson)
+    # created_at is request-time metadata, not artifact content. Excluding it
+    # makes repeated approvals of unchanged lesson material reuse the same PDF.
+    lesson_identity.pop("created_at", None)
+    payload = {"lesson": lesson_identity, "materials": [asdict(material) for material in materials]}
+    digest = hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=True).encode("utf-8")).hexdigest()[:12]
+    return f"lesson-packet-{_safe_slug(lesson.topic)}-{digest}"
+
+
 def write_printable_packet(
     lesson: LessonInput,
     materials: list[TierMaterial],
@@ -1024,6 +1034,37 @@ def write_printable_packet(
     except OSError:
         pass
     return path
+
+
+def write_printable_packet_pdfs(
+    lesson: LessonInput,
+    materials: list[TierMaterial],
+    *,
+    directory: Path | None = None,
+) -> dict[str, Path | dict[str, Path]]:
+    from src.lingua_viva.pdf_generator import artifacts_dir, render_lesson_pdf, render_tier_pdf
+
+    target_dir = directory or artifacts_dir("lesson_packets")
+    target_dir.mkdir(parents=True, exist_ok=True)
+    stem = lesson_packet_pdf_stem(lesson, materials)
+    lesson_dict = asdict(lesson)
+    material_dicts = [asdict(material) for material in materials]
+
+    teacher_path = target_dir / f"{stem}-teacher.pdf"
+    if not teacher_path.exists():
+        render_lesson_pdf(lesson_dict, material_dicts, output_path=teacher_path)
+    tier_paths: dict[str, Path] = {}
+    for material in materials:
+        tier_path = target_dir / f"{stem}-{_safe_slug(material.tier)}.pdf"
+        if not tier_path.exists():
+            render_tier_pdf(material.tier, asdict(material), lesson_dict, output_path=tier_path)
+        tier_paths[material.tier] = tier_path
+    for path in [teacher_path, *tier_paths.values()]:
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            pass
+    return {"teacher": teacher_path, "student_tiers": tier_paths}
 
 
 def printable_packet_hash(markdown: str) -> str:

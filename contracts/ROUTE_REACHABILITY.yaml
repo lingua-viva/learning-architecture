@@ -539,6 +539,22 @@ reachable_from_ui:
       archives the teacher's copy before replacing — never destroys work.
 
 intentionally_backend_only:
+  - route: "POST /api/students/{student_id}/lens/pdf"
+    status: permanent
+    reason: >-
+      Programmatic/share workflow endpoint that materializes a student lens
+      as an immutable, share-scoped PDF and records a deliverable/receipt.
+      UI download control is a later surface; current UI still previews the
+      Drive-safe Markdown route.
+
+  - route: "POST /api/assess/rubric/{unit_id}/pdf"
+    status: permanent
+    reason: >-
+      Programmatic/share workflow endpoint that materializes the existing
+      rubric JSON as an immutable PDF and records a deliverable/receipt.
+      Current Assess UI reads the rubric JSON endpoint; PDF export control is
+      a later surface.
+
   - route: "POST /api/prepare/differentiated-pdf"
     status: permanent
     reason: >-

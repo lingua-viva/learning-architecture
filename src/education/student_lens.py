@@ -159,6 +159,8 @@ _SOURCE_TYPE_TO_EVIDENCE_TYPE = {
 # model_suggested or imported_needs_confirmation item has not been
 # teacher-verified and must never appear in a report as fact.
 REPORT_GRADE_CONFIDENCE = ("teacher_confirmed", "imported_verified")
+LENS_SHARE_AUDIENCES = ("teacher", "family", "hr")
+PERSONAL_SUPPORT_CATEGORIES = {"personal_context"}
 
 VALID_SOURCE_TYPES = (
     "observation",
@@ -450,6 +452,75 @@ def _validate_support_evidence(item: dict) -> None:
     _validate_non_empty_string(item.get("created_by"), "created_by")
     _validate_non_empty_string(item.get("source_observation_id"), "source_observation_id")
     _validate_source_ref_ids(item.get("source_ref_ids"))
+
+
+def _report_grade_support_item(item: dict, *, text_keys: tuple[str, ...]) -> dict | None:
+    if not isinstance(item, dict):
+        return None
+    if item.get("active", True) is False:
+        return None
+    if item.get("confidence", "teacher_confirmed") not in REPORT_GRADE_CONFIDENCE:
+        return None
+    text_value = ""
+    for key in text_keys:
+        value = str(item.get(key) or "").strip()
+        if value:
+            text_value = value
+            break
+    if not text_value:
+        return None
+    allowed = {
+        "id",
+        "text",
+        "summary",
+        "created_at",
+        "created_by",
+        "source_observation_id",
+        "source_ref_ids",
+        "confidence",
+        "evidence_type",
+        "active",
+    }
+    return {key: value for key, value in item.items() if key in allowed}
+
+
+def support_profile_for_audience(profile: dict, audience: str) -> dict:
+    audience = audience if audience in LENS_SHARE_AUDIENCES else "teacher"
+    include_personal = audience == "hr"
+    normalized = _normalize_support_profile(profile)
+    categories: dict[str, dict] = {}
+    text_keys = ("text", "summary", "need_statement", "strategy", "question")
+    for cat_id, cat_data in normalized.get("categories", {}).items():
+        if cat_id in PERSONAL_SUPPORT_CATEGORIES and not include_personal:
+            continue
+        filtered = {
+            "needs": [],
+            "strengths": [],
+            "strategies_worked": [],
+            "strategies_not_worked": [],
+            "evidence": [],
+            "open_questions": [],
+        }
+        for bucket in filtered:
+            kept = []
+            for item in cat_data.get(bucket, []) or []:
+                clean = _report_grade_support_item(item, text_keys=text_keys)
+                if clean is not None:
+                    kept.append(clean)
+            filtered[bucket] = kept
+        if any(filtered.values()) or include_personal:
+            categories[cat_id] = filtered
+    return {
+        "schema_version": normalized.get("schema_version", 2),
+        "share_scope": {
+            "audience": audience,
+            "personal_context_included": include_personal,
+            "unconfirmed_evidence_included": False,
+        },
+        "categories": categories,
+        "last_reviewed_at": normalized.get("last_reviewed_at"),
+        "last_reviewed_by": normalized.get("last_reviewed_by"),
+    }
 
 
 def _validate_support_profile(profile: dict) -> None:
@@ -1528,6 +1599,40 @@ class StudentLensStore:
         ).fetchall()
         lens["observations"] = [self._observation_row_to_dict(r) for r in obs_rows]
         return lens
+
+    def export_lens_view(self, student_id: str, audience: str = "teacher") -> dict:
+        """Share-scoped lens view for teacher/family/HR PDFs.
+
+        Family and teacher views exclude Personal Context and unconfirmed
+        evidence. HR view includes Personal Context but still excludes raw
+        observation narration from the PDF-ready view.
+        """
+        audience = audience if audience in LENS_SHARE_AUDIENCES else "teacher"
+        row = self._get_student_row(student_id, include_deleted=False)
+        if row is None:
+            raise LensNotFoundError(student_id)
+        lens = self._row_to_lens_dict(row)
+        keep = {
+            "student_id",
+            "display_name",
+            "campus",
+            "grade_level",
+            "home_languages",
+            "cefr_snapshot",
+            "cefr_trajectory_30d",
+            "rti_current_tier",
+            "updated_at",
+            "profile_version",
+        }
+        view = {key: lens.get(key) for key in keep}
+        view["support_profile"] = support_profile_for_audience(lens.get("support_profile") or {}, audience)
+        view["share_scope"] = {
+            "audience": audience,
+            "personal_context_included": audience == "hr",
+            "raw_observations_included": False,
+            "unconfirmed_evidence_included": False,
+        }
+        return view
 
     def delete_lens(self, student_id: str, hard: bool = False) -> None:
         """

@@ -496,3 +496,47 @@ def test_add_support_entry_rejects_invalid_source_refs(store):
             created_by="t1",
             source_ref_ids=["valid", ""],
         )
+
+
+def test_export_lens_view_separates_hr_personal_context(store):
+    sid = store.create_lens(display_name="Marco Bianchi")
+    store.add_support_entry(
+        sid,
+        "communication_and_language",
+        "needs",
+        "Needs sentence starters for oral rehearsal.",
+        "teacher-a",
+        source_observation_id="obs-public",
+    )
+    store.add_support_entry(
+        sid,
+        "communication_and_language",
+        "needs",
+        "Draft guess should stay out.",
+        "teacher-a",
+        source_observation_id="obs-draft",
+        confidence="model_suggested",
+    )
+    store.add_support_entry(
+        sid,
+        "personal_context",
+        "needs",
+        "Sensitive family context for HR only.",
+        "teacher-a",
+        source_observation_id="obs-private",
+    )
+
+    teacher_view = store.export_lens_view(sid, "teacher")
+    family_view = store.export_lens_view(sid, "family")
+    hr_view = store.export_lens_view(sid, "hr")
+
+    assert "personal_context" not in teacher_view["support_profile"]["categories"]
+    assert "personal_context" not in family_view["support_profile"]["categories"]
+    assert "personal_context" in hr_view["support_profile"]["categories"]
+    teacher_text = json.dumps(teacher_view)
+    assert "Needs sentence starters" in teacher_text
+    assert "Draft guess" not in teacher_text
+    assert "Sensitive family context" not in teacher_text
+    assert "Sensitive family context" in json.dumps(hr_view)
+    assert teacher_view["share_scope"]["raw_observations_included"] is False
+    assert hr_view["share_scope"]["personal_context_included"] is True

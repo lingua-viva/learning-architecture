@@ -109,6 +109,17 @@ def test_assess_and_publication_status(monkeypatch, tmp_path):
     assert "does not yet reach" not in descriptors
     assert "limited:" not in descriptors
 
+    rubric_pdf = client.post(f"/api/assess/rubric/{unit_id}/pdf")
+    assert rubric_pdf.status_code == 200
+    pdf_body = rubric_pdf.json()
+    pdf_path = Path(pdf_body["file_path"])
+    assert pdf_path.read_bytes().startswith(b"%PDF")
+    assert pdf_body["deliverable"]["type"] == "assessment"
+    assert pdf_body["deliverable"]["deliverable_id"] in pdf_body["audit_receipt"]["deliverable_ids"]
+    repeated_pdf = client.post(f"/api/assess/rubric/{unit_id}/pdf")
+    assert repeated_pdf.status_code == 200
+    assert repeated_pdf.json()["file_path"] == pdf_body["file_path"]
+
     publication = client.get("/api/publication/status")
     assert publication.status_code == 200
     assert publication.json()["claim_count"] >= 1

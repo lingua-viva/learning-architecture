@@ -3394,6 +3394,77 @@ async def student_lens_markdown_preview(student_id: str):
     }
 
 
+@app.post("/api/students/{student_id}/lens/pdf")
+async def student_lens_pdf_export(student_id: str, payload: dict):
+    from src.education.student_lens import LENS_SHARE_AUDIENCES
+    from src.lingua_viva.audit_receipts.builder import build_receipt
+    from src.lingua_viva.deliverables.schema import (
+        DeliverableLocation,
+        DeliverableRecord,
+        compute_deliverable_id,
+    )
+    from src.lingua_viva.deliverables.store import upsert_deliverable
+    from src.lingua_viva.pdf_generator import artifacts_dir, render_student_lens_pdf
+
+    audience = str(payload.get("audience") or "teacher").strip().lower()
+    if audience not in LENS_SHARE_AUDIENCES:
+        return JSONResponse({"error": "audience must be teacher, family, or hr"}, status_code=400)
+
+    def build(store):
+        view = store.export_lens_view(student_id, audience)
+        stable_payload = {"audience": audience, "view": view}
+        artifact_hash = hashlib.sha256(
+            json.dumps(stable_payload, sort_keys=True, ensure_ascii=True).encode("utf-8")
+        ).hexdigest()
+        safe_student = re.sub(r"[^A-Za-z0-9_-]+", "-", student_id).strip("-") or "student"
+        path = artifacts_dir("student_lenses") / f"student-lens-{safe_student}-{audience}-{artifact_hash[:12]}.pdf"
+        if not path.exists():
+            render_student_lens_pdf(view, audience=audience, output_path=path)
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            pass
+        return view, path, artifact_hash
+
+    try:
+        view, path, artifact_hash = await asyncio.to_thread(_with_student_store, build)
+    except Exception:
+        return JSONResponse({"error": "Student lens could not be exported."}, status_code=404)
+
+    trace_id = f"student-lens-{student_id}-{audience}-{uuid.uuid4().hex[:12]}"
+    deliverable_id = compute_deliverable_id(trace_id, "")
+    deliverable = DeliverableRecord(
+        deliverable_id=deliverable_id,
+        session_id=broadcaster.session_id or "",
+        trace_id=trace_id,
+        type="student_lens",
+        title=f"Student lens PDF: {view.get('display_name') or student_id} ({audience})",
+        status="created",
+        location=DeliverableLocation(kind="local_path", path=str(path)),
+        source_record_ids=[student_id],
+        summary="Share-scoped student lens PDF. Personal Context is HR-only.",
+        content_hash=artifact_hash,
+    )
+    upsert_deliverable(deliverable)
+    receipt = build_receipt(
+        scope="student_lens",
+        session_id=broadcaster.session_id or "",
+        trace_id=trace_id,
+        deliverable_id=deliverable_id,
+        source_record_ids=[student_id],
+        export_format="pdf",
+        export_path=str(path),
+    )
+    return {
+        "student_id": student_id,
+        "audience": audience,
+        "file_path": str(path),
+        "share_scope": view.get("share_scope"),
+        "deliverable": deliverable.as_dict(),
+        "audit_receipt": receipt.as_dict(),
+    }
+
+
 @app.post("/api/audit-receipts/export")
 async def audit_receipts_export(payload: dict):
     from src.lingua_viva.audit_receipts.builder import build_receipt
@@ -6024,10 +6095,10 @@ async def lesson_materials_packet_approve(request: Request, payload: dict):
         generate_lesson_materials,
         material_from_dict,
         materials_as_dicts,
-        printable_packet_hash,
         render_packet_bundle,
         share_packet_to_drive,
         write_printable_packet,
+        write_printable_packet_pdfs,
     )
 
     teacher_id = effective_teacher_id(request, str(payload.get("teacher_id") or "local-teacher"))
@@ -6076,12 +6147,19 @@ async def lesson_materials_packet_approve(request: Request, payload: dict):
         return JSONResponse({"error": "approval_failed", "detail": str(exc)}, status_code=422)
 
     try:
-        path = await asyncio.to_thread(
+        markdown_path = await asyncio.to_thread(
             write_printable_packet,
             lesson,
             materials,
             individual_support=individual_support,
         )
+        pdfs = await asyncio.to_thread(
+            write_printable_packet_pdfs,
+            lesson,
+            materials,
+        )
+        teacher_pdf = Path(pdfs["teacher"])
+        tier_pdfs = {tier: str(path) for tier, path in dict(pdfs["student_tiers"]).items()}
         packet = render_packet_bundle(
             lesson,
             materials,
@@ -6107,10 +6185,10 @@ async def lesson_materials_packet_approve(request: Request, payload: dict):
         type="lesson_material_packet",
         title=f"Printable lesson packet: {lesson.topic}",
         status="created",
-        location=DeliverableLocation(kind="local_path", path=str(path)),
+        location=DeliverableLocation(kind="local_path", path=str(teacher_pdf)),
         source_record_ids=source_ids,
-        summary="Teacher-approved printable lesson packet. Local until explicitly shared.",
-        content_hash=printable_packet_hash(markdown),
+        summary="Teacher-approved printable lesson packet PDFs. Local until explicitly shared.",
+        content_hash=hashlib.sha256(teacher_pdf.read_bytes()).hexdigest(),
     )
     upsert_deliverable(deliverable)
     receipt = build_receipt(
@@ -6143,7 +6221,9 @@ async def lesson_materials_packet_approve(request: Request, payload: dict):
             "html": packet["html"],
             "print_html": packet["print_html"],
             "student_print_html": packet["student_print_html"],
-            "file_path": str(path),
+            "file_path": str(teacher_pdf),
+            "markdown_path": str(markdown_path),
+            "pdf_paths": {"teacher": str(teacher_pdf), "student_tiers": tier_pdfs},
             "printable": True,
         },
         "materials": materials_as_dicts(materials),
@@ -6317,6 +6397,68 @@ async def assess_rubric(unit_id: str):
             "cefr_language": f"Designed to target {lesson.cefr_target} listening and speaking.",
             "source_citation": unit["source_citation"],
         },
+    }
+
+
+@app.post("/api/assess/rubric/{unit_id}/pdf")
+async def assess_rubric_pdf(unit_id: str):
+    from src.lingua_viva.audit_receipts.builder import build_receipt
+    from src.lingua_viva.deliverables.schema import (
+        DeliverableLocation,
+        DeliverableRecord,
+        compute_deliverable_id,
+    )
+    from src.lingua_viva.deliverables.store import upsert_deliverable
+    from src.lingua_viva.pdf_generator import artifacts_dir, render_simple_artifact_pdf
+
+    rubric = await assess_rubric(unit_id)
+    if isinstance(rubric, JSONResponse):
+        return rubric
+    assessment = dict(rubric["assessment"])
+    unit = rubric["unit"]
+    assessment["title"] = f"Rubric: {unit['title']}"
+    artifact_hash = hashlib.sha256(
+        json.dumps({"unit": unit, "assessment": assessment}, sort_keys=True, ensure_ascii=True).encode("utf-8")
+    ).hexdigest()
+    safe_unit = re.sub(r"[^A-Za-z0-9_-]+", "-", unit_id).strip("-") or "unit"
+    path = artifacts_dir("assessments") / f"rubric-{safe_unit}-{artifact_hash[:12]}.pdf"
+    if not path.exists():
+        await asyncio.to_thread(render_simple_artifact_pdf, assessment, artifact_type="assessment", output_path=path)
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+
+    trace_id = f"assessment-rubric-{unit_id}-{uuid.uuid4().hex[:12]}"
+    deliverable_id = compute_deliverable_id(trace_id, "")
+    deliverable = DeliverableRecord(
+        deliverable_id=deliverable_id,
+        session_id=broadcaster.session_id or "",
+        trace_id=trace_id,
+        type="assessment",
+        title=assessment["title"],
+        status="created",
+        location=DeliverableLocation(kind="local_path", path=str(path)),
+        source_record_ids=[unit_id],
+        summary="Teacher-created assessment rubric PDF.",
+        content_hash=artifact_hash,
+    )
+    upsert_deliverable(deliverable)
+    receipt = build_receipt(
+        scope="assessment",
+        session_id=broadcaster.session_id or "",
+        trace_id=trace_id,
+        deliverable_id=deliverable_id,
+        source_record_ids=[unit_id],
+        export_format="pdf",
+        export_path=str(path),
+    )
+    return {
+        "unit": unit,
+        "assessment_id": assessment["assessment_id"],
+        "file_path": str(path),
+        "deliverable": deliverable.as_dict(),
+        "audit_receipt": receipt.as_dict(),
     }
 
 

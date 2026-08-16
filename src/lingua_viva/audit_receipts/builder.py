@@ -12,6 +12,8 @@ LOCAL_EVIDENCE_SCOPES = {
     "portfolio_entry",
     "cohort_lesson_plan",
     "lesson_material_packet",
+    "student_lens",
+    "assessment",
 }
 
 
