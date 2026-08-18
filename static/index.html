@@ -176,6 +176,22 @@
       font-size: 20px;
       margin: 0;
     }
+    .topbar-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .sir-topbar-photo {
+      width: 96px;
+      height: 44px;
+      object-fit: cover;
+      border-radius: 6px;
+      border: 1px solid var(--line);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, .08);
+      flex: 0 0 auto;
+    }
     .role-pill, .badge {
       display: inline-flex;
       align-items: center;
@@ -658,6 +674,14 @@
       .content {
         padding: 18px 14px 28px;
       }
+      .topbar {
+        align-items: flex-start;
+        padding: 10px 14px;
+      }
+      .sir-topbar-photo {
+        width: 76px;
+        height: 36px;
+      }
       .app {
         padding-right: var(--lv-voice-collapsed-width);
       }
@@ -741,7 +765,8 @@
     <main class="main">
       <div class="topbar">
         <h1 id="view-title">Plan</h1>
-        <div class="row">
+        <div class="topbar-actions">
+          <img src="/assets/still-i-rise-topbar.jpg" alt="Still I Rise students" class="sir-topbar-photo">
           <span id="route-badge" class="role-pill">local route</span>
           <button id="change-role" type="button">Change role</button>
         </div>
@@ -1682,7 +1707,7 @@
         : `<h2>Good morning.</h2><p>Set up your schedule in Settings → My Schedule to see today's plan.</p>`;
       const showSourcesNudge = !data.filemap && localStorage.getItem(SOURCES_SKIP_KEY) !== "1";
       $("content").innerHTML = `
-        <div class="view-head"><div>${planHtml}</div><span class="badge ${data.health?.status === "OK" ? "ok" : "warn"}">System: ${escapeHtml(data.health?.status || "WARN")}</span></div>
+        <div class="view-head"><div>${planHtml}</div></div>
         ${showSourcesNudge ? `
         <div class="panel" id="sources-nudge" style="margin-bottom:14px;">
           <h3>Connect your teaching folders</h3>
@@ -1704,7 +1729,7 @@
             <button id="home-students" type="button">Go to Students</button>
           </div>
           <div class="panel"><h3>This week</h3><p>${data.recent.observations_this_week} observations captured</p><p>Last reflection: ${escapeHtml(data.recent.last_reflection || "not recorded")}</p></div>
-          <div class="panel"><h3>Health</h3><p>${escapeHtml(data.health?.summary || "")}</p></div>
+          <div class="panel"><h3>Ready for class</h3><p>Capture an observation, review student lenses, or prepare a differentiated activity when you are ready.</p></div>
         </div>`;
       if (showSourcesNudge) {
         $("nudge-open-sources").addEventListener("click", () => { state.view = "sources"; renderShell(); renderView(); });
