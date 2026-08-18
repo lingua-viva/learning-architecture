@@ -2034,11 +2034,10 @@ def _perplexity_api_key() -> str:
         configured = service_api_key("perplexity")
     except Exception:
         configured = None
-    return (
-        configured
-        or os.environ.get("PERPLEXITY_API_KEY", "")
-        or _BUNDLED_PERPLEXITY_KEY
-    ).strip()
+    key = configured or os.environ.get("PERPLEXITY_API_KEY", "")
+    if not key and not os.environ.get("CI"):
+        key = _BUNDLED_PERPLEXITY_KEY
+    return key.strip()
 
 
 def _ask_payload_text(question: str, history: list[dict]) -> str:
