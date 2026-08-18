@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import platform
+import subprocess
 from pathlib import Path
 from typing import Optional
 from urllib import error, request
@@ -14,6 +16,7 @@ from urllib import error, request
 # with qwen3:8b and token_count=0 (the teacher got a timeout, not an answer).
 # Keep in sync with LOCAL_PREFERENCE in src/pipeline.py.
 LOCAL_MODEL_PREFERENCE = [
+    "nemotron-3.5-lightning",  # 30B MoE, 3B active — 3.9x faster than dense on GPU
     "phi4:14b",
     "qwen2.5:14b",
     "llama3.1:8b",
@@ -24,6 +27,165 @@ LOCAL_MODEL_PREFERENCE = [
     "qwen3:8b",
 ]
 CLOUD_FALLBACK = "kimi-k2.7-code:cloud"
+
+
+# ---------------------------------------------------------------------------
+# Hardware-adaptive model selection (ported from Mission Canvas onboarding.py)
+# ---------------------------------------------------------------------------
+# Tier thresholds and model sizes verified against ollama.com/library.
+
+_TIER_MODEL_MAP = {
+    "ultra_gpu":  "nemotron-3.5-lightning",  # 23.7GB, >=32GB usable GPU memory
+    "strong_gpu": "qwen2.5:14b",    # 9.0GB, fits 12GB+ VRAM with headroom
+    "mid_gpu":    "qwen2.5:7b",     # 4.7GB, fits 6GB+ VRAM with headroom
+    "weak_gpu":   "qwen2.5:3b",     # 1.9GB, fits 3-6GB VRAM
+    "cpu_only":   "qwen2.5:3b",     # 1.9GB, fastest CPU option
+}
+
+
+def _estimate_gpu_gb() -> float:
+    """Estimate usable GPU memory in GB without requiring Ollama.
+
+    NVIDIA via nvidia-smi (all platforms), AMD via sysfs (Linux),
+    Apple Silicon via unified memory. Falls through to 0.0 (cpu_only)."""
+    # NVIDIA
+    try:
+        out = subprocess.run(
+            ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=3,
+        )
+        if out.returncode == 0 and out.stdout.strip():
+            return int(out.stdout.strip().splitlines()[0]) / 1e3  # MiB -> GB
+    except Exception:
+        pass
+    # Windows AMD/Intel: display-class registry
+    if platform.system() == "Windows":
+        gb = _windows_gpu_gb()
+        if gb > 0.0:
+            return gb
+    # Linux AMD: sysfs VRAM + GTT (APU) or VRAM-only (discrete)
+    if platform.system() == "Linux":
+        for card in sorted(Path("/sys/class/drm").glob("card*/device/mem_info_vram_total")):
+            try:
+                vram_gb = int(card.read_text().strip()) / 1e9
+                gtt_path = card.parent / "mem_info_gtt_total"
+                gtt_gb = int(gtt_path.read_text().strip()) / 1e9 if gtt_path.exists() else 0.0
+                if gtt_gb > vram_gb:
+                    return vram_gb + gtt_gb  # APU: inference spills into GTT
+                else:
+                    return vram_gb  # Discrete: VRAM-bandwidth-bound
+            except (ValueError, OSError):
+                continue
+    # Apple Silicon: unified memory
+    if platform.system() == "Darwin" and platform.machine() == "arm64":
+        return _system_ram_gb()
+    return 0.0
+
+
+def _windows_gpu_gb() -> float:
+    """Read GPU memory from Windows display-class registry (vendor-agnostic).
+    Win32_VideoController.AdapterRAM is deliberately NOT used — it's a 32-bit
+    value that caps at 4GB."""
+    if platform.system() != "Windows":
+        return 0.0
+    try:
+        import winreg
+    except ImportError:
+        return 0.0
+    best = 0.0
+    try:
+        klass = winreg.OpenKey(
+            winreg.HKEY_LOCAL_MACHINE,
+            r"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}",
+        )
+    except OSError:
+        return 0.0
+    try:
+        for i in range(64):
+            try:
+                subname = winreg.EnumKey(klass, i)
+                sub = winreg.OpenKey(klass, subname)
+                try:
+                    val, _ = winreg.QueryValueEx(sub, "HardwareInformation.qwMemorySize")
+                    if isinstance(val, int) and val > 0:
+                        best = max(best, val / 1e9)
+                except OSError:
+                    pass
+                finally:
+                    winreg.CloseKey(sub)
+            except OSError:
+                continue
+    finally:
+        winreg.CloseKey(klass)
+    return best
+
+
+def _system_ram_gb() -> float:
+    """Total physical RAM in GB."""
+    try:
+        if platform.system() == "Linux":
+            with open("/proc/meminfo", encoding="utf-8") as f:
+                for line in f:
+                    if line.startswith("MemTotal"):
+                        return int(line.split()[1]) / 1e6
+        elif platform.system() == "Darwin":
+            out = subprocess.run(
+                ["sysctl", "-n", "hw.memsize"],
+                capture_output=True, text=True, timeout=5,
+            )
+            return int(out.stdout.strip()) / 1e9
+        else:
+            import ctypes
+
+            class MEMORYSTATUSEX(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+
+            stat = MEMORYSTATUSEX()
+            stat.dwLength = ctypes.sizeof(stat)
+            ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat))  # type: ignore[attr-defined]
+            return stat.ullTotalPhys / 1e9
+    except Exception:
+        pass
+    return 0.0
+
+
+def gpu_tier() -> str:
+    """Map detected GPU memory to a hardware tier."""
+    gb = _estimate_gpu_gb()
+    if gb >= 32:
+        return "ultra_gpu"
+    if gb >= 12:
+        return "strong_gpu"
+    if gb >= 6:
+        return "mid_gpu"
+    if gb >= 3:
+        return "weak_gpu"
+    return "cpu_only"
+
+
+def recommended_model(installed_models: list[str] | None = None) -> str:
+    """Return the best Ollama model for this machine's hardware.
+
+    For ultra_gpu tier: nemotron requires a consent-gated 23.7GB pull, so
+    only return it if it's already installed. Otherwise fall back to
+    strong_gpu recommendation. Same download process as Mission Canvas."""
+    tier = gpu_tier()
+    if tier == "ultra_gpu":
+        models = installed_models or []
+        if any("nemotron" in m for m in models):
+            return "nemotron-3.5-lightning"
+        return _TIER_MODEL_MAP["strong_gpu"]
+    return _TIER_MODEL_MAP.get(tier, "qwen2.5:3b")
 
 SUPPORTED_PROVIDERS = {
     "openai": {
@@ -272,13 +434,36 @@ def list_ollama_models(timeout: int = 5) -> list[str]:
     return [name for name in names if isinstance(name, str)]
 
 
+def _model_installed(model: str, installed: set[str]) -> bool:
+    """Check if a model name matches any installed tag.
+    Handles the :latest suffix: 'nemotron-3.5-lightning' matches
+    'nemotron-3.5-lightning:latest'."""
+    if model in installed:
+        return True
+    if f"{model}:latest" in installed:
+        return True
+    # Also match a tagless request against any tag of the base name
+    if ":" not in model:
+        return any(m.split(":")[0] == model for m in installed)
+    return False
+
+
 def detect_model(installed_models: list[str] | None = None) -> str | None:
+    """Pick the best installed model, preferring the hardware-recommended one.
+
+    If the hardware-recommended model is installed, use it directly (skips the
+    static preference list). Otherwise walk LOCAL_MODEL_PREFERENCE as before."""
     try:
         installed = set(installed_models if installed_models is not None else list_ollama_models())
     except (error.URLError, ConnectionError, TimeoutError, OSError, json.JSONDecodeError):
         return None
+    # Hardware-aware pick: if the recommended model for this GPU is installed, use it
+    rec = recommended_model(list(installed))
+    if _model_installed(rec, installed):
+        return f"ollama/{rec}"
+    # Fallback: walk the static preference list
     for model in LOCAL_MODEL_PREFERENCE:
-        if model in installed:
+        if _model_installed(model, installed):
             return f"ollama/{model}"
     return f"ollama/{CLOUD_FALLBACK}"
 
@@ -382,4 +567,27 @@ def connect_provider(provider: str, api_key: str, model: Optional[str] = None) -
 
 
 def disconnect_provider() -> None:
-    provider_config_path().unlink(missing_ok=True)
+    """Remove external provider config, preserving service keys (perplexity, rime).
+
+    The old implementation deleted the entire file, which nuked perplexity and
+    rime API keys set via Settings — a teacher disconnecting 'groq' shouldn't
+    lose their Ask configuration."""
+    config = read_provider_config()
+    if not config:
+        return
+    # Preserve service-key fields
+    preserved = {}
+    for field in SERVICE_KEY_FIELDS.values():
+        val = config.get(field)
+        if isinstance(val, str) and val.strip():
+            preserved[field] = val
+    if not preserved:
+        provider_config_path().unlink(missing_ok=True)
+        return
+    # Write back only the service keys
+    config_path = provider_config_path()
+    tmp_path = config_path.with_suffix(".json.tmp")
+    with tmp_path.open("w", encoding="utf-8") as handle:
+        json.dump(preserved, handle)
+    os.chmod(tmp_path, 0o600)
+    os.replace(tmp_path, config_path)

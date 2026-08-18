@@ -1,16 +1,13 @@
-"""Tests for mc_push's live-verification + site-pin bump helpers.
+"""Tests for mc_push's live-verification helpers.
 
-Why this exists (2026-07-26): the 07-25 ship found `_verify_live()` grepped
-for ANY desktop-v string and returned True on every branch — "Shipped ✓" was
-reported while docs/index.html sat two releases stale (0.2.7 vs 0.2.9).
-The same session in Mission Canvas caught an INDEX row claiming "built"
-before the code existed. Same lesson both times: a status claim must be
-compared against the exact expected state, not pattern-matched for presence.
-
-These tests pin the pure helpers so the trap can't silently reopen.
+Updated 2026-08-17: synced mc_push.py from Mission Canvas. The old
+_bump_site_pins / _check_site_pins helpers are gone — auto-release.yml
+handles site pinning in CI now. Tests updated to cover the current
+_verify_live and _stale_vs_main functions.
 """
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 
@@ -30,62 +27,9 @@ mc_push = _load_mc_push()
 
 
 SITE_HTML = """
-<a href="https://github.com/lingua-viva/learning-architecture/releases/download/desktop-v0.2.7/LinguaViva-Setup.exe">Windows</a>
-<a href="https://github.com/lingua-viva/learning-architecture/releases/download/desktop-v0.2.7/LinguaViva.dmg">macOS</a>
+<a href="https://github.com/lingua-viva/learning-architecture/releases/download/desktop-v0.2.60/LinguaViva-Setup.exe">Windows</a>
+<a href="https://github.com/lingua-viva/learning-architecture/releases/download/desktop-v0.2.60/LinguaViva.dmg">macOS</a>
 """
-
-
-class TestBumpSitePins:
-    def test_rewrites_every_pin(self):
-        new_html, count = mc_push._bump_site_pins(SITE_HTML, "desktop-v0.2.9")
-        assert count == 2
-        assert "desktop-v0.2.7" not in new_html
-        assert new_html.count("desktop-v0.2.9") == 2
-
-    def test_idempotent_on_current_tag(self):
-        once, _ = mc_push._bump_site_pins(SITE_HTML, "desktop-v0.2.9")
-        twice, count = mc_push._bump_site_pins(once, "desktop-v0.2.9")
-        assert twice == once
-        assert count == 2  # re-matched, but content unchanged
-
-    def test_mixed_stale_pins_all_converge(self):
-        html = SITE_HTML + '<a href=".../desktop-v0.1.0/x">old</a>'
-        new_html, count = mc_push._bump_site_pins(html, "desktop-v0.3.0")
-        assert count == 3
-        assert set(__import__("re").findall(r"desktop-v[\d.]+", new_html)) == {
-            "desktop-v0.3.0"
-        }
-
-    def test_no_pins_is_a_noop(self):
-        new_html, count = mc_push._bump_site_pins("<p>no links</p>", "desktop-v1.0.0")
-        assert count == 0
-        assert new_html == "<p>no links</p>"
-
-
-class TestCheckSitePins:
-    def test_stale_pin_detected(self):
-        served, stale = mc_push._check_site_pins(SITE_HTML, "desktop-v0.2.9")
-        assert served == ["desktop-v0.2.7"]
-        assert stale == ["desktop-v0.2.7"]
-
-    def test_current_pin_passes(self):
-        html, _ = mc_push._bump_site_pins(SITE_HTML, "desktop-v0.2.9")
-        served, stale = mc_push._check_site_pins(html, "desktop-v0.2.9")
-        assert served == ["desktop-v0.2.9"]
-        assert stale == []
-
-    def test_mixed_pins_flag_only_stale(self):
-        html = SITE_HTML.replace(
-            "desktop-v0.2.7/LinguaViva.dmg", "desktop-v0.2.9/LinguaViva.dmg"
-        )
-        served, stale = mc_push._check_site_pins(html, "desktop-v0.2.9")
-        assert served == ["desktop-v0.2.7", "desktop-v0.2.9"]
-        assert stale == ["desktop-v0.2.7"]
-
-    def test_no_pins_at_all(self):
-        served, stale = mc_push._check_site_pins("<p>empty</p>", "desktop-v0.2.9")
-        assert served == []
-        assert stale == []
 
 
 class TestVerifyLive:
@@ -94,43 +38,83 @@ class TestVerifyLive:
     def _ctx(self):
         ctx = mc_push.Context()
         ctx.site_url = "https://linguaviva.art"
+        ctx.gh_repo = "lingua-viva/learning-architecture"
         return ctx
+
+    def test_matching_tag_passes(self, monkeypatch):
+        monkeypatch.setattr(mc_push, "run_quiet", lambda cmd, cwd=None: (0, SITE_HTML))
+        assert mc_push._verify_live(self._ctx(), "desktop-v0.2.60",
+                                    attempts=1, delay=0) is True
 
     def test_stale_pin_fails_with_expected_tag(self, monkeypatch):
         monkeypatch.setattr(mc_push, "run_quiet", lambda cmd, cwd=None: (0, SITE_HTML))
-        assert mc_push._verify_live(self._ctx(), "desktop-v0.2.9") is False
+        assert mc_push._verify_live(self._ctx(), "desktop-v0.2.99",
+                                    attempts=1, delay=0) is False
 
     def test_no_pin_fails_with_expected_tag(self, monkeypatch):
         monkeypatch.setattr(mc_push, "run_quiet", lambda cmd, cwd=None: (0, "<p></p>"))
-        assert mc_push._verify_live(self._ctx(), "desktop-v0.2.9") is False
+        assert mc_push._verify_live(self._ctx(), "desktop-v0.2.60",
+                                    attempts=1, delay=0) is False
 
-    def test_correct_pin_and_live_assets_pass(self, monkeypatch):
-        html, _ = mc_push._bump_site_pins(SITE_HTML, "desktop-v0.2.9")
-
-        def fake_run_quiet(cmd, cwd=None):
-            if cmd.startswith("curl -sI"):
-                return 0, "200"
-            return 0, html
-
-        monkeypatch.setattr(mc_push, "run_quiet", fake_run_quiet)
-        assert mc_push._verify_live(self._ctx(), "desktop-v0.2.9") is True
-
-    def test_dead_download_url_fails(self, monkeypatch):
-        html, _ = mc_push._bump_site_pins(SITE_HTML, "desktop-v0.2.9")
-
-        def fake_run_quiet(cmd, cwd=None):
-            if cmd.startswith("curl -sI"):
-                return 0, "404"
-            return 0, html
-
-        monkeypatch.setattr(mc_push, "run_quiet", fake_run_quiet)
-        assert mc_push._verify_live(self._ctx(), "desktop-v0.2.9") is False
-
-    def test_unreachable_site_stays_nonfatal(self, monkeypatch):
-        monkeypatch.setattr(mc_push, "run_quiet", lambda cmd, cwd=None: (1, ""))
-        assert mc_push._verify_live(self._ctx(), "desktop-v0.2.9") is True
-
-    def test_no_expected_tag_never_fails(self, monkeypatch):
-        # MC auto-release path: informational only, legacy behavior preserved.
+    def test_no_expected_tag_reports_whatever_is_live(self, monkeypatch):
         monkeypatch.setattr(mc_push, "run_quiet", lambda cmd, cwd=None: (0, SITE_HTML))
-        assert mc_push._verify_live(self._ctx(), None) is True
+        assert mc_push._verify_live(self._ctx(), None, attempts=1, delay=0) is True
+
+    def test_no_tag_on_site_fails_without_expected(self, monkeypatch):
+        monkeypatch.setattr(mc_push, "run_quiet", lambda cmd, cwd=None: (0, "<p></p>"))
+        assert mc_push._verify_live(self._ctx(), None, attempts=1, delay=0) is False
+
+    def test_unreachable_site_fails(self, monkeypatch):
+        monkeypatch.setattr(mc_push, "run_quiet", lambda cmd, cwd=None: (1, ""))
+        assert mc_push._verify_live(self._ctx(), "desktop-v0.2.60",
+                                    attempts=1, delay=0) is False
+
+
+class TestContextDetect:
+    """Verify context detection classifies repos correctly."""
+
+    def test_lv_context_detects_auto_release(self, tmp_path):
+        # Simulate LV repo structure
+        (tmp_path / "desktop").mkdir()
+        (tmp_path / "desktop" / "package.json").write_text(
+            json.dumps({"name": "lingua-viva", "version": "0.2.60"})
+        )
+        (tmp_path / ".github" / "workflows").mkdir(parents=True)
+        (tmp_path / ".github" / "workflows" / "auto-release.yml").write_text("on: push")
+        (tmp_path / ".git").mkdir()
+
+        ctx = mc_push.Context()
+        ctx.repo_root = tmp_path
+        ctx._detect_lv()
+        assert ctx.kind == "lingua-viva"
+        assert ctx.has_auto_release is True
+        assert ctx.site_url == "https://linguaviva.art"
+        assert ctx.gh_repo == "lingua-viva/learning-architecture"
+
+
+class TestFreshnessRecording:
+    """Verify three-state freshness verdicts."""
+
+    def test_fresh_is_not_stale(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(mc_push, "FRESHNESS_FILE", tmp_path / "f.json")
+        is_stale, msg = mc_push._record_freshness("fresh", "all good")
+        assert is_stale is False
+        assert "all good" in msg
+
+    def test_stale_is_stale(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(mc_push, "FRESHNESS_FILE", tmp_path / "f.json")
+        is_stale, msg = mc_push._record_freshness("stale", "behind")
+        assert is_stale is True
+
+    def test_unknown_is_not_stale(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(mc_push, "FRESHNESS_FILE", tmp_path / "f.json")
+        is_stale, msg = mc_push._record_freshness("unknown", "unreachable")
+        assert is_stale is False
+
+    def test_invalid_state_degrades_to_unknown(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(mc_push, "FRESHNESS_FILE", tmp_path / "f.json")
+        is_stale, msg = mc_push._record_freshness("bogus", "typo")
+        assert is_stale is False
+        assert "unrecognised" in msg
+        data = json.loads((tmp_path / "f.json").read_text())
+        assert data["state"] == "unknown"

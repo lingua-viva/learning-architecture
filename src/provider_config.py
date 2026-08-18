@@ -99,7 +99,9 @@ def connect_provider(provider: str, api_key: str, model: Optional[str] = None) -
 
 
 def disconnect_provider() -> None:
-    _provider_config_path().unlink(missing_ok=True)
+    """Remove external provider config, preserving service keys."""
+    from src.lingua_viva.config import disconnect_provider as _real
+    _real()
 
 
 __all__ = [

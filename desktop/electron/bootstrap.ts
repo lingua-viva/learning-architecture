@@ -9,6 +9,15 @@ import path from "node:path";
 export const DEFAULT_PORT = 8787;
 export const DEFAULT_MODEL = "qwen2.5:3b";
 
+// Hardware-tier model map (same as MC onboarding.py and LV config.py)
+const TIER_MODEL_MAP: Record<string, { model: string; sizeLabel: string }> = {
+  ultra_gpu:  { model: "nemotron-3.5-lightning", sizeLabel: "23.7 GB" },
+  strong_gpu: { model: "qwen2.5:14b",           sizeLabel: "9.0 GB" },
+  mid_gpu:    { model: "qwen2.5:7b",            sizeLabel: "4.7 GB" },
+  weak_gpu:   { model: "qwen2.5:3b",            sizeLabel: "1.9 GB" },
+  cpu_only:   { model: "qwen2.5:3b",            sizeLabel: "1.9 GB" },
+};
+
 export type BootstrapCheck = {
   ok: boolean;
   detail: string;
@@ -18,6 +27,59 @@ export type BackendHandle = {
   process: ChildProcessWithoutNullStreams;
   url: string;
 };
+
+// --- GPU detection (ported from MC onboarding.py) ---
+
+function estimateGpuGb(): number {
+  // NVIDIA via nvidia-smi
+  try {
+    const out = execFileSync("nvidia-smi",
+      ["--query-gpu=memory.total", "--format=csv,noheader,nounits"],
+      { encoding: "utf8", timeout: 3000 });
+    const mib = parseInt(out.trim().split("\n")[0], 10);
+    if (mib > 0) return mib / 1000;
+  } catch { /* no nvidia-smi */ }
+
+  // Linux AMD: sysfs VRAM (+ GTT for APU)
+  if (process.platform === "linux") {
+    try {
+      const { readdirSync, readFileSync } = require("node:fs") as typeof import("node:fs");
+      const drmBase = "/sys/class/drm";
+      for (const card of readdirSync(drmBase).sort()) {
+        const vramPath = path.join(drmBase, card, "device", "mem_info_vram_total");
+        try {
+          const vramGb = parseInt(readFileSync(vramPath, "utf8").trim(), 10) / 1e9;
+          const gttPath = path.join(drmBase, card, "device", "mem_info_gtt_total");
+          let gttGb = 0;
+          try { gttGb = parseInt(readFileSync(gttPath, "utf8").trim(), 10) / 1e9; } catch { /* no GTT */ }
+          return gttGb > vramGb ? vramGb + gttGb : vramGb;
+        } catch { continue; }
+      }
+    } catch { /* no sysfs */ }
+  }
+
+  // Apple Silicon: unified memory = GPU shares system RAM
+  if (process.platform === "darwin" && os.arch() === "arm64") {
+    return os.totalmem() / 1e9;
+  }
+
+  return 0;
+}
+
+function gpuTier(): string {
+  const gb = estimateGpuGb();
+  if (gb >= 32) return "ultra_gpu";
+  if (gb >= 12) return "strong_gpu";
+  if (gb >= 6) return "mid_gpu";
+  if (gb >= 3) return "weak_gpu";
+  return "cpu_only";
+}
+
+export function recommendedModel(): { model: string; tier: string; sizeLabel: string } {
+  const tier = gpuTier();
+  const entry = TIER_MODEL_MAP[tier] || TIER_MODEL_MAP.cpu_only;
+  return { model: entry.model, tier, sizeLabel: entry.sizeLabel };
+}
 
 // --- Low-level helpers ---
 
@@ -108,7 +170,7 @@ async function ollamaHasModel(model: string): Promise<boolean> {
   }
 }
 
-export async function ensureOllamaModel(model = DEFAULT_MODEL): Promise<BootstrapCheck> {
+export async function ensureOllamaModel(model?: string): Promise<BootstrapCheck> {
   // P1-1 (Claudia QA 2026-08-03): this used to be a 120s CLI pull, called
   // fire-and-forget. A ~2GB model on school wifi takes far longer than 120s,
   // so the pull timed out silently and the teacher ended up with no model and
@@ -119,6 +181,25 @@ export async function ensureOllamaModel(model = DEFAULT_MODEL): Promise<Bootstra
   if (!available.ok) {
     return { ok: false, detail: "Ollama is not installed or not on PATH." };
   }
+
+  // Hardware-aware model selection (same process as Mission Canvas):
+  // detect GPU tier, pick the right model. For ultra_gpu (nemotron), only
+  // use it if already installed — the 23.7GB pull requires explicit consent
+  // from the setup wizard. Otherwise fall back to strong_gpu tier.
+  if (!model) {
+    const rec = recommendedModel();
+    if (rec.tier === "ultra_gpu") {
+      // Only use nemotron if already installed (consent-gated)
+      if (await ollamaHasModel(rec.model)) {
+        model = rec.model;
+      } else {
+        model = TIER_MODEL_MAP.strong_gpu.model;
+      }
+    } else {
+      model = rec.model;
+    }
+  }
+
   if (await ollamaHasModel(model)) {
     return { ok: true, detail: `Model ${model} already available.` };
   }

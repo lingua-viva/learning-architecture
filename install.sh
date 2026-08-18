@@ -61,6 +61,60 @@ echo "  ✓ Detected: ${PLATFORM}-${ARCH}"
 # which made git refuse to clone into it ("already exists and is not empty").
 mkdir -p "${HOME}/.local/bin"
 
+# Hardware-adaptive model selection (same process as Mission Canvas).
+# Detect GPU memory, pick the right tier. Nemotron (ultra_gpu) requires
+# explicit consent due to its 23.7GB download — auto-pull only for smaller tiers.
+detect_gpu_gb() {
+  # NVIDIA
+  if command -v nvidia-smi >/dev/null 2>&1; then
+    MIB=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -1)
+    if [ -n "$MIB" ] && [ "$MIB" -gt 0 ] 2>/dev/null; then
+      echo $(( MIB / 1000 ))
+      return
+    fi
+  fi
+  # Linux AMD: sysfs
+  if [ "$OS" = "linux" ]; then
+    for VRAM_FILE in /sys/class/drm/card*/device/mem_info_vram_total; do
+      [ -f "$VRAM_FILE" ] || continue
+      VRAM_BYTES=$(cat "$VRAM_FILE" 2>/dev/null)
+      GTT_FILE="$(dirname "$VRAM_FILE")/mem_info_gtt_total"
+      GTT_BYTES=$(cat "$GTT_FILE" 2>/dev/null || echo 0)
+      VRAM_GB=$(( VRAM_BYTES / 1000000000 ))
+      GTT_GB=$(( GTT_BYTES / 1000000000 ))
+      if [ "$GTT_GB" -gt "$VRAM_GB" ]; then
+        echo $(( VRAM_GB + GTT_GB ))
+      else
+        echo "$VRAM_GB"
+      fi
+      return
+    done
+  fi
+  # macOS Apple Silicon: unified memory
+  if [ "$OS" = "darwin" ] && [ "$(uname -m)" = "arm64" ]; then
+    RAM_BYTES=$(sysctl -n hw.memsize 2>/dev/null)
+    echo $(( RAM_BYTES / 1000000000 ))
+    return
+  fi
+  echo 0
+}
+
+pick_model() {
+  GPU_GB=$(detect_gpu_gb)
+  if [ "$GPU_GB" -ge 32 ] 2>/dev/null; then
+    # ultra_gpu: nemotron needs consent — fall back to strong_gpu for auto-pull
+    echo "qwen2.5:14b"
+  elif [ "$GPU_GB" -ge 12 ] 2>/dev/null; then
+    echo "qwen2.5:14b"
+  elif [ "$GPU_GB" -ge 6 ] 2>/dev/null; then
+    echo "qwen2.5:7b"
+  elif [ "$GPU_GB" -ge 3 ] 2>/dev/null; then
+    echo "qwen2.5:3b"
+  else
+    echo "qwen2.5:3b"
+  fi
+}
+
 # Pull Ollama model if ollama command is installed
 pull_ollama() {
   if ! command -v ollama >/dev/null 2>&1; then
@@ -75,12 +129,15 @@ pull_ollama() {
     esac
     return
   fi
+  MODEL=$(pick_model)
+  GPU_GB=$(detect_gpu_gb)
+  echo "  ℹ Detected ${GPU_GB}GB GPU memory → model: ${MODEL}"
   # Check if model already present
-  if curl -s http://127.0.0.1:11434/api/tags 2>/dev/null | grep -q "qwen2.5:3b"; then
-    echo "  ✓ qwen2.5:3b already available"
+  if curl -s http://127.0.0.1:11434/api/tags 2>/dev/null | grep -q "$MODEL"; then
+    echo "  ✓ ${MODEL} already available"
   else
-    echo "  → Pulling Ollama qwen2.5:3b model..."
-    ollama pull qwen2.5:3b || true
+    echo "  → Pulling Ollama ${MODEL} model..."
+    ollama pull "$MODEL" || true
   fi
 }
 
@@ -223,15 +280,16 @@ if [ -z "$SKIP_BINARY" ] && curl -fsSL "$URL" -o "$TMPFILE" 2>/dev/null && [ -s 
 
   pull_ollama
 
-  # Persist Ollama as configured provider if detected
+  # Persist Ollama as configured provider if detected (hardware-adaptive model)
   if command -v ollama >/dev/null 2>&1 && curl -s http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
     mkdir -p "$HOME/.lingua-viva/config"
     if [ ! -f "$HOME/.lingua-viva/config/providers.json" ]; then
-      cat > "$HOME/.lingua-viva/config/providers.json" << 'PROVEOF'
+      INSTALLED_MODEL=$(pick_model)
+      cat > "$HOME/.lingua-viva/config/providers.json" << PROVEOF
 {
   "providers": {
     "ollama": {
-      "model": "qwen2.5:3b",
+      "model": "${INSTALLED_MODEL}",
       "verified": true
     }
   },
@@ -239,7 +297,7 @@ if [ -z "$SKIP_BINARY" ] && curl -fsSL "$URL" -o "$TMPFILE" 2>/dev/null && [ -s 
 }
 PROVEOF
       chmod 600 "$HOME/.lingua-viva/config/providers.json"
-      echo "  ✓ Connected to Ollama / qwen2.5:3b"
+      echo "  ✓ Connected to Ollama / ${INSTALLED_MODEL}"
     fi
   fi
 

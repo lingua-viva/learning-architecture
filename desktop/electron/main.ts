@@ -13,6 +13,7 @@ import {
   ensurePythonEnv,
   verifyPythonDeps,
   refreshWindowsPath,
+  recommendedModel,
   startBackend,
   waitForBackend
 } from "./bootstrap";
@@ -145,11 +146,18 @@ async function runSetupFlow(root: string, window: BrowserWindow): Promise<void> 
   // but its RESULT is awaited and reported before the wizard finishes.
   let modelPull: Promise<{ ok: boolean; detail: string }> | null = null;
 
+  // Hardware-adaptive model selection (same process as Mission Canvas):
+  // detect GPU tier, pick the right model size automatically.
+  const hwRec = recommendedModel();
+  const modelOverride = process.env.LV_OLLAMA_MODEL || undefined;
+
   if (ollamaCheck.ok) {
     emitProgress(window, "ollama_ok", ollamaCheck.detail);
     if (process.env.LV_SKIP_MODEL_PULL !== "1") {
-      emitProgress(window, "model", "Preparing the local AI model (first time may take a while)...");
-      modelPull = ensureOllamaModel(process.env.LV_OLLAMA_MODEL || undefined)
+      const modelName = modelOverride || hwRec.model;
+      emitProgress(window, "model",
+        `Preparing ${modelName} for your hardware (${hwRec.tier}, ${hwRec.sizeLabel})...`);
+      modelPull = ensureOllamaModel(modelOverride)
         .catch((err) => ({ ok: false, detail: String(err instanceof Error ? err.message : err) }));
     }
   } else if (process.env.LV_SKIP_OLLAMA === "1") {
@@ -160,8 +168,10 @@ async function runSetupFlow(root: string, window: BrowserWindow): Promise<void> 
     await waitForOllamaResolution(window);
     // If they installed Ollama during resolution, still ensure a model exists.
     if (process.env.LV_SKIP_MODEL_PULL !== "1" && (await checkOllama()).ok) {
-      emitProgress(window, "model", "Preparing the local AI model (first time may take a while)...");
-      modelPull = ensureOllamaModel(process.env.LV_OLLAMA_MODEL || undefined)
+      const modelName = modelOverride || hwRec.model;
+      emitProgress(window, "model",
+        `Preparing ${modelName} for your hardware (${hwRec.tier}, ${hwRec.sizeLabel})...`);
+      modelPull = ensureOllamaModel(modelOverride)
         .catch((err) => ({ ok: false, detail: String(err instanceof Error ? err.message : err) }));
     }
   }
