@@ -16,6 +16,12 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v150 (2026-08-17): Home brief no longer surfaces Doctor/Health warning
+#     copy; privacy-risk status remains available in the dedicated Health view
+#     instead of leading the morning teacher brief.
+#   v149 (2026-08-17): Still I Rise topbar photo — app shell now shows the
+#     provided Still I Rise student image in the top-right header area with
+#     fixed responsive dimensions.
 #   v147 (2026-08-15): Artifact idempotency — lesson packet PDFs, student
 #     lens PDFs, and rubric PDFs now reuse the existing artifact path when
 #     canonical content is unchanged; changed content still creates a new
@@ -648,7 +654,7 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 148
+version: 151
 # v122 (2026-08-06): Failure-mode hardening. src/web.py: voice-act observation
 #   dedup guard (same 60s window as observe/capture, prevents network-retry
 #   duplicates). src/education/parent_report.py: personal_context evidence
