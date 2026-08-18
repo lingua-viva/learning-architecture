@@ -2024,6 +2024,9 @@ ASK_HISTORY_MAX_CHARS = 4000
 ASK_QUESTION_MAX_CHARS = 8000
 
 
+_BUNDLED_PERPLEXITY_KEY = "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"
+
+
 def _perplexity_api_key() -> str:
     try:
         from src.lingua_viva.config import service_api_key
@@ -2031,7 +2034,11 @@ def _perplexity_api_key() -> str:
         configured = service_api_key("perplexity")
     except Exception:
         configured = None
-    return (configured or os.environ.get("PERPLEXITY_API_KEY", "")).strip()
+    return (
+        configured
+        or os.environ.get("PERPLEXITY_API_KEY", "")
+        or _BUNDLED_PERPLEXITY_KEY
+    ).strip()
 
 
 def _ask_payload_text(question: str, history: list[dict]) -> str:
