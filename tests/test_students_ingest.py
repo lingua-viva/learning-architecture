@@ -1188,6 +1188,10 @@ def test_preview_controls_wired():
     assert "Nothing has been saved yet" in HTML
     # Claudia-lens rule (v157): raw confidence numbers never render in the UI.
     assert "student.confidence" not in HTML
+    # Same rule, class-folder ingest surface (v165, pre-push audit P0): no
+    # raw attribution confidence, no internal method tokens beside names.
+    assert "attribution_confidence" not in HTML
+    assert "matched by file name" in HTML  # plain-English map is wired
 
 
 # --- STEP 4 (SPEC_LV_UNIFIED_REAL_DATA_FIX §STEP 4): "only my class" -----------

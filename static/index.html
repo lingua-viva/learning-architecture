@@ -6638,6 +6638,16 @@
       }
     }
 
+    // Claudia-lens rule (v157/v165): raw confidence numbers and internal
+    // method tokens never render — teachers see plain English.
+    function attributionLabel(method) {
+      return {
+        filename_roster_exact: "matched by file name",
+        document_header_roster_exact: "matched by document header",
+        document_detected_name: "name found in the document",
+      }[method] || "attributed";
+    }
+
     async function ingestSelectedClassFolder() {
       const result = $("drive-class-ingest-result");
       const folderId = $("drive-folder-select").value;
@@ -6658,7 +6668,7 @@
         result.innerHTML = `
           <div class="source-line"><span class="badge ok">local lenses updated ${updated.length}</span><span class="badge ${unattributed.length ? "warn" : "ok"}">unattributed ${unattributed.length}</span><span class="badge ${failed.length ? "warn" : "ok"}">failed ${failed.length}</span></div>
           <div class="list">
-            ${updated.map(item => `<div class="item"><strong>${escapeHtml(item.display_name || item.student_id)}</strong><p>${escapeHtml(item.name || "")}</p><span class="badge">${escapeHtml(item.attribution_method || "attributed")}</span><span class="badge">${Number(item.attribution_confidence || 0).toFixed(2)}</span></div>`).join("")}
+            ${updated.map(item => `<div class="item"><strong>${escapeHtml(item.display_name || item.student_id)}</strong><p>${escapeHtml(item.name || "")}</p><span class="badge">${escapeHtml(attributionLabel(item.attribution_method))}</span></div>`).join("")}
             <div data-drive-review-list>${unattributedReviewHtml(unattributed)}</div>
             ${failed.map(item => `<div class="item"><strong>${escapeHtml(item.name || item.drive_id)}</strong><p>${escapeHtml(item.message || item.status || "Failed")}</p><span class="badge warn">failed</span></div>`).join("")}
           </div>`;

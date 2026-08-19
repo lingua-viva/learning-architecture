@@ -262,7 +262,9 @@ REPO = Path(__file__).resolve().parent.parent
 #     badge "may not be a student".
 #   v164 (2026-08-19): STEPs 8+10 — generation honesty: generation_status
 #     on tier materials + loud template-fallback badge; blank tiers dead.
-EXPECTED_VERSION = 164
+#   v165 (2026-08-19): pre-push audit P0 — class-folder ingest renders plain
+#     English attribution, never raw confidence numbers or method tokens.
+EXPECTED_VERSION = 165
 
 
 def _html() -> str:

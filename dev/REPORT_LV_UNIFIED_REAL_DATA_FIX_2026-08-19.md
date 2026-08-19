@@ -550,8 +550,36 @@ instead of an unexplained constant; re-derive if the timeout budget or
 governed model class changes. No behavior change → comment + report only.
 
 **Wave status: ALL STEPS CLOSED** (1–8, 10, 11, 12 done; 9 skipped per
-directive, gated on §8-2). Remaining before any push: Claudia-lens UX
-audit; push itself requires explicit operator instruction.
+directive, gated on §8-2).
+
+## Claudia-lens UX audit (pre-push gate) — DONE 2026-08-19
+
+Independent lens-pass over the wave's three teacher-facing surfaces
+(always-preview ingest, generation-status badge, Prepare pre-fill).
+Initial verdict **FAIL, one P0 — fixed same session**:
+
+- **P0 (FIXED, v165):** the class-folder ingest results rendered a RAW
+  attribution confidence number (`.toFixed(2)`) and the internal method
+  token (`filename_roster_exact`, …) beside student names
+  (index.html:6661) — violating the v157 invariant "raw confidence
+  numbers never render". Now `attributionLabel()` maps method tokens to
+  plain English ("matched by file name" / "matched by document header" /
+  "name found in the document") and the number is gone. Class-locked in
+  `test_preview_controls_wired` (`"attribution_confidence" not in HTML`).
+  UI_CONTRACT bumped v164 → **v165**.
+- **P1 punch list (recorded for the next cycle, not fixed — ONE push
+  rule):** (1) all-tiers-failed generation shows three honest badges but
+  names no recovery step (backend knows the reason); (2) ingest
+  approve/cancel network failures degrade to a bare "Retry" button with
+  no message; (3) Prepare pre-fill silently overwrites an already-typed
+  topic and gives no "detected from your file" hint.
+- **P2:** low-confidence badge wording ("hard to read" vs the true
+  "found by pattern-matching") inconsistent with the post-approve reason;
+  two spots pass raw exception text to the UI.
+- **Verified good:** preview badges are boolean-only, approve states the
+  exact count, cancel honesty matches backend reality, zero-detection
+  path gives actionable advice, student names never enter generation
+  prompts, no internal status tokens render as literals.
 
 ## Holdout opening (§6) — OPENED 2026-08-19 (once) — HONEST FAIL
 

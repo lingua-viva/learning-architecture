@@ -16,6 +16,12 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v165 (2026-08-19): pre-push Claudia-lens audit P0 — class-folder ingest
+#     results no longer render a raw attribution confidence number or the
+#     internal method token beside student names; attributionLabel() maps
+#     filename_roster_exact / document_header_roster_exact /
+#     document_detected_name to plain English. Lock:
+#     test_preview_controls_wired ("attribution_confidence" never in HTML).
 #   v164 (2026-08-19): STEPs 8+10 of SPEC_LV_UNIFIED_REAL_DATA_FIX — model
 #     governance + generation honesty (C1/C2/C3). lesson_materials.py:
 #     TierMaterial.generation_status ("generated" | "template_fallback",
@@ -747,7 +753,7 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 164
+version: 165
 # v122 (2026-08-06): Failure-mode hardening. src/web.py: voice-act observation
 #   dedup guard (same 60s window as observe/capture, prevents network-retry
 #   duplicates). src/education/parent_report.py: personal_context evidence
