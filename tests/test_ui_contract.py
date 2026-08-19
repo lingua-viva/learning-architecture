@@ -245,7 +245,12 @@ REPO = Path(__file__).resolve().parent.parent
 #     drop zone, unit CRUD (starter themes removed), file-content generation,
 #     starting CEFR levels at import, teacher_roster, native print, Claudia-
 #     lens copy pass.
-EXPECTED_VERSION = 158
+#   v158 (2026-08-19): Drive per-file access — OAuth scope → drive.file,
+#     sign-in panel copy rewritten (obsolete unverified-app walkthrough and
+#     broad-permission line removed), honest DriveAuthError passthrough.
+#   v159 (2026-08-19): Phase 0A always-preview ingest — imports stop at a
+#     preview that writes nothing; explicit approve/cancel routes + panel.
+EXPECTED_VERSION = 159
 
 
 def _html() -> str:

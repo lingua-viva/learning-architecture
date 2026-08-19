@@ -16,6 +16,15 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v159 (2026-08-19): Phase 0A always-preview ingest (SPEC_LV_UNIFIED_REAL_
+#     DATA_FIX §2A). src/web.py: /api/students/ingest stops at status
+#     "preview" (creates NOTHING, syncs NOTHING); creation moved to
+#     _create_from_preview behind new POST /api/students/ingest/approve;
+#     new POST /api/students/ingest/cancel (preview → cancelled, zero
+#     trace); zero detections finish as done directly. static/index.html:
+#     preview panel (names + low-confidence badges, no raw numbers) with
+#     "Create these students" / Cancel; poll treats preview/cancelled as
+#     terminal, creating as in-flight.
 #   v158 (2026-08-19): Drive per-file access (SPEC_LV_DRIVE_PER_FILE_ACCESS,
 #     no-admin ruling). OAuth scope → drive.file so any teacher signs in with
 #     zero registration/verification. src/web.py: class-folder route passes
@@ -699,7 +708,7 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 158
+version: 159
 # v122 (2026-08-06): Failure-mode hardening. src/web.py: voice-act observation
 #   dedup guard (same 60s window as observe/capture, prevents network-retry
 #   duplicates). src/education/parent_report.py: personal_context evidence

@@ -2423,6 +2423,7 @@ def _new_ingest_job(source_id: str, source_name: str, teacher_id: str = "teacher
         "source_name": source_name,
         "teacher_id": teacher_id,
         "students_found": 0,
+        "preview_students": [],
         "students_created": [],
         "needs_confirmation": [],
         "warnings": [],
@@ -2498,34 +2499,27 @@ def _create_lens_for_detected(extraction, detected: dict, teacher_id: str = "tea
     }
 
 
-async def _run_ingest_job(job: dict, source, content: bytes) -> None:
-    from src.lingua_viva.docpipe import extract as docpipe_extract
-    from src.lingua_viva.docpipe import vault as docpipe_vault
-
+def _safe_confidence(student: dict) -> float:
     try:
-        job["status"] = "extracting"
-        _save_ingest_job(job)
-        # Local model enrichment when available; extraction is deterministic
-        # without it (offline is a supported state — T3 spec §0).
-        model_client = None
-        try:
-            from src.lingua_viva.docpipe.model import LocalModelClient
+        return float(student.get("confidence", 0.0))
+    except (TypeError, ValueError):
+        return 0.0
 
-            model_client = LocalModelClient()
-        except Exception:
-            model_client = None
-        extraction = await docpipe_extract.extract_document(
-            source, content, model_client=model_client
-        )
-        await asyncio.to_thread(docpipe_vault.put_extraction, extraction)
-        job["status"] = "identifying"
-        _save_ingest_job(job)
-        detected = [
-            student
-            for student in extraction.data.get("structure", {}).get("students_detected", [])
-            if isinstance(student, dict) and str(student.get("display_name") or "").strip()
-        ]
-        job["students_found"] = len(detected)
+
+def _detected_students(extraction) -> list[dict]:
+    return [
+        student
+        for student in extraction.data.get("structure", {}).get("students_detected", [])
+        if isinstance(student, dict) and str(student.get("display_name") or "").strip()
+    ]
+
+
+async def _create_from_preview(job: dict, extraction) -> None:
+    """Runs only after the teacher's explicit approve. Everything that writes
+    to the student store or touches Drive lives here — never in the preview
+    path (Phase 0A, SPEC_LV_UNIFIED_REAL_DATA_FIX_2026-08-19 §2A)."""
+    try:
+        detected = _detected_students(extraction)
         # SPEC_LV_DRIVE_OOTB 2026-08-18 (G3): roster-style imports (more than
         # BULK_IMPORT_CONFIRMATION_THRESHOLD students) auto-create EVERY
         # detected student — the teacher contract allows no per-name confirm
@@ -2537,10 +2531,7 @@ async def _run_ingest_job(job: dict, source, content: bytes) -> None:
         roster_import = len(detected) > BULK_IMPORT_CONFIRMATION_THRESHOLD
         low_confidence_names: list[str] = []
         for student in detected:
-            try:
-                confidence = float(student.get("confidence", 0.0))
-            except (TypeError, ValueError):
-                confidence = 0.0
+            confidence = _safe_confidence(student)
             if roster_import:
                 created = await asyncio.to_thread(
                     _create_lens_for_detected, extraction, student, job.get("teacher_id") or "teacher:ingest"
@@ -2560,7 +2551,6 @@ async def _run_ingest_job(job: dict, source, content: bytes) -> None:
                     "confidence": confidence,
                     "reason": "Low-confidence match in the document.",
                 })
-        job["warnings"] = [str(w) for w in extraction.data.get("warnings", [])]
         if low_confidence_names:
             job["warnings"].append(
                 "Check these names — they were read with low confidence: "
@@ -2583,6 +2573,60 @@ async def _run_ingest_job(job: dict, source, content: bytes) -> None:
                         trigger_sync(student_id)
             except Exception:
                 pass  # sync is best-effort; the import itself already succeeded
+    except Exception as error:
+        job["status"] = "failed"
+        job["error"] = f"Could not create the students: {error}"
+        _save_ingest_job(job)
+
+
+async def _run_ingest_job(job: dict, source, content: bytes) -> None:
+    from src.lingua_viva.docpipe import extract as docpipe_extract
+    from src.lingua_viva.docpipe import vault as docpipe_vault
+
+    try:
+        job["status"] = "extracting"
+        _save_ingest_job(job)
+        # Local model enrichment when available; extraction is deterministic
+        # without it (offline is a supported state — T3 spec §0).
+        model_client = None
+        try:
+            from src.lingua_viva.docpipe.model import LocalModelClient
+
+            model_client = LocalModelClient()
+        except Exception:
+            model_client = None
+        extraction = await docpipe_extract.extract_document(
+            source, content, model_client=model_client
+        )
+        await asyncio.to_thread(docpipe_vault.put_extraction, extraction)
+        job["status"] = "identifying"
+        _save_ingest_job(job)
+        detected = _detected_students(extraction)
+        job["students_found"] = len(detected)
+        job["warnings"] = [str(w) for w in extraction.data.get("warnings", [])]
+        # Phase 0A (SPEC_LV_UNIFIED_REAL_DATA_FIX_2026-08-19 §2A): the ingest
+        # job stops here, at a PREVIEW. It has created NOTHING and synced
+        # NOTHING — the extraction sits in the vault, the would-be result is
+        # reported per student, and only the explicit approve step
+        # (/api/students/ingest/approve) may create lenses. Always-preview is
+        # the default pending operator ruling §8-1.
+        if not detected:
+            # Nothing to approve — finishing as "done" with zero creations is
+            # the same honest outcome with one fewer click.
+            job["status"] = "done"
+            _save_ingest_job(job)
+            return
+        job["preview_students"] = [
+            {
+                "display_name": str(student.get("display_name") or "").strip(),
+                "confidence": _safe_confidence(student),
+                "low_confidence": _safe_confidence(student) < INGEST_CONFIDENCE_THRESHOLD,
+                "span_ids": [str(sid) for sid in (student.get("span_ids") or [])],
+            }
+            for student in detected
+        ]
+        job["status"] = "preview"
+        _save_ingest_job(job)
     except NotImplementedError:
         job["status"] = "failed"
         job["error"] = (
@@ -2819,6 +2863,56 @@ async def students_ingest_status(job_id: str):
             ),
         }, status_code=404)
     return job
+
+
+@app.post("/api/students/ingest/approve")
+async def students_ingest_approve(payload: dict, background_tasks: BackgroundTasks):
+    """Phase 0A (SPEC_LV_UNIFIED_REAL_DATA_FIX_2026-08-19 §2A): the explicit
+    confirm step. Only a job sitting at "preview" may create students; the
+    creation itself runs in _create_from_preview."""
+    from src.lingua_viva.docpipe import vault as docpipe_vault
+
+    job_id = str((payload or {}).get("job_id", "")).strip()
+    job = _ingest_job(job_id)
+    if job is None:
+        return JSONResponse({"error": "import job not found"}, status_code=404)
+    if job.get("status") != "preview":
+        return JSONResponse({
+            "error": (
+                "This import is not awaiting approval "
+                f"(status: {job.get('status')})."
+            ),
+        }, status_code=409)
+    try:
+        extraction = await asyncio.to_thread(docpipe_vault.get_extraction, job["source_id"])
+    except FileNotFoundError:
+        return JSONResponse({
+            "error": "The extracted document is no longer available — import the file again (re-imports merge safely).",
+        }, status_code=409)
+    job["status"] = "creating"
+    _save_ingest_job(job)
+    background_tasks.add_task(_create_from_preview, job, extraction)
+    return {"job_id": job_id, "status": job["status"]}
+
+
+@app.post("/api/students/ingest/cancel")
+async def students_ingest_cancel(payload: dict):
+    """Phase 0A: cancelling a preview leaves zero trace — nothing was created,
+    nothing was synced, and nothing ever will be from this job."""
+    job_id = str((payload or {}).get("job_id", "")).strip()
+    job = _ingest_job(job_id)
+    if job is None:
+        return JSONResponse({"error": "import job not found"}, status_code=404)
+    if job.get("status") != "preview":
+        return JSONResponse({
+            "error": (
+                "Only an import awaiting approval can be cancelled "
+                f"(status: {job.get('status')})."
+            ),
+        }, status_code=409)
+    job["status"] = "cancelled"
+    _save_ingest_job(job)
+    return {"job_id": job_id, "status": "cancelled"}
 
 
 @app.post("/api/students/ingest/confirm")

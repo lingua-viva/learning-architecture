@@ -99,6 +99,14 @@ reachable_from_ui:
     call_site: '/api/students/ingest/${job.job_id}'
   - route: "POST /api/students/ingest/confirm"
     call_site: '"/api/students/ingest/confirm"'
+  # Phase 0A — always-preview ingest (SPEC_LV_UNIFIED_REAL_DATA_FIX
+  # 2026-08-19 §2A): preview panel's explicit create/cancel buttons.
+  - route: "POST /api/students/ingest/approve"
+    call_site: '"/api/students/ingest/approve"'
+    note: "Students import preview panel: Create these students — the only path that writes."
+  - route: "POST /api/students/ingest/cancel"
+    call_site: '"/api/students/ingest/cancel"'
+    note: "Students import preview panel: Cancel — leaves zero trace."
   - route: "DELETE /api/students/ingest/{job_id}"
     call_site: "/api/students/ingest/${state.ingestJob.job_id}"
     note: "Students import result panel: Undo this import archives exactly the students created by that job."

@@ -114,15 +114,29 @@ def _wait_for_job(job_id: str, timeout: float = 10.0) -> dict:
         response = client.get(f"/api/students/ingest/{job_id}")
         assert response.status_code == 200, response.text
         job = response.json()
-        if job["status"] in ("done", "failed"):
+        if job["status"] in ("done", "failed", "preview", "cancelled"):
             return job
         time.sleep(0.05)
     raise AssertionError("ingest job did not finish in time")
 
 
+def _run_to_done(job_id: str, timeout: float = 10.0) -> dict:
+    """Phase 0A (SPEC_LV_UNIFIED_REAL_DATA_FIX_2026-08-19 §2A): every import
+    with detections stops at a preview; creation needs the explicit approve.
+    This helper drives that two-step flow to completion for tests whose
+    subject is what happens AFTER creation. Jobs that end at done/failed
+    without a preview (zero detections, extraction failure) pass through."""
+    job = _wait_for_job(job_id, timeout)
+    if job["status"] != "preview":
+        return job
+    response = client.post("/api/students/ingest/approve", json={"job_id": job_id})
+    assert response.status_code == 200, response.text
+    return _wait_for_job(job_id, timeout)
+
+
 def test_full_chain_creates_grounded_lenses(isolated_state, fixture_extractor):
     started = _upload()
-    job = _wait_for_job(started["job_id"])
+    job = _run_to_done(started["job_id"])
     assert job["status"] == "done", job
     assert job["students_found"] == 2
     names = sorted(s["display_name"] for s in job["students_created"])
@@ -161,14 +175,14 @@ def test_full_chain_creates_grounded_lenses(isolated_state, fixture_extractor):
 
 
 def test_reimport_merges_never_forks(isolated_state, fixture_extractor):
-    first = _wait_for_job(_upload()["job_id"])
+    first = _run_to_done(_upload()["job_id"])
     assert first["status"] == "done"
     root = vault.vault_root()
     marco_id = next(s["student_id"] for s in first["students_created"] if s["display_name"] == "Marco Bianchi")
     before = json.loads((root / "lenses" / marco_id / "lens.json").read_text(encoding="utf-8"))
     evidence_before = sum(len(f["evidence"]) for f in before["profile"].values())
 
-    second = _wait_for_job(_upload()["job_id"])
+    second = _run_to_done(_upload()["job_id"])
     assert second["status"] == "done"
     after = json.loads((root / "lenses" / marco_id / "lens.json").read_text(encoding="utf-8"))
     evidence_after = sum(len(f["evidence"]) for f in after["profile"].values())
@@ -191,7 +205,7 @@ def test_low_confidence_student_needs_confirmation(isolated_state, monkeypatch):
     from src.lingua_viva.docpipe import extract as docpipe_extract
 
     monkeypatch.setattr(docpipe_extract, "extract_document", extract)
-    job = _wait_for_job(_upload()["job_id"])
+    job = _run_to_done(_upload()["job_id"])
     assert job["status"] == "done"
     assert job["students_created"] == []
     assert len(job["needs_confirmation"]) == 2
@@ -222,7 +236,7 @@ def test_small_import_confirm_multiple_names_at_once(isolated_state, monkeypatch
     from src.lingua_viva.docpipe import extract as docpipe_extract
 
     monkeypatch.setattr(docpipe_extract, "extract_document", extract)
-    job = _wait_for_job(_upload()["job_id"])
+    job = _run_to_done(_upload()["job_id"])
     assert len(job["needs_confirmation"]) == 2
     names = [item["display_name"] for item in job["needs_confirmation"]]
 
@@ -250,7 +264,7 @@ def test_bulk_roster_auto_creates_every_student(isolated_state, monkeypatch):
     from src.lingua_viva.docpipe import extract as docpipe_extract
 
     monkeypatch.setattr(docpipe_extract, "extract_document", extract)
-    job = _wait_for_job(_upload()["job_id"])
+    job = _run_to_done(_upload()["job_id"])
 
     assert job["status"] == "done"
     assert job["students_found"] == 5
@@ -282,7 +296,7 @@ def test_bulk_roster_low_confidence_names_created_and_flagged(isolated_state, mo
     from src.lingua_viva.docpipe import extract as docpipe_extract
 
     monkeypatch.setattr(docpipe_extract, "extract_document", extract)
-    job = _wait_for_job(_upload()["job_id"])
+    job = _run_to_done(_upload()["job_id"])
 
     assert job["status"] == "done"
     assert [s["display_name"] for s in job["students_created"]] == names
@@ -315,7 +329,7 @@ def test_bulk_undo_archives_only_students_from_that_import(isolated_state, monke
     from src.lingua_viva.docpipe import extract as docpipe_extract
 
     monkeypatch.setattr(docpipe_extract, "extract_document", extract)
-    job = _wait_for_job(_upload()["job_id"])
+    job = _run_to_done(_upload()["job_id"])
     assert sorted(s["display_name"] for s in job["students_created"]) == names
 
     response = client.delete(f"/api/students/ingest/{job['job_id']}")
@@ -350,8 +364,8 @@ def test_bulk_undo_does_not_touch_students_from_another_import(isolated_state, m
     from src.lingua_viva.docpipe import extract as docpipe_extract
 
     monkeypatch.setattr(docpipe_extract, "extract_document", extract)
-    first = _wait_for_job(_upload()["job_id"])
-    second = _wait_for_job(_upload()["job_id"])
+    first = _run_to_done(_upload()["job_id"])
+    second = _run_to_done(_upload()["job_id"])
     assert sorted(s["display_name"] for s in first["students_created"]) == [
         "Marco Bianchi", "Nora Rossi",
     ]
@@ -367,7 +381,7 @@ def test_bulk_undo_does_not_touch_students_from_another_import(isolated_state, m
 
 
 def test_ingest_job_status_survives_memory_reset(isolated_state, fixture_extractor):
-    job = _wait_for_job(_upload()["job_id"])
+    job = _run_to_done(_upload()["job_id"])
     web._INGEST_JOBS = {}
 
     response = client.get(f"/api/students/ingest/{job['job_id']}")
@@ -387,7 +401,7 @@ def test_real_extraction_end_to_end_no_mock(isolated_state, monkeypatch):
         docpipe_model, "LocalModelClient",
         lambda *a, **k: (_ for _ in ()).throw(RuntimeError("no model in test")),
     )
-    job = _wait_for_job(_upload()["job_id"])
+    job = _run_to_done(_upload()["job_id"])
     assert job["status"] == "done", job
     names = sorted(s["display_name"] for s in job["students_created"])
     assert names == ["Marco Bianchi", "Nora Rossi"]
@@ -437,7 +451,7 @@ def test_real_xlsx_roster_upload_auto_creates_students(isolated_state, monkeypat
         buffer.getvalue(),
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
-    job = _wait_for_job(started["job_id"])
+    job = _run_to_done(started["job_id"])
 
     assert job["status"] == "done", job
     assert job["students_found"] == 5
@@ -483,7 +497,7 @@ def test_real_docx_roster_upload_auto_creates_students(isolated_state, monkeypat
         buffer.getvalue(),
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
-    job = _wait_for_job(started["job_id"])
+    job = _run_to_done(started["job_id"])
 
     assert job["status"] == "done", job
     assert job["students_found"] == 5
@@ -514,7 +528,7 @@ def test_messy_roster_fills_only_evidenced_fields(isolated_state, monkeypatch):
         "Sara Conti -- new arrival, no notes yet\n\n"
         "(remember to update this file)\n"
     )
-    job = _wait_for_job(
+    job = _run_to_done(
         _upload_bytes("messy-roster.md", messy.encode("utf-8"), "text/markdown")["job_id"]
     )
 
@@ -564,7 +578,7 @@ def test_support_document_updates_existing_lenses_no_duplicates(isolated_state, 
     )
     # Day 1: bare roster — lenses exist, profile fields empty.
     roster = "Class list\n\nMarco Bianchi\n\nNora Rossi\n"
-    job = _wait_for_job(
+    job = _run_to_done(
         _upload_bytes("roster.md", roster.encode("utf-8"), "text/markdown")["job_id"]
     )
     assert job["status"] == "done"
@@ -577,7 +591,7 @@ def test_support_document_updates_existing_lenses_no_duplicates(isolated_state, 
         "Marco Bianchi benefits from a checklist before writing.\n\n"
         "Nora Rossi has strong inference skills and can extend ideas with a relevant quotation.\n"
     )
-    job2 = _wait_for_job(
+    job2 = _run_to_done(
         _upload_bytes("support-notes.md", support_doc.encode("utf-8"), "text/markdown")["job_id"]
     )
     assert job2["status"] == "done"
@@ -670,7 +684,7 @@ def test_real_unsupported_upload_fails_honestly(isolated_state, monkeypatch):
         b"not really a presentation, but the extension is unsupported",
         "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     )
-    job = _wait_for_job(started["job_id"])
+    job = _run_to_done(started["job_id"])
 
     assert job["status"] == "failed"
     assert "unsupported format" in job["error"]
@@ -687,7 +701,7 @@ def test_no_students_found_is_honest(isolated_state, monkeypatch):
     from src.lingua_viva.docpipe import extract as docpipe_extract
 
     monkeypatch.setattr(docpipe_extract, "extract_document", extract)
-    job = _wait_for_job(_upload()["job_id"])
+    job = _run_to_done(_upload()["job_id"])
     assert job["status"] == "done"
     assert job["students_found"] == 0
     assert job["students_created"] == []
@@ -791,7 +805,7 @@ def test_ingest_teacher_id_passthrough_registers_roster(isolated_state, fixture_
         data={"teacher_id": "teacher-claudia"},
     )
     assert response.status_code == 200, response.text
-    job = _wait_for_job(response.json()["job_id"])
+    job = _run_to_done(response.json()["job_id"])
     assert job["status"] == "done", job
 
     def roster_rows(store):
@@ -824,7 +838,7 @@ def test_confirm_accepts_optional_cefr_level(isolated_state, monkeypatch):
     from src.lingua_viva.docpipe import extract as docpipe_extract
 
     monkeypatch.setattr(docpipe_extract, "extract_document", extract)
-    job = _wait_for_job(_upload()["job_id"])
+    job = _run_to_done(_upload()["job_id"])
     names = [item["display_name"] for item in job["needs_confirmation"]]
     assert "Nora Rossi" in names
 
@@ -860,7 +874,7 @@ def test_confirm_rejects_invalid_cefr_level(isolated_state, monkeypatch):
     from src.lingua_viva.docpipe import extract as docpipe_extract
 
     monkeypatch.setattr(docpipe_extract, "extract_document", extract)
-    job = _wait_for_job(_upload()["job_id"])
+    job = _run_to_done(_upload()["job_id"])
 
     response = client.post("/api/students/ingest/confirm", json={
         "job_id": job["job_id"],
@@ -877,7 +891,7 @@ def test_confirm_sets_levels_for_auto_created_students(isolated_state, fixture_e
     """Claudia-lens audit P0-1 (2026-08-18): roster imports auto-create every
     student, so the confirm route must also accept starting levels for
     already-created students — with no display_names at all."""
-    job = _wait_for_job(_upload()["job_id"])
+    job = _run_to_done(_upload()["job_id"])
     assert job["status"] == "done", job
     created = {s["display_name"]: s for s in job["students_created"]}
     assert "Nora Rossi" in created and "Marco Bianchi" in created
@@ -915,3 +929,194 @@ def test_created_row_cefr_controls_wired():
     assert "data-created-cefr" in HTML
     assert "data-ingest-save-levels" in HTML
     assert "Save starting levels" in HTML
+
+
+# ---------------------------------------------------------------------------
+# Phase 0A — always-preview ingest (SPEC_LV_UNIFIED_REAL_DATA_FIX_2026-08-19
+# §2A). The class lock: preview writes NOTHING — no student store rows, no
+# vault lenses, no Drive sync enqueue. Only the explicit approve creates.
+# ---------------------------------------------------------------------------
+
+_ROSTER_NAMES = ["Marco Bianchi", "Nora Rossi", "Luca Verdi", "Sara Conti", "Maya Singh"]
+
+
+@pytest.fixture()
+def roster_extractor(monkeypatch):
+    async def extract(source, content, *, model_client=None):
+        data = _roster_extraction(source.source_id, _ROSTER_NAMES)
+        data["source_sha256"] = source.data["sha256"]
+        return ExtractionRecord(data)
+
+    from src.lingua_viva.docpipe import extract as docpipe_extract
+
+    monkeypatch.setattr(docpipe_extract, "extract_document", extract)
+
+
+@pytest.fixture()
+def sync_spies(monkeypatch):
+    """Spy on every surface that could push a student toward Drive."""
+    from src.lingua_viva import drive_sync
+    from src.lingua_viva.docpipe import sync as docpipe_sync
+
+    calls = {"enqueued": [], "folder": 0, "triggered": []}
+    monkeypatch.setattr(docpipe_sync, "enqueue_lens", lambda sid: calls["enqueued"].append(sid))
+    monkeypatch.setattr(drive_sync, "ensure_lens_sync_folder",
+                        lambda: calls.__setitem__("folder", calls["folder"] + 1))
+    monkeypatch.setattr(drive_sync, "trigger_sync", lambda sid: calls["triggered"].append(sid))
+    return calls
+
+
+def _store_count() -> int:
+    return web._with_student_store(lambda store: len(store.list_lenses()))
+
+
+def test_preview_writes_nothing(isolated_state, roster_extractor, sync_spies):
+    """The Phase 0A class lock. Store count identical before and after the
+    preview; nothing enqueued toward Drive; the full would-be result is
+    reported per student."""
+    assert _store_count() == 0
+    job = _wait_for_job(_upload()["job_id"])
+
+    assert job["status"] == "preview"
+    assert [s["display_name"] for s in job["preview_students"]] == _ROSTER_NAMES
+    for student in job["preview_students"]:
+        assert student["span_ids"], student
+        assert student["low_confidence"] is False
+    assert job["students_created"] == []
+    assert job["needs_confirmation"] == []
+
+    # Nothing was written anywhere.
+    assert _store_count() == 0
+    assert sync_spies == {"enqueued": [], "folder": 0, "triggered": []}
+    lenses_dir = vault.vault_root() / "lenses"
+    assert not lenses_dir.exists() or not any(lenses_dir.iterdir())
+
+
+def test_preview_flags_low_confidence_names_without_creating(isolated_state, monkeypatch, sync_spies):
+    async def extract(source, content, *, model_client=None):
+        data = _roster_extraction(source.source_id, _ROSTER_NAMES)
+        data["source_sha256"] = source.data["sha256"]
+        for student in data["structure"]["students_detected"]:
+            if student["display_name"] == "Maya Singh":
+                student["confidence"] = 0.4
+        return ExtractionRecord(data)
+
+    from src.lingua_viva.docpipe import extract as docpipe_extract
+
+    monkeypatch.setattr(docpipe_extract, "extract_document", extract)
+    job = _wait_for_job(_upload()["job_id"])
+
+    assert job["status"] == "preview"
+    flags = {s["display_name"]: s["low_confidence"] for s in job["preview_students"]}
+    assert flags["Maya Singh"] is True
+    assert flags["Marco Bianchi"] is False
+    assert _store_count() == 0
+
+
+def test_approve_creates_and_syncs(isolated_state, roster_extractor, sync_spies):
+    job = _wait_for_job(_upload()["job_id"])
+    assert job["status"] == "preview"
+
+    response = client.post("/api/students/ingest/approve", json={"job_id": job["job_id"]})
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "creating"
+
+    done = _wait_for_job(job["job_id"])
+    assert done["status"] == "done"
+    assert [s["display_name"] for s in done["students_created"]] == _ROSTER_NAMES
+    assert _store_count() == len(_ROSTER_NAMES)
+    created_ids = sorted(s["student_id"] for s in done["students_created"])
+    assert sorted(sync_spies["enqueued"]) == created_ids
+    assert sync_spies["folder"] == 1
+    assert sorted(sync_spies["triggered"]) == created_ids
+
+
+def test_cancel_leaves_zero_trace(isolated_state, roster_extractor, sync_spies):
+    job = _wait_for_job(_upload()["job_id"])
+    assert job["status"] == "preview"
+
+    response = client.post("/api/students/ingest/cancel", json={"job_id": job["job_id"]})
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "cancelled"
+
+    assert _store_count() == 0
+    assert sync_spies == {"enqueued": [], "folder": 0, "triggered": []}
+    refreshed = client.get(f"/api/students/ingest/{job['job_id']}").json()
+    assert refreshed["status"] == "cancelled"
+    assert refreshed["students_created"] == []
+
+    # A cancelled preview can never be approved afterwards.
+    response = client.post("/api/students/ingest/approve", json={"job_id": job["job_id"]})
+    assert response.status_code == 409
+    assert _store_count() == 0
+
+
+def test_double_approve_is_refused(isolated_state, roster_extractor, sync_spies):
+    job = _wait_for_job(_upload()["job_id"])
+    first = client.post("/api/students/ingest/approve", json={"job_id": job["job_id"]})
+    assert first.status_code == 200, first.text
+    done = _wait_for_job(job["job_id"])
+    assert done["status"] == "done"
+
+    second = client.post("/api/students/ingest/approve", json={"job_id": job["job_id"]})
+    assert second.status_code == 409
+    # No duplicates from the refused second approve.
+    assert _store_count() == len(_ROSTER_NAMES)
+
+
+def test_cancel_requires_a_preview(isolated_state, roster_extractor):
+    job = _run_to_done(_upload()["job_id"])
+    assert job["status"] == "done"
+    response = client.post("/api/students/ingest/cancel", json={"job_id": job["job_id"]})
+    assert response.status_code == 409
+
+
+def test_approve_and_cancel_unknown_job_is_404(isolated_state):
+    assert client.post("/api/students/ingest/approve", json={"job_id": "JOB-nope"}).status_code == 404
+    assert client.post("/api/students/ingest/cancel", json={"job_id": "JOB-nope"}).status_code == 404
+
+
+def test_zero_detections_skip_the_preview(isolated_state, monkeypatch):
+    """Nothing to approve → the job finishes honestly as done with zero
+    creations instead of asking the teacher to confirm an empty list."""
+    async def extract(source, content, *, model_client=None):
+        data = _fixture_extraction(source.source_id)
+        data["source_sha256"] = source.data["sha256"]
+        data["structure"]["students_detected"] = []
+        return ExtractionRecord(data)
+
+    from src.lingua_viva.docpipe import extract as docpipe_extract
+
+    monkeypatch.setattr(docpipe_extract, "extract_document", extract)
+    job = _wait_for_job(_upload()["job_id"])
+    assert job["status"] == "done"
+    assert job["students_found"] == 0
+    assert job["preview_students"] == []
+    assert job["students_created"] == []
+
+
+def test_preview_survives_memory_reset_and_still_approves(isolated_state, roster_extractor):
+    """The preview is durable: an app restart between preview and approve
+    must not lose the teacher's pending import."""
+    job = _wait_for_job(_upload()["job_id"])
+    assert job["status"] == "preview"
+    web._INGEST_JOBS = {}
+
+    response = client.post("/api/students/ingest/approve", json={"job_id": job["job_id"]})
+    assert response.status_code == 200, response.text
+    done = _wait_for_job(job["job_id"])
+    assert done["status"] == "done"
+    assert [s["display_name"] for s in done["students_created"]] == _ROSTER_NAMES
+
+
+def test_preview_controls_wired():
+    """Phase 0A UI: the preview panel offers explicit create/cancel and says
+    honestly that nothing is saved yet."""
+    assert "data-ingest-approve" in HTML
+    assert "data-ingest-cancel" in HTML
+    assert '"/api/students/ingest/approve"' in HTML
+    assert '"/api/students/ingest/cancel"' in HTML
+    assert "Create these students" in HTML
+    assert "Nothing has been saved yet" in HTML
+    # Claudia-lens rule (v157): raw confidence numbers never render in the UI.
+    assert "student.confidence" not in HTML
