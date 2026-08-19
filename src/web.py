@@ -2625,8 +2625,25 @@ async def _create_from_preview(job: dict, extraction) -> None:
             _teacher_roster_snapshot, job.get("teacher_id") or "teacher:ingest"
         )
         low_confidence_names: list[str] = []
+        veto_flagged_names: list[str] = []
         for student in detected:
+            # STEP 6 (SPEC §STEP 6, L7): the enrichment veto is review-gated,
+            # never auto-applied. On a small import a flagged name waits for
+            # the teacher's confirm click (with the model's reason); on a
+            # roster import the G3 zero-click contract holds — the name is
+            # created but the veto is surfaced loudly in warnings, and the
+            # one-click Remove is the mechanism.
+            veto_reason = str(student.get("removal_proposed") or "").strip()
+            if veto_reason and not roster_import:
+                job["needs_confirmation"].append({
+                    "display_name": str(student.get("display_name")),
+                    "confidence": _safe_confidence(student),
+                    "reason": f"The AI thinks this may not be a student: {veto_reason}",
+                })
+                continue
             if roster_import:
+                if veto_reason:
+                    veto_flagged_names.append(str(student.get("display_name")))
                 student = _resolve_or_queue(student, job=job, roster=roster)
                 if student is None:
                     continue
@@ -2655,6 +2672,12 @@ async def _create_from_preview(job: dict, extraction) -> None:
             job["warnings"].append(
                 "Check these names — they were read with low confidence: "
                 + ", ".join(low_confidence_names)
+            )
+        if veto_flagged_names:
+            job["warnings"].append(
+                "The AI thinks these may not be students: "
+                + ", ".join(veto_flagged_names)
+                + ". If it's right, remove them from the roster with one click."
             )
         if job.get("identity_review"):
             names = ", ".join(item["display_name"] for item in job["identity_review"])
@@ -2733,7 +2756,7 @@ async def _run_ingest_job(job: dict, source, content: bytes) -> None:
                 "span_ids": [str(sid) for sid in (student.get("span_ids") or [])],
                 **{
                     key: str(student.get(key))
-                    for key in ("class", "grade", "teacher_attribution")
+                    for key in ("class", "grade", "teacher_attribution", "removal_proposed")
                     if str(student.get(key) or "").strip()
                 },
             }

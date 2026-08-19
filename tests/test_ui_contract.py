@@ -257,7 +257,10 @@ REPO = Path(__file__).resolve().parent.parent
 #   v162 (2026-08-19): STEP 5 — identity resolution + unresolved queue (L8):
 #     roster-scoped resolve at every ingest creation, identity review panel
 #     (assign/create/dismiss), never auto-merge, never silent duplicates.
-EXPECTED_VERSION = 162
+#   v163 (2026-08-19): STEP 6 — enrichment veto (L7): model may propose
+#     removal (grounded), never applies it; review-gated at ingest, preview
+#     badge "may not be a student".
+EXPECTED_VERSION = 163
 
 
 def _html() -> str:

@@ -166,6 +166,93 @@ def test_malformed_model_json_retries_then_degrades_honestly():
     ]
 
 
+# --- STEP 6 (SPEC_LV_UNIFIED_REAL_DATA_FIX §STEP 6): the enrichment veto -------
+#
+# Additive-only enrichment cannot converge on truth. The model may now
+# DISPUTE a detection — but a veto never deletes: grounded claims set
+# removal_proposed for downstream review; ungrounded claims are DROPPED
+# with the same mechanical severity as ungrounded additions.
+
+
+def _span_containing(record, text: str) -> str:
+    return next(s["span_id"] for s in record.data["spans"] if text in str(s["text"]))
+
+
+def test_model_veto_flags_never_deletes():
+    source, content = _source("source_lesson_plan_marco_nora.json", "lesson_plan_marco_nora.md")
+    plain = _run(extract_document(source, content))
+    span_id = _span_containing(plain, "Nora Rossi")
+    model = ScriptedModel([json.dumps({
+        "students": [],
+        "not_students": [{
+            "display_name": "Nora Rossi", "span_id": span_id,
+            "reason": "listed as the classroom tutor",
+        }],
+    })])
+    record = _run(extract_document(source, content, model_client=model))
+    by_name = {s["display_name"]: s for s in record.data["structure"]["students_detected"]}
+    # the veto NEVER deletes — the detection stays, flagged for review
+    assert "Nora Rossi" in by_name
+    assert by_name["Nora Rossi"]["removal_proposed"] == "listed as the classroom tutor"
+    assert "removal_proposed" not in by_name["Marco Bianchi"]
+    assert any(w.startswith("model_enrichment_veto:Nora Rossi") for w in record.data["warnings"])
+    assert verify_extraction(record.data).ok
+
+    # the flagged extraction survives the frozen vault schema gate
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        vault.put_source(source, content, root=root)
+        vault.put_extraction(record, root=root)
+
+
+def test_ungrounded_vetoes_are_dropped_like_ungrounded_additions():
+    source, content = _source("source_lesson_plan_marco_nora.json", "lesson_plan_marco_nora.md")
+    plain = _run(extract_document(source, content))
+    nora_span = _span_containing(plain, "Nora Rossi")
+    no_name_span = next(
+        s["span_id"] for s in plain.data["spans"]
+        if "Nora" not in str(s["text"]) and "Marco" not in str(s["text"])
+    )
+    model = ScriptedModel([json.dumps({
+        "students": [],
+        "not_students": [
+            # not a current detection
+            {"display_name": "Giulia Ferrari", "span_id": nora_span, "reason": "a teacher"},
+            # span does not exist
+            {"display_name": "Nora Rossi", "span_id": "SPN-9999", "reason": "a teacher"},
+            # no reason given
+            {"display_name": "Nora Rossi", "span_id": nora_span, "reason": ""},
+            # cited span does not contain the name
+            {"display_name": "Marco Bianchi", "span_id": no_name_span, "reason": "a teacher"},
+        ],
+    })])
+    record = _run(extract_document(source, content, model_client=model))
+    students = record.data["structure"]["students_detected"]
+    assert all("removal_proposed" not in s for s in students)
+    assert [s["display_name"] for s in students] == ["Marco Bianchi", "Nora Rossi"]
+    dropped = [w for w in record.data["warnings"] if w.startswith("grounding_dropped:model_veto:")]
+    assert len(dropped) == 4
+
+
+def test_veto_matching_uses_the_one_normalizer():
+    """§5 prohibition: ONE normalizer. A case-variant veto still matches the
+    detection through identity.normalize_name — no second comparison path."""
+    source, content = _source("source_lesson_plan_marco_nora.json", "lesson_plan_marco_nora.md")
+    plain = _run(extract_document(source, content))
+    span_id = _span_containing(plain, "Nora Rossi")
+    model = ScriptedModel([json.dumps({
+        "students": [],
+        "not_students": [{
+            "display_name": "NORA  ROSSI", "span_id": span_id, "reason": "a tutor",
+        }],
+    })])
+    record = _run(extract_document(source, content, model_client=model))
+    by_name = {s["display_name"]: s for s in record.data["structure"]["students_detected"]}
+    assert by_name["Nora Rossi"]["removal_proposed"] == "a tutor"
+
+
 # --- Span integrity + offline + formats ---------------------------------------
 
 

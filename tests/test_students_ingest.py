@@ -1521,3 +1521,88 @@ def test_identity_review_ui_wired():
     assert "Same child" in HTML and "New student" in HTML
     # never auto-merge: the copy says the teacher decides
     assert "Nothing is merged or created until you decide" in HTML
+
+
+# --- STEP 6 (SPEC_LV_UNIFIED_REAL_DATA_FIX §STEP 6): enrichment veto at ingest --
+#
+# A removal_proposed flag from extraction is review-gated, never auto-applied:
+# small imports hold the name behind confirm (with the model's reason); roster
+# imports keep the G3 zero-click contract but warn loudly (one-click Remove is
+# the mechanism). Nothing is ever silently dropped OR silently trusted.
+
+
+def _vetoed_extraction(source_id: str, names: list[str], vetoed: dict[str, str]) -> dict:
+    data = _roster_extraction(source_id, names)
+    for student in data["structure"]["students_detected"]:
+        reason = vetoed.get(student["display_name"])
+        if reason:
+            student["removal_proposed"] = reason
+    return data
+
+
+def test_veto_gates_small_import_behind_confirm(isolated_state, monkeypatch):
+    async def extract(source, content, *, model_client=None):
+        data = _vetoed_extraction(
+            source.source_id, ["Marco Bianchi", "Nora Rossi"],
+            {"Nora Rossi": "listed as the classroom tutor"},
+        )
+        data["source_sha256"] = source.data["sha256"]
+        return ExtractionRecord(data)
+
+    from src.lingua_viva.docpipe import extract as docpipe_extract
+
+    monkeypatch.setattr(docpipe_extract, "extract_document", extract)
+    job = _wait_for_job(_upload()["job_id"])
+    assert job["status"] == "preview"
+    # the preview says so before anything is created
+    nora_row = next(row for row in job["preview_students"] if row["display_name"] == "Nora Rossi")
+    assert nora_row["removal_proposed"] == "listed as the classroom tutor"
+
+    response = client.post("/api/students/ingest/approve", json={"job_id": job["job_id"]})
+    assert response.status_code == 200, response.text
+    job = _wait_for_job(job["job_id"])
+    assert job["status"] == "done"
+    assert [s["display_name"] for s in job["students_created"]] == ["Marco Bianchi"]
+    pending = job["needs_confirmation"]
+    assert [item["display_name"] for item in pending] == ["Nora Rossi"]
+    assert "may not be a student" in pending[0]["reason"]
+    assert "listed as the classroom tutor" in pending[0]["reason"]
+    assert _store_count() == 1
+
+    # the teacher overrules the veto — confirm still creates
+    response = client.post("/api/students/ingest/confirm", json={
+        "job_id": job["job_id"], "display_names": ["Nora Rossi"],
+    })
+    assert response.status_code == 200, response.text
+    assert _store_count() == 2
+
+
+def test_veto_on_roster_import_creates_but_warns_loudly(isolated_state, monkeypatch):
+    names = ["Marco Bianchi", "Nora Rossi", "Luca Verdi", "Sara Conti"]
+
+    async def extract(source, content, *, model_client=None):
+        data = _vetoed_extraction(
+            source.source_id, names, {"Sara Conti": "this is the school name"},
+        )
+        data["source_sha256"] = source.data["sha256"]
+        return ExtractionRecord(data)
+
+    from src.lingua_viva.docpipe import extract as docpipe_extract
+
+    monkeypatch.setattr(docpipe_extract, "extract_document", extract)
+    job = _run_to_done(_upload()["job_id"])
+    assert job["status"] == "done"
+    # G3 zero-click contract holds: everyone is created…
+    assert [s["display_name"] for s in job["students_created"]] == names
+    assert job["needs_confirmation"] == []
+    # …but the veto is surfaced loudly, by name
+    flagged = [w for w in job["warnings"] if "may not be students" in w]
+    assert len(flagged) == 1
+    assert "Sara Conti" in flagged[0] and "Marco Bianchi" not in flagged[0]
+
+
+def test_veto_badge_ui_wired():
+    """STEP 6 UI: the preview row says the AI disputes this name, with the
+    model's reason — never a silent drop, never a raw number."""
+    assert "may not be a student" in HTML
+    assert "student.removal_proposed" in HTML

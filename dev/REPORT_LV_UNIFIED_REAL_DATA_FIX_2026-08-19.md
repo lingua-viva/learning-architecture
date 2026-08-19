@@ -293,8 +293,46 @@ class-list students or land in the queue; zero silent duplicate lenses ✓
 (locked by `test_abbreviated_spelling_queues_never_duplicates`,
 `test_assign_ruling_merges_evidence_and_replays_forever`).
 
-_(pending — STEPs 6–8, 10, 11; STEP 9 gated on ruling §8-2; STEP 12 only if
-time. Each entry: scorer before/after, per-STEP gate result, commits.)_
+### STEP 6 — Enrichment veto (L7) — DONE
+
+`_model_enrich_students` was additive-only — a pipeline that can only add
+cannot converge on truth. The model may now DISPUTE a detection via a
+`not_students` channel, but **a veto never deletes**: it sets
+`removal_proposed` (additive schema field) and the teacher rules.
+
+- **Grounding is symmetric with additions:** a veto claim must name a
+  current detection (matched through `identity.normalize_name` — the ONE
+  normalizer, §5), cite a real span, that span must contain the name, and
+  give a reason. Ungrounded vetoes are DROPPED with
+  `grounding_dropped:model_veto:` warnings — same mechanical severity as
+  hallucinated additions. The current detections ride along in the prompt
+  (the model can only dispute what it can see).
+- **Review-gated at ingest, never auto-applied:** small imports hold a
+  flagged name behind confirm with the model's reason ("The AI thinks
+  this may not be a student: …"); roster imports keep the G3 zero-click
+  contract — everyone is created, but the veto is surfaced loudly by name
+  in warnings and the one-click Remove is the mechanism. Preview rows
+  carry the flag ("may not be a student — reason" badge).
+- Urgency note honored: after STEP 2 the false positives largely stopped
+  existing (structural detection), which is why this landed as STEP 6 —
+  the veto now guards the residual (bigram/model-added names, staff rows
+  in unseen genres).
+- Locks: 3 extract tests (grounded veto flags + survives the vault schema
+  gate + never deletes; 4-way ungrounded drop; case-variant match through
+  the one normalizer) + 3 ingest tests (small import gated behind confirm
+  then teacher overrules; roster import creates-but-warns by name; UI
+  wiring).
+- Scorer re-run after the change: **identical to STEP 4** (class list
+  1.00/0.80, curriculum/calendar 0 FP, 3V 1.00/1.00) — the veto only
+  activates with a model client; deterministic detection untouched.
+- UI_CONTRACT bumped v162 → **v163** (extract.py + web.py + index.html).
+
+**Spec gate (§STEP 6):** enrichment may propose removal, gated by review ✓
+— proposal grounded like additions, applied only by a human, never silent
+in either direction.
+
+_(pending — STEPs 7, 8, 10, 11; STEP 9 gated on ruling §8-2; STEP 12 only
+if time. Each entry: scorer before/after, per-STEP gate result, commits.)_
 
 ## Holdout opening (§6) — NOT YET OPENED
 

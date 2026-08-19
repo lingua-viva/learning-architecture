@@ -1001,9 +1001,12 @@ def _detect_students(spans: list[dict[str, Any]]) -> list[dict[str, Any]]:
 _MODEL_SYSTEM_PROMPT = (
     "You identify student names in a teaching document. Reply with STRICT "
     'JSON only, exactly: {"students": [{"display_name": "First Last", '
-    '"span_id": "SPN-0001"}]} . Only include real student names that '
-    "appear verbatim inside the cited span. If there are none, reply "
-    '{"students": []}. No prose, no markdown fences.'
+    '"span_id": "SPN-0001"}], "not_students": [{"display_name": "First Last", '
+    '"span_id": "SPN-0001", "reason": "short reason"}]} . In "students", only '
+    "include real student names that appear verbatim inside the cited span. "
+    'In "not_students", only include names from the detected-students list '
+    "that the cited span shows are NOT students (a teacher, a school name, a "
+    'note). If a list is empty, use []. No prose, no markdown fences.'
 )
 
 
@@ -1019,6 +1022,13 @@ async def _model_enrich_students(
     prompt = "Spans:\n" + "\n".join(
         f"[{span['span_id']}] {str(span['text'])[:500]}" for span in prompt_spans
     )
+    # STEP 6 (SPEC_LV_UNIFIED_REAL_DATA_FIX_2026-08-19, L7): the model can
+    # only dispute what it can see — the current detections ride along so
+    # "not_students" claims have something concrete to point at.
+    if students:
+        prompt += "\n\nDetected students: " + ", ".join(
+            str(student.get("display_name") or "") for student in students
+        )
     model_used: Optional[str] = None
     parsed: Optional[dict[str, Any]] = None
     for attempt in range(2):
@@ -1083,6 +1093,44 @@ async def _model_enrich_students(
             "evidence": "model",
             "span_ids": span_ids or [span_id],
         })
+
+    # STEP 6 (SPEC §STEP 6, L7): the veto channel. Additive-only enrichment
+    # cannot converge on truth — the model may now DISPUTE a detection, but
+    # a veto never deletes: it sets removal_proposed and the teacher rules
+    # (review-gated downstream, exactly like additions are grounding-gated
+    # here). The mechanical rule is symmetric with additions: the claim must
+    # name a current detection, cite a real span, and that span must contain
+    # the name — an ungrounded veto is DROPPED, never trusted.
+    from src.lingua_viva.docpipe.identity import normalize_name
+
+    detected_by_norm = {
+        normalize_name(str(student.get("display_name") or "")): student
+        for student in students
+    }
+    for claim in parsed.get("not_students", []) if isinstance(parsed.get("not_students"), list) else []:
+        if not isinstance(claim, dict):
+            continue
+        display_name = str(claim.get("display_name") or "").strip()
+        span_id = str(claim.get("span_id") or "").strip()
+        reason = str(claim.get("reason") or "").strip()
+        student = detected_by_norm.get(normalize_name(display_name))
+        span = span_by_id.get(span_id)
+        if student is None or span is None or not reason:
+            warnings.append(
+                f"grounding_dropped:model_veto:{display_name or '?'}:"
+                "claim must name a current detection, cite a real span, and give a reason"
+            )
+            continue
+        tokens = name_tokens(display_name)
+        if not tokens or not all(
+            span_contains_any_token(str(span["text"]), [token]) for token in tokens
+        ):
+            warnings.append(
+                f"grounding_dropped:model_veto:{display_name}:cited span {span_id} does not contain the name"
+            )
+            continue
+        student["removal_proposed"] = reason[:160]
+        warnings.append(f"model_enrichment_veto:{display_name}:{reason[:120]}")
     return model_used, warnings
 
 

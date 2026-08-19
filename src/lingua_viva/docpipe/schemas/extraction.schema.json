@@ -104,6 +104,7 @@
               "class": { "type": "string", "minLength": 1 },
               "grade": { "type": "string", "minLength": 1 },
               "teacher_attribution": { "type": "string", "minLength": 1 },
+              "removal_proposed": { "type": "string", "minLength": 1 },
               "span_ids": {
                 "type": "array",
                 "items": { "type": "string", "pattern": "^SPN-[A-Za-z0-9_-]+$" }

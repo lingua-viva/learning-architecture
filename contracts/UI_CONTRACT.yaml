@@ -16,6 +16,14 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v163 (2026-08-19): STEP 6 of SPEC_LV_UNIFIED_REAL_DATA_FIX — enrichment
+#     veto (L7). extract.py: the model may DISPUTE a detection via
+#     not_students (grounded like additions: must name a current detection,
+#     cite a real span containing the name, give a reason) — a veto never
+#     deletes, it sets removal_proposed. src/web.py: small imports gate
+#     flagged names behind confirm (with the model's reason); roster imports
+#     keep zero-click creation but warn loudly; preview rows carry the flag.
+#     static/index.html: "may not be a student" preview badge.
 #   v162 (2026-08-19): STEP 5 of SPEC_LV_UNIFIED_REAL_DATA_FIX — identity
 #     resolution + unresolved queue (L8). src/web.py: every lens creation
 #     from ingest resolves against the teacher's roster (exact spelling or
@@ -731,7 +739,7 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 162
+version: 163
 # v122 (2026-08-06): Failure-mode hardening. src/web.py: voice-act observation
 #   dedup guard (same 60s window as observe/capture, prevents network-retry
 #   duplicates). src/education/parent_report.py: personal_context evidence
