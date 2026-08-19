@@ -637,3 +637,156 @@ def test_nome_cognome_pair_and_lone_nome_column():
     record = _run(extract_document(_xlsx_source("nome.xlsx"), buf.getvalue()))
     names = {s["display_name"] for s in record.data["structure"]["students_detected"]}
     assert names == {"Marco Bianchi", "Nora Rossi"}
+
+
+# --- STEP 4: class membership from the pair shape (SPEC §STEP 4, L4) -----------
+
+
+def test_class_pair_sheets_detect_students_with_class_membership():
+    """Gate: the class-list fixture (NO header labels — class name over each
+    Last|First pair, teacher row under it) yields every roster student, each
+    carrying class / grade / teacher_attribution. The teacher wants her ~39,
+    not 400."""
+    content = (SYNTHETIC_CORPUS / "synthetic_class_list.xlsx").read_bytes()
+    record = _run(extract_document(_xlsx_source("synthetic_class_list.xlsx"), content))
+
+    students = record.data["structure"]["students_detected"]
+    assert len(students) == 19, [s["display_name"] for s in students]
+    assert all(s["evidence"] == "student_column" for s in students)
+    by_class: dict = {}
+    for s in students:
+        by_class.setdefault(s["class"], []).append(s)
+    assert {c: len(v) for c, v in by_class.items()} == {
+        "Verdi": 6, "Arancioni": 5, "Blu": 4, "Gialli": 4,
+    }
+    # membership metadata is complete and correct per pair
+    verdi = by_class["Verdi"][0]
+    assert verdi["grade"] == "Grade 3"
+    assert verdi["teacher_attribution"] == "Ilaria Moretti"
+    blu = by_class["Blu"][0]
+    assert blu["grade"] == "Grade 6"
+    assert blu["teacher_attribution"] == "Chiara De Luca"
+    # Last|First pairs join as "First Last"
+    names = {s["display_name"] for s in students}
+    assert "Marco Bianchi" in names
+    assert "Anna (Annie) Villa" in names  # nickname parentheses retained
+    # every detection cites its row span
+    assert all(s["span_ids"] for s in students)
+
+
+def test_teacher_row_is_attribution_never_a_student():
+    """Position says row 2 is the teacher row — teachers must never appear
+    in the student set (the 'staff detected as students' failure class)."""
+    content = (SYNTHETIC_CORPUS / "synthetic_class_list.xlsx").read_bytes()
+    record = _run(extract_document(_xlsx_source("synthetic_class_list.xlsx"), content))
+
+    names = {s["display_name"] for s in record.data["structure"]["students_detected"]}
+    teachers = {"Ilaria Moretti", "Davide Colombo", "Chiara De Luca", "Stefano Ricci"}
+    assert not names & teachers
+    # ...but they ARE the attribution on their class's students
+    attributions = {
+        s["teacher_attribution"]
+        for s in record.data["structure"]["students_detected"]
+    }
+    assert attributions == teachers
+
+
+def test_note_rows_inside_roster_columns_are_not_students():
+    """'1/2 groups...' scheduling notes live INSIDE the roster columns but
+    fill only one cell of the pair — excluded structurally, not by text
+    matching or blocklist (§5)."""
+    content = (SYNTHETIC_CORPUS / "synthetic_class_list.xlsx").read_bytes()
+    record = _run(extract_document(_xlsx_source("synthetic_class_list.xlsx"), content))
+
+    names = {s["display_name"] for s in record.data["structure"]["students_detected"]}
+    assert not any("groups" in name for name in names)
+
+
+def test_title_and_subtitle_over_a_grid_is_not_a_class_pair():
+    """The exact real-corpus regression class: a sheet whose first two rows
+    both fill only column A (title + subtitle) above a dense grid must yield
+    ZERO students — the ≥2-pairs rule and the allowed-columns row guard fail
+    closed. First cut of STEP 4 turned these into +217/+35 FP."""
+    from io import BytesIO
+
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Mappatura"
+    ws.append(["Mappatura UOI"])          # title — cols {A}
+    ws.append(["Anno Scolastico"])        # subtitle — cols {A} == row 1
+    ws.append(["Unità Uno", "Le Stagioni", "Autunno Inverno"])
+    ws.append(["Unità Due", "La Famiglia", "Nonna Nonno"])
+    buf = BytesIO()
+    wb.save(buf)
+    record = _run(extract_document(_xlsx_source("grid.xlsx"), buf.getvalue()))
+    assert record.data["structure"]["students_detected"] == []
+
+
+def test_adjacent_heading_cells_are_a_grid_not_class_pairs():
+    """A heading row with ADJACENT filled cells (A and B) is a table header,
+    not class names over Last|First pairs — even if row 2 fills the same
+    columns."""
+    from io import BytesIO
+
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["Giorno Uno", "Aula Musica", "Lunedì Mattina", "Orario Pieno"])
+    ws.append(["Giorno Due", "Aula Arte", "Martedì Mattina", "Orario Ridotto"])
+    ws.append(["Giorno Tre", "Palestra Grande", "Mercoledì Mattina", "Orario Pieno"])
+    buf = BytesIO()
+    wb.save(buf)
+    record = _run(extract_document(_xlsx_source("cycle.xlsx"), buf.getvalue()))
+    assert record.data["structure"]["students_detected"] == []
+
+
+def test_label_header_wins_over_pair_shape_and_class_column_scopes():
+    """On a sheet WITH an explicit Student/class label header, the label
+    rule wins (never both), and the class column attaches membership
+    metadata without ever being a name source."""
+    content = (SYNTHETIC_CORPUS / "synthetic_support_3v.xlsx").read_bytes()
+    record = _run(extract_document(_xlsx_source("synthetic_support_3v.xlsx"), content))
+
+    students = record.data["structure"]["students_detected"]
+    assert len(students) == 6
+    assert {s["class"] for s in students} == {"V", "A"}
+    assert sum(1 for s in students if s["class"] == "V") == 3
+    # class codes are metadata, never students
+    names = {s["display_name"] for s in students}
+    assert not names & {"V", "A"}
+
+
+def test_lone_class_column_never_declares_a_header_row():
+    """A row whose only recognized label is 'class'/'classe' is scoping
+    metadata, not a student-name header — it must not turn every row below
+    into students."""
+    from io import BytesIO
+
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["Materia", "classe", "Aula"])
+    ws.append(["Lettura Guidata", "3V", "12"])
+    ws.append(["Scrittura Creativa", "4A", "14"])
+    buf = BytesIO()
+    wb.save(buf)
+    record = _run(extract_document(_xlsx_source("materie.xlsx"), buf.getvalue()))
+    assert record.data["structure"]["students_detected"] == []
+
+
+def test_class_pair_extractions_survive_the_vault_schema_gate(tmp_path):
+    """The STEP 1 lesson, re-applied: new detection metadata (class / grade /
+    teacher_attribution) must pass the vault's schema validation — additive
+    keys that the schema refuses would break every real ingest."""
+    from src.lingua_viva.docpipe import vault
+
+    content = (SYNTHETIC_CORPUS / "synthetic_class_list.xlsx").read_bytes()
+    record = _run(extract_document(_xlsx_source("synthetic_class_list.xlsx"), content))
+    students = record.data["structure"]["students_detected"]
+    assert all("class" in s and "grade" in s and "teacher_attribution" in s
+               for s in students)
+    vault.put_extraction(record, root=tmp_path)

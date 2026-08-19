@@ -739,13 +739,17 @@ _FULL_NAME_LABELS = {
 }
 _LAST_NAME_LABELS = {"last", "last name", "surname", "family name", "cognome"}
 _FIRST_NAME_LABELS = {"first", "first name", "given name"}
+# STEP 4 (L4): a class column is METADATA, never a name source — it scopes
+# an import ("only my class"), it does not detect students.
+_CLASS_LABELS = {"class", "classe"}
 # "nome" is Italian for both "name" and "first name": it is a first-name
 # column when a cognome column shares the header row, otherwise full-name
 # (resolved in _sheet_student_columns).
 
 
 def _column_role(label: str) -> Optional[str]:
-    """Classify a header cell: "full" | "first" | "last" | "nome", or None."""
+    """Classify a header cell: "full" | "first" | "last" | "nome" | "class",
+    or None."""
     label = re.sub(r"\s+", " ", str(label or "").strip().lower()).rstrip(":").strip()
     if not label:
         return None
@@ -757,7 +761,24 @@ def _column_role(label: str) -> Optional[str]:
         return "last"
     if label in _FIRST_NAME_LABELS:
         return "first"
+    if label in _CLASS_LABELS:
+        return "class"
     return None
+
+
+def _column_index(letter: str) -> int:
+    index = 0
+    for char in letter:
+        index = index * 26 + (ord(char) - ord("A") + 1)
+    return index
+
+
+def _column_letter(index: int) -> str:
+    letters = ""
+    while index > 0:
+        index, remainder = divmod(index - 1, 26)
+        letters = chr(ord("A") + remainder) + letters
+    return letters
 
 
 def _sheet_student_columns(
@@ -775,7 +796,9 @@ def _sheet_student_columns(
             role = _column_role(cell["text"])
             if role:
                 roles[cell["column"]] = role
-        if roles:
+        # A header row must carry a NAME concept — a lone "class" column is
+        # scoping metadata, not a student-name header (STEP 4).
+        if any(role != "class" for role in roles.values()):
             # "Nome" is a first name only when paired with a Cognome column
             has_last = any(role == "last" for role in roles.values())
             roles = {
@@ -784,6 +807,65 @@ def _sheet_student_columns(
             }
             columns[sheet] = (int(span["row_index"]), roles)
     return columns
+
+
+def _sheet_class_pairs(spans: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """STEP 4 (L4, SPEC_LV_UNIFIED_REAL_DATA_FIX_2026-08-19): grade-sheet
+    class lists carry NO header labels — the SHAPE is the evidence. Row 1
+    names the class above each Last|First column pair, row 2 names the
+    teacher under it, and roster rows fill BOTH columns of a pair.
+
+    Recognized per sheet only when:
+    - the first two non-empty rows fill exactly the same columns,
+    - no pair-start's right neighbour is filled in the heading row (a table
+      with adjacent header cells — curriculum grids, cycle calendars — is
+      NOT this shape), and
+    - there are AT LEAST TWO pairs: a single stacked header pair is
+      structurally indistinguishable from a title + subtitle above a
+      two-column table, so it fails closed to zero students.
+    Position says row 2 is a teacher row: teachers are attribution, never
+    students.
+    """
+    by_sheet: dict[str, list[dict[str, Any]]] = {}
+    for span in spans:
+        sheet = span.get("sheet")
+        if sheet is None or "cells" not in span:
+            continue
+        by_sheet.setdefault(sheet, []).append(span)
+    pairs_by_sheet: dict[str, dict[str, Any]] = {}
+    for sheet, sheet_spans in by_sheet.items():
+        sheet_spans = sorted(sheet_spans, key=lambda span: int(span["row_index"]))
+        if len(sheet_spans) < 3:
+            continue
+        heading, teacher_row = sheet_spans[0], sheet_spans[1]
+        heading_cols = {cell["column"]: cell["text"] for cell in heading["cells"]}
+        teacher_cols = {cell["column"]: cell["text"] for cell in teacher_row["cells"]}
+        if not heading_cols or set(heading_cols) != set(teacher_cols):
+            continue
+        pairs: dict[str, dict[str, str]] = {}
+        for column in sorted(heading_cols, key=_column_index):
+            neighbour = _column_letter(_column_index(column) + 1)
+            if neighbour in heading_cols:
+                pairs = {}
+                break  # adjacent header cells — a grid, not class pairs
+            pairs[column] = {
+                "neighbour": neighbour,
+                "class": heading_cols[column],
+                "teacher": teacher_cols[column],
+            }
+        if len(pairs) >= 2:
+            pairs_by_sheet[sheet] = {
+                "teacher_row": int(teacher_row["row_index"]),
+                "pairs": pairs,
+                # a roster row lives INSIDE the pair columns — any row that
+                # fills a column outside them is table data, not a student
+                "allowed_columns": {
+                    column
+                    for pair_start, pair in pairs.items()
+                    for column in (pair_start, pair["neighbour"])
+                },
+            }
+    return pairs_by_sheet
 
 
 def _detect_students_structural(spans: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -797,10 +879,15 @@ def _detect_students_structural(spans: list[dict[str, Any]]) -> list[dict[str, A
     _detect_students (the bigram path) in _build_structure.
     """
     header_by_sheet = _sheet_student_columns(spans)
+    class_pairs_by_sheet = {
+        sheet: info
+        for sheet, info in _sheet_class_pairs(spans).items()
+        if sheet not in header_by_sheet  # an explicit label header wins
+    }
     found: dict[str, dict[str, Any]] = {}
     order: list[str] = []
 
-    def _add(display_name: str, span_id: str) -> None:
+    def _add(display_name: str, span_id: str, meta: Optional[dict[str, str]] = None) -> None:
         display_name = re.sub(r"\s+", " ", display_name).strip()
         if not display_name:
             return
@@ -809,36 +896,69 @@ def _detect_students_structural(spans: list[dict[str, Any]]) -> list[dict[str, A
             return
         student_id = f"student-{_slug(display_name)}"
         if student_id not in found:
-            found[student_id] = {
+            record = {
                 "student_id": student_id,
                 "display_name": display_name,
                 "confidence": VERBATIM_STUDENT_CONFIDENCE,
                 "evidence": "student_column",
                 "span_ids": [],
             }
+            for key, value in (meta or {}).items():
+                value = re.sub(r"\s+", " ", str(value or "")).strip()
+                if value:
+                    record[key] = value
+            found[student_id] = record
             order.append(student_id)
         if span_id not in found[student_id]["span_ids"]:
             found[student_id]["span_ids"].append(span_id)
 
     for span in spans:
         sheet = span.get("sheet")
-        if sheet not in header_by_sheet or "cells" not in span:
+        if "cells" not in span:
             continue
-        header_row, roles = header_by_sheet[sheet]
-        if int(span["row_index"]) <= header_row:
-            continue
-        first_part = ""
-        last_part = ""
-        for cell in span["cells"]:
-            role = roles.get(cell["column"])
-            if role == "full":
-                _add(cell["text"], span["span_id"])
-            elif role == "first":
-                first_part = cell["text"]
-            elif role == "last":
-                last_part = cell["text"]
-        if first_part or last_part:
-            _add(f"{first_part} {last_part}".strip(), span["span_id"])
+        row_index = int(span["row_index"])
+        if sheet in header_by_sheet:
+            header_row, roles = header_by_sheet[sheet]
+            if row_index <= header_row:
+                continue
+            first_part = ""
+            last_part = ""
+            class_value = ""
+            full_names: list[str] = []
+            for cell in span["cells"]:
+                role = roles.get(cell["column"])
+                if role == "full":
+                    full_names.append(cell["text"])
+                elif role == "first":
+                    first_part = cell["text"]
+                elif role == "last":
+                    last_part = cell["text"]
+                elif role == "class":
+                    class_value = cell["text"]
+            meta = {"class": class_value} if class_value else None
+            for name in full_names:
+                _add(name, span["span_id"], meta)
+            if first_part or last_part:
+                _add(f"{first_part} {last_part}".strip(), span["span_id"], meta)
+        elif sheet in class_pairs_by_sheet:
+            info = class_pairs_by_sheet[sheet]
+            if row_index <= info["teacher_row"]:
+                continue
+            cells = {cell["column"]: cell["text"] for cell in span["cells"]}
+            if any(column not in info["allowed_columns"] for column in cells):
+                continue  # fills beyond the pairs — table data, not a roster row
+            for column, pair in info["pairs"].items():
+                last_part = str(cells.get(column) or "").strip()
+                first_part = str(cells.get(pair["neighbour"]) or "").strip()
+                # A roster row fills BOTH columns of the pair; a row with one
+                # cell (scheduling notes inside the roster columns) is not a
+                # student — structurally, no text matching.
+                if last_part and first_part:
+                    _add(f"{first_part} {last_part}", span["span_id"], {
+                        "class": pair["class"],
+                        "grade": str(sheet),
+                        "teacher_attribution": pair["teacher"],
+                    })
     return [found[student_id] for student_id in order]
 
 

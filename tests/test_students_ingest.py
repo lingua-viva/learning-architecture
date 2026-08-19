@@ -1184,7 +1184,131 @@ def test_preview_controls_wired():
     assert "data-ingest-cancel" in HTML
     assert '"/api/students/ingest/approve"' in HTML
     assert '"/api/students/ingest/cancel"' in HTML
-    assert "Create these students" in HTML
+    assert "Create these ${scoped.length} student" in HTML
     assert "Nothing has been saved yet" in HTML
     # Claudia-lens rule (v157): raw confidence numbers never render in the UI.
     assert "student.confidence" not in HTML
+
+
+# --- STEP 4 (SPEC_LV_UNIFIED_REAL_DATA_FIX §STEP 4): "only my class" -----------
+
+
+_CLASS_LIST = {
+    "Verdi": {
+        "teacher": "Ilaria Moretti",
+        "students": ["Marco Bianchi", "Nora Rossi", "Sara Conti"],
+    },
+    "Blu": {
+        "teacher": "Chiara De Luca",
+        "students": ["Matteo Barbieri", "Sofia Caruso"],
+    },
+}
+
+
+def _class_list_extraction(source_id: str) -> dict:
+    """Extraction shaped like the class-pair detector's output: every
+    detection carries class / grade / teacher_attribution (STEP 4)."""
+    data = _roster_extraction(
+        source_id,
+        [name for info in _CLASS_LIST.values() for name in info["students"]],
+    )
+    by_name = {
+        name: (class_name, info["teacher"])
+        for class_name, info in _CLASS_LIST.items()
+        for name in info["students"]
+    }
+    for student in data["structure"]["students_detected"]:
+        class_name, teacher = by_name[student["display_name"]]
+        student["class"] = class_name
+        student["grade"] = "Grade 3"
+        student["teacher_attribution"] = teacher
+    return data
+
+
+@pytest.fixture()
+def class_list_extractor(monkeypatch):
+    async def extract(source, content, *, model_client=None):
+        data = _class_list_extraction(source.source_id)
+        data["source_sha256"] = source.data["sha256"]
+        return ExtractionRecord(data)
+
+    from src.lingua_viva.docpipe import extract as docpipe_extract
+
+    monkeypatch.setattr(docpipe_extract, "extract_document", extract)
+
+
+def test_preview_carries_class_membership(isolated_state, class_list_extractor, sync_spies):
+    """Preview rows surface class / grade / teacher_attribution and the job
+    lists the distinct classes so the UI can offer the scope picker."""
+    job = _wait_for_job(_upload()["job_id"])
+    assert job["status"] == "preview"
+    assert job["preview_classes"] == ["Blu", "Verdi"]
+    rows = {row["display_name"]: row for row in job["preview_students"]}
+    assert rows["Marco Bianchi"]["class"] == "Verdi"
+    assert rows["Marco Bianchi"]["grade"] == "Grade 3"
+    assert rows["Marco Bianchi"]["teacher_attribution"] == "Ilaria Moretti"
+    assert rows["Sofia Caruso"]["class"] == "Blu"
+    assert rows["Sofia Caruso"]["teacher_attribution"] == "Chiara De Luca"
+    assert _store_count() == 0  # still a preview — nothing written
+
+
+def test_approve_scoped_to_one_class_creates_only_that_class(isolated_state, class_list_extractor, sync_spies):
+    """The product requirement: the teacher wants her ~39, not 400. A scoped
+    approve creates only her class and says honestly how many it skipped."""
+    job = _wait_for_job(_upload()["job_id"])
+    assert job["status"] == "preview"
+
+    response = client.post("/api/students/ingest/approve", json={
+        "job_id": job["job_id"], "classes": ["Verdi"],
+    })
+    assert response.status_code == 200, response.text
+    done = _wait_for_job(job["job_id"])
+    assert done["status"] == "done"
+    created = sorted(s["display_name"] for s in done["students_created"])
+    assert created == sorted(_CLASS_LIST["Verdi"]["students"])
+    assert _store_count() == 3
+    assert any("Skipped 2" in w and "Verdi" in w for w in done["warnings"]), done["warnings"]
+    # only the created students head toward Drive
+    assert len(sync_spies["enqueued"]) == 3
+
+
+def test_unscoped_approve_creates_every_class(isolated_state, class_list_extractor, sync_spies):
+    job = _wait_for_job(_upload()["job_id"])
+    response = client.post("/api/students/ingest/approve", json={"job_id": job["job_id"]})
+    assert response.status_code == 200, response.text
+    done = _wait_for_job(job["job_id"])
+    assert done["status"] == "done"
+    assert _store_count() == 5
+    assert not any("Skipped" in w for w in done["warnings"])
+
+
+def test_approve_with_unknown_class_is_refused(isolated_state, class_list_extractor, sync_spies):
+    """An unknown class selection is a 422, never a silent zero-creation
+    approve — the job stays at preview and can still be approved correctly."""
+    job = _wait_for_job(_upload()["job_id"])
+    response = client.post("/api/students/ingest/approve", json={
+        "job_id": job["job_id"], "classes": ["Rossi"],
+    })
+    assert response.status_code == 422
+    assert _store_count() == 0
+    refreshed = client.get(f"/api/students/ingest/{job['job_id']}").json()
+    assert refreshed["status"] == "preview"
+
+    # a correct scope still works afterwards
+    response = client.post("/api/students/ingest/approve", json={
+        "job_id": job["job_id"], "classes": ["Blu"],
+    })
+    assert response.status_code == 200, response.text
+    done = _wait_for_job(job["job_id"])
+    assert sorted(s["display_name"] for s in done["students_created"]) == sorted(
+        _CLASS_LIST["Blu"]["students"]
+    )
+
+
+def test_class_scope_ui_wired():
+    """STEP 4 UI: the preview offers the class scope picker and per-row class
+    badges; the approve sends the selected class."""
+    assert "data-ingest-class-scope" in HTML
+    assert "preview_classes" in HTML
+    assert "you can import only yours" in HTML
+    assert "classes: [scope]" in HTML

@@ -101,6 +101,9 @@
               "display_name": { "type": "string", "minLength": 1 },
               "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
               "evidence": { "enum": ["student_column", "bigram_fallback", "model"] },
+              "class": { "type": "string", "minLength": 1 },
+              "grade": { "type": "string", "minLength": 1 },
+              "teacher_attribution": { "type": "string", "minLength": 1 },
               "span_ids": {
                 "type": "array",
                 "items": { "type": "string", "pattern": "^SPN-[A-Za-z0-9_-]+$" }

@@ -831,7 +831,8 @@
       askMoreOffered: false,
       tierOverrides: {},
       rosterSplit: null,
-      ingestJob: null
+      ingestJob: null,
+      ingestClassScope: ""
     };
 
     const voiceRuntime = {
@@ -3046,9 +3047,24 @@
       // panel. The import has created NOTHING at this point — the teacher
       // sees exactly who would be created and explicitly confirms or cancels.
       if (job.status === "preview") {
-        const previewRows = (job.preview_students || []).map(student => `
-          <div class="source-line" style="align-items:center;"><span class="badge${student.low_confidence ? " warn" : " ok"}">${escapeHtml(student.display_name)}</span>${student.low_confidence ? '<span class="badge">check this name — it was hard to read</span>' : ""}</div>`).join("");
-        host.innerHTML = previewRows + `<div class="row" style="margin-top:8px;"><button type="button" class="primary" data-ingest-approve>Create these students</button><button type="button" data-ingest-cancel>Cancel</button><span class="voice-hint">Nothing has been saved yet — cancelling leaves no trace.</span></div>`;
+        // STEP 4 (SPEC_LV_UNIFIED_REAL_DATA_FIX §STEP 4): class-list imports
+        // carry class membership — the teacher can scope the approve to
+        // "only my class" and the preview shows exactly who that creates.
+        const allStudents = job.preview_students || [];
+        const classes = job.preview_classes || [];
+        const scope = classes.includes(state.ingestClassScope) ? state.ingestClassScope : "";
+        const scoped = scope ? allStudents.filter(student => student.class === scope) : allStudents;
+        const classCounts = {};
+        allStudents.forEach(student => { if (student.class) classCounts[student.class] = (classCounts[student.class] || 0) + 1; });
+        const scopePicker = classes.length ? `<div class="row" style="margin-bottom:8px;"><select data-ingest-class-scope style="width:auto;"><option value="">All classes (${allStudents.length} students)</option>${classes.map(name => `<option value="${escapeHtml(name)}"${scope === name ? " selected" : ""}>Only ${escapeHtml(name)} (${classCounts[name] || 0} students)</option>`).join("")}</select><span class="voice-hint">This file lists more than one class — you can import only yours.</span></div>` : "";
+        const previewRows = scoped.map(student => `
+          <div class="source-line" style="align-items:center;"><span class="badge${student.low_confidence ? " warn" : " ok"}">${escapeHtml(student.display_name)}</span>${student.class ? `<span class="badge">${escapeHtml(student.class)}${student.teacher_attribution ? ` — ${escapeHtml(student.teacher_attribution)}` : ""}</span>` : ""}${student.low_confidence ? '<span class="badge">check this name — it was hard to read</span>' : ""}</div>`).join("");
+        host.innerHTML = scopePicker + previewRows + `<div class="row" style="margin-top:8px;"><button type="button" class="primary" data-ingest-approve>Create these ${scoped.length} student${scoped.length === 1 ? "" : "s"}</button><button type="button" data-ingest-cancel>Cancel</button><span class="voice-hint">Nothing has been saved yet — cancelling leaves no trace.</span></div>`;
+        const scopeSelect = host.querySelector("[data-ingest-class-scope]");
+        if (scopeSelect) scopeSelect.addEventListener("change", () => {
+          state.ingestClassScope = scopeSelect.value;
+          renderIngestResults();
+        });
         const approveBtn = host.querySelector("[data-ingest-approve]");
         approveBtn.addEventListener("click", async () => {
           approveBtn.disabled = true;
@@ -3056,7 +3072,7 @@
             const response = await fetch("/api/students/ingest/approve", {
               method: "POST",
               headers: {"Content-Type": "application/json"},
-              body: JSON.stringify({job_id: job.job_id})
+              body: JSON.stringify(scope ? {job_id: job.job_id, classes: [scope]} : {job_id: job.job_id})
             });
             const data = await response.json();
             if (!response.ok) throw new Error(data.error || "approve failed");
@@ -3330,6 +3346,7 @@
         return;
       }
       state.ingestJob = {job_id: data.job_id, status: "queued", source_name: "Drive roster", students_created: [], needs_confirmation: []};
+      state.ingestClassScope = "";
       renderIngestResults();
       pollIngestJob();
     }
@@ -3365,6 +3382,7 @@
         return;
       }
       state.ingestJob = {job_id: data.job_id, status: "queued", source_name: file.name, students_created: [], needs_confirmation: []};
+      state.ingestClassScope = "";
       renderIngestResults();
       pollIngestJob();
     }

@@ -185,7 +185,59 @@ The evidence class predicts correctness; the number never did. So:
 - UI_CONTRACT bumped v159 → **v160** (server-side only; the boolean badge
   contract from v157 is unchanged — raw numbers still never render).
 
-_(pending — STEPs 4–8, 10, 11; STEP 9 gated on ruling §8-2; STEP 12 only if
+### STEP 4 — Class membership and "my class" (L4) — DONE
+
+Grade-sheet class lists carry NO header labels — the SHAPE is the
+evidence. `_sheet_class_pairs` (extract.py) recognizes the pair genre:
+row 1 = class name above each Last|First column pair, row 2 = teacher,
+roster rows fill BOTH columns of a pair. Detections carry `class`,
+`grade` (sheet title), `teacher_attribution`; teachers are attribution,
+never students (position, not text). Fail-closed guards, both earned on
+the real corpus (see below): ≥2 pairs required, first two non-empty rows
+must fill the same columns, no adjacent heading cells, and any row
+filling a column outside the pairs is table data. The label-header rule
+(STEP 2) wins per sheet; a lone "class"/"classe" column is scoping
+metadata, never a name header — and on label sheets it now attaches
+`class` to each detection (3V: her 3 of 6).
+
+- **Regression the synthetic mirror missed, the real corpus caught:**
+  first cut of the pair rule turned title+subtitle-over-a-grid sheets
+  into a false (A,B) pair — real curriculum +217 FP, calendar +35 FP.
+  Fixed with the ≥2-pairs and allowed-columns guards; class locked by
+  `test_title_and_subtitle_over_a_grid_is_not_a_class_pair` (+ a same-
+  shape synthetic guard test), so the mirror now holds this line in CI.
+- **Scope option ("only my class"):** preview rows carry the class
+  metadata + jobs list `preview_classes`; approve accepts `classes`
+  (unknown class = 422, never a silent no-op; out-of-scope names skipped
+  with an honest count warning). UI: scope picker on the preview panel,
+  per-row class badges, button says exactly how many it will create.
+  Roster attribution rides the existing `teacher_roster` wiring
+  (`_register_roster`, add_to_roster source='ingest') — the approving
+  teacher's roster gets exactly the class she scoped to.
+- Locks: 8 new extract tests (membership, teacher exclusion, note rows,
+  grid fail-closed ×2, label-wins + class scoping, lone-class column,
+  vault schema gate for the new keys) + 5 new ingest tests (preview
+  metadata, scoped approve, unscoped approve, unknown-class 422 then
+  correct approve, UI wiring). Schema: `class`/`grade`/
+  `teacher_attribution` added to students_detected (additive).
+- UI_CONTRACT bumped v160 → **v161** (web.py + index.html).
+
+**Gate results (real corpus):**
+
+| real corpus | baseline | after STEP 4 | spec gate |
+|---|---|---|---|
+| class list prec / rec | 0.14 / 0.22 (FP 547) | **1.00 / 0.80 (334 TP, 0 FP)** | roster attributed to the correct teacher, teachers not in the student set ✓ |
+| curriculum / calendar FP | 144 / 86 | **0 / 0** (held through the pair rule) | 0 ✓ |
+| 3V | 1.00 / 1.00 | 1.00 / 1.00 + class metadata ("V"/"A") | unchanged ✓ |
+
+The 83 FN are entirely the grades 6–8 sheets — a DIFFERENT genre
+(full-name columns, r1≠r2 column sets), not the K–5 pair shape. Honest
+deferral: no rule was tuned to reach them (§5), they are recorded here
+as the known gap. The teacher's own requirement ("her ~39, not 400") is
+met — every K–5 class roster resolves with zero false positives.
+Synthetic mirror after STEP 4: **1.00/1.00 on all five files.**
+
+_(pending — STEPs 5–8, 10, 11; STEP 9 gated on ruling §8-2; STEP 12 only if
 time. Each entry: scorer before/after, per-STEP gate result, commits.)_
 
 ## Holdout opening (§6) — NOT YET OPENED

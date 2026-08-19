@@ -2423,6 +2423,7 @@ def _new_ingest_job(source_id: str, source_name: str, teacher_id: str = "teacher
         "teacher_id": teacher_id,
         "students_found": 0,
         "preview_students": [],
+        "preview_classes": [],
         "students_created": [],
         "needs_confirmation": [],
         "warnings": [],
@@ -2532,6 +2533,28 @@ async def _create_from_preview(job: dict, extraction) -> None:
     path (Phase 0A, SPEC_LV_UNIFIED_REAL_DATA_FIX_2026-08-19 §2A)."""
     try:
         detected = _detected_students(extraction)
+        # STEP 4 (SPEC §STEP 4, L4): "only my class" — when the approve
+        # carried a class scope, only students whose detected class is in it
+        # are created. The teacher wants her ~39, not 400. Students the
+        # detector could not place in a class are excluded by an explicit
+        # scope (never silently included) and counted in a warning.
+        approved_classes = [
+            str(item).strip()
+            for item in (job.get("approved_classes") or [])
+            if str(item).strip()
+        ]
+        if approved_classes:
+            in_scope = [
+                student for student in detected
+                if str(student.get("class") or "").strip() in approved_classes
+            ]
+            skipped = len(detected) - len(in_scope)
+            if skipped:
+                job["warnings"].append(
+                    f"Skipped {skipped} detected name(s) outside your selected "
+                    f"class ({', '.join(approved_classes)})."
+                )
+            detected = in_scope
         # SPEC_LV_DRIVE_OOTB 2026-08-18 (G3): roster-style imports (more than
         # BULK_IMPORT_CONFIRMATION_THRESHOLD students) auto-create EVERY
         # detected student — the teacher contract allows no per-name confirm
@@ -2628,15 +2651,28 @@ async def _run_ingest_job(job: dict, source, content: bytes) -> None:
             job["status"] = "done"
             _save_ingest_job(job)
             return
+        # STEP 4 (SPEC §STEP 4, L4): detections from class-pair sheets carry
+        # class / grade / teacher_attribution — surfaced on every preview row
+        # so the teacher can scope the approve to "only my class".
         job["preview_students"] = [
             {
                 "display_name": str(student.get("display_name") or "").strip(),
                 "confidence": _safe_confidence(student),
                 "low_confidence": not _trusted_detection(student),
                 "span_ids": [str(sid) for sid in (student.get("span_ids") or [])],
+                **{
+                    key: str(student.get(key))
+                    for key in ("class", "grade", "teacher_attribution")
+                    if str(student.get(key) or "").strip()
+                },
             }
             for student in detected
         ]
+        job["preview_classes"] = sorted({
+            str(student.get("class"))
+            for student in detected
+            if str(student.get("class") or "").strip()
+        })
         job["status"] = "preview"
         _save_ingest_job(job)
     except NotImplementedError:
@@ -2881,7 +2917,11 @@ async def students_ingest_status(job_id: str):
 async def students_ingest_approve(payload: dict, background_tasks: BackgroundTasks):
     """Phase 0A (SPEC_LV_UNIFIED_REAL_DATA_FIX_2026-08-19 §2A): the explicit
     confirm step. Only a job sitting at "preview" may create students; the
-    creation itself runs in _create_from_preview."""
+    creation itself runs in _create_from_preview.
+
+    STEP 4 (SPEC §STEP 4, L4): the payload may carry `classes` — a list of
+    class names from the preview's `preview_classes` — to scope creation to
+    "only my class". An unknown class name is a 422, not a silent no-op."""
     from src.lingua_viva.docpipe import vault as docpipe_vault
 
     job_id = str((payload or {}).get("job_id", "")).strip()
@@ -2895,12 +2935,27 @@ async def students_ingest_approve(payload: dict, background_tasks: BackgroundTas
                 f"(status: {job.get('status')})."
             ),
         }, status_code=409)
+    classes = [
+        str(item).strip()
+        for item in ((payload or {}).get("classes") or [])
+        if str(item).strip()
+    ]
+    known = set(job.get("preview_classes") or [])
+    unknown = [name for name in classes if name not in known]
+    if unknown:
+        return JSONResponse({
+            "error": (
+                "Unknown class selection: " + ", ".join(unknown)
+                + ". Pick from the classes shown in the preview."
+            ),
+        }, status_code=422)
     try:
         extraction = await asyncio.to_thread(docpipe_vault.get_extraction, job["source_id"])
     except FileNotFoundError:
         return JSONResponse({
             "error": "The extracted document is no longer available — import the file again (re-imports merge safely).",
         }, status_code=409)
+    job["approved_classes"] = classes
     job["status"] = "creating"
     _save_ingest_job(job)
     background_tasks.add_task(_create_from_preview, job, extraction)

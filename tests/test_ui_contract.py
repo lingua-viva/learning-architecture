@@ -252,7 +252,9 @@ REPO = Path(__file__).resolve().parent.parent
 #     preview that writes nothing; explicit approve/cancel routes + panel.
 #   v160 (2026-08-19): STEP 3 — dead numeric confidence gate deleted; trust
 #     rides on the corpus-measured evidence class (server-side only).
-EXPECTED_VERSION = 160
+#   v161 (2026-08-19): STEP 4 — class membership on preview rows + "only my
+#     class" approve scope (web.py + index.html scope picker).
+EXPECTED_VERSION = 161
 
 
 def _html() -> str:
