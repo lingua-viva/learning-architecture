@@ -245,7 +245,7 @@ REPO = Path(__file__).resolve().parent.parent
 #     drop zone, unit CRUD (starter themes removed), file-content generation,
 #     starting CEFR levels at import, teacher_roster, native print, Claudia-
 #     lens copy pass.
-EXPECTED_VERSION = 157
+EXPECTED_VERSION = 158
 
 
 def _html() -> str:
