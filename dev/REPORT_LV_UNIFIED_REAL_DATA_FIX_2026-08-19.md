@@ -526,9 +526,61 @@ Same root as the lens side: first-plausible-line vs document structure.
 **Spec gate (§STEP 11):** title = the actual document title, grade
 detected, not the letterhead — verified on the real PDF ✓.
 
-_(pending — STEP 12 only if time; then §6 holdout opening + end-to-end
-assertion.)_
+_(pending — STEP 12 only if time.)_
 
-## Holdout opening (§6) — NOT YET OPENED
+## Holdout opening (§6) — OPENED 2026-08-19 (once) — HONEST FAIL
 
-_(one-time, end of wave: `--open-holdout` run, result recorded here.)_
+One-time `--open-holdout` scorer run (operator-authorized):
+
+| file (shape) | exp | det | TP | FP | FN | prec | rec |
+|---|---|---|---|---|---|---|---|
+| K-5 support (per_class_sheet_support) | 230 | 1 | 0 | 1 | 230 | 0.00 | 0.00 |
+
+**The per-class-sheet genre did not generalize.** Diagnosis (structure, no
+names): 12 sheets named by class (class identity lives in the SHEET NAME);
+the name column has NO header (every other column is a long descriptive
+support header); names are "Firstname + initial" — a single-capital
+surname the bigram fallback cannot match, and no labelled column or
+first/last pair for the structural detector. The 1 FP is a bigram inside
+a long free-text cell. Zero structural detections → zero enrichment from
+this file.
+
+**Measurement integrity:** this result stands as recorded. No fix was
+built and re-scored against the opened holdout — a post-hoc fix scored on
+the same file would be in-sample, not generalization evidence. Fixing the
+genre (sheet-name class + unlabelled row-key column + first-name-initial)
+needs an operator ruling and its own verification data.
+
+## End-to-end assertion (§6) — PASS (isolated store, counts only)
+
+All five real files imported through the real ingest API
+(`/api/students/ingest` → preview → approve/cancel) into an isolated
+store (`LV_STATE_HOME`/`LV_STUDENT_DB_PATH` in tmp):
+
+- **Curriculum map:** 0 structural detections. The model-enrichment leg
+  added 1 low-confidence candidate (7 on an earlier run — the leg is
+  nondeterministic), `evidence=None`, visibly low-confidence in preview;
+  the teacher declines → cancel → **0 lenses**. Calendar: 0 detections,
+  job finishes `done` directly → **0 lenses**. Gate: zero lenses from
+  curriculum/calendar ✓ (held by the Phase 0A always-preview gate).
+- **Class list:** 334 found, 12 classes on the preview; approve scoped to
+  the target teacher's class → **35 lenses created, 0 false positives**.
+  (Spec's "~39" was a pre-labelling estimate; the class-list FN are
+  entirely the grades 6–8 sheets — a different genre, recorded at STEP 4.
+  Her K-5 class resolves fully, 0 FP.)
+- **3V support:** 6 found; approve → 3 linked to existing lenses via
+  identity review (enrichment, never duplicated) + 3 created for the
+  other class; 35 → 38 lenses, no duplicate explosion ✓.
+- **K-5 holdout:** 0 structural detections on this path too (consistent
+  with the scorer) — preview shows 1 low-confidence model candidate; the
+  teacher declines → 0 lenses. Known FAIL, recorded above.
+
+**Findings for the next wave (recorded, not fixed):**
+1. The model-enrichment leg can add ungrounded-EVIDENCE (span-grounded but
+   structurally uncorroborated) "students" to previews of non-student
+   documents — e.g. book authors in a curriculum map. Today the always-
+   preview gate + low-confidence badge hold the line at zero lenses; the
+   corpus scorer measures the structural leg only, so this leg is
+   currently unmeasured.
+2. The per-class-sheet support genre (holdout) needs its own detection
+   rule + fresh verification data.
