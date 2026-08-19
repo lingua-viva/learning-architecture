@@ -2426,6 +2426,7 @@ def _new_ingest_job(source_id: str, source_name: str, teacher_id: str = "teacher
         "preview_classes": [],
         "students_created": [],
         "needs_confirmation": [],
+        "identity_review": [],
         "warnings": [],
         "error": None,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -2527,6 +2528,56 @@ def _detected_students(extraction) -> list[dict]:
     ]
 
 
+def _teacher_roster_snapshot(teacher_id: str) -> list[dict]:
+    """STEP 5 (SPEC §STEP 5, L8): the identity-resolution scope — the
+    approving teacher's roster (~39 names, never the whole school; a fresh
+    single-teacher install's fallback IS her roster). Snapshotted once per
+    approve so resolution is deterministic across the batch."""
+    def read(store):
+        return [
+            {
+                "student_id": str(lens.get("student_id") or ""),
+                "display_name": str(lens.get("display_name") or ""),
+            }
+            for lens in store.list_lenses_for_teacher(teacher_id)
+        ]
+
+    return _with_student_store(read)
+
+
+def _resolve_or_queue(student: dict, *, job: dict, roster: list[dict]) -> Optional[dict]:
+    """Resolve one detection's identity before ANY lens creation (STEP 5).
+
+    Returns the (possibly id-rewritten) student to create, or None when the
+    spelling landed in the unresolved queue. Default per ruling §8-3: a
+    plausible-but-inexact match is ALWAYS queued for a human, NEVER
+    auto-merged — "Marco B-R" must not silently become a second child next
+    to "Marco Bianchi", and must not silently become the same child either.
+    """
+    from src.lingua_viva.docpipe import identity
+
+    display_name = str(student.get("display_name") or "").strip()
+    resolution = identity.resolve(display_name, roster)
+    if resolution["status"] == "exact":
+        # The spelling IS a roster student (or a spelling a human already
+        # ruled on) — merge into the canonical lens, whatever the slug says.
+        return {**student, "student_id": resolution["student_id"]}
+    if resolution["status"] == "queue":
+        identity.enqueue_unresolved(
+            teacher_id=str(job.get("teacher_id") or "teacher:ingest"),
+            display_name=display_name,
+            source_id=str(job.get("source_id") or ""),
+            candidates=resolution["candidates"],
+            job_id=str(job.get("job_id") or ""),
+        )
+        job.setdefault("identity_review", []).append({
+            "display_name": display_name,
+            "candidates": resolution["candidates"],
+        })
+        return None
+    return student
+
+
 async def _create_from_preview(job: dict, extraction) -> None:
     """Runs only after the teacher's explicit approve. Everything that writes
     to the student store or touches Drive lives here — never in the preview
@@ -2565,9 +2616,20 @@ async def _create_from_preview(job: dict, extraction) -> None:
         # entry. STEP 3: the gate is the corpus-measured evidence class
         # (_trusted_detection), not a numeric threshold that never fired.
         roster_import = len(detected) > BULK_IMPORT_CONFIRMATION_THRESHOLD
+        # STEP 5 (SPEC §STEP 5, L8): identity resolves against the approving
+        # teacher's roster BEFORE any creation — exact spellings (and human-
+        # ruled surface forms) merge into their canonical lens, plausible
+        # matches go to the unresolved queue, only genuinely new names mint
+        # new lenses. Zero silent duplicates.
+        roster = await asyncio.to_thread(
+            _teacher_roster_snapshot, job.get("teacher_id") or "teacher:ingest"
+        )
         low_confidence_names: list[str] = []
         for student in detected:
             if roster_import:
+                student = _resolve_or_queue(student, job=job, roster=roster)
+                if student is None:
+                    continue
                 created = await asyncio.to_thread(
                     _create_lens_for_detected, extraction, student, job.get("teacher_id") or "teacher:ingest"
                 )
@@ -2575,6 +2637,9 @@ async def _create_from_preview(job: dict, extraction) -> None:
                 if not _trusted_detection(student):
                     low_confidence_names.append(str(student.get("display_name")))
             elif _trusted_detection(student):
+                student = _resolve_or_queue(student, job=job, roster=roster)
+                if student is None:
+                    continue
                 created = await asyncio.to_thread(
                     _create_lens_for_detected, extraction, student, job.get("teacher_id") or "teacher:ingest"
                 )
@@ -2590,6 +2655,12 @@ async def _create_from_preview(job: dict, extraction) -> None:
             job["warnings"].append(
                 "Check these names — they were read with low confidence: "
                 + ", ".join(low_confidence_names)
+            )
+        if job.get("identity_review"):
+            names = ", ".join(item["display_name"] for item in job["identity_review"])
+            job["warnings"].append(
+                f"Not created yet — these names look like students you already "
+                f"have: {names}. Decide in the identity review below."
             )
         job["status"] = "done"
         _save_ingest_job(job)
@@ -2831,6 +2902,109 @@ async def students_ingest_unattributed(teacher_id: str = ""):
     return {"items": list_open_items(str(teacher_id or "") or None)}
 
 
+@app.get("/api/students/ingest/identity")
+async def students_ingest_identity(teacher_id: str = ""):
+    """STEP 5 (SPEC §STEP 5, L8): the unresolved-identity queue — detected
+    spellings that plausibly match roster students, waiting for a human
+    ruling (always queue, never auto-merge — ruling §8-3 default)."""
+    from src.lingua_viva.docpipe import identity
+
+    return {"items": identity.list_open_items(str(teacher_id or "") or None)}
+
+
+@app.post("/api/students/ingest/identity/resolve")
+async def students_ingest_identity_resolve(payload: dict):
+    """The human ruling on one queued spelling.
+
+    action=assign  → this spelling IS student_id (the same_person_as
+                     relation): recorded as a surface form future imports
+                     replay, document evidence merged into the CANONICAL
+                     lens — never a second lens.
+    action=create  → genuinely new student: a lens is minted for the
+                     spelling.
+    action=dismiss → not a student / not mine: queue item closed, nothing
+                     created.
+    """
+    from src.education.student_lens import LensNotFoundError
+    from src.lingua_viva.docpipe import identity
+    from src.lingua_viva.docpipe import vault as docpipe_vault
+
+    data = payload or {}
+    display_name = str(data.get("display_name") or "").strip()
+    teacher_id = str(data.get("teacher_id") or "teacher:ingest").strip() or "teacher:ingest"
+    action = str(data.get("action") or "").strip()
+    if not display_name:
+        return JSONResponse({"error": "display_name is required"}, status_code=400)
+    if action not in ("assign", "create", "dismiss"):
+        return JSONResponse({"error": "action must be assign, create, or dismiss"}, status_code=400)
+
+    item = identity.current_items().get(identity._item_key(teacher_id, display_name))
+    if not item or item.get("status") != "open":
+        return JSONResponse({"error": "identity_item_not_open"}, status_code=409)
+
+    if action == "dismiss":
+        event = identity.mark_dismissed(teacher_id=teacher_id, display_name=display_name)
+        return {"status": "dismissed", "event": event}
+
+    source_id = str(item.get("source_id") or "")
+    extraction = None
+    if source_id:
+        try:
+            extraction = await asyncio.to_thread(docpipe_vault.get_extraction, source_id)
+        except FileNotFoundError:
+            extraction = None
+
+    def _detected_for_name():
+        if extraction is None:
+            return None
+        for student in extraction.data.get("structure", {}).get("students_detected", []):
+            if isinstance(student, dict) and str(student.get("display_name") or "").strip() == display_name:
+                return student
+        return None
+
+    if action == "assign":
+        student_id = str(data.get("student_id") or "").strip()
+        if not student_id:
+            return JSONResponse({"error": "student_id is required for assign"}, status_code=400)
+        # the canonical student must exist — assigning to a ghost is a bug
+        try:
+            await asyncio.to_thread(_with_student_store, lambda store: store.get_lens(student_id))
+        except LensNotFoundError:
+            return JSONResponse({"error": "unknown student_id"}, status_code=404)
+        merged = None
+        if extraction is not None:
+            detected = _detected_for_name() or {"display_name": display_name}
+            merged = await asyncio.to_thread(
+                _create_lens_for_detected, extraction,
+                {**detected, "student_id": student_id}, teacher_id,
+            )
+        event = identity.mark_assigned(
+            teacher_id=teacher_id, display_name=display_name,
+            student_id=student_id, source_id=source_id,
+        )
+        return {
+            "status": "assigned",
+            "student_id": student_id,
+            "evidence_merged": merged is not None,
+            "event": event,
+        }
+
+    # action == "create": the human ruled "genuinely new student"
+    if extraction is None:
+        return JSONResponse({
+            "error": "The extracted document is no longer available — import the file again (re-imports merge safely).",
+        }, status_code=409)
+    detected = _detected_for_name() or {"display_name": display_name}
+    created = await asyncio.to_thread(
+        _create_lens_for_detected, extraction, detected, teacher_id
+    )
+    event = identity.mark_created(
+        teacher_id=teacher_id, display_name=display_name,
+        student_id=created["student_id"],
+    )
+    return {"status": "created", "student": created, "event": event}
+
+
 @app.post("/api/students/ingest/attribute")
 async def students_ingest_attribute(payload: dict):
     from src.education.student_lens import LensNotFoundError
@@ -3042,8 +3216,21 @@ async def students_ingest_confirm(payload: dict):
             for student in extraction.data.get("structure", {}).get("students_detected", [])
             if isinstance(student, dict)
         }
+        # STEP 5: confirmed names pass through identity resolution too — a
+        # teacher confirming "this IS a student" must not silently mint a
+        # duplicate of a child already on her roster under another spelling.
+        roster = await asyncio.to_thread(
+            _teacher_roster_snapshot, job.get("teacher_id") or "teacher:ingest"
+        )
         for name in display_names:
             detected = detected_by_name.get(name) or {"display_name": name}
+            detected = _resolve_or_queue(detected, job=job, roster=roster)
+            if detected is None:
+                job["needs_confirmation"] = [
+                    item for item in job["needs_confirmation"]
+                    if item.get("display_name") != name
+                ]
+                continue
             created = await asyncio.to_thread(
                 _create_lens_for_detected, extraction, detected, job.get("teacher_id") or "teacher:ingest"
             )
@@ -3092,6 +3279,8 @@ async def students_ingest_confirm(payload: dict):
         })
     _save_ingest_job(job)
     body = {"status": "created" if created_students else "updated", "students": created_students}
+    if job.get("identity_review"):
+        body["identity_review"] = job["identity_review"]
     if cefr_updated:
         body["cefr_updated"] = cefr_updated
     if len(created_students) == 1:

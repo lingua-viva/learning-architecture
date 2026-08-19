@@ -16,6 +16,14 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v162 (2026-08-19): STEP 5 of SPEC_LV_UNIFIED_REAL_DATA_FIX — identity
+#     resolution + unresolved queue (L8). src/web.py: every lens creation
+#     from ingest resolves against the teacher's roster (exact spelling or
+#     recorded surface form -> canonical id; plausible match -> queued, NEVER
+#     auto-merged; no match -> new); routes GET /api/students/ingest/identity
+#     + POST .../identity/resolve (assign|create|dismiss). static/index.html:
+#     identity-review-panel with Same child / New student / Dismiss controls,
+#     done-job identity notice. Raw confidence still never renders.
 #   v161 (2026-08-19): STEP 4 of SPEC_LV_UNIFIED_REAL_DATA_FIX — class
 #     membership + "only my class". src/web.py: preview rows carry
 #     class/grade/teacher_attribution, jobs list preview_classes, approve
@@ -723,7 +731,7 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 161
+version: 162
 # v122 (2026-08-06): Failure-mode hardening. src/web.py: voice-act observation
 #   dedup guard (same 60s window as observe/capture, prevents network-retry
 #   duplicates). src/education/parent_report.py: personal_context evidence

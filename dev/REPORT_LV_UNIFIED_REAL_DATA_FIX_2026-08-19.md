@@ -237,7 +237,63 @@ as the known gap. The teacher's own requirement ("her ~39, not 400") is
 met — every K–5 class roster resolves with zero false positives.
 Synthetic mirror after STEP 4: **1.00/1.00 on all five files.**
 
-_(pending — STEPs 5–8, 10, 11; STEP 9 gated on ruling §8-2; STEP 12 only if
+### STEP 5 — Identity resolution + unresolved queue (L8) — DONE
+
+`student_id = slug(display_name)` made identity BE the spelling: "Marco
+B-R" in a support file next to "Marco Bianchi" on the class list silently
+became two children. New module `docpipe/identity.py`: each child is a
+canonical id plus observed SURFACE FORMS; every lens creation from ingest
+(roster path, small trusted path, confirm path — all three
+`_create_lens_for_detected` call sites) first resolves the spelling
+against the approving teacher's roster (~39 names, snapshotted once per
+approve; never the whole school):
+
+- **exact** — the spelling IS a roster student or a surface form a human
+  already ruled on → merge into the canonical lens (deterministic replay,
+  not a guess).
+- **queue** — plausible match (first name exact + abbreviated-initial
+  compatibility) → the unresolved queue. Ruling §8-3 default honored:
+  ALWAYS queue, NEVER auto-merge — confidence measures nothing (STEP 3).
+- **new** — no plausible match → a genuinely new student.
+
+The queue is the same NDJSON event-log pattern as ingest_review.py
+(last-event-wins, chmod 600, junk-line tolerant). An "assigned" event is
+the `same_person_as` relation of the MC lens precedent
+(DESIGN_LENS_SCHEMA_MC_LENS_V1_2026-08-10): a relation between a spelling
+and an existing canonical record — never a new entity type, never a
+coercive merge — and it doubles as the surface-form registry future
+imports replay. Lens schema untouched (docpipe.lens.v1 stays frozen).
+
+- Routes: `GET /api/students/ingest/identity` (open items) +
+  `POST /api/students/ingest/identity/resolve` (assign → evidence merged
+  into the CANONICAL lens + surface form recorded; create → new lens;
+  dismiss → closed; 400/404/409 on bad name, ghost student, non-open
+  item). Both in ROUTE_REACHABILITY.
+- UI: identity-review-panel on Students (mirrors the unattributed
+  pattern) — per spelling: candidate picker, **Same child** / **New
+  student** / **Dismiss**; done-job notice when names were held back;
+  copy says "Nothing is merged or created until you decide."
+- Locks: 17 unit tests (test_docpipe_identity.py — normalization,
+  abbreviation compatibility, resolve exact/queue/new, roster scoping,
+  surface-form replay, corrected-ruling last-event-wins, teacher filter,
+  junk-line tolerance) + 8 ingest gate tests (the L8 scenario itself:
+  "Marco B-R" after "Marco Bianchi" queues with the right candidate and
+  store count stays at 3 — zero silent duplicates; exact respelling
+  merges into the canonical lens; assign merges evidence + replays on a
+  third import; create mints; dismiss creates nothing; bad-request
+  refusals keep the item open; confirm path runs the same gate; UI
+  wiring).
+- Scorer not re-run: detection surface untouched (identity runs AFTER
+  detection, at the creation chokepoint) — extract.py has no diff in
+  this STEP.
+- UI_CONTRACT bumped v161 → **v162** (web.py + index.html).
+
+**Spec gate (§STEP 5 verify):** abbreviated support-file names resolve to
+class-list students or land in the queue; zero silent duplicate lenses ✓
+(locked by `test_abbreviated_spelling_queues_never_duplicates`,
+`test_assign_ruling_merges_evidence_and_replays_forever`).
+
+_(pending — STEPs 6–8, 10, 11; STEP 9 gated on ruling §8-2; STEP 12 only if
 time. Each entry: scorer before/after, per-STEP gate result, commits.)_
 
 ## Holdout opening (§6) — NOT YET OPENED

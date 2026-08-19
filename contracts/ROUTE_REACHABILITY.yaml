@@ -534,6 +534,14 @@ reachable_from_ui:
     call_site: 'api("/api/students/ingest/attribute"'
     note: "Students and Drive ingest review cards: assign or dismiss unattributed documents."
 
+  - route: "GET /api/students/ingest/identity"
+    call_site: 'api("/api/students/ingest/identity"'
+    note: "Students identity review panel (STEP 5, L8): spellings that plausibly match existing roster students, awaiting a human ruling."
+
+  - route: "POST /api/students/ingest/identity/resolve"
+    call_site: 'api("/api/students/ingest/identity/resolve"'
+    note: "Identity review panel: same child (merge evidence into canonical lens), new student, or dismiss."
+
   - route: "POST /api/provider/disconnect"
     call_site: 'api("/api/provider/disconnect"'
     note: "Same Settings form as POST /api/provider/connect (ff2401e)."

@@ -254,7 +254,10 @@ REPO = Path(__file__).resolve().parent.parent
 #     rides on the corpus-measured evidence class (server-side only).
 #   v161 (2026-08-19): STEP 4 — class membership on preview rows + "only my
 #     class" approve scope (web.py + index.html scope picker).
-EXPECTED_VERSION = 161
+#   v162 (2026-08-19): STEP 5 — identity resolution + unresolved queue (L8):
+#     roster-scoped resolve at every ingest creation, identity review panel
+#     (assign/create/dismiss), never auto-merge, never silent duplicates.
+EXPECTED_VERSION = 162
 
 
 def _html() -> str:

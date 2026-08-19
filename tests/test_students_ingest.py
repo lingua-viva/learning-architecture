@@ -1312,3 +1312,212 @@ def test_class_scope_ui_wired():
     assert "preview_classes" in HTML
     assert "you can import only yours" in HTML
     assert "classes: [scope]" in HTML
+
+
+# --- STEP 5 (SPEC_LV_UNIFIED_REAL_DATA_FIX §STEP 5): identity resolution ------
+#
+# `student_id = slug(display_name)` made identity BE the spelling — "Marco
+# B-R" in a support file next to "Marco Bianchi" on the class list silently
+# became two children. Ruling §8-3 default: a plausible-but-inexact match is
+# ALWAYS queued for the teacher, NEVER auto-merged and NEVER silently
+# duplicated.
+
+
+@pytest.fixture()
+def switchable_extractor(monkeypatch):
+    """Extractor whose detections the test can swap between uploads."""
+    names_box = {"names": ["Marco Bianchi", "Nora Rossi", "Luca Verdi"]}
+
+    async def extract(source, content, *, model_client=None):
+        data = _roster_extraction(source.source_id, list(names_box["names"]))
+        data["source_sha256"] = source.data["sha256"]
+        return ExtractionRecord(data)
+
+    from src.lingua_viva.docpipe import extract as docpipe_extract
+
+    monkeypatch.setattr(docpipe_extract, "extract_document", extract)
+    return names_box
+
+
+def _import_class_list_then(names_box, follow_up_names: list[str]) -> tuple[dict, dict]:
+    """Import the 3-name class list, then a follow-up file with the given
+    detections. Returns (first job, follow-up job)."""
+    first = _run_to_done(_upload_bytes("class_list.md", b"class list v1\n", "text/markdown")["job_id"])
+    assert first["status"] == "done"
+    assert len(first["students_created"]) == 3
+    names_box["names"] = follow_up_names
+    second = _run_to_done(_upload_bytes("support_doc.md", b"support doc v1\n", "text/markdown")["job_id"])
+    assert second["status"] == "done"
+    return first, second
+
+
+def test_abbreviated_spelling_queues_never_duplicates(isolated_state, switchable_extractor):
+    """The L8 failure itself: "Marco B-R" after "Marco Bianchi" must not mint
+    a second child — and must not silently merge either. It queues."""
+    first, second = _import_class_list_then(switchable_extractor, ["Marco B-R"])
+
+    assert second["students_created"] == []
+    assert second["needs_confirmation"] == []
+    assert [item["display_name"] for item in second["identity_review"]] == ["Marco B-R"]
+    candidates = second["identity_review"][0]["candidates"]
+    assert [c["display_name"] for c in candidates] == ["Marco Bianchi"]
+    assert any("identity review" in w for w in second["warnings"])
+    # zero silent duplicates: the store still holds exactly the class list
+    assert _store_count() == 3
+
+    queue = client.get("/api/students/ingest/identity").json()["items"]
+    assert [item["display_name"] for item in queue] == ["Marco B-R"]
+    assert queue[0]["status"] == "open"
+
+
+def test_exact_respelling_merges_into_canonical_lens(isolated_state, switchable_extractor):
+    """An exact roster spelling in a later document is the SAME child: evidence
+    merges into the canonical lens, no queue, no duplicate."""
+    first, second = _import_class_list_then(switchable_extractor, ["Marco Bianchi"])
+    marco_id = next(s["student_id"] for s in first["students_created"]
+                    if s["display_name"] == "Marco Bianchi")
+
+    assert second["identity_review"] == []
+    assert [s["student_id"] for s in second["students_created"]] == [marco_id]
+    assert _store_count() == 3
+    lens_dirs = [p.name for p in (vault.vault_root() / "lenses").iterdir() if p.is_dir()]
+    assert len([d for d in lens_dirs if "marco" in d.lower()]) == 1
+
+
+def test_assign_ruling_merges_evidence_and_replays_forever(isolated_state, switchable_extractor):
+    """Teacher rules "same child": document evidence lands on the CANONICAL
+    lens, and the ruling becomes a surface form every future import replays
+    deterministically — no re-asking, no guessing."""
+    first, second = _import_class_list_then(switchable_extractor, ["Marco B-R"])
+    marco_id = next(s["student_id"] for s in first["students_created"]
+                    if s["display_name"] == "Marco Bianchi")
+
+    response = client.post("/api/students/ingest/identity/resolve", json={
+        "display_name": "Marco B-R", "action": "assign", "student_id": marco_id,
+    })
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "assigned"
+    assert body["student_id"] == marco_id
+    assert body["evidence_merged"] is True
+    assert _store_count() == 3
+    assert client.get("/api/students/ingest/identity").json()["items"] == []
+    # only ONE marco lens exists in the vault — never a second child
+    lens_dirs = [p.name for p in (vault.vault_root() / "lenses").iterdir() if p.is_dir()]
+    assert len([d for d in lens_dirs if "marco" in d.lower()]) == 1
+
+    # replay: the same spelling in a THIRD document resolves exactly —
+    # straight into the canonical lens, no queue, no duplicate
+    switchable_extractor["names"] = ["Marco B-R"]
+    third = _run_to_done(_upload_bytes("support_doc2.md", b"support doc v2\n", "text/markdown")["job_id"])
+    assert third["status"] == "done"
+    assert third["identity_review"] == []
+    assert [s["student_id"] for s in third["students_created"]] == [marco_id]
+    assert _store_count() == 3
+
+
+def test_create_ruling_mints_a_genuinely_new_student(isolated_state, switchable_extractor):
+    _import_class_list_then(switchable_extractor, ["Marco B-R"])
+
+    response = client.post("/api/students/ingest/identity/resolve", json={
+        "display_name": "Marco B-R", "action": "create",
+    })
+    assert response.status_code == 200, response.text
+    created = response.json()["student"]
+    assert created["display_name"] == "Marco B-R"
+    assert _store_count() == 4
+    assert client.get("/api/students/ingest/identity").json()["items"] == []
+    lens_path = vault.vault_root() / "lenses" / created["student_id"] / "lens.json"
+    assert lens_path.exists()
+
+
+def test_dismiss_ruling_creates_nothing(isolated_state, switchable_extractor):
+    _import_class_list_then(switchable_extractor, ["Marco B-R"])
+
+    response = client.post("/api/students/ingest/identity/resolve", json={
+        "display_name": "Marco B-R", "action": "dismiss",
+    })
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "dismissed"
+    assert _store_count() == 3
+    assert client.get("/api/students/ingest/identity").json()["items"] == []
+
+
+def test_identity_resolve_refuses_bad_requests(isolated_state, switchable_extractor):
+    _import_class_list_then(switchable_extractor, ["Marco B-R"])
+
+    # unknown spelling → 409 (nothing open to rule on)
+    response = client.post("/api/students/ingest/identity/resolve", json={
+        "display_name": "Nobody Here", "action": "dismiss",
+    })
+    assert response.status_code == 409
+    # bad action → 400
+    response = client.post("/api/students/ingest/identity/resolve", json={
+        "display_name": "Marco B-R", "action": "merge",
+    })
+    assert response.status_code == 400
+    # assign without a student → 400
+    response = client.post("/api/students/ingest/identity/resolve", json={
+        "display_name": "Marco B-R", "action": "assign",
+    })
+    assert response.status_code == 400
+    # assign to a ghost → 404, and the queue item stays open
+    response = client.post("/api/students/ingest/identity/resolve", json={
+        "display_name": "Marco B-R", "action": "assign", "student_id": "student-ghost",
+    })
+    assert response.status_code == 404
+    queue = client.get("/api/students/ingest/identity").json()["items"]
+    assert [item["display_name"] for item in queue] == ["Marco B-R"]
+    assert _store_count() == 3
+
+
+def test_confirm_path_also_resolves_identity(isolated_state, monkeypatch):
+    """The small-import confirm path (bigram-fallback names) runs through the
+    same identity gate: a confirmed spelling that plausibly matches the roster
+    queues instead of silently duplicating."""
+    box = {"names": ["Marco Bianchi", "Nora Rossi", "Luca Verdi"], "evidence": "student_column"}
+
+    async def extract(source, content, *, model_client=None):
+        data = _roster_extraction(source.source_id, list(box["names"]))
+        data["source_sha256"] = source.data["sha256"]
+        for student in data["structure"]["students_detected"]:
+            student["evidence"] = box["evidence"]
+        return ExtractionRecord(data)
+
+    from src.lingua_viva.docpipe import extract as docpipe_extract
+
+    monkeypatch.setattr(docpipe_extract, "extract_document", extract)
+    first = _run_to_done(_upload_bytes("class_list.md", b"class list v1\n", "text/markdown")["job_id"])
+    assert len(first["students_created"]) == 3
+
+    box["names"] = ["Marco B-R"]
+    box["evidence"] = "bigram_fallback"
+    job = _run_to_done(_upload_bytes("prose_note.md", b"note v1\n", "text/markdown")["job_id"])
+    assert [item["display_name"] for item in job["needs_confirmation"]] == ["Marco B-R"]
+
+    response = client.post("/api/students/ingest/confirm", json={
+        "job_id": job["job_id"], "display_names": ["Marco B-R"],
+    })
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["students"] == []
+    assert [item["display_name"] for item in body.get("identity_review", [])] == ["Marco B-R"]
+    assert _store_count() == 3
+    refreshed = client.get(f"/api/students/ingest/{job['job_id']}").json()
+    assert refreshed["needs_confirmation"] == []
+    queue = client.get("/api/students/ingest/identity").json()["items"]
+    assert [item["display_name"] for item in queue] == ["Marco B-R"]
+
+
+def test_identity_review_ui_wired():
+    """STEP 5 UI: the identity review panel with Same child / New student /
+    Dismiss controls, wired to the resolve route."""
+    assert "identity-review-panel" in HTML
+    assert "data-identity-assign" in HTML
+    assert "data-identity-create" in HTML
+    assert "data-identity-dismiss" in HTML
+    assert 'api("/api/students/ingest/identity"' in HTML
+    assert 'api("/api/students/ingest/identity/resolve"' in HTML
+    assert "Same child" in HTML and "New student" in HTML
+    # never auto-merge: the copy says the teacher decides
+    assert "Nothing is merged or created until you decide" in HTML

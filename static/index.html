@@ -2815,6 +2815,7 @@
           <div id="ingest-results" style="margin-top:8px;"></div>
         </div>
         <div id="unattributed-review-panel" class="panel" style="margin-bottom:14px;"></div>
+        <div id="identity-review-panel" class="panel" style="margin-bottom:14px;"></div>
         <div class="panel" style="margin-bottom:14px;">
           <h3>Add Student</h3>
           <form id="add-student-form" class="row" style="gap:8px;flex-wrap:wrap;align-items:flex-end;">
@@ -2834,6 +2835,7 @@
       renderDriveRosterImport();
       renderIngestResults();
       await renderUnattributedReviewQueue("unattributed-review-panel");
+      await renderIdentityReviewQueue("identity-review-panel");
       // Resume polling for an in-flight import when the teacher returns to
       // this view — jobs keep running while they navigate elsewhere.
       if (state.ingestJob && state.ingestJob.job_id && !["done", "failed"].includes(state.ingestJob.status)) pollIngestJob();
@@ -3009,6 +3011,83 @@
       }
     }
 
+    // STEP 5 (SPEC_LV_UNIFIED_REAL_DATA_FIX_2026-08-19, L8): identity review
+    // queue. A detected spelling that plausibly matches students already on
+    // the roster ("Marco B-R" vs "Marco Bianchi") is NEVER auto-merged and
+    // NEVER silently duplicated — it waits here for the teacher's ruling.
+    function identityReviewHtml(items) {
+      if (!items.length) return `<p>No name spellings waiting for a decision.</p>`;
+      return `<div class="list">${items.map(item => {
+        const candidates = item.candidates || [];
+        const options = [`<option value="">Choose a student…</option>`].concat(candidates.map(candidate =>
+          `<option value="${escapeHtml(candidate.student_id)}">${escapeHtml(candidate.display_name || candidate.student_id)}</option>`
+        )).join("");
+        return `<div class="item" data-identity-item data-display-name="${escapeHtml(item.display_name || "")}" data-teacher-id="${escapeHtml(item.teacher_id || "")}">
+          <strong>${escapeHtml(item.display_name || "Unnamed")}</strong>
+          <p>This spelling looks like a student you already have. Is it the same child, or someone new?</p>
+          <div class="row" style="margin-top:8px;">
+            <select data-identity-student>${options}</select>
+            <button type="button" data-identity-assign>Same child</button>
+            <button type="button" data-identity-create>New student</button>
+            <button type="button" data-identity-dismiss>Dismiss</button>
+          </div>
+        </div>`;
+      }).join("")}</div>`;
+    }
+
+    function attachIdentityReviewControls(root) {
+      if (!root) return;
+      const resolveItem = async (button, payload, successMessage) => {
+        const item = button.closest("[data-identity-item]");
+        button.disabled = true;
+        try {
+          await api("/api/students/ingest/identity/resolve", {
+            method: "POST",
+            body: JSON.stringify({
+              display_name: item.dataset.displayName,
+              teacher_id: item.dataset.teacherId || "teacher:ingest",
+              ...payload
+            })
+          });
+          showToast(successMessage, "success");
+          state.students = null;
+          await ensureStudents();
+          await renderIdentityReviewQueue("identity-review-panel");
+        } catch (error) {
+          showToast(error.message, "error");
+          button.disabled = false;
+        }
+      };
+      root.querySelectorAll("[data-identity-assign]").forEach(button => button.addEventListener("click", async () => {
+        const item = button.closest("[data-identity-item]");
+        const studentId = item.querySelector("[data-identity-student]").value;
+        if (!studentId) {
+          showToast("Choose which student this spelling belongs to first.", "error");
+          return;
+        }
+        await resolveItem(button, {action: "assign", student_id: studentId}, "Spelling linked — the document's evidence went to that student.");
+      }));
+      root.querySelectorAll("[data-identity-create]").forEach(button => button.addEventListener("click", async () => {
+        await resolveItem(button, {action: "create"}, "New student created from this spelling.");
+      }));
+      root.querySelectorAll("[data-identity-dismiss]").forEach(button => button.addEventListener("click", async () => {
+        await resolveItem(button, {action: "dismiss"}, "Spelling dismissed from review.");
+      }));
+    }
+
+    async function loadIdentityItems() {
+      const data = await api("/api/students/ingest/identity");
+      return data.items || [];
+    }
+
+    async function renderIdentityReviewQueue(targetId) {
+      const target = $(targetId);
+      if (!target) return;
+      const items = await loadIdentityItems();
+      target.innerHTML = `<div class="view-head"><div><h3>Identity review (${items.length})</h3><p>Name spellings from imported files that may match students you already have. Nothing is merged or created until you decide.</p></div></div>${identityReviewHtml(items)}`;
+      attachIdentityReviewControls(target);
+    }
+
     // T9 (SPEC_T9_INGEST_UI_2026-08-04): Students-from-file ingest. The
     // teacher points at a document; the pipeline builds lens scaffolds.
     // Job state lives on state.ingestJob; polling runs only while the
@@ -3121,7 +3200,12 @@
       const undone = job.undo && job.undo.status === "archived"
         ? `<div class="source-line"><span class="badge ok">Import undone</span><span class="badge">${(job.undo.students_archived || []).length} archived</span></div>`
         : "";
-      host.innerHTML = created + saveLevels + pendingControls + undo + undone;
+      // STEP 5 (L8): spellings held back for the identity review queue —
+      // nothing was created for them, the teacher decides below.
+      const identityNotice = (job.identity_review || []).length
+        ? `<div class="source-line" style="align-items:center;"><span class="badge warn">${job.identity_review.length} name${job.identity_review.length === 1 ? "" : "s"} waiting in identity review</span><span class="voice-hint">These spellings look like students you already have — decide in the identity review panel before anything is created.</span></div>`
+        : "";
+      host.innerHTML = created + identityNotice + saveLevels + pendingControls + undo + undone;
       host.querySelectorAll("[data-ingest-confirm]").forEach(button => button.addEventListener("click", async () => {
         button.disabled = true;
         try {
@@ -3159,6 +3243,7 @@
           if (!response.ok) throw new Error(data.error || "confirm failed");
           state.ingestJob.needs_confirmation = state.ingestJob.needs_confirmation.filter(item => !names.includes(item.display_name));
           state.ingestJob.students_created.push(...(data.students || []));
+          if (data.identity_review) state.ingestJob.identity_review = data.identity_review;
           await renderStudents();
         } catch (error) {
           confirmSelected.disabled = false;
@@ -3229,6 +3314,9 @@
             await renderStudents();
             return;
           }
+          // STEP 5 (L8): a finished job may have queued spellings for the
+          // identity review panel even when nothing was created.
+          if (current.status === "done" && (current.identity_review || []).length) renderIdentityReviewQueue("identity-review-panel");
           renderIngestResults();
           return;
         }
