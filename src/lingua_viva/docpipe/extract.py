@@ -22,7 +22,7 @@ from .grounding_docs import name_tokens, span_contains_any_token, verify_extract
 from .model import ModelClient
 
 EXTRACTOR_NAME = "docpipe.extract"
-EXTRACTOR_VERSION = "1.0"
+EXTRACTOR_VERSION = "1.1"
 
 TEXT_MIMES = {"text/markdown", "text/plain", "text/csv", "text/x-markdown"}
 TEXT_EXTS = {".md", ".markdown", ".txt", ".csv"}
@@ -125,17 +125,25 @@ async def extract_document(
     # xlsx rosters whose sheet names don't match the support map — falls
     # through to the generic paragraph path.
     support = None
+    row_extract = None
     mime = str(source.data.get("mime") or "").lower()
     ext = str(source.data.get("original_ext") or "").lower()
     if mime in SPREADSHEET_MIMES or ext in SPREADSHEET_EXTS:
         support = _xlsx_support_extract(source, content)
+        if support is None:
+            # STEP 1 (SPEC_LV_UNIFIED_REAL_DATA_FIX_2026-08-19): structure
+            # survives extraction — one span per row, column identity kept.
+            row_extract = _xlsx_row_spans(content)
     if support is not None:
         text = support["text"]
         spans = support["spans"]
         structure = support["structure"]
     else:
-        text = _normalize(source, content)
-        spans = _build_spans(text)
+        if row_extract is not None:
+            text, spans = row_extract
+        else:
+            text = _normalize(source, content)
+            spans = _build_spans(text)
         structure = _build_structure(text, spans)
     model_used: Optional[str] = None
 
@@ -255,6 +263,71 @@ def _xlsx_text(content: bytes) -> str:
     if not text.strip():
         raise ValueError("no extractable text found in this Excel file")
     return text
+
+
+def _xlsx_row_spans(content: bytes) -> Optional[tuple[str, list[dict[str, Any]]]]:
+    """STEP 1 (L9): structured extraction for generic xlsx — one span per
+    non-empty ROW, with sheet name, row index, and per-cell column identity
+    retained as additive span keys ({"sheet", "row_index", "cells"}).
+
+    The span text stays an exact slice of the normalized text (built through
+    _build_spans), so the grounding gate holds by construction — same
+    additive-metadata pattern as _xlsx_support_extract's field_hint.
+
+    Returns (text, spans) or None (unreadable workbook / no content /
+    span↔row pairing broke) — the caller falls back to the flat-text path.
+
+    Interpretation of WHICH row is a header / teacher row / student row is
+    deliberately NOT done here: STEP 1 preserves structure, STEP 2/4 read it.
+    """
+    import io
+
+    try:
+        import openpyxl
+        from openpyxl.utils import get_column_letter
+    except ImportError:
+        return None
+    try:
+        workbook = openpyxl.load_workbook(
+            io.BytesIO(content), read_only=True, data_only=True
+        )
+    except Exception:
+        return None
+
+    blocks: list[str] = []
+    metas: list[dict[str, Any]] = []
+    try:
+        for sheet in workbook.worksheets:
+            for row_index, row in enumerate(sheet.iter_rows(values_only=True), start=1):
+                cells: list[dict[str, str]] = []
+                for col_index, cell in enumerate(row, start=1):
+                    value = (
+                        re.sub(r"\s+", " ", str(cell).strip()) if cell is not None else ""
+                    )
+                    if value:
+                        cells.append({"column": get_column_letter(col_index), "text": value})
+                if not cells:
+                    continue
+                blocks.append(" ".join(cell["text"] for cell in cells))
+                metas.append({
+                    "sheet": sheet.title,
+                    "row_index": row_index,
+                    "cells": cells,
+                })
+    finally:
+        workbook.close()
+
+    if not blocks:
+        return None
+    text = _normalize_text("\n\n".join(blocks))
+    spans = _build_spans(text)
+    if len(spans) != len(blocks):
+        # a row collapsed or split unexpectedly — the span↔row pairing would
+        # be wrong; fall back rather than attach lying metadata
+        return None
+    for span, meta in zip(spans, metas):
+        span.update(meta)
+    return text, spans
 
 
 def _sheet_field(sheet_title: str) -> Optional[str]:

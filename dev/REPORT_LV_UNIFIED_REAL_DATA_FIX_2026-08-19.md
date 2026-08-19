@@ -86,7 +86,40 @@ numbers must move these; CI holds the line.
 
 ## STEP evidence (filled as each STEP lands)
 
-_(pending — STEPs 1–8, 10, 11; STEP 9 gated on ruling §8-2; STEP 12 only if
+### STEP 1 — Preserve structure at extraction (L9) — DONE
+
+`_xlsx_row_spans` in `docpipe/extract.py`: generic xlsx now yields ONE SPAN
+PER ROW with additive metadata (`sheet`, `row_index`, `cells` with real
+column letters) — same additive pattern as the support path's `field_hint`,
+so spans stay byte-exact slices and the grounding gate holds by
+construction. Support path untouched; flat `_xlsx_text` retained for lesson
+materials. `EXTRACTOR_VERSION` 1.0 → 1.1.
+
+- **Gate (spec):** 3V-shaped fixture yields one span per row (7 = header +
+  6 students), not 1 — locked in `tests/test_docpipe_extract.py`.
+- **Latent bug found + fixed (failure-class chokepoint):** the extraction
+  schema (`extraction.schema.json`) had `additionalProperties: false` on
+  spans and no `student_support` in the `document_type` enum — so the
+  2026-08-18 support-xlsx fix produced extractions the VAULT REFUSED
+  ("Could not read this document") on every real support-file ingest.
+  Schema now declares the additive span keys + the enum value; class locked
+  by `test_xlsx_extractions_survive_the_vault_schema_gate` (real vault
+  write for both xlsx paths).
+
+Scorer movement from structure alone (no detection change yet):
+
+| real corpus | before | after STEP 1 |
+|---|---|---|
+| curriculum FP | 144 | 125 |
+| calendar FP | 86 | 86 |
+| 3V recall | 0.00 | 0.00 (needs STEP 2) |
+| class list prec / rec | 0.14 / 0.22 | **0.30 / 0.41** (TP 90→171, FP 547→404) |
+
+Synthetic mirror: K-5 file went 0.17/0.29 → **1.00/1.00** (per-row spans
+kill the cross-row false bigrams that glued staff names together); class
+list/3V/zero-student files move to STEP 2's account.
+
+_(pending — STEPs 2–8, 10, 11; STEP 9 gated on ruling §8-2; STEP 12 only if
 time. Each entry: scorer before/after, per-STEP gate result, commits.)_
 
 ## Holdout opening (§6) — NOT YET OPENED

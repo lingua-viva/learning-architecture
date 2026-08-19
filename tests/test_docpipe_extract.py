@@ -396,3 +396,99 @@ def test_plain_roster_xlsx_still_uses_generic_path():
     record = _run(extract_document(xlsx, buf.getvalue()))
     assert record.data["structure"]["document_type"] != "student_support"
     assert not any(s.get("field_hint") for s in record.data["spans"])
+
+
+# --- STEP 1: structure survives extraction (SPEC_LV_UNIFIED_REAL_DATA_FIX §STEP 1)
+
+
+SYNTHETIC_CORPUS = Path(__file__).parent / "fixtures" / "docpipe" / "synthetic-corpus"
+
+
+def _xlsx_source(filename: str) -> SourceRecord:
+    source, _ = _source("source_lesson_plan_marco_nora.json", "lesson_plan_marco_nora.md")
+    return SourceRecord({
+        **source.data,
+        "mime": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "original_ext": ".xlsx",
+        "original_filename": filename,
+    })
+
+
+def test_xlsx_rows_become_individual_spans_not_one_sheet_blob():
+    """The 3V-shaped fixture yields one span per row (7: header + 6
+    students), not 1 span for the whole sheet — the L9 failure."""
+    content = (SYNTHETIC_CORPUS / "synthetic_support_3v.xlsx").read_bytes()
+    record = _run(extract_document(_xlsx_source("synthetic_support_3v.xlsx"), content))
+
+    spans = record.data["spans"]
+    assert len(spans) == 7, f"expected 7 row spans, got {len(spans)}"
+    # each of the 6 student rows is its OWN span
+    student_spans = [s for s in spans if s["row_index"] >= 2]
+    assert len(student_spans) == 6
+    assert len({s["span_id"] for s in student_spans}) == 6
+
+
+def test_xlsx_spans_carry_sheet_row_and_column_identity():
+    content = (SYNTHETIC_CORPUS / "synthetic_support_3v.xlsx").read_bytes()
+    record = _run(extract_document(_xlsx_source("synthetic_support_3v.xlsx"), content))
+
+    header = record.data["spans"][0]
+    assert header["sheet"] == "Sheet1"
+    assert header["row_index"] == 1
+    assert [c["column"] for c in header["cells"]][:2] == ["A", "B"]
+    assert header["cells"][0]["text"] == "Student"
+    assert header["cells"][1]["text"] == "class"
+    first_student = record.data["spans"][1]
+    assert first_student["cells"][0]["column"] == "A"
+    assert first_student["cells"][1]["text"] in ("V", "A")
+
+
+def test_xlsx_multi_sheet_spans_keep_sheet_names():
+    content = (SYNTHETIC_CORPUS / "synthetic_class_list.xlsx").read_bytes()
+    record = _run(extract_document(_xlsx_source("synthetic_class_list.xlsx"), content))
+
+    sheets = {s["sheet"] for s in record.data["spans"]}
+    assert sheets == {"Grade 3", "Grade 6"}
+    # row 1 (class names) and row 2 (teachers) survive as their own spans
+    grade3 = [s for s in record.data["spans"] if s["sheet"] == "Grade 3"]
+    assert grade3[0]["row_index"] == 1
+    assert grade3[1]["row_index"] == 2
+    # empty columns don't produce cells; column letters are the real ones
+    assert all(c["text"] for s in record.data["spans"] for c in s["cells"])
+
+
+def test_xlsx_row_spans_pass_grounding_gate():
+    """Row spans stay byte-exact slices — the grounding gate must hold."""
+    content = (SYNTHETIC_CORPUS / "synthetic_class_list.xlsx").read_bytes()
+    record = _run(extract_document(_xlsx_source("synthetic_class_list.xlsx"), content))
+
+    report = verify_extraction(record.data, apply_drops=False)
+    assert report.ok, report.errors
+
+
+def test_support_path_untouched_by_row_spans():
+    """Multi-sheet SUPPORT workbooks keep the sheet-aware support parse
+    (field_hint spans), not the generic row-span path."""
+    record = _run(extract_document(_support_source(), _support_workbook_bytes()))
+    assert record.data["structure"]["document_type"] == "student_support"
+    assert any(s.get("field_hint") for s in record.data["spans"])
+    assert not any("row_index" in s for s in record.data["spans"])
+
+
+def test_xlsx_extractions_survive_the_vault_schema_gate(tmp_path):
+    """Class lock: additive span metadata (field_hint from the support path,
+    sheet/row_index/cells from STEP 1) must pass the vault's schema
+    validation — the 2026-08-18 support fix shipped spans the vault refused
+    ('Could not read this document'), which this test would have caught."""
+    from src.lingua_viva.docpipe import vault
+
+    # STEP 1 row-span path (generic xlsx)
+    content = (SYNTHETIC_CORPUS / "synthetic_class_list.xlsx").read_bytes()
+    record = _run(extract_document(_xlsx_source("synthetic_class_list.xlsx"), content))
+    assert any("row_index" in s for s in record.data["spans"])
+    vault.put_extraction(record, root=tmp_path)
+
+    # support path (field_hint spans)
+    record = _run(extract_document(_support_source(), _support_workbook_bytes()))
+    assert any(s.get("field_hint") for s in record.data["spans"])
+    vault.put_extraction(record, root=tmp_path)
