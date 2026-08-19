@@ -485,8 +485,49 @@ FAILURE ✓; fallback loud on-surface + never blank (foundational included)
 ✓; `LV_REASON_MODEL` respected end-to-end incl. `LocalModelClient` +
 logged ✓; lens-side scorer unchanged ✓.
 
-_(pending — STEP 11; STEP 9 gated on ruling §8-2 — skipped if unruled when
-reached; STEP 12 only if time.)_
+## STEP 9 — SKIPPED (gated on operator ruling §8-2, unruled when reached)
+
+Per operator directive 08-19: "STEP 9 remains gated on operator ruling §8-2
+— if unruled when you get there, skip it and continue to STEP 11; do not
+stall." No ruling had arrived; skipped, continued to STEP 11.
+
+## STEP 11 — Metadata detection from structure (C4) — CODE COMPLETE
+
+Same root as the lens side: first-plausible-line vs document structure.
+`parse_lesson_metadata` picked the letterhead as title and missed grade.
+
+- **Title = structure:** in a labelled document, the title is the nearest
+  non-label line immediately ABOVE the first metadata label
+  (`Unit:`/`Author:`/…) — letterheads sit higher up. Markdown `#` headings
+  still win; unlabelled documents keep the old first-plausible-line
+  heuristic. If the nearest-above line is implausible, detection falls back
+  rather than walking further up into the letterhead.
+- **Grade from labelled structure:** `Grade:` and `Author:` values parsed
+  for grade tokens (`_grade_from_text`: "Grade 3 …" → `G3`, "MYP2 English"
+  → `MYP2`, bare "3" → `G3`) — normalized to the app's grade-band form so
+  the Prepare pre-fill dropdown (exact-match on G1–G5) can actually match.
+  `Subjects:`/`Subject:` → first listed subject. Existing `Class:` parse
+  untouched.
+- **Verified against the real PDF locally (spec gate):** before →
+  title = letterhead school-code line, no grade. After →
+  `title='Lizard Brain/Wizard Brain - Instinct vs. Reason'` (the actual
+  document title), `grade='G3'`, `subject='Social Emotional Learning'`,
+  `unit='Diversity and emotions'`. Real file stays local; committed tests
+  use a synthetic letterhead mirror (no institution name).
+- Tests: 4 new in `test_docpipe_extract.py` (structural title vs
+  letterhead, grade normalization incl. no-grade Author line, markdown +
+  unlabelled + Class-label behavior preserved, implausible-line fallback
+  does NOT walk up). 52 extract + 98 lesson_materials/students_ingest green.
+- Scorer re-run: **identical to baseline** (class list 1.00/0.80 — 334 TP,
+  0 FP; 3V 1.00/1.00; curriculum/calendar 0 FP; holdout SEALED) — title
+  detection feeds `_build_structure`, student detection unaffected.
+- No UI change → no contract bump (pre-fill consumes existing fields).
+
+**Spec gate (§STEP 11):** title = the actual document title, grade
+detected, not the letterhead — verified on the real PDF ✓.
+
+_(pending — STEP 12 only if time; then §6 holdout opening + end-to-end
+assertion.)_
 
 ## Holdout opening (§6) — NOT YET OPENED
 

@@ -947,3 +947,75 @@ def test_class_pair_extractions_survive_the_vault_schema_gate(tmp_path):
     assert all("class" in s and "grade" in s and "teacher_attribution" in s
                for s in students)
     vault.put_extraction(record, root=tmp_path)
+
+
+# --- STEP 11 (C4): metadata from structure, not first-plausible-line ----------
+
+
+def test_title_is_the_line_above_the_label_block_not_the_letterhead():
+    """A labelled lesson export (synthetic mirror of the real IB PDF shape):
+    letterhead + template header sit ABOVE the true title, which sits
+    immediately above the metadata labels. First-plausible-line picked the
+    letterhead; structure picks the title."""
+    from src.lingua_viva.docpipe.extract import parse_lesson_metadata
+
+    text = (
+        "Sunrise International School School code: 012345\n"
+        "Learning experience\n"
+        "Instinct and Reason - How Animals React\n"
+        "Unit: Diversity and emotions\n"
+        "Author: Grade 3 Blue Teachers\n"
+        "Subjects: Social Emotional Learning , Science , English\n\n"
+        "Learning intentions\n"
+        "1. transfer observations of animal reactions to stimuli."
+    )
+    meta = parse_lesson_metadata(text)
+    assert meta["title"] == "Instinct and Reason - How Animals React"
+    curriculum = meta["curriculum"]
+    assert curriculum["grade"] == "G3"
+    assert curriculum["unit"] == "Diversity and emotions"
+    assert curriculum["subject"] == "Social Emotional Learning"
+
+
+def test_grade_label_and_author_grade_patterns_normalize_to_grade_bands():
+    from src.lingua_viva.docpipe.extract import _grade_from_text, parse_lesson_metadata
+
+    assert _grade_from_text("3") == "G3"
+    assert _grade_from_text("Grade 3 Blue Teachers") == "G3"
+    assert _grade_from_text("MYP2 English") == "MYP2"
+    assert _grade_from_text("pyp4") == "PYP4"
+    assert _grade_from_text("Blue Teachers") is None
+
+    meta = parse_lesson_metadata("My Lesson\nGrade: 4\nUnit: Water cycles")
+    assert meta["curriculum"]["grade"] == "G4"
+    # An Author line with no grade token adds nothing.
+    meta = parse_lesson_metadata("My Lesson\nAuthor: Blue Teachers\nUnit: Water cycles")
+    assert "grade" not in meta["curriculum"]
+
+
+def test_title_detection_keeps_markdown_and_unlabelled_behavior():
+    """Structure only kicks in when a label block exists: markdown headings
+    still win, unlabelled documents keep the first-plausible-line heuristic,
+    and Class-label grade parsing is unchanged."""
+    from src.lingua_viva.docpipe.extract import parse_lesson_metadata
+
+    assert parse_lesson_metadata("# Poetry Lesson\n\nRead the poem.")["title"] == "Poetry Lesson"
+    assert parse_lesson_metadata("Weather Words\n\nA list of words.")["title"] == "Weather Words"
+    meta = parse_lesson_metadata("Class: MYP2 English\nUnit: Migration stories")
+    assert meta["curriculum"]["grade"] == "MYP2"
+    assert meta["curriculum"]["subject"] == "English"
+
+
+def test_implausible_line_above_labels_falls_back_not_letterhead_walk():
+    """If the nearest line above the label block is not a plausible title
+    (too long / ends like a sentence), detection must NOT keep walking up
+    into the letterhead — it falls back to the old heuristic."""
+    from src.lingua_viva.docpipe.extract import parse_lesson_metadata
+
+    text = (
+        "Sunrise Letterhead\n"
+        "This line ends like a sentence and cannot be a title.\n"
+        "Unit: Diversity and emotions"
+    )
+    meta = parse_lesson_metadata(text)
+    assert meta["title"] == "Sunrise Letterhead"

@@ -599,12 +599,40 @@ def _build_structure(text: str, spans: list[dict[str, Any]]) -> dict[str, Any]:
     return structure
 
 
+# STEP 11 (C4): the labels the metadata parser understands. A line starting
+# with any of these is structure, not content — and the document title of a
+# labelled document sits immediately ABOVE the first such line (letterheads
+# sit higher up, which is why first-plausible-line picked the school header).
+_METADATA_LABELS = ("class", "unit", "task", "author", "subjects", "subject", "grade")
+
+
+def _is_label_line(line: str) -> bool:
+    lowered = line.strip().lower()
+    return any(lowered.startswith(label + ":") for label in _METADATA_LABELS)
+
+
 def _detect_title(spans: list[dict[str, Any]]) -> Optional[str]:
     if not spans:
         return None
     first = str(spans[0]["text"]).split("\n")[0]
     if first.startswith("#"):
         return first.lstrip("#").strip()
+    # Structure over first-plausible-line: if the document carries a labelled
+    # metadata block, the title is the nearest non-label line above the first
+    # label. Metadata blocks live at the top, so only the leading spans count.
+    lines: list[str] = []
+    for span in spans[:3]:
+        lines.extend(str(span["text"]).split("\n"))
+    for index, line in enumerate(lines):
+        if _is_label_line(line):
+            for candidate in reversed(lines[:index]):
+                candidate = candidate.strip()
+                if not candidate or _is_label_line(candidate):
+                    continue
+                if len(candidate) <= 100 and not candidate.endswith((".", ":")):
+                    return candidate
+                break  # nearest-above line is not a plausible title — fall back
+            break
     if len(first) <= 100 and not first.endswith((".", ":")):
         return first.strip()
     return None
@@ -704,7 +732,42 @@ def _detect_curriculum(spans: list[dict[str, Any]]) -> dict[str, Any]:
         task_value = _labeled_value(text, "Task")
         if task_value and "task" not in curriculum:
             curriculum["task"] = task_value
+        # STEP 11 (C4): grade lives in labelled structure the old parser
+        # ignored — "Grade: 3" and "Author: Grade 3 …" lines. Normalized to
+        # the app's grade-band form (G3/MYP2/…) so the pre-fill can match.
+        if "grade" not in curriculum:
+            for label in ("Grade", "Author"):
+                value = _labeled_value(text, label)
+                if not value:
+                    continue
+                grade = _grade_from_text(value)
+                if grade:
+                    curriculum["grade"] = grade
+                    break
+        if "subject" not in curriculum:
+            subjects_value = _labeled_value(text, "Subjects") or _labeled_value(text, "Subject")
+            if subjects_value:
+                curriculum["subject"] = subjects_value.split(",")[0].strip()
     return curriculum
+
+
+_GRADE_TOKEN = re.compile(
+    r"\b(?:Grade\s+(\d{1,2})|(MYP\d{1,2}|PYP\d{1,2}|DP\d?|G\d{1,2}))\b",
+    re.IGNORECASE,
+)
+
+
+def _grade_from_text(value: str) -> Optional[str]:
+    """'Grade 3 Verdi Teachers' -> 'G3'; 'MYP2 English' -> 'MYP2'; '3' -> 'G3'."""
+    value = value.strip()
+    if re.fullmatch(r"\d{1,2}", value):
+        return f"G{value}"
+    match = _GRADE_TOKEN.search(value)
+    if not match:
+        return None
+    if match.group(1):
+        return f"G{match.group(1)}"
+    return match.group(2).upper()
 
 
 def _detect_language(text: str) -> str:
