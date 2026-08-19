@@ -526,7 +526,32 @@ Same root as the lens side: first-plausible-line vs document structure.
 **Spec gate (§STEP 11):** title = the actual document title, grade
 detected, not the letterhead — verified on the real PDF ✓.
 
-_(pending — STEP 12 only if time.)_
+## STEP 12 — Excerpt budget revisit (C5) — DONE (measured; cap CONFIRMED, now documented)
+
+Re-derived `_SOURCE_EXCERPT_CHARS` from measurement on the governed
+auto-pick (nemotron, resident), 3-tier generation at 400 max_tokens.
+Ollama serializes the three "parallel" tier calls, so the worst call runs
+~3x a single call against the 60s per-call budget:
+
+| excerpt chars | worst call | statuses |
+|---|---|---|
+| 1500 (current) | 36.0s | 3x generated |
+| 2000 | 58.8s | 3x generated (barely) |
+| 2400 | 55.0s | 3x generated (barely) |
+| 3000 | 60s TIMEOUT | 1x template_fallback |
+
+Run-to-run variance (~±10s, generation-length noise — 2000 measured WORSE
+than 2400) puts everything ≥2000 within noise of the timeout. 1500 is the
+only point with real margin (24s, enough to absorb a cold model load).
+**Decision: keep 1500** — raising it would trade grounding for flaky
+on-surface template_fallback failures (loud since STEP 10, worst possible
+demo behavior). The cap is now a documented, measured trade-off in code
+instead of an unexplained constant; re-derive if the timeout budget or
+governed model class changes. No behavior change → comment + report only.
+
+**Wave status: ALL STEPS CLOSED** (1–8, 10, 11, 12 done; 9 skipped per
+directive, gated on §8-2). Remaining before any push: Claudia-lens UX
+audit; push itself requires explicit operator instruction.
 
 ## Holdout opening (§6) — OPENED 2026-08-19 (once) — HONEST FAIL
 

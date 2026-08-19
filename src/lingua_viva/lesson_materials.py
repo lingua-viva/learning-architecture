@@ -515,6 +515,17 @@ def _check_roster_names(material: TierMaterial, roster_names: list[str]) -> None
             raise ValueError("student_name_in_generated_content")
 
 
+# STEP 12 (C5, SPEC_LV_UNIFIED_REAL_DATA_FIX_2026-08-19): cap RE-DERIVED from
+# measurement on the governed auto-pick (nemotron-3.5-lightning, resident),
+# 2026-08-19. Ollama serializes the three "parallel" tier calls, so the worst
+# call runs ~3x a single call against the 60s per-call budget. Measured worst
+# call (3-tier, 400 max_tokens): 1500 chars -> 36.0s; 2000 -> 58.8s;
+# 2400 -> 55.0s; 3000 -> TIMEOUT. Run-to-run variance (~±10s, generation-
+# length noise) puts everything >=2000 within noise of the timeout; 1500 is
+# the only point with real margin (24s — enough to absorb a cold model load).
+# Raising this cap trades "more source grounding" for flaky on-surface
+# template_fallback failures. Re-derive if the timeout budget or the governed
+# model class changes.
 _SOURCE_EXCERPT_CHARS = 1500
 
 
