@@ -6280,8 +6280,7 @@
         <div class="panel">
           <h3>${again ? "Sign in to Google again" : "Sign in with Google"}</h3>
           <p>${escapeHtml(status.setup_message || "Sign in with Google to connect Drive on this machine.")}</p>
-          <p class="voice-hint">Google may show a broad Drive permission. Lingua Viva only checks folders you connect, and it does not download file contents until you choose to import.</p>
-          <p class="voice-hint">The first time you sign in, Google will show a warning that it hasn't verified this app. That's expected — Lingua Viva is a small app that runs on this computer, not a published web service. Tap <strong>Advanced</strong>, then <strong>Go to Lingua Viva (unsafe)</strong> to continue. Nothing leaves this machine until you choose to share it.</p>
+          <p class="voice-hint">Google will ask permission for files this app creates or that you open with it — Lingua Viva never sees the rest of your Drive. To bring in existing school documents, upload them directly in the app. Nothing leaves this machine until you choose to share it.</p>
           <button id="drive-signin-btn" class="primary" type="button">${again ? "Sign in with Google again" : "Sign in with Google"}</button>
           <div id="drive-signin-result" style="margin-top:12px;"></div>
         </div>`;

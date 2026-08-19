@@ -29,10 +29,12 @@ def fetch_file(file_ref: str) -> SourceBytes:
 
     from src.lingua_viva.google_drive_integration import (
         DRIVE_API,
+        PER_FILE_ACCESS_HINT,
         DriveAuthError,
         DriveFileTooLarge,
         MAX_IMPORT_BYTES,
         _access_token,
+        _is_access_denied,
         default_transport,
         ensure_configured,
         parse_file_link,
@@ -50,6 +52,8 @@ def fetch_file(file_ref: str) -> SourceBytes:
             f"{DRIVE_API}/files/{quoted}?fields=id,name,mimeType,size", token
         )
     except Exception as exc:
+        if _is_access_denied(exc):
+            raise DriveAuthError(PER_FILE_ACCESS_HINT) from exc
         raise DriveAuthError("Could not read that file from Google Drive.") from exc
     if not isinstance(meta, dict) or not meta.get("id"):
         raise DriveAuthError("Could not read that file from Google Drive.")
@@ -75,6 +79,8 @@ def fetch_file(file_ref: str) -> SourceBytes:
     try:
         content = transport.get_bytes(url, token)
     except Exception as exc:
+        if _is_access_denied(exc):
+            raise DriveAuthError(PER_FILE_ACCESS_HINT) from exc
         raise DriveAuthError("Could not download that file from Google Drive.") from exc
     if len(content) > MAX_IMPORT_BYTES:
         raise DriveFileTooLarge(str(len(content)))

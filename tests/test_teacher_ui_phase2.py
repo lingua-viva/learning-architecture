@@ -38,18 +38,22 @@ def test_teacher_sidebar_contract():
     assert "/api/google-drive/auth/start" in html
     assert "/api/google-drive/auth/disconnect" in html
     assert "Sign in with Google" in html
+    # Per-file access (SPEC_LV_DRIVE_PER_FILE_ACCESS_2026-08-19): scope is
+    # drive.file and the app is published, so Google shows NO unverified-app
+    # interstitial and NO broad-permission screen. The old H1 walkthrough
+    # ("Advanced" → "Go to Lingua Viva (unsafe)") and the "broad Drive
+    # permission" line are obsolete and must NOT come back — they would
+    # describe screens teachers never see.
     assert (
-        "Google may show a broad Drive permission. Lingua Viva only checks folders "
-        "you connect, and it does not download file contents until you choose to import."
+        "Google will ask permission for files this app creates or that you "
+        "open with it"
     ) in html
+    assert "upload them directly in the app" in html
+    assert "Google will show a warning that it hasn't verified this app" not in html
+    assert "Go to Lingua Viva (unsafe)" not in html
+    assert "broad Drive permission" not in html
     assert "Using Google Drive credentials set up by whoever installed Lingua Viva" in html
     assert "Sign in with Google again" in html
-    # H1 (SPEC_LV_DRIVE_FINAL_HARDENING_2026-07-27): unverified-app
-    # interstitial walkthrough, operator-approved wording. The button label
-    # Google renders is "Go to <OAuth client name> (unsafe)" — the client
-    # MUST be named "Lingua Viva" in the console for this copy to match.
-    assert "Google will show a warning that it hasn't verified this app" in html
-    assert "Go to Lingua Viva (unsafe)" in html
     assert "Nothing leaves this machine until you choose to share it." in html
     assert "student_lens_source" in html
     assert "curriculum_unit_source" in html

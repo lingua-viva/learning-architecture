@@ -16,6 +16,14 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v158 (2026-08-19): Drive per-file access (SPEC_LV_DRIVE_PER_FILE_ACCESS,
+#     no-admin ruling). OAuth scope → drive.file so any teacher signs in with
+#     zero registration/verification. src/web.py: class-folder route passes
+#     the honest DriveAuthError message through. static/index.html: sign-in
+#     panel copy rewritten — the unverified-app interstitial walkthrough
+#     (H1, now obsolete: published app + non-sensitive scope shows no
+#     warning) and the "broad Drive permission" line replaced with per-file
+#     truth + direct-upload guidance for existing school files.
 #   v157 (2026-08-18): Prepare/class-materials fix build (FIX_PREPARE_CLASS_
 #     MATERIALS, all 10 issues + Claudia-lens audit pass). src/web.py: POST
 #     /api/lesson-materials/library/import-file (base64 drop-zone upload);
@@ -691,7 +699,7 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 157
+version: 158
 # v122 (2026-08-06): Failure-mode hardening. src/web.py: voice-act observation
 #   dedup guard (same 60s window as observe/capture, prevents network-retry
 #   duplicates). src/education/parent_report.py: personal_context evidence

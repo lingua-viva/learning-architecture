@@ -2662,9 +2662,9 @@ async def students_ingest(request: Request, background_tasks: BackgroundTasks):
                     {"error": "Connect Google Drive first, then import the folder."},
                     status_code=409,
                 )
-            except DriveAuthError:
+            except DriveAuthError as exc:
                 return JSONResponse(
-                    {"error": "Google Drive could not be reached safely."},
+                    {"error": str(exc) or "Google Drive could not be reached safely."},
                     status_code=502,
                 )
             except ValueError as exc:

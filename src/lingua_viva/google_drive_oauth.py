@@ -36,7 +36,13 @@ from src.lingua_viva.google_drive_integration import (
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 REVOKE_URL = "https://oauth2.googleapis.com/revoke"
 # openid + email make account_email reliable via the ID token (spec §A4).
-SCOPES = "openid email https://www.googleapis.com/auth/drive"
+# drive.file (2026-08-19, no-admin ruling): per-file access — the app only
+# sees files/folders it created. Non-sensitive scope, so the app can be
+# published to production with NO Google verification, NO test-user lists,
+# NO school-admin setup: any teacher with a Google account can sign in.
+# NEVER widen back to the restricted ".../auth/drive" scope — that requires
+# CASA verification or per-user test registration, both ruled non-starters.
+SCOPES = "openid email https://www.googleapis.com/auth/drive.file"
 FLOW_TIMEOUT_SECONDS = 120
 
 

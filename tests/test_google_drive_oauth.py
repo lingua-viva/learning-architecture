@@ -459,3 +459,55 @@ def test_loopback_listener_closed_after_flow_completes(client_env):
             return  # port refused / reset — listener is gone
         time.sleep(0.05)
     pytest.fail("loopback listener still accepting connections after flow completed")
+
+
+# --- Scope class-lock (no-admin ruling, 2026-08-19) -------------------------
+# The app must request ONLY per-file Drive access (drive.file). The restricted
+# full-Drive scope requires Google CASA verification or per-user test-user
+# registration — both ruled non-starters (schools will not maintain staff
+# email lists; teachers must sign in with zero special access). This lock
+# fails if anyone widens the scope back.
+
+
+def test_scope_is_per_file_never_restricted_full_drive():
+    scopes = oauth.SCOPES.split()
+    assert "https://www.googleapis.com/auth/drive.file" in scopes
+    assert "https://www.googleapis.com/auth/drive" not in scopes
+    assert "https://www.googleapis.com/auth/drive.readonly" not in scopes
+
+
+def test_access_denied_surfaces_per_file_hint():
+    """A 403/404 on a pasted link is EXPECTED under drive.file — the message
+    must direct the teacher to direct upload, never to a sharing fix."""
+
+    class Denied:
+        def get_json(self, url, token):
+            raise error.HTTPError(url, 404, "Not Found", {}, io.BytesIO(b""))
+
+        def get_bytes(self, url, token):
+            raise error.HTTPError(url, 404, "Not Found", {}, io.BytesIO(b""))
+
+        def post_form(self, url, data):
+            return {"access_token": "at"}
+
+    settings = drive.DriveSettings(
+        enabled=True,
+        client_id="cid",
+        client_secret="csecret",
+        refresh_token="rt",
+        root_id=None,
+    )
+    with pytest.raises(DriveAuthError) as excinfo:
+        drive.connect_folder(
+            "https://drive.google.com/drive/folders/abc123DEF456ghi789",
+            settings=settings,
+            transport=Denied(),
+        )
+    assert "per-file" in str(excinfo.value)
+    assert "upload" in str(excinfo.value)
+
+    with pytest.raises(DriveAuthError) as excinfo:
+        drive.download_file_text(
+            "abc123DEF456ghi789", settings=settings, transport=Denied()
+        )
+    assert "per-file" in str(excinfo.value)

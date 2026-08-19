@@ -59,6 +59,22 @@ class DriveFileTooLarge(RuntimeError):
     pass
 
 
+# Per-file access (drive.file scope, 2026-08-19): the app can only see files
+# and folders it created — never a teacher's pre-existing Drive content. A
+# 403/404 on a pasted link is therefore EXPECTED under this scope, and the
+# message must say what actually works (direct upload), not imply a sharing
+# fix that cannot work.
+PER_FILE_ACCESS_HINT = (
+    "Lingua Viva uses per-file Google Drive access: it can only open files and "
+    "folders it created. To bring this document in, import it directly in the "
+    "app (upload the file) instead of pasting a Drive link."
+)
+
+
+def _is_access_denied(exc: Exception) -> bool:
+    return isinstance(exc, error.HTTPError) and exc.code in (403, 404)
+
+
 def _read_bounded(response: Any, limit: int) -> bytes:
     """Read an HTTP response body, refusing to exceed `limit` bytes.
 
@@ -436,12 +452,14 @@ def connect_folder(
             token,
         )
     except (error.HTTPError, error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+        if _is_access_denied(exc):
+            raise DriveAuthError(PER_FILE_ACCESS_HINT) from exc
         raise DriveAuthError(
-            "Lingua Viva could not open that folder. Check the link and that it is shared with the connected account."
+            "Lingua Viva could not open that folder. Check the link and your connection."
         ) from exc
     if not isinstance(meta, dict):  # H5: malformed metadata response
         raise DriveAuthError(
-            "Lingua Viva could not open that folder. Check the link and that it is shared with the connected account."
+            "Lingua Viva could not open that folder. Check the link and your connection."
         )
     if meta.get("mimeType") != "application/vnd.google-apps.folder":
         raise ValueError("That link points to a file, not a folder.")
@@ -644,6 +662,8 @@ def list_files(
     try:
         data = transport.get_json(url, token)
     except (error.HTTPError, error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+        if _is_access_denied(exc):
+            raise DriveAuthError(PER_FILE_ACCESS_HINT) from exc
         raise DriveAuthError("Google Drive list failed.") from exc
     if not isinstance(data, dict):  # H5: malformed list response
         raise DriveAuthError("Google Drive list failed.")
@@ -710,6 +730,8 @@ def list_folder_files(
         try:
             data = transport.get_json(url, token)
         except (error.HTTPError, error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+            if _is_access_denied(exc):
+                raise DriveAuthError(PER_FILE_ACCESS_HINT) from exc
             raise DriveAuthError("Google Drive list failed.") from exc
         if not isinstance(data, dict):
             raise DriveAuthError("Google Drive list failed.")
@@ -743,6 +765,8 @@ def download_file_text(
     try:
         content = transport.get_bytes(url, token)
     except (error.HTTPError, error.URLError, TimeoutError, OSError) as exc:
+        if _is_access_denied(exc):
+            raise DriveAuthError(PER_FILE_ACCESS_HINT) from exc
         raise DriveAuthError("Google Drive download failed.") from exc
     if len(content) > MAX_IMPORT_BYTES:
         raise DriveFileTooLarge(str(len(content)))
