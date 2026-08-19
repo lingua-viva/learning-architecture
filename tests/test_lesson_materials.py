@@ -288,6 +288,85 @@ def test_no_model_available_uses_deterministic_materials():
     assert "Local reasoning" not in result.materials[0].exercise_body
 
 
+# --- STEP 10 (SPEC_LV_UNIFIED_REAL_DATA_FIX 2026-08-19, C2/C3): generation honesty
+
+
+class FailingEngine:
+    def __init__(self, content: str = "", model_used: str = "ollama/qwen3:8b", error: str = ""):
+        self.content = content
+        self.model_used = model_used
+        self.error = error
+
+    async def reason(self, query, context=None, model=None, default_model=None, system_prompt=None, local_only=False, max_tokens=2000):
+        return ReasonResult(
+            content=self.content,
+            confidence=0.0 if self.error else 0.8,
+            model_used=self.model_used,
+            error=self.error,
+        )
+
+
+@pytest.mark.parametrize(
+    "engine",
+    [
+        FailingEngine(error="empty_model_response"),                      # STEP 8 failure signal
+        FailingEngine(error="timeout"),
+        FailingEngine(model_used="none:local_only", error="local_only_no_model"),
+        FailingEngine(model_used="none"),                                 # no model, error=""
+        FailingEngine(content="", model_used="mock"),                     # THE C3 shape: empty content, no error
+        FakeEngine(content="EXERCISE:\n1. Read the text.\n2. Answer."),   # drifted format: no INSTRUCTIONS section
+    ],
+    ids=["empty_response", "timeout", "privacy_refusal", "none_model", "empty_no_error", "blank_instructions"],
+)
+def test_template_fallback_is_loud_and_never_blank(engine):
+    """Class lock (spec §4 STEP 10): no template-fallback output without its
+    status signal, and no tier — least of all foundational — ever renders
+    blank instructions / blank exercise / empty scaffolding. The C3 audit
+    finding was the foundational tier degrading to NOTHING, silently."""
+    result = _generate(engine=engine)
+    assert len(result.materials) == 3
+    for material in result.materials:
+        assert material.generation_status == "template_fallback"
+        assert material.instructions_for_student.strip()
+        assert material.exercise_body.strip()
+        assert material.scaffolding
+    # The signal must survive serialization to the API response.
+    from src.lingua_viva.lesson_materials import materials_as_dicts
+
+    for item in materials_as_dicts(result):
+        assert item["generation_status"] == "template_fallback"
+
+
+def test_genuinely_generated_materials_report_generated_status():
+    result = _generate()  # FakeEngine returns GOOD_CONTENT
+    for material in result.materials:
+        assert material.generation_status == "generated"
+
+
+def test_material_from_dict_round_trips_generation_status():
+    from src.lingua_viva.lesson_materials import material_from_dict
+
+    material = material_from_dict({"tier": "foundational", "generation_status": "template_fallback"})
+    assert material.generation_status == "template_fallback"
+    # Old dicts without the field default to "generated" (pre-v164 payloads).
+    assert material_from_dict({"tier": "on_track"}).generation_status == "generated"
+
+
+def test_every_fallback_path_sets_the_status_signal_class_lock():
+    """Source-level lock: inside _generate_tier_material, every switch to
+    _deterministic_material_fields must be paired with a template_fallback
+    status assignment — a new silent fallback path fails this test."""
+    import inspect
+
+    from src.lingua_viva import lesson_materials
+
+    source = inspect.getsource(lesson_materials._generate_tier_material)
+    fallback_calls = source.count("_deterministic_material_fields(")
+    status_marks = source.count('generation_status = "template_fallback"')
+    assert fallback_calls >= 2
+    assert fallback_calls == status_marks
+
+
 def test_unknown_student_id_raises_permission_error():
     store = FakeStore(_roster())
     with pytest.raises(PermissionError, match="unauthorized_student_ids:student-zed"):

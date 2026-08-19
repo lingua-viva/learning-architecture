@@ -236,16 +236,37 @@ class ReasoningEngine:
         url, headers = self._resolve_endpoint(model)
         if self._is_external_model(model):
             log_event("external_call_made", query_text=query)
+        # Payload shape follows the ENDPOINT, not externality: a ':cloud'
+        # model counts as external for egress logging but is still dispatched
+        # through the local daemon's endpoint.
+        native = url.endswith("/api/chat")
         model_name = model.split("/", 1)[-1] if "/" in model else model
-        payload = json.dumps({
-            "model": model_name,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": query},
-            ],
-            "temperature": 0.3,
-            "max_tokens": max_tokens,
-        }).encode("utf-8")
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": query},
+        ]
+        if not native:
+            payload_dict: dict = {
+                "model": model_name,
+                "messages": messages,
+                "temperature": 0.3,
+                "max_tokens": max_tokens,
+            }
+        else:
+            # STEP 8 (C1): the local leg uses Ollama's NATIVE /api/chat —
+            # the OpenAI-compat endpoint cannot suppress thinking, so a
+            # thinking model burned the whole timeout budget on hidden
+            # tokens and returned empty visible content (audit: 35.3s,
+            # error=<none>, 0 visible chars).
+            payload_dict = {
+                "model": model_name,
+                "messages": messages,
+                "stream": False,
+                "options": {"temperature": 0.3, "num_predict": max_tokens},
+            }
+            if config.is_thinking_model(model_name):
+                payload_dict["think"] = False
+        payload = json.dumps(payload_dict).encode("utf-8")
         req = request.Request(
             url,
             data=payload,
@@ -297,12 +318,29 @@ class ReasoningEngine:
             return None
 
         try:
-            content = body["choices"][0]["message"]["content"]
-        except (KeyError, IndexError, TypeError):
+            if native:
+                content = body["message"]["content"]
+                tokens = int(body.get("prompt_eval_count") or 0) + int(body.get("eval_count") or 0)
+            else:
+                content = body["choices"][0]["message"]["content"]
+                tokens = body.get("usage", {}).get("total_tokens", 0)
+        except (KeyError, IndexError, TypeError, ValueError):
             return None
-        tokens = body.get("usage", {}).get("total_tokens", 0)
         if self._is_ollama_model(model):
             self._reset_ollama_failures()
+        # STEP 8: empty content with no transport error is a FAILURE signal,
+        # not a success — it is exactly the shape a thinking model produces
+        # when its budget is spent on hidden tokens. Returning it as a
+        # confident success is how C1/C3 rendered blank tiers.
+        if not str(content or "").strip():
+            return ReasonResult(
+                content="",
+                confidence=0.0,
+                model_used=model,
+                tokens_used=tokens,
+                error="empty_model_response",
+                error_detail="the model returned no visible content",
+            )
         return ReasonResult(content=content, confidence=0.75, model_used=model, tokens_used=tokens)
 
     @staticmethod
@@ -316,7 +354,9 @@ class ReasoningEngine:
         if model.startswith("mistral/"):
             key = config.provider_api_key("mistral") or os.environ.get("MISTRAL_API_KEY", "")
             return "https://api.mistral.ai/v1/chat/completions", {"Authorization": f"Bearer {key}"}
-        return "http://localhost:11434/v1/chat/completions", {}
+        # Local leg: NATIVE Ollama chat API (STEP 8) — required for "think":
+        # false; the OpenAI-compat endpoint has no thinking suppression.
+        return "http://localhost:11434/api/chat", {}
 
     _is_external_model = staticmethod(is_external_model)
 

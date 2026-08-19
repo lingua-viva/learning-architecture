@@ -508,18 +508,36 @@ class ReasoningEngine:
         import json
         from urllib import request, error
 
+        from src.lingua_viva import config as lv_config
+
         url, headers = self._resolve_endpoint(model)
         model_name = model.split("/", 1)[-1] if "/" in model else model
-
-        payload = json.dumps({
-            "model": model_name,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": query},
-            ],
-            "temperature": 0.3,
-            "max_tokens": max_tokens,
-        }).encode("utf-8")
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": query},
+        ]
+        # STEP 8 (C1), kept synchronized with src/lingua_viva/reasoning.py:
+        # the local leg uses Ollama's NATIVE /api/chat so "think": false can
+        # actually suppress thinking; payload shape follows the ENDPOINT
+        # (':cloud' models are external for logging but dispatch locally).
+        native = url.endswith("/api/chat")
+        if native:
+            payload_dict: dict = {
+                "model": model_name,
+                "messages": messages,
+                "stream": False,
+                "options": {"temperature": 0.3, "num_predict": max_tokens},
+            }
+            if lv_config.is_thinking_model(model_name):
+                payload_dict["think"] = False
+        else:
+            payload_dict = {
+                "model": model_name,
+                "messages": messages,
+                "temperature": 0.3,
+                "max_tokens": max_tokens,
+            }
+        payload = json.dumps(payload_dict).encode("utf-8")
 
         req_headers = {"Content-Type": "application/json", **headers}
         req = request.Request(url, data=payload, headers=req_headers, method="POST")
@@ -527,8 +545,23 @@ class ReasoningEngine:
         try:
             with request.urlopen(req, timeout=90) as resp:
                 body = json.loads(resp.read())
-                content = body["choices"][0]["message"]["content"]
-                tokens = body.get("usage", {}).get("total_tokens", 0)
+                if native:
+                    content = body["message"]["content"]
+                    tokens = int(body.get("prompt_eval_count") or 0) + int(body.get("eval_count") or 0)
+                else:
+                    content = body["choices"][0]["message"]["content"]
+                    tokens = body.get("usage", {}).get("total_tokens", 0)
+                # STEP 8: empty content with no transport error is a FAILURE
+                # signal — the thinking-model shape that made blank tiers.
+                if not str(content or "").strip():
+                    return ReasonResult(
+                        content="",
+                        confidence=0.0,
+                        model_used=model,
+                        tokens_used=tokens,
+                        error="empty_model_response",
+                        error_detail="the model returned no visible content",
+                    )
                 return ReasonResult(
                     content=content,
                     confidence=0.75,
@@ -544,7 +577,7 @@ class ReasoningEngine:
                 error="model_unreachable",
                 error_detail=f"{type(exc).__name__}: {str(exc)[:200]}",
             )
-        except KeyError:
+        except (KeyError, IndexError, TypeError, ValueError):
             return None
 
     @staticmethod
@@ -566,8 +599,9 @@ class ReasoningEngine:
             key = _provider_api_key("mistral") or os.environ.get("MISTRAL_API_KEY", "")
             return "https://api.mistral.ai/v1/chat/completions", {"Authorization": f"Bearer {key}"}
         else:
-            # Default: Ollama (handles both local and :cloud models)
-            return "http://localhost:11434/v1/chat/completions", {}
+            # Default: Ollama NATIVE chat API (handles both local and :cloud
+            # models) — required for "think": false (STEP 8).
+            return "http://localhost:11434/api/chat", {}
 
     @staticmethod
     def _exit_destination(model: Optional[str]) -> str:

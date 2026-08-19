@@ -330,6 +330,27 @@ def test_none_model_without_error_still_reports_unavailable():
     assert not any("invalid JSON" in w for w in warnings)
 
 
+def test_local_model_client_respects_engine_resolution_order():
+    """STEP 8: LocalModelClient must not hard-code detect_model() — passing
+    an explicit model jumped the engine's resolution order, so the
+    LV_REASON_MODEL override was silently ignored on every docpipe call."""
+    from src.lingua_viva.docpipe.model import LocalModelClient
+    from src.lingua_viva.reasoning import ReasonResult
+
+    captured: dict = {}
+
+    class Engine:
+        async def reason(self, prompt, **kwargs):
+            captured.update(kwargs)
+            return ReasonResult(content="{}", confidence=0.75, model_used="ollama/qwen2.5:7b")
+
+    result = _run(LocalModelClient(engine=Engine()).complete("prompt", system_prompt="sys"))
+
+    assert "model" not in captured  # the engine resolves; overrides work
+    assert captured["local_only"] is True
+    assert result.model_used == "ollama/qwen2.5:7b"
+
+
 def test_unsupported_format_fails_honestly():
     source, content = _source("source_lesson_plan_marco_nora.json", "lesson_plan_marco_nora.md")
     bad = SourceRecord({**source.data, "mime": "image/png", "original_ext": ".png"})

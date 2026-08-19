@@ -26,7 +26,18 @@ LOCAL_MODEL_PREFERENCE = [
     "qwen3:14b",
     "qwen3:8b",
 ]
-CLOUD_FALLBACK = "kimi-k2.7-code:cloud"
+
+# Models that declare the "thinking" capability: their visible answer is
+# empty until reasoning finishes, which on slow hardware burns the whole
+# timeout budget emitting hidden tokens. The native Ollama /api/chat request
+# must send "think": false for these (STEP 8, C1 — MC-proven fix; only
+# models with the capability accept the parameter).
+THINKING_MODEL_TAGS = ("glm", "nemotron", "qwen3")
+
+
+def is_thinking_model(model: str | None) -> bool:
+    name = (model or "").strip().lower()
+    return any(tag in name for tag in THINKING_MODEL_TAGS)
 
 
 # ---------------------------------------------------------------------------
@@ -459,24 +470,79 @@ def model_matches_installed(model: str, installed: set[str] | frozenset[str]) ->
     return False
 
 
-def detect_model(installed_models: list[str] | None = None) -> str | None:
-    """Pick the best installed model, preferring the hardware-recommended one.
+# Fraction of estimated GPU memory a model file may occupy and still count
+# as "resident" — the remainder is headroom for KV cache and context.
+_RESIDENT_FIT_FRACTION = 0.9
 
-    If the hardware-recommended model is installed, use it directly (skips the
-    static preference list). Otherwise walk LOCAL_MODEL_PREFERENCE as before."""
+
+def _ollama_model_sizes(timeout: int = 5) -> dict[str, int]:
+    """Installed model name -> model file size in bytes, from /api/tags."""
+    try:
+        req = request.Request("http://localhost:11434/api/tags", method="GET")
+        with request.urlopen(req, timeout=timeout) as response:
+            data = json.loads(response.read())
+    except (error.URLError, ConnectionError, TimeoutError, OSError, json.JSONDecodeError):
+        return {}
+    models = data.get("models", [])
+    if not isinstance(models, list):
+        return {}
+    sizes: dict[str, int] = {}
+    for item in models:
+        if not isinstance(item, dict) or not isinstance(item.get("name"), str):
+            continue
+        try:
+            sizes[item["name"]] = int(item.get("size") or 0)
+        except (TypeError, ValueError):
+            continue
+    return sizes
+
+
+def _candidate_size_bytes(candidate: str, sizes: dict[str, int]) -> int | None:
+    """Size of the installed model this candidate names, resolved through THE
+    matcher (model_matches_installed) so tag variants stay one concept."""
+    for name, size in sizes.items():
+        if size > 0 and model_matches_installed(candidate, {name}):
+            return size
+    return None
+
+
+def detect_model(installed_models: list[str] | None = None) -> str | None:
+    """Pick the best installed LOCAL model, or None — never a cloud model.
+
+    Order: hardware-recommended model first, then LOCAL_MODEL_PREFERENCE.
+    Among installed candidates, prefer one whose file fits in estimated GPU
+    memory over a larger offloaded one (STEP 8, C1 — MC-measured: ~4s prefill
+    + 29ms/token CPU-offloaded vs ~100ms + 0.1ms/token resident; residency
+    matters more than model size). Sizes come from the live /api/tags probe;
+    when a caller passes installed_models (names only, no sizes), every
+    candidate is treated as fitting.
+
+    STEP 8 (L10): fails closed. The old `ollama/<cloud>` last resort meant a
+    LOCAL-model detector could quietly answer with a cloud route; callers that
+    need a fallback must decide that themselves, in the open."""
+    live_probe = installed_models is None
     try:
         installed = set(installed_models if installed_models is not None else list_ollama_models())
     except (error.URLError, ConnectionError, TimeoutError, OSError, json.JSONDecodeError):
         return None
-    # Hardware-aware pick: if the recommended model for this GPU is installed, use it
+    candidates: list[str] = []
     rec = recommended_model(list(installed))
     if model_matches_installed(rec, installed):
-        return f"ollama/{rec}"
-    # Fallback: walk the static preference list
+        candidates.append(rec)
     for model in LOCAL_MODEL_PREFERENCE:
-        if model_matches_installed(model, installed):
-            return f"ollama/{model}"
-    return f"ollama/{CLOUD_FALLBACK}"
+        if model not in candidates and model_matches_installed(model, installed):
+            candidates.append(model)
+    if not candidates:
+        return None
+    if live_probe:
+        sizes = _ollama_model_sizes()
+        budget = _estimate_gpu_gb() * 1e9 * _RESIDENT_FIT_FRACTION
+        if budget > 0 and sizes:
+            for candidate in candidates:
+                size = _candidate_size_bytes(candidate, sizes)
+                if size is not None and size <= budget:
+                    return f"ollama/{candidate}"
+    return f"ollama/{candidates[0]}"
 
 
 def ollama_reachable() -> bool:

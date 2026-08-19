@@ -2124,8 +2124,15 @@
         : "";
       output.innerHTML = tiers.map(tier => {
         const item = byTier[tier] || {};
+        // STEP 10 (C2): template fallback must be LOUD — the teacher sees
+        // that AI generation did not run, never silently receives template
+        // text dressed as a generated material.
+        const fallbackBadge = item.generation_status === "template_fallback"
+          ? `<p><span class="badge warn">AI generation did not run — this is template text</span></p>`
+          : "";
         return `<div class="panel">
           <h3>${escapeHtml(TIER_LABELS[tier])}</h3>
+          ${fallbackBadge}
           <p>${escapeHtml(item.title || "No material generated.")}</p>
           <p>${escapeHtml(item.instructions_for_student || "")}</p>
           <div class="output">${escapeHtml(item.exercise_body || "")}</div>

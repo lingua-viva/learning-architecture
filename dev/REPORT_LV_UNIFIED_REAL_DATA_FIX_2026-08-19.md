@@ -374,10 +374,119 @@ because the system lied about why it failed.
 **Spec gate (§STEP 7):** one normalizer, class-locked; a privacy refusal
 reports its true reason ✓.
 
-_(pending — STEPs 8+10 (combined verification battery per operator directive
-08-19), 11; STEP 9 gated on ruling §8-2 — skipped if unruled when reached;
-STEP 12 only if time. Each entry: scorer before/after, per-STEP gate result,
-commits.)_
+## STEPs 8+10 COMBINED — Model governance + generation honesty — CODE COMPLETE
+
+Per operator directive 08-19: STEP 8 (model governance) and STEP 10
+(generation honesty) implemented back-to-back, then ONE combined
+verification battery (three runs) instead of two separate ones.
+
+### STEP 8 — model governance
+- **Fail-closed detector:** `CLOUD_FALLBACK` deleted entirely.
+  `detect_model()` returns `None` when no preferred local model is
+  installed — never a `:cloud` name. Class-locked:
+  `test_detect_model_never_returns_a_cloud_model_class_lock` asserts
+  `":cloud"` does not appear in the function source AND a cloud-only
+  installed list yields `None`.
+- **Native Ollama leg:** local calls now use `/api/chat` (native shape:
+  `stream: false`, `options.num_predict`, parse `message.content`,
+  tokens = `prompt_eval_count + eval_count`). Payload shape follows the
+  ENDPOINT, not externality — `:cloud` models are external for logging
+  but dispatch through the local daemon, so `native =
+  url.endswith("/api/chat")` decides shape in BOTH synchronized engine
+  copies (`reasoning.py`, `pipeline.py`).
+- **`"think": false`** sent for thinking models
+  (`THINKING_MODEL_TAGS = ("glm", "nemotron", "qwen3")` →
+  `config.is_thinking_model`). This is the fix for the audit's 35.3s +
+  0-visible-chars nemotron calls. Locked:
+  `test_local_leg_sends_think_false_for_thinking_models`.
+- **Empty content = failure:** a 200 with no visible content returns
+  `error="empty_model_response"`, confidence 0.0 — never a silent
+  "success". Locked: `test_empty_content_with_no_error_is_a_failure_not_a_success`.
+- **VRAM residency (C1):** in live-probe mode the detector reads
+  `/api/tags` sizes and picks the first candidate fitting
+  `0.9 × estimated GPU bytes` — prefers a resident smaller model over a
+  larger offloaded one. Names-only callers keep pure preference order.
+  Size lookup routes through `model_matches_installed` (no second
+  `:latest` literal — STEP 7 class-lock preserved). Locked:
+  `test_detect_model_prefers_resident_fit_over_larger_offloaded`.
+- **Resolution order respected:** `LocalModelClient` no longer hard-codes
+  `detect_model()` (which silently ignored `LV_REASON_MODEL`); it passes
+  no model and lets the engine resolve (explicit → provider config →
+  default → `LV_REASON_MODEL` → cached detect). `local_only=True` still
+  guarantees provably-local. Locked:
+  `test_local_model_client_respects_engine_resolution_order`.
+
+### STEP 10 — generation honesty
+- **`TierMaterial.generation_status`** (`"generated"` |
+  `"template_fallback"`, mirrors `sync_status`). EVERY switch to
+  `_deterministic_material_fields` pairs with the fallback status —
+  source-level class lock counts both
+  (`test_every_fallback_path_sets_the_status_signal_class_lock`).
+- **Blank output = failed generation:** `_has_blank_output` (blank
+  instructions OR blank exercise) triggers the fallback switch, so a
+  parse that "succeeds" into emptiness is treated as failure.
+- **Fallback is loud and never blank:** parametrized across
+  empty_response / timeout / privacy_refusal / none_model /
+  empty_no_error / blank_instructions — all three tiers report
+  `template_fallback` with non-blank instructions, exercise, and
+  scaffolding (foundational included).
+- **On-surface signal:** the status rides `materials_as_dicts` into
+  `/api/lesson-materials/generate`; `index.html` renders a warn badge
+  "AI generation did not run — this is template text" on
+  `template_fallback`. UI contract bumped **v163 → v164**.
+
+### Combined verification battery (operator directive) — ALL THREE RUNS PASS
+
+**Run 1 — happy path (governed auto-pick, real IB PDF):**
+- Detector auto-pick = `ollama/nemotron-3.5-lightning` (never `:cloud`).
+- Real PDF (`Lizard BrainWizard Brain`) extracted: 2,385 chars.
+- Single-tier call: **13.3s**, `status=generated`, non-empty visible
+  content. Full 3-tier: **36.0s** wall-clock, all tiers `generated`,
+  content grounded in the source (lizard/wizard/instinct).
+- Trace ledger: 4 lines `model_used=ollama/nemotron-3.5-lightning` at
+  13343/15038/27955/35971 ms with 796/802/794/782 REAL tokens — vs the
+  audit baseline of 35.3s + 0 visible chars (`"think": false` proven
+  effective on the thinking model).
+
+**Run 2 — forced failure (loud, non-blank, fail-closed):**
+- Unavailable model (`LV_REASON_MODEL=ollama/model-that-does-not-exist`):
+  all tiers `template_fallback` in 0.1s, `blank_fields=False` every tier.
+- 1s timeout budget: honored at 1.0s wall-clock; all tiers
+  `template_fallback`, instructions 57–71 ch, exercise 184–217 ch —
+  foundational tier NOT blank.
+- Detector fails closed: installed=`["tiny-custom"]` →
+  `detect_model()=None`; student-data call through `LocalModelClient` →
+  `model_used='none:local_only'`, `error='local_only_no_model'` — honest
+  reason, never `:cloud`.
+
+**Run 3 — override respected end-to-end:**
+- `LV_REASON_MODEL=ollama/qwen2.5:7b` (different installed model).
+- Leg A `LocalModelClient.complete` → `model_used='ollama/qwen2.5:7b'`,
+  4.8s, valid JSON content (the STEP 8 fix target — it used to hard-code
+  `detect_model()` and silently ignore the override).
+- Leg B full 3-tier: 26.1s wall-clock, all tiers `status=generated`,
+  non-blank (instr 41–52 ch, ex 75–177 ch).
+- Trace ledger: 4 lines `model_used=ollama/qwen2.5:7b` at
+  4754/10264/17402/26039 ms — override logged per call.
+
+### Tests + scorer
+- Targeted: **340 tests green** (config 35 / reasoning / extract /
+  lesson_materials 36 / UI contract + consumers: students_ingest 62,
+  pipeline consumers 71, others).
+- Scorer re-run (unchanged lens side): **identical to STEP 4/7 baseline**
+  — class list 1.00 prec / 0.80 rec (334 TP, 0 FP); 3V 1.00/1.00;
+  curriculum/calendar 0 FP; holdout SEALED. STEPs 8+10 touch only the
+  model/generation leg.
+
+**Spec gate (§9, combined):** detector never returns cloud, fails closed
+with honest reason ✓; think:false effective (real tokens + content within
+budget) ✓; model-used logged every call ✓; empty-content-no-error is a
+FAILURE ✓; fallback loud on-surface + never blank (foundational included)
+✓; `LV_REASON_MODEL` respected end-to-end incl. `LocalModelClient` +
+logged ✓; lens-side scorer unchanged ✓.
+
+_(pending — STEP 11; STEP 9 gated on ruling §8-2 — skipped if unruled when
+reached; STEP 12 only if time.)_
 
 ## Holdout opening (§6) — NOT YET OPENED
 

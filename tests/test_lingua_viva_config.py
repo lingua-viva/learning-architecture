@@ -14,8 +14,50 @@ def test_detect_model_qwen3_is_last_resort_not_excluded():
     assert config.detect_model(["qwen3:8b"]) == "ollama/qwen3:8b"
 
 
-def test_detect_model_falls_back_to_cloud_when_ollama_has_no_preferred_models():
-    assert config.detect_model(["tiny-custom"]) == "ollama/kimi-k2.7-code:cloud"
+def test_detect_model_fails_closed_when_no_preferred_local_model_installed():
+    # STEP 8 (L10): a LOCAL-model detector must never answer with a cloud
+    # model. The old ollama/<cloud> last resort meant "detect local" could
+    # silently become "send to cloud".
+    assert config.detect_model(["tiny-custom"]) is None
+
+
+def test_detect_model_never_returns_a_cloud_model_class_lock():
+    """Class-lock (spec §3 STEP 8): detector output never matches ':cloud' —
+    for any installed set, including one where ONLY cloud models exist."""
+    import inspect
+
+    cloud_only = ["kimi-k2.6:cloud", "kimi-k2.7-code:cloud"]
+    assert config.detect_model(cloud_only) is None
+    mixed = cloud_only + ["qwen2.5:7b"]
+    picked = config.detect_model(mixed)
+    assert picked == "ollama/qwen2.5:7b"
+    assert ":cloud" not in (picked or "")
+    # Source-level: no cloud fallback path may reappear inside detect_model.
+    assert ":cloud" not in inspect.getsource(config.detect_model)
+
+
+def test_detect_model_prefers_resident_fit_over_larger_offloaded(monkeypatch):
+    """STEP 8 (C1): with live sizes known, a model that fits estimated GPU
+    memory beats a preference-earlier model that would run CPU-offloaded
+    [MC-measured: ~4s prefill + 29ms/token offloaded vs ~100ms + 0.1ms/token
+    resident]. Setup: 6GB GPU (mid_gpu rec qwen2.5:7b NOT installed) so the
+    preference walk alone would pick the 9GB qwen2.5:14b."""
+    installed = ["qwen2.5:14b", "qwen2.5:3b"]
+    monkeypatch.setattr(config, "list_ollama_models", lambda: list(installed))
+    monkeypatch.setattr(
+        config, "_ollama_model_sizes",
+        lambda: {"qwen2.5:14b": int(9.0e9), "qwen2.5:3b": int(1.9e9)},
+    )
+    monkeypatch.setattr(config, "_estimate_gpu_gb", lambda: 6.0)  # 5.4GB budget
+
+    assert config.detect_model() == "ollama/qwen2.5:3b"
+
+    # With enough GPU for the larger model, preference order wins again.
+    monkeypatch.setattr(config, "_estimate_gpu_gb", lambda: 16.0)
+    assert config.detect_model() == "ollama/qwen2.5:14b"
+
+    # Callers passing installed names (no sizes) keep pure preference order.
+    assert config.detect_model(installed) == "ollama/qwen2.5:14b"
 
 
 # --- STEP 7 (SPEC_LV_UNIFIED_REAL_DATA_FIX 2026-08-19, L6): ONE model normalizer

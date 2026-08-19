@@ -56,10 +56,13 @@ class LocalModelClient:
         context: dict | None = None,
         max_tokens: int = 2000,
     ) -> ModelResult:
+        # STEP 8: no explicit model — hard-coding detect_model() here jumped
+        # the engine's resolution order and silently ignored the
+        # LV_REASON_MODEL override. local_only=True still guarantees only a
+        # provably-local model can serve this call.
         result = await self._engine.reason(
             prompt,
             context=context or {},
-            model=config.detect_model(),
             system_prompt=system_prompt,
             local_only=True,
             max_tokens=max_tokens,

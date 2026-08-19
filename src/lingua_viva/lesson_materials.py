@@ -95,6 +95,10 @@ class TierMaterial:
     exercise_body: str
     scaffolding: list[str]
     teacher_note: str
+    # STEP 10 (C2): "generated" | "template_fallback" — mirrors the Drive
+    # leg's sync_status. The teacher must be able to see "AI generation did
+    # not run; this is template text"; no fallback output without its signal.
+    generation_status: str = "generated"
 
 
 @dataclass
@@ -490,6 +494,14 @@ def _has_placeholder_output(parsed: dict) -> bool:
     return any(PLACEHOLDER_OUTPUT_RE.search(value) for value in values)
 
 
+def _has_blank_output(parsed: dict) -> bool:
+    """STEP 10 (C3): a parse that yields blank instructions or a blank
+    exercise is a failed generation, not a material. This was the blank
+    foundational tier: empty model content flowed through the tolerant
+    parser into empty fields that the placeholder regex never matched."""
+    return not str(parsed.get("instructions") or "").strip() or not str(parsed.get("exercise") or "").strip()
+
+
 def _check_roster_names(material: TierMaterial, roster_names: list[str]) -> None:
     """Mirror cohort_planning.validate_plan_safety's name scan: no roster
     student's display name may appear in student-facing generated text."""
@@ -539,12 +551,15 @@ async def _generate_tier_material(
     content = getattr(result, "content", "") or ""
     model_used = str(getattr(result, "model_used", "") or "")
     error = str(getattr(result, "error", "") or "")
+    generation_status = "generated"
     if error or model_used.startswith("none") or content.startswith("[Local reasoning"):
         parsed = _deterministic_material_fields(tier, lesson)
+        generation_status = "template_fallback"
     else:
         parsed = _parse_material_response(content, tier, lesson)
-    if _has_placeholder_output(parsed):
+    if _has_placeholder_output(parsed) or _has_blank_output(parsed):
         parsed = _deterministic_material_fields(tier, lesson)
+        generation_status = "template_fallback"
     note = TIER_PROFILES[tier]["teacher_note"]
     if student_ids:
         teacher_note = f"{len(student_ids)} student(s) assigned. {note}"
@@ -559,6 +574,7 @@ async def _generate_tier_material(
         exercise_body=parsed["exercise"],
         scaffolding=parsed["scaffolding"],
         teacher_note=teacher_note,
+        generation_status=generation_status,
     )
     # Same safety bar as help_artifacts student copy: unsafe markers +
     # trauma-informed guardrails, applied to everything we return.
@@ -1339,6 +1355,7 @@ def material_from_dict(data: dict) -> TierMaterial:
         if isinstance(data.get("scaffolding"), list)
         else [],
         teacher_note=str(data.get("teacher_note") or ""),
+        generation_status=str(data.get("generation_status") or "generated"),
     )
 
 

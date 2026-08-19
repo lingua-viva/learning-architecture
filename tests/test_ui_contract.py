@@ -260,7 +260,9 @@ REPO = Path(__file__).resolve().parent.parent
 #   v163 (2026-08-19): STEP 6 — enrichment veto (L7): model may propose
 #     removal (grounded), never applies it; review-gated at ingest, preview
 #     badge "may not be a student".
-EXPECTED_VERSION = 163
+#   v164 (2026-08-19): STEPs 8+10 — generation honesty: generation_status
+#     on tier materials + loud template-fallback badge; blank tiers dead.
+EXPECTED_VERSION = 164
 
 
 def _html() -> str:
