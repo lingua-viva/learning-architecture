@@ -1,0 +1,76 @@
+{
+  "corpus": "synthetic",
+  "files": [
+    {
+      "file": "synthetic_class_list.xlsx",
+      "shape": "grade_sheet_class_list",
+      "expected_students": [
+        "Marco Bianchi",
+        "Nora Rossi",
+        "Sara Conti",
+        "Luca Ferri",
+        "Elisa Greco",
+        "Tommaso Marini",
+        "Giulia Riva",
+        "Pietro Serra",
+        "Anna (Annie) Villa",
+        "Leo Fontana",
+        "Camilla Gatti",
+        "Matteo Barbieri",
+        "Sofia Caruso",
+        "Emma Longo",
+        "Diego Marchetti",
+        "Alice Monti",
+        "Filippo Neri",
+        "Viola Pellegrini",
+        "Oscar Sanna"
+      ],
+      "sealed": false,
+      "note": "row1 class pairs, row2 teachers, Last/First columns, note rows are not students"
+    },
+    {
+      "file": "synthetic_support_3v.xlsx",
+      "shape": "single_sheet_support",
+      "expected_students": [
+        "Marco B-R",
+        "Nora R-S",
+        "Elisa G-M",
+        "Giulia R-V",
+        "Matteo B-C",
+        "Viola P-S"
+      ],
+      "sealed": false,
+      "target_class": "V",
+      "note": "literal Student/class headers, abbreviated names, 3 of 6 in class V"
+    },
+    {
+      "file": "synthetic_support_k5.xlsx",
+      "shape": "per_class_sheet_support",
+      "expected_students": [
+        "Marco Bianchi",
+        "Nora Rossi",
+        "Sara Conti",
+        "Giulia Riva",
+        "Pietro Serra",
+        "Leo Fontana",
+        "Camilla Gatti"
+      ],
+      "sealed": false,
+      "note": "class code row 1, staff first-name block, accommodations header, students below"
+    },
+    {
+      "file": "synthetic_curriculum.xlsx",
+      "shape": "curriculum_mapping",
+      "expected_students": [],
+      "sealed": false,
+      "note": "zero students — Italian capitalized bigrams must not be detected"
+    },
+    {
+      "file": "synthetic_calendar.xlsx",
+      "shape": "cycle_calendar",
+      "expected_students": [],
+      "sealed": false,
+      "note": "zero students — Day-cycle grid, room names, month bigrams"
+    }
+  ]
+}
