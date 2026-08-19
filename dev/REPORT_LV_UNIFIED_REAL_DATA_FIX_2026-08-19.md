@@ -331,8 +331,53 @@ cannot converge on truth. The model may now DISPUTE a detection via a
 — proposal grounded like additions, applied only by a human, never silent
 in either direction.
 
-_(pending — STEPs 7, 8, 10, 11; STEP 9 gated on ruling §8-2; STEP 12 only
-if time. Each entry: scorer before/after, per-STEP gate result, commits.)_
+### STEP 7 — One canonical model normalizer + honest failure reporting (L6) — DONE
+
+Two installed-model matchers disagreed on `:latest`: `config._model_installed`
+(handled `:latest` + tagless) vs `model_gate.is_provably_local_model` (exact
+membership only). `detect_model()` could pick `ollama/X` when Ollama had
+`X:latest` installed; the privacy gate then refused its own detector's pick,
+every student-data call died as `none:local_only` — and that refusal carried
+`error=""`, so enrichment misreported it as
+`model_enrichment_discarded:invalid JSON after retry`. L6 stayed invisible
+because the system lied about why it failed.
+
+- **ONE normalizer (§5):** `config.model_matches_installed()` is now the
+  single installed-match function — case-insensitive (detect_model's set was
+  unlowered, model_gate's lowered: a second divergence closed by the same
+  move), `:latest`, tagless-vs-any-tag. `detect_model()` and
+  `is_provably_local_model()` both route through it (model_gate already
+  imports config; the circular-import constraint puts the canonical function
+  in config).
+- **Class-lock:** `test_one_model_normalizer_class_lock` — the `:latest`
+  literal may exist ONLY inside `model_matches_installed` (source-level
+  count), zero occurrences in model_gate, and model_gate's source must
+  reference the canonical function. A second normalization path fails the
+  suite.
+- **The regression itself:** `test_detector_pick_always_passes_the_privacy_gate`
+  — whatever detect_model picks from `["nemotron-3.5-lightning:latest", …]`,
+  the gate must accept (property holds on any hardware tier).
+- **Honest failure reporting:** the `none:local_only` refusal now carries
+  `error="local_only_no_model"` in BOTH synchronized engine copies
+  (`reasoning.py`, `pipeline.py`); enrichment additionally treats any
+  `none*` model_used as unavailability (belt) — the warning is
+  `model_enrichment_unavailable:local_only_no_model`, never "invalid JSON".
+  Locked by `test_privacy_refusal_reports_true_reason_not_invalid_json` +
+  `test_none_model_without_error_still_reports_unavailable`.
+- Targeted: 95 (config/extract/failure-honesty/reasoning/stays-local) + 78
+  (all other refusal-shape consumers) — all green.
+- Scorer re-run: **identical to STEP 4** (class list 1.00/0.80 — 334 TP,
+  0 FP; 3V 1.00/1.00; curriculum/calendar 0 FP; holdout SEALED) — STEP 7
+  touches only the model leg.
+- No UI change → no contract bump.
+
+**Spec gate (§STEP 7):** one normalizer, class-locked; a privacy refusal
+reports its true reason ✓.
+
+_(pending — STEPs 8+10 (combined verification battery per operator directive
+08-19), 11; STEP 9 gated on ruling §8-2 — skipped if unruled when reached;
+STEP 12 only if time. Each entry: scorer before/after, per-STEP gate result,
+commits.)_
 
 ## Holdout opening (§6) — NOT YET OPENED
 

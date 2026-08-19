@@ -281,6 +281,55 @@ def test_offline_no_model_is_fully_deterministic_with_warning():
     assert len(record.data["structure"]["students_detected"]) == 2
 
 
+# --- STEP 7 (SPEC_LV_UNIFIED_REAL_DATA_FIX §STEP 7, L6): honest failure reporting
+
+
+def test_privacy_refusal_reports_true_reason_not_invalid_json():
+    """A none:local_only refusal must surface as model_enrichment_unavailable
+    with the privacy reason. The 08-19 audit found this exact case
+    misreported as 'invalid JSON after retry' — the model never ran at all."""
+
+    class RefusingModel:
+        async def complete(self, prompt, *, system_prompt=None, context=None, max_tokens=2000):
+            return ModelResult(
+                content="Student data must stay on this computer and no local model is installed.",
+                confidence=0.0,
+                model_used="none:local_only",
+                error="local_only_no_model",
+            )
+
+    source, content = _source("source_lesson_plan_marco_nora.json", "lesson_plan_marco_nora.md")
+    record = _run(extract_document(source, content, model_client=RefusingModel()))
+    warnings = record.data["warnings"]
+    assert any(w == "model_enrichment_unavailable:local_only_no_model" for w in warnings)
+    assert not any("invalid JSON" in w for w in warnings)
+    # deterministic detection is untouched by the refusal
+    assert [s["display_name"] for s in record.data["structure"]["students_detected"]] == [
+        "Marco Bianchi", "Nora Rossi",
+    ]
+
+
+def test_none_model_without_error_still_reports_unavailable():
+    """Belt for the same class: even when a refusal arrives with error=''
+    (the pre-fix engine shape), a 'none*' model_used means the model never
+    ran — its prose must never reach the JSON parser and be blamed as
+    invalid JSON."""
+
+    class ProseRefusal:
+        async def complete(self, prompt, *, system_prompt=None, context=None, max_tokens=2000):
+            return ModelResult(
+                content="Install a local model first.",
+                confidence=0.0,
+                model_used="none:local_only",
+            )
+
+    source, content = _source("source_lesson_plan_marco_nora.json", "lesson_plan_marco_nora.md")
+    record = _run(extract_document(source, content, model_client=ProseRefusal()))
+    warnings = record.data["warnings"]
+    assert any(w.startswith("model_enrichment_unavailable:no usable local model") for w in warnings)
+    assert not any("invalid JSON" in w for w in warnings)
+
+
 def test_unsupported_format_fails_honestly():
     source, content = _source("source_lesson_plan_marco_nora.json", "lesson_plan_marco_nora.md")
     bad = SourceRecord({**source.data, "mime": "image/png", "original_ext": ".png"})

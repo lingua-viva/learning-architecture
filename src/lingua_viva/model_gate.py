@@ -104,4 +104,8 @@ def is_provably_local_model(model: str | None) -> bool:
     allowlist = _explicit_local_allowlist()
     if name in allowlist or normalize_model(model) in allowlist:
         return True
-    return name in _installed_ollama_models()
+    # STEP 7 (L6): the installed check MUST use the same matcher as
+    # detect_model(). Exact membership here while the detector accepted tag
+    # variants meant the detector could pick a model this gate then
+    # refused — every student-data call died as none:local_only.
+    return config.model_matches_installed(name, _installed_ollama_models())

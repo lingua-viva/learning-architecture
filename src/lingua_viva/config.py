@@ -434,17 +434,28 @@ def list_ollama_models(timeout: int = 5) -> list[str]:
     return [name for name in names if isinstance(name, str)]
 
 
-def _model_installed(model: str, installed: set[str]) -> bool:
-    """Check if a model name matches any installed tag.
-    Handles the :latest suffix: 'nemotron-3.5-lightning' matches
-    'nemotron-3.5-lightning:latest'."""
-    if model in installed:
+def model_matches_installed(model: str, installed: set[str] | frozenset[str]) -> bool:
+    """THE one installed-model matcher (STEP 7, SPEC_LV_UNIFIED_REAL_DATA_FIX
+    2026-08-19, L6). Case-insensitive; handles the :latest suffix
+    ('nemotron-3.5-lightning' matches 'nemotron-3.5-lightning:latest') and a
+    tagless request against any tag of the base name.
+
+    Both detect_model() and model_gate.is_provably_local_model() MUST route
+    through this function. The 08-19 audit's L6 was these two disagreeing on
+    ':latest': the detector picked a model the privacy gate then refused, so
+    every student-data call died as none:local_only — and that refusal was
+    misreported downstream as an invalid-JSON model response."""
+    candidate = (model or "").strip().lower()
+    if not candidate:
+        return False
+    normalized = {str(item).strip().lower() for item in installed}
+    if candidate in normalized:
         return True
-    if f"{model}:latest" in installed:
+    if f"{candidate}:latest" in normalized:
         return True
     # Also match a tagless request against any tag of the base name
-    if ":" not in model:
-        return any(m.split(":")[0] == model for m in installed)
+    if ":" not in candidate:
+        return any(item.split(":")[0] == candidate for item in normalized)
     return False
 
 
@@ -459,11 +470,11 @@ def detect_model(installed_models: list[str] | None = None) -> str | None:
         return None
     # Hardware-aware pick: if the recommended model for this GPU is installed, use it
     rec = recommended_model(list(installed))
-    if _model_installed(rec, installed):
+    if model_matches_installed(rec, installed):
         return f"ollama/{rec}"
     # Fallback: walk the static preference list
     for model in LOCAL_MODEL_PREFERENCE:
-        if _model_installed(model, installed):
+        if model_matches_installed(model, installed):
             return f"ollama/{model}"
     return f"ollama/{CLOUD_FALLBACK}"
 

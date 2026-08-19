@@ -386,6 +386,11 @@ class ReasoningEngine:
                     content=local_only_no_model_message(),
                     confidence=0.0,
                     model_used="none:local_only",
+                    # STEP 7 (L6), kept synchronized with
+                    # src/lingua_viva/reasoning.py: a privacy refusal must
+                    # carry its true reason, not error="".
+                    error="local_only_no_model",
+                    error_detail="student data must stay local and no provably-local model is available",
                 )
             resolved_model = fallback
 

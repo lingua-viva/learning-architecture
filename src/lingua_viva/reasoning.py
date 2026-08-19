@@ -137,10 +137,16 @@ class ReasoningEngine:
             except Exception:
                 pass
             if fallback is None:
+                # STEP 7 (L6): carry an explicit error so downstream callers
+                # report the true reason. With error="" this privacy refusal
+                # was misreported by docpipe enrichment as "invalid JSON
+                # after retry" — the model never ran at all.
                 result = ReasonResult(
                     content=local_only_no_model_message(),
                     confidence=0.0,
                     model_used="none:local_only",
+                    error="local_only_no_model",
+                    error_detail="student data must stay local and no provably-local model is available",
                 )
                 # Still traced: a query that was refused for privacy reasons is
                 # exactly the kind the governance view must be able to show.

@@ -1042,8 +1042,13 @@ async def _model_enrich_students(
             warnings.append(f"model_enrichment_unavailable:{str(error)[:120]}")
             return None, warnings
         model_used = result.model_used or model_used
-        if result.error:
-            warnings.append(f"model_enrichment_unavailable:{result.error}")
+        # STEP 7 (L6): "none*" model_used means no model ever ran (privacy
+        # refusal, no model installed). Reporting the true reason here is the
+        # fix for the audit's misreport — this used to fall through to JSON
+        # parsing and surface as "invalid JSON after retry".
+        if result.error or str(result.model_used or "").startswith("none"):
+            reason = result.error or f"no usable local model ({result.model_used})"
+            warnings.append(f"model_enrichment_unavailable:{reason}")
             return (model_used if model_used not in (None, "none") else None), warnings
         parsed = _parse_model_json(result.content)
         if parsed is not None:
