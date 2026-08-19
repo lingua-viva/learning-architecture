@@ -62,6 +62,7 @@
           "knowledge/*.yaml",
           "knowledge/education/**",
           "requirements*.txt",
+          "oauth_client.json",
           "!Manuale_Italiano_Laboratorio_Linguistico_G1-G5.docx",
           "!archive/**",
           "!.git/**",

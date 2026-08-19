@@ -1680,6 +1680,46 @@ async def _startup_model_warmup():
 app.router.add_event_handler("startup", _startup_model_warmup)
 
 
+_drive_drain_task = None
+
+
+async def _startup_drive_sync_drain():
+    """Drain queued lens syncs on launch, with zero teacher action.
+
+    SPEC_LV_DRIVE_OOTB 2026-08-18 (G5): observations made offline queue their
+    lens sync; before this, draining required the teacher to click "Sync now",
+    which the teacher contract forbids. On startup, when Drive is connected,
+    auto-provision the lens folder if needed and retry everything pending.
+    Daemon-style background task: never awaited by the teacher's first paint,
+    never raises. Skipped under pytest/LV_AGENT so tests never touch Drive.
+    """
+    if os.environ.get("LV_AGENT", "").strip() in {"1", "true", "yes", "on"}:
+        return
+    if "pytest" in sys.modules:
+        return
+
+    async def _drain() -> None:
+        try:
+            from src.lingua_viva.drive_sync import (
+                ensure_lens_sync_folder,
+                retry_pending_syncs,
+            )
+
+            folder_id = await asyncio.to_thread(ensure_lens_sync_folder)
+            if folder_id:
+                await retry_pending_syncs()
+        except Exception:
+            pass  # a failed drain must never take the app down
+
+    # Module-level reference: a bare create_task could be garbage-collected
+    # mid-flight (same pitfall as the ingest BackgroundTasks note above).
+    global _drive_drain_task
+    _drive_drain_task = asyncio.create_task(_drain())
+
+
+app.router.add_event_handler("startup", _startup_drive_sync_drain)
+
+
 def _safe_unit(unit_id: str | None = None, grade: str | None = None) -> dict:
     from src.lingua_viva.curriculum import CurriculumService
 
@@ -2440,18 +2480,26 @@ async def _run_ingest_job(job: dict, source, content: bytes) -> None:
             if isinstance(student, dict) and str(student.get("display_name") or "").strip()
         ]
         job["students_found"] = len(detected)
-        bulk_review_required = len(detected) > BULK_IMPORT_CONFIRMATION_THRESHOLD
+        # SPEC_LV_DRIVE_OOTB 2026-08-18 (G3): roster-style imports (more than
+        # BULK_IMPORT_CONFIRMATION_THRESHOLD students) auto-create EVERY
+        # detected student — the teacher contract allows no per-name confirm
+        # clicks. Low-confidence names are still created but flagged in
+        # warnings; "Undo this import" (one click, archives all) is the
+        # review mechanism. Small imports keep the confidence gate: a single
+        # low-confidence guess in one student's document must not silently
+        # become a roster entry.
+        roster_import = len(detected) > BULK_IMPORT_CONFIRMATION_THRESHOLD
+        low_confidence_names: list[str] = []
         for student in detected:
             try:
                 confidence = float(student.get("confidence", 0.0))
             except (TypeError, ValueError):
                 confidence = 0.0
-            if bulk_review_required:
-                job["needs_confirmation"].append({
-                    "display_name": str(student.get("display_name")),
-                    "confidence": confidence,
-                    "reason": "Roster-style import: review names before creating student profiles.",
-                })
+            if roster_import:
+                created = await asyncio.to_thread(_create_lens_for_detected, extraction, student)
+                job["students_created"].append(created)
+                if confidence < INGEST_CONFIDENCE_THRESHOLD:
+                    low_confidence_names.append(str(student.get("display_name")))
             elif confidence >= INGEST_CONFIDENCE_THRESHOLD:
                 created = await asyncio.to_thread(_create_lens_for_detected, extraction, student)
                 job["students_created"].append(created)
@@ -2463,8 +2511,28 @@ async def _run_ingest_job(job: dict, source, content: bytes) -> None:
                     "reason": "Low-confidence match in the document.",
                 })
         job["warnings"] = [str(w) for w in extraction.data.get("warnings", [])]
+        if low_confidence_names:
+            job["warnings"].append(
+                "Check these names — they were read with low confidence: "
+                + ", ".join(low_confidence_names)
+            )
         job["status"] = "done"
         _save_ingest_job(job)
+        # SPEC_LV_DRIVE_OOTB 2026-08-18 (G5): freshly created lenses propagate
+        # to Drive with zero teacher action. Auto-provision the lens folder on
+        # first need, then fire-and-forget sync per student — failures queue
+        # honestly and drain later; the import itself is already done.
+        if job["students_created"]:
+            try:
+                from src.lingua_viva.drive_sync import ensure_lens_sync_folder, trigger_sync
+
+                await asyncio.to_thread(ensure_lens_sync_folder)
+                for created in job["students_created"]:
+                    student_id = str((created or {}).get("student_id") or "").strip()
+                    if student_id:
+                        trigger_sync(student_id)
+            except Exception:
+                pass  # sync is best-effort; the import itself already succeeded
     except NotImplementedError:
         job["status"] = "failed"
         job["error"] = (
@@ -2508,20 +2576,62 @@ async def students_ingest(request: Request, background_tasks: BackgroundTasks):
         drive_ref = str((payload or {}).get("drive_ref", "")).strip()
         if not drive_ref:
             return JSONResponse({"error": "attach a file or provide a drive_ref"}, status_code=400)
-        # Frozen T1 seam — honest failure while drive.fetch_file is a stub.
+        # Real fetch (SPEC_LV_DRIVE_OOTB 2026-08-18, G2) — errors map to
+        # honest teacher-readable failures, never a 500.
         from src.lingua_viva.docpipe import drive as docpipe_drive
+        from src.lingua_viva.google_drive_integration import (
+            DriveAuthError,
+            DriveConfigError,
+            DriveFileTooLarge,
+            parse_folder_link,
+        )
+
+        # A pasted FOLDER link routes to the class-folder ingest (match every
+        # document inside by student name) instead of the single-file roster
+        # path. Only unambiguous folder URLs qualify — "?id=" links stay on
+        # the file path because both URL grammars use that form.
+        if "/folders/" in drive_ref:
+            folder_id = parse_folder_link(drive_ref)
+            if not folder_id:
+                return JSONResponse(
+                    {"error": "That looks like a Drive folder link, but no folder ID could be read from it."},
+                    status_code=400,
+                )
+            from src.lingua_viva.class_folder_ingest import ingest_class_folder
+
+            def run_folder(store):
+                return ingest_class_folder(folder_id, "teacher:drive", store=store)
+
+            try:
+                result = await asyncio.to_thread(_with_student_store, run_folder)
+            except DriveConfigError:
+                return JSONResponse(
+                    {"error": "Connect Google Drive first, then import the folder."},
+                    status_code=409,
+                )
+            except DriveAuthError:
+                return JSONResponse(
+                    {"error": "Google Drive could not be reached safely."},
+                    status_code=502,
+                )
+            except ValueError as exc:
+                return JSONResponse({"error": str(exc)}, status_code=400)
+            result["kind"] = "class_folder"
+            return result
 
         try:
             fetched = await asyncio.to_thread(docpipe_drive.fetch_file, drive_ref)
-        except NotImplementedError:
-            return {
-                "job_id": None,
-                "status": "failed",
-                "error": (
-                    "Drive import is not available in this build yet. Import a "
-                    "local file instead — nothing else changes."
-                ),
-            }
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+        except DriveFileTooLarge:
+            return JSONResponse({"error": "file is larger than 15 MB"}, status_code=413)
+        except DriveConfigError:
+            return JSONResponse(
+                {"error": "Connect Google Drive first, then import the roster."},
+                status_code=409,
+            )
+        except DriveAuthError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=502)
         content = fetched.content
         filename = fetched.filename
         origin = "drive"
@@ -4977,6 +5087,57 @@ async def update_student_profile(student_id: str, payload: dict):
         "student_id": student_id,
         "profile_version": lens["profile_version"],
         "updated_fields": sorted(payload.keys()),
+    }
+
+
+@app.post("/api/students/{student_id}/support-entry")
+async def add_support_entry_endpoint(request: Request, student_id: str, payload: dict):
+    """Inline teacher entry (2026-08-18): type directly into a Category
+    Profile section. The teacher typing it IS the evidence, so it lands
+    already teacher_confirmed — no suggestion/confirm round-trip."""
+    from src.education.student_lens import LensNotFoundError
+    from src.lingua_viva.access_roles import effective_teacher_id
+    from src.lingua_viva.privacy_log import log_event
+
+    if not isinstance(payload, dict):
+        return JSONResponse({"error": "payload must be an object"}, status_code=400)
+    category_id = str(payload.get("category_id") or "").strip()
+    bucket = str(payload.get("bucket") or "").strip()
+    text = str(payload.get("text") or "").strip()
+    if not (category_id and bucket and text):
+        return JSONResponse(
+            {"error": "category_id, bucket, and text are required"},
+            status_code=400,
+        )
+    teacher_id = effective_teacher_id(
+        request, str(payload.get("teacher_id") or "local-teacher")
+    )
+
+    def do_add(store):
+        return store.add_support_entry(
+            student_id,
+            category_id,
+            bucket,
+            text,
+            created_by=teacher_id,
+            confidence="teacher_confirmed",
+        )
+
+    try:
+        await asyncio.to_thread(_with_student_store, do_add)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    except LensNotFoundError:
+        return JSONResponse(
+            {"error": f"Student '{student_id}' not found."}, status_code=404
+        )
+    # Privacy event carries the student id only — never the typed text.
+    await asyncio.to_thread(log_event, "support_entry_added", query_text=student_id)
+    return {
+        "status": "recorded",
+        "student_id": student_id,
+        "category_id": category_id,
+        "bucket": bucket,
     }
 
 

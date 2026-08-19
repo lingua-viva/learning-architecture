@@ -315,6 +315,14 @@ reachable_from_ui:
       2026-08-02). Soft delete — roster hides the student, observations
       are retained; hard purge is deliberately not exposed over HTTP.
 
+  - route: "POST /api/students/{student_id}/support-entry"
+    call_site: "/api/students/${state.selectedStudent}/support-entry`"
+    note: >-
+      Inline add-entry row in each Category Profile section — teacher types
+      what they know, saved as teacher_confirmed evidence (Drive OOTB build
+      2026-08-18). Call-site string ends with a backtick so it cannot be
+      satisfied by the /confirm route's longer URL literal.
+
   - route: "POST /api/students/{student_id}/support-entry/confirm"
     call_site: "/api/students/${state.selectedStudent}/support-entry/confirm"
     note: "Tap-to-confirm on model_suggested Category Profile entries."

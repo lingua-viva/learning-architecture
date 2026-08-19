@@ -167,6 +167,31 @@ jobs:
         working-directory: desktop
         run: npm run build
 
+      # SPEC_LV_DRIVE_OOTB 2026-08-18 (G1): package the Google OAuth client so
+      # Drive sign-in works out of the box — the "capability built, credential
+      # never packaged" failure class. Written to the repo root, which
+      # extraResources maps to resources/app/ where load_client_config()
+      # already looks. Secrets absent → build still ships, sign-in honestly
+      # reports unavailable (never a broken button).
+      - name: Stage Google OAuth client for packaging
+        shell: bash
+        env:
+          LV_OAUTH_CLIENT_ID: ${{ secrets.LV_GOOGLE_OAUTH_CLIENT_ID }}
+          LV_OAUTH_CLIENT_SECRET: ${{ secrets.LV_GOOGLE_OAUTH_CLIENT_SECRET }}
+        run: |
+          if [ -z "$LV_OAUTH_CLIENT_ID" ] || [ -z "$LV_OAUTH_CLIENT_SECRET" ]; then
+            echo "::warning::LV_GOOGLE_OAUTH_CLIENT_ID/SECRET not set — Drive sign-in will be unavailable in this build."
+            exit 0
+          fi
+          node -e '
+            const fs = require("fs");
+            fs.writeFileSync("oauth_client.json", JSON.stringify({
+              client_id: process.env.LV_OAUTH_CLIENT_ID.trim(),
+              client_secret: process.env.LV_OAUTH_CLIENT_SECRET.trim(),
+            }) + "\n");
+          '
+          echo "✓ oauth_client.json staged for packaging"
+
       - name: Package with electron-builder
         working-directory: desktop
         env:

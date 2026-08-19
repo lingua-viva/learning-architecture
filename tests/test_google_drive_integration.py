@@ -792,3 +792,100 @@ def test_connect_folder_handles_non_dict_metadata(monkeypatch, tmp_path):
             settings=_settings(),
             transport=GarbageMetaTransport(),
         )
+
+# ---------------------------------------------------------------------------
+# SPEC_LV_DRIVE_OOTB 2026-08-18: parse_file_link (G2) + create_folder (G5)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("link", "expected"),
+    [
+        ("https://drive.google.com/file/d/FileId12345/view?usp=sharing", "FileId12345"),
+        ("https://docs.google.com/document/d/DocId12345/edit", "DocId12345"),
+        ("https://docs.google.com/spreadsheets/d/SheetId123/edit#gid=0", "SheetId123"),
+        ("https://drive.google.com/open?id=AbC123xyz", "AbC123xyz"),
+        ("  https://drive.google.com/file/d/FileId12345/view  ", "FileId12345"),
+        ("AbC-123_xyz", "AbC-123_xyz"),
+        ("https://example.com/not-drive", None),
+        ("???", None),
+        ("abc", None),
+        ("", None),
+    ],
+)
+def test_parse_file_link(link, expected):
+    assert drive.parse_file_link(link) == expected
+
+
+class FolderCreateTransport(FakeDriveTransport):
+    def __init__(self, existing=None):
+        super().__init__()
+        self.existing = existing or []
+        self.created = []
+
+    def get_json(self, url, token):
+        assert token == "access-token-secret"
+        self.json_urls.append(url)
+        assert "/files?" in url
+        return {"files": self.existing}
+
+    def post_json(self, url, token, payload):
+        assert token == "access-token-secret"
+        self.created.append(payload)
+        return {"id": "new-folder-1"}
+
+
+def test_create_folder_reuses_existing_folder_by_name():
+    transport = FolderCreateTransport(existing=[{"id": "existing-1", "name": "Lenses"}])
+    folder_id = drive.create_folder("Lenses", settings=_settings(), transport=transport)
+    assert folder_id == "existing-1"
+    assert transport.created == []
+    query = parse_qs(urlparse(transport.json_urls[0]).query)["q"][0]
+    assert "name = 'Lenses'" in query
+    assert "trashed = false" in query
+
+
+def test_create_folder_creates_when_absent():
+    transport = FolderCreateTransport()
+    folder_id = drive.create_folder(
+        "Lingua Viva – Student Lenses", settings=_settings(), transport=transport
+    )
+    assert folder_id == "new-folder-1"
+    assert transport.created == [{
+        "name": "Lingua Viva – Student Lenses",
+        "mimeType": "application/vnd.google-apps.folder",
+    }]
+
+
+def test_create_folder_with_parent_scopes_search_and_metadata():
+    transport = FolderCreateTransport()
+    drive.create_folder("Lenses", "parent-123", settings=_settings(), transport=transport)
+    query = parse_qs(urlparse(transport.json_urls[0]).query)["q"][0]
+    assert "'parent-123' in parents" in query
+    assert transport.created[0]["parents"] == ["parent-123"]
+
+
+def test_create_folder_escapes_quotes_in_name():
+    transport = FolderCreateTransport()
+    drive.create_folder("Nora's 'class'", settings=_settings(), transport=transport)
+    query = parse_qs(urlparse(transport.json_urls[0]).query)["q"][0]
+    assert "name = 'Nora\\'s \\'class\\''" in query
+
+
+def test_create_folder_rejects_blank_name_and_bad_parent():
+    transport = FolderCreateTransport()
+    with pytest.raises(ValueError):
+        drive.create_folder("   ", settings=_settings(), transport=transport)
+    with pytest.raises(ValueError):
+        drive.create_folder("Lenses", "bad id!", settings=_settings(), transport=transport)
+
+
+def test_create_folder_post_failure_raises_auth_error_without_secrets():
+    class FailingPost(FolderCreateTransport):
+        def post_json(self, url, token, payload):
+            raise OSError("network down")
+
+    with pytest.raises(drive.DriveAuthError) as excinfo:
+        drive.create_folder("Lenses", settings=_settings(), transport=FailingPost())
+    assert "client-secret" not in str(excinfo.value)
+    assert "refresh-token" not in str(excinfo.value)

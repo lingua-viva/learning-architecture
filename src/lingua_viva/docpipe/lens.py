@@ -87,7 +87,7 @@ def create_from_extraction(
     ]
     added_fields: list[str] = []
     for span in spans:
-        for field_id in _fields_for_span(str(span.get("text") or "")):
+        for field_id in _fields_for_span(str(span.get("text") or ""), span=span):
             evidence = {
                 "source_ref": {
                     "type": "DOCUMENT",
@@ -229,7 +229,13 @@ def _mentions_student(text: object, student_name: str) -> bool:
     return student_name.lower() in text.lower()
 
 
-def _fields_for_span(text: str) -> list[str]:
+def _fields_for_span(text: str, span: dict | None = None) -> list[str]:
+    # Direct field hint from structured extraction (e.g. support-xlsx
+    # sheets map onto lens fields) beats keyword guessing.
+    if span is not None:
+        hint = span.get("field_hint")
+        if hint in PROFILE_FIELDS:
+            return [str(hint)]
     lower = text.lower()
     fields = [
         field_id

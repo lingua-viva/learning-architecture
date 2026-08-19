@@ -391,6 +391,72 @@ def test_confirm_support_entry_missing_entry_400(monkeypatch, tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# 6b. Inline teacher entry (operator request 2026-08-18): type straight into
+# a Category Profile section. The teacher typing it IS the evidence, so it
+# lands already teacher_confirmed.
+# ---------------------------------------------------------------------------
+
+def test_inline_support_entry_saves_teacher_confirmed(monkeypatch, tmp_path):
+    _isolate(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        sid = _create_student(client)
+        res = client.post(
+            f"/api/students/{sid}/support-entry",
+            json={
+                "category_id": "executive_functioning",
+                "bucket": "needs",
+                "text": "Needs a written plan before starting multi-step tasks",
+            },
+        )
+        assert res.status_code == 200, res.text
+        assert res.json()["status"] == "recorded"
+        lens = client.get(f"/api/students/{sid}/lens").json()
+        entries = lens["support_profile"]["categories"]["executive_functioning"]["needs"]
+        assert len(entries) == 1
+        assert entries[0]["text"] == "Needs a written plan before starting multi-step tasks"
+        assert entries[0]["confidence"] == "teacher_confirmed"
+        events = _privacy_events(tmp_path)
+        added = [e for e in events if e["event_type"] == "support_entry_added"]
+        assert added, events
+        # ids only — the typed text never reaches the privacy log
+        assert all("written plan" not in json.dumps(e) for e in added)
+
+
+def test_inline_support_entry_rejects_bad_input(monkeypatch, tmp_path):
+    _isolate(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        sid = _create_student(client)
+        for payload in (
+            {"category_id": "nope", "bucket": "needs", "text": "x"},
+            {"category_id": "executive_functioning", "bucket": "nope", "text": "x"},
+            {"category_id": "executive_functioning", "bucket": "needs", "text": "  "},
+        ):
+            res = client.post(f"/api/students/{sid}/support-entry", json=payload)
+            assert res.status_code == 400, payload
+
+
+def test_inline_support_entry_unknown_student_404(monkeypatch, tmp_path):
+    _isolate(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        res = client.post(
+            "/api/students/student-ghost/support-entry",
+            json={"category_id": "executive_functioning", "bucket": "needs", "text": "x"},
+        )
+        assert res.status_code == 404
+
+
+def test_inline_entry_controls_wired_in_html():
+    html = (Path(__file__).resolve().parents[1] / "static" / "index.html").read_text(
+        encoding="utf-8"
+    )
+    assert "data-add-entry" in html
+    assert "data-entry-bucket" in html
+    assert "data-entry-text" in html
+    assert "/support-entry`" in html
+    assert "Strategy that worked" in html
+
+
+# ---------------------------------------------------------------------------
 # 7. voice/act: additive category_suggestions, spoken stays first-name-only
 # ---------------------------------------------------------------------------
 

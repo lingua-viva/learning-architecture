@@ -150,6 +150,38 @@ def get_sync_folder_id_for_category(category: str = DEFAULT_SHARED_CATEGORY) -> 
     return folder_map.get(normalize_folder_category(category))
 
 
+LENS_SYNC_FOLDER_NAME = "Lingua Viva – Student Lenses"
+
+
+def ensure_lens_sync_folder() -> Optional[str]:
+    """Auto-provision the shared lens folder when Drive is connected.
+
+    SPEC_LV_DRIVE_OOTB 2026-08-18 (G5): the teacher contract allows no
+    folder-configuration step, so the first time lenses need a home and none
+    is configured, we create "Lingua Viva – Student Lenses" in the teacher's
+    own Drive and record it in the folder map. Idempotent (create_folder
+    reuses by name); returns the folder ID, or None when Drive is not
+    connected or provisioning fails (sync then stays honestly queued).
+    """
+    existing = get_sync_folder_id_for_category(DEFAULT_SHARED_CATEGORY)
+    if existing:
+        return existing
+    try:
+        from src.lingua_viva.google_drive_integration import create_folder, load_settings
+
+        if not load_settings().configured:
+            return None
+        folder_id = create_folder(LENS_SYNC_FOLDER_NAME)
+        folder_map = get_sync_folder_map()
+        folder_map[DEFAULT_SHARED_CATEGORY] = folder_id
+        set_sync_folder_map(folder_map)
+        logger.info("Auto-provisioned lens sync folder %s", folder_id)
+        return folder_id
+    except Exception:
+        logger.warning("Lens sync folder auto-provision failed", exc_info=True)
+        return None
+
+
 def set_sync_folder_id(folder_id: str) -> None:
     """Write the sync folder ID to config."""
     data = _read_settings()

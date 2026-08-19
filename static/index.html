@@ -2518,15 +2518,15 @@
       $("content").innerHTML = `
         <div class="view-head"><div><h2>Student Lenses</h2><p>View profiles, observations, CEFR trajectory, grouping notes, and support proposals. The system suggests; the teacher decides.</p></div></div>
         <div class="panel" style="margin-bottom:14px;">
-          <h3>Import students from a file</h3>
-          <p class="voice-hint">Point at a class list, roster, or lesson plan (.xlsx, .docx, .csv, .txt, .md, or .pdf). Roster-style imports ask you to confirm names before creating student profiles.</p>
+          <h3>Import your roster</h3>
+          <p class="voice-hint">Point at your class list or roster — whatever file you already have (Google Doc, Sheet, Word, PDF, CSV, or text). Every student gets a profile automatically; one click undoes the whole import.</p>
+          <div id="drive-roster-import" style="margin-bottom:8px;"></div>
           <form id="ingest-form" class="row" style="gap:8px;align-items:center;flex-wrap:wrap;">
             <input id="ingest-file" type="file" accept=".xlsx,.docx,.csv,.txt,.md,.markdown,.pdf,text/plain,text/csv,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style="width:auto;">
-            <button class="primary" type="submit">Import</button>
+            <button class="primary" type="submit">Import a local file</button>
             <span id="ingest-status" class="voice-hint" aria-live="polite"></span>
           </form>
           <div id="ingest-results" style="margin-top:8px;"></div>
-          <p class="voice-hint" style="margin-top:6px;">Drive folder import arrives with the Drive connector.</p>
         </div>
         <div id="unattributed-review-panel" class="panel" style="margin-bottom:14px;"></div>
         <div class="panel" style="margin-bottom:14px;">
@@ -2540,11 +2540,12 @@
           <p id="add-student-status" style="margin-top:6px;"></p>
         </div>
         <div class="grid two">
-          <div class="panel"><h3>Roster</h3><div class="list">${state.students.map(s => `<button type="button" data-student="${s.student_id}"><strong>${escapeHtml(s.display_name)}</strong> ${growthBadge(s.reference)}<br>${escapeHtml(s.cefr_trajectory_30d || "trajectory pending")} · support tier ${s.rti_current_tier} · ${escapeHtml(s.grade_level)}</button>`).join("")}</div>
+          <div class="panel"><h3>Roster</h3><div class="list">${state.students.map(s => `<div class="row" style="gap:6px;align-items:stretch;"><button type="button" data-student="${s.student_id}" style="flex:1;"><strong>${escapeHtml(s.display_name)}</strong> ${growthBadge(s.reference)}<br>${escapeHtml(s.cefr_trajectory_30d || "trajectory pending")} · support tier ${s.rti_current_tier} · ${escapeHtml(s.grade_level)}</button><button type="button" data-student-remove="${s.student_id}" data-student-remove-name="${escapeHtml(s.display_name)}" title="Remove ${escapeHtml(s.display_name)} from the roster" style="width:auto;align-self:center;">Remove</button></div>`).join("")}</div>
             <p class="voice-hint" id="growth-note" style="margin-top:10px;"></p></div>
           <div id="lens" class="panel"></div>
         </div>`;
       $("ingest-form").addEventListener("submit", submitStudentsIngest);
+      renderDriveRosterImport();
       renderIngestResults();
       await renderUnattributedReviewQueue("unattributed-review-panel");
       // Resume polling for an in-flight import when the teacher returns to
@@ -2575,6 +2576,24 @@
       document.querySelectorAll("[data-student]").forEach(button => button.addEventListener("click", () => {
         state.selectedStudent = button.dataset.student;
         loadLens();
+      }));
+      // Per-student removal from the roster itself (operator request
+      // 2026-08-18: a student leaves, or a teacher was imported as a
+      // student). Same archive semantics as the lens-bottom button:
+      // soft-delete, observations kept.
+      document.querySelectorAll("[data-student-remove]").forEach(button => button.addEventListener("click", async () => {
+        const name = button.dataset.studentRemoveName || "this student";
+        if (!window.confirm(`Remove ${name} from your roster? They disappear from grouping and recommendations. Their observation history is kept for records.`)) return;
+        button.disabled = true;
+        try {
+          await api(`/api/students/${button.dataset.studentRemove}`, {method: "DELETE"});
+          showToast(`${name} removed from the roster.`, "info");
+          if (state.selectedStudent === button.dataset.studentRemove) state.selectedStudent = null;
+          state.students = null;
+          await renderStudents();
+        } catch {
+          button.disabled = false;
+        }
       }));
       // Guard: only auto-load a lens if the selected student actually exists
       // in the current roster.  Truthiness alone is not enough — a stale ID
@@ -2717,6 +2736,7 @@
       if (job.status === "failed") return job.error || "Import failed.";
       if (job.status === "done") {
         const created = (job.students_created || []).length;
+        if (job.folder) return `${job.folder.files_processed} document${job.folder.files_processed === 1 ? "" : "s"} read from your Drive folder — ${created} student lens${created === 1 ? "" : "es"} updated${job.folder.unattributed ? `, ${job.folder.unattributed} document${job.folder.unattributed === 1 ? "" : "s"} waiting for review below` : ""}.`;
         if (!job.students_found) return `No student names found in ${job.source_name}. The app looks for first and last names in the document text. If this is a scanned PDF, it may not have extractable text — try a Word or text version instead.`;
         if ((job.needs_confirmation || []).length) return `${job.needs_confirmation.length} name${job.needs_confirmation.length === 1 ? "" : "s"} found in ${job.source_name}. Review before creating student profiles.`;
         return `${created} student${created === 1 ? "" : "s"} added from ${job.source_name}.`;
@@ -2736,7 +2756,7 @@
       const pending = (job.needs_confirmation || []).map(item => `
         <label class="source-line" style="align-items:center;"><input type="checkbox" data-ingest-confirm-check="${escapeHtml(item.display_name)}" checked style="width:auto;"><span class="badge warn">${escapeHtml(item.display_name)}</span><span class="badge">${escapeHtml(item.reason || "Needs confirmation")}</span><span class="badge">confidence ${Number(item.confidence || 0).toFixed(2)}</span></label>`).join("");
       const pendingControls = pending ? `<div style="margin-top:8px;">${pending}<div class="row" style="margin-top:8px;"><button type="button" class="primary" data-ingest-confirm-selected>Create selected students</button></div></div>` : "";
-      const undo = (job.students_created || []).length && !(job.undo && job.undo.status === "archived")
+      const undo = job.job_id && (job.students_created || []).length && !(job.undo && job.undo.status === "archived")
         ? `<div class="row" style="margin-top:8px;"><button type="button" data-ingest-undo>Undo this import</button><span class="voice-hint">Archives only the students created by this import.</span></div>`
         : "";
       const undone = job.undo && job.undo.status === "archived"
@@ -2826,6 +2846,119 @@
         renderIngestResults();
         pollIngestJob();
       }, 1500);
+    }
+
+    // SPEC_LV_DRIVE_OOTB 2026-08-18 (G2): roster import straight from Drive.
+    // Teacher contract: connect once, paste the roster link, everything else
+    // is automatic.
+    async function renderDriveRosterImport() {
+      const host = $("drive-roster-import");
+      if (!host) return;
+      let status = null;
+      try { status = await api("/api/google-drive/status"); } catch { host.innerHTML = ""; return; }
+      if (status.configured) {
+        host.innerHTML = `
+          <form id="drive-roster-form" class="row" style="gap:8px;align-items:center;flex-wrap:wrap;">
+            <input id="drive-roster-link" placeholder="Paste a Drive link — your roster file, or a folder of student documents" style="flex:1;min-width:240px;">
+            <button class="primary" type="submit">Import from Drive</button>
+          </form>
+          <p class="voice-hint" style="margin-top:6px;">Signed in to Google Drive. Updated student lenses flow back to &ldquo;Lingua Viva &ndash; Student Lenses&rdquo; in your Drive automatically.</p>`;
+        $("drive-roster-form").addEventListener("submit", submitDriveRosterImport);
+      } else if (status.can_signin) {
+        host.innerHTML = `
+          <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap;">
+            <button class="primary" type="button" id="drive-roster-connect">Connect Google Drive</button>
+            <span class="voice-hint">Sign in once &mdash; then import your roster straight from Drive.</span>
+          </div>
+          <div id="drive-roster-signin-result"></div>`;
+        $("drive-roster-connect").addEventListener("click", startDriveRosterSignin);
+      } else {
+        host.innerHTML = `<p class="voice-hint">Google Drive sign-in is not available on this build &mdash; import a local file below.</p>`;
+      }
+    }
+
+    let driveRosterSigninAttempt = 0;
+
+    async function startDriveRosterSignin() {
+      const attempt = ++driveRosterSigninAttempt;  // a second click replaces the flow
+      const result = $("drive-roster-signin-result");
+      if (result) result.innerHTML = `<p>Opening Google sign-in in your browser...</p>`;
+      let data;
+      try {
+        data = await api("/api/google-drive/auth/start", {method: "POST"});
+      } catch (error) {
+        if (result) result.innerHTML = `<p>${escapeHtml(error.message)}</p>`;
+        return;
+      }
+      if (result) result.innerHTML = `<p>Finish signing in with Google in the browser tab that just opened. If nothing opened, <a href="${escapeHtml(data.auth_url)}" target="_blank" rel="noopener">use this link</a>.</p>`;
+      const deadline = Date.now() + 120000;
+      while (Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        if (attempt !== driveRosterSigninAttempt) return;  // superseded by a newer click
+        if (state.view !== "students") return;
+        let status = null;
+        try { status = await api("/api/google-drive/status"); } catch { continue; }
+        if (status.configured) { await renderDriveRosterImport(); return; }
+        if (!status.flow_pending) {
+          if (result) result.innerHTML = `<p>Sign-in didn't finish. You can try again.</p>`;
+          return;
+        }
+      }
+      if (result) result.innerHTML = `<p>Sign-in timed out. You can try again.</p>`;
+    }
+
+    async function submitDriveRosterImport(event) {
+      event.preventDefault();
+      const linkInput = $("drive-roster-link");
+      const link = linkInput ? linkInput.value.trim() : "";
+      if (!link) {
+        if ($("ingest-status")) $("ingest-status").textContent = "Paste the Drive link to your roster first.";
+        return;
+      }
+      const importBtn = event.target.querySelector("button[type=submit]");
+      if (importBtn) { importBtn.disabled = true; importBtn.textContent = "Importing…"; }
+      if ($("ingest-status")) $("ingest-status").textContent = "Fetching your roster from Drive…";
+      let data;
+      try {
+        const response = await fetch("/api/students/ingest", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({drive_ref: link}),
+        });
+        data = await response.json();
+        if (!response.ok) throw new Error(data.error || "import failed");
+      } catch (error) {
+        if (importBtn) { importBtn.disabled = false; importBtn.textContent = "Import from Drive"; }
+        state.ingestJob = {status: "failed", error: error.message || "Drive import failed.", source_name: "Drive roster", job_id: null};
+        renderIngestResults();
+        return;
+      }
+      if (importBtn) { importBtn.disabled = false; importBtn.textContent = "Import from Drive"; }
+      if (data.kind === "class_folder") {
+        // A folder link: every document inside was matched to students by
+        // name. Show the folder summary and refresh the roster + review queue.
+        state.ingestJob = {
+          status: "done", source_name: "Drive folder", job_id: null, students_found: true,
+          students_created: data.students_created_or_updated || [], needs_confirmation: [],
+          folder: {
+            files_seen: data.files_seen || 0,
+            files_processed: data.files_processed || 0,
+            unattributed: (data.unattributed || []).length,
+            truncated: !!data.truncated
+          }
+        };
+        state.students = null;
+        await renderStudents();
+        return;
+      }
+      if (data.status === "failed") {
+        state.ingestJob = {status: "failed", error: data.error, source_name: "Drive roster", job_id: null};
+        renderIngestResults();
+        return;
+      }
+      state.ingestJob = {job_id: data.job_id, status: "queued", source_name: "Drive roster", students_created: [], needs_confirmation: []};
+      renderIngestResults();
+      pollIngestJob();
     }
 
     async function submitStudentsIngest(event) {
@@ -3135,13 +3268,29 @@
       const evidence = category.evidence || [];
       const openQuestions = category.open_questions || [];
       const total = needs.length + strengths.length + worked.length + notWorked.length + evidence.length + openQuestions.length;
-      const body = total === 0 ? `<p class="voice-hint" style="margin:4px 0 0;">No entries yet — populated by teacher feedback.</p>` : `
+      const body = total === 0 ? `<p class="voice-hint" style="margin:4px 0 0;">No entries yet — type what you know below, or it fills from your observations.</p>` : `
         ${needs.length ? `<p style="margin:6px 0 0;"><strong>Needs</strong></p>${categoryEntryList(needs, catId, "needs")}` : ""}
         ${strengths.length ? `<p style="margin:6px 0 0;"><strong>Strengths</strong></p>${categoryEntryList(strengths, catId, "strengths")}` : ""}
         ${(worked.length || notWorked.length) ? `<p style="margin:6px 0 0;"><strong>Strategies trialed</strong></p>${categoryEntryList(worked, catId, "strategies_worked", '<span class="badge ok">&#10003;</span> ')}${categoryEntryList(notWorked, catId, "strategies_not_worked", '<span class="badge warn">&#10007;</span> ')}` : ""}
         ${openQuestions.length ? `<p style="margin:6px 0 0;"><strong>Open questions</strong></p>${categoryEntryList(openQuestions, catId, "open_questions")}` : ""}
         ${evidence.length ? `<div class="source-line" style="margin-top:6px;"><span class="badge">${evidence.length} evidence item${evidence.length === 1 ? "" : "s"}</span></div>` : ""}`;
-      return `<div class="item"><strong>${escapeHtml(categoryLabel(catId))}</strong>${triangulationChip(catId)}${body}</div>`;
+      // Inline teacher entry (2026-08-18): type straight into the category.
+      // Saved as a teacher_confirmed entry — the teacher typing it IS the
+      // evidence, so no suggestion/confirm round-trip.
+      const addRow = `
+        <div class="row" style="margin-top:8px;gap:6px;flex-wrap:wrap;align-items:center;">
+          <select data-entry-bucket="${catId}" style="width:auto;">
+            <option value="needs">Need</option>
+            <option value="strengths">Strength</option>
+            <option value="strategies_worked">Strategy that worked</option>
+            <option value="strategies_not_worked">Strategy that didn't work</option>
+            <option value="open_questions">Open question</option>
+          </select>
+          <input data-entry-text="${catId}" placeholder="Type what you know about ${escapeHtml(categoryLabel(catId).toLowerCase())}" style="flex:1;min-width:160px;">
+          <button type="button" data-add-entry="${catId}">Add</button>
+          <span data-entry-status="${catId}" class="voice-hint" aria-live="polite"></span>
+        </div>`;
+      return `<div class="item"><strong>${escapeHtml(categoryLabel(catId))}</strong>${triangulationChip(catId)}${body}${addRow}</div>`;
     }
 
     function renderStrengthEntries(items) {
@@ -3364,6 +3513,36 @@
           if (res.ok) { await loadLens(targetId, true); }
           else { button.disabled = false; button.textContent = "confirm failed — retry"; }
         } catch { button.disabled = false; button.textContent = "network error — retry"; }
+      }));
+      container.querySelectorAll("[data-add-entry]").forEach(button => button.addEventListener("click", async () => {
+        const catId = button.dataset.addEntry;
+        const input = container.querySelector(`[data-entry-text="${catId}"]`);
+        const bucketSelect = container.querySelector(`[data-entry-bucket="${catId}"]`);
+        const statusEl = container.querySelector(`[data-entry-status="${catId}"]`);
+        const text = input ? input.value.trim() : "";
+        if (!text) { if (statusEl) statusEl.textContent = "Type the entry first."; return; }
+        button.disabled = true;
+        if (statusEl) statusEl.textContent = "Saving…";
+        try {
+          const res = await fetch(`/api/students/${state.selectedStudent}/support-entry`, {
+            method: "POST", headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({category_id: catId, bucket: bucketSelect ? bucketSelect.value : "needs", text})
+          });
+          const data = await res.json().catch(() => ({}));
+          if (res.ok) { await loadLens(targetId, true); return; }
+          button.disabled = false;
+          if (statusEl) statusEl.textContent = data.error || "Could not save the entry.";
+        } catch {
+          button.disabled = false;
+          if (statusEl) statusEl.textContent = "Network error — the entry was not saved.";
+        }
+      }));
+      // Enter in an inline entry field submits it — "click and start typing".
+      container.querySelectorAll("[data-entry-text]").forEach(input => input.addEventListener("keydown", event => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        const button = container.querySelector(`[data-add-entry="${input.dataset.entryText}"]`);
+        if (button && !button.disabled) button.click();
       }));
       container.querySelectorAll("[data-pending-action]").forEach(button => button.addEventListener("click", async () => {
         button.disabled = true;

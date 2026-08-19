@@ -232,7 +232,16 @@ REPO = Path(__file__).resolve().parent.parent
 #   v140 (2026-08-09): Parent recommendation route now passes the final
 #     parent-safe draft through sharing_matrix.filter_payload(role=parent)
 #     before returning the legacy flat response shape.
-EXPECTED_VERSION = 153
+#   v154 (2026-08-18): Drive out-of-the-box roster→lenses (SPEC_LV_DRIVE_OOTB):
+#     real drive_ref import, roster auto-create-all with undo review, Drive
+#     sync-back auto-provision + startup drain, Students Drive import UI.
+#   v155 (2026-08-18): per-student Remove button on each roster row (soft
+#     archive via DELETE /api/students/{id}; observations kept).
+#   v156 (2026-08-18): Drive folder links accepted by the Students import
+#     (class-folder ingest, match-by-name, review queue); inline teacher
+#     entry per Category Profile section via POST .../support-entry
+#     (teacher_confirmed — typing it IS the evidence).
+EXPECTED_VERSION = 156
 
 
 def _html() -> str:

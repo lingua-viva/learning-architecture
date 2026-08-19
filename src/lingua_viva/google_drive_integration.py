@@ -100,6 +100,9 @@ class DriveTransport(Protocol):
     ) -> dict[str, Any]:
         ...
 
+    def post_json(self, url: str, token: str, payload: dict[str, Any]) -> dict[str, Any]:
+        ...
+
 
 class UrlLibDriveTransport:
     def post_form(self, url: str, data: dict[str, str]) -> dict[str, Any]:
@@ -150,6 +153,20 @@ class UrlLibDriveTransport:
         with request.urlopen(req, timeout=60) as response:
             return json.loads(response.read().decode("utf-8"))
 
+    def post_json(self, url: str, token: str, payload: dict[str, Any]) -> dict[str, Any]:
+        body = json.dumps(payload, ensure_ascii=True).encode("utf-8")
+        req = request.Request(
+            url,
+            data=body,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        with request.urlopen(req, timeout=20) as response:
+            return json.loads(response.read().decode("utf-8"))
+
 
 class FixtureDriveTransport:
     """Local fixture transport for served-app verification; never contacts Google."""
@@ -192,6 +209,14 @@ class FixtureDriveTransport:
         }
         self.uploads.append(record)
         return {"id": upload_id, "name": record["name"]}
+
+    def post_json(self, url: str, token: str, payload: dict[str, Any]) -> dict[str, Any]:
+        if not hasattr(self, "created_folders"):
+            self.created_folders: list[dict[str, Any]] = []
+        folder_id = f"fixture-folder-{len(self.created_folders) + 1}"
+        record = {"id": folder_id, **payload}
+        self.created_folders.append(record)
+        return {"id": folder_id}
 
 
 def default_transport() -> DriveTransport:
@@ -292,6 +317,30 @@ def parse_folder_link(link: str) -> str | None:
     if not link:
         return None
     for pattern in FOLDER_URL_PATTERNS:
+        match = pattern.search(link)
+        if match:
+            return match.group(1)
+    if BARE_FOLDER_ID.match(link) and "://" not in link:
+        return link
+    return None
+
+
+FILE_URL_PATTERNS = [
+    re.compile(r"/d/([A-Za-z0-9_-]{5,})"),      # docs/sheets/file "…/d/<id>" links
+    re.compile(r"[?&]id=([A-Za-z0-9_-]{5,})"),  # drive.google.com/open?id=<id>
+]
+
+
+def parse_file_link(link: str) -> str | None:
+    """Extract a Drive FILE ID from a pasted URL (or accept a bare ID).
+
+    SPEC_LV_DRIVE_OOTB 2026-08-18 (G2): teachers paste whatever link Drive
+    gives them for the roster — Docs, Sheets, file/d/, or open?id= forms.
+    """
+    link = (link or "").strip()
+    if not link:
+        return None
+    for pattern in FILE_URL_PATTERNS:
         match = pattern.search(link)
         if match:
             return match.group(1)
@@ -1033,6 +1082,61 @@ def upload_paths(
     if manifest_entries:
         _write_export_manifest(manifest_entries)
     return {"uploaded": uploaded, "failed": failed}
+
+
+FOLDER_MIME = "application/vnd.google-apps.folder"
+
+
+def create_folder(
+    name: str,
+    parent_id: str | None = None,
+    *,
+    settings: DriveSettings | None = None,
+    transport: DriveTransport | None = None,
+) -> str:
+    """Create (or reuse) a Drive folder by name; returns its folder ID.
+
+    SPEC_LV_DRIVE_OOTB 2026-08-18 (G5): reuse-if-exists by exact name so
+    repeated auto-provisioning never litters the teacher's Drive — same
+    idempotent pattern as upload_text_to_folder's update-in-place.
+    """
+    name = (name or "").strip()
+    if not name:
+        raise ValueError("Folder name is required.")
+    settings = ensure_configured(settings)
+    transport = transport or default_transport()
+    token = _access_token(settings, transport)
+
+    safe_name = name.replace("\\", "\\\\").replace("'", "\\'")
+    q_parts = [
+        f"name = '{safe_name}'",
+        f"mimeType = '{FOLDER_MIME}'",
+        "trashed = false",
+    ]
+    if parent_id:
+        if not BARE_FOLDER_ID.match(parent_id):
+            raise ValueError("That folder ID does not look valid.")
+        q_parts.append(f"'{parent_id}' in parents")
+    params = {"q": " and ".join(q_parts), "fields": "files(id,name)", "pageSize": "5"}
+    try:
+        data = transport.get_json(f"{DRIVE_API}/files?{parse.urlencode(params)}", token)
+        files = data.get("files") if isinstance(data, dict) else None
+        if isinstance(files, list) and files and isinstance(files[0], dict) and files[0].get("id"):
+            return str(files[0]["id"])
+    except Exception:
+        pass  # search failure falls through to create
+
+    metadata: dict[str, Any] = {"name": name, "mimeType": FOLDER_MIME}
+    if parent_id:
+        metadata["parents"] = [parent_id]
+    try:
+        created = transport.post_json(f"{DRIVE_API}/files?fields=id", token, metadata)
+    except Exception as exc:
+        raise DriveAuthError("Could not create the Drive folder.") from exc
+    folder_id = str(created.get("id") or "") if isinstance(created, dict) else ""
+    if not folder_id:
+        raise DriveAuthError("Could not create the Drive folder.")
+    return folder_id
 
 
 def upload_text_to_folder(

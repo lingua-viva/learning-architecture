@@ -16,6 +16,28 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v156 (2026-08-18): Bulk lens updates + inline entry (operator requests).
+#     src/web.py: /api/students/ingest drive_ref accepts Drive FOLDER links —
+#     routes to class-folder ingest (match-by-name across every document,
+#     unattributed → review queue), returns kind:"class_folder"; new POST
+#     /api/students/{id}/support-entry — teacher types a category entry
+#     directly, saved teacher_confirmed (typing it IS the evidence).
+#     static/index.html: paste-link box copy covers folders, folder result
+#     summary in ingest results (undo hidden — folder runs have no job);
+#     inline add row (bucket picker + input + Enter-submits) on every
+#     Category Profile section.
+#   v155 (2026-08-18): Per-student Remove button on each roster row (operator
+#     request: a student leaves, or a teacher gets imported as a student).
+#     Reuses DELETE /api/students/{id} soft-archive — observations kept; the
+#     lens-bottom "Archive student" button remains.
+#   v154 (2026-08-18): Drive out-of-the-box roster→lenses (SPEC_LV_DRIVE_OOTB).
+#     src/web.py: /api/students/ingest drive_ref now real (fetch_file G2,
+#     honest 400/409/413/502 errors); roster imports (>2 students) auto-create
+#     ALL detected students with low-confidence names flagged in warnings —
+#     undo replaces per-name confirm (G3); post-import Drive sync-back with
+#     auto-provisioned "Lingua Viva – Student Lenses" folder + startup
+#     pending-sync drain (G5). static/index.html: Students panel "Import your
+#     roster" with Connect Google Drive / paste-Drive-link import flow.
 #   v150 (2026-08-17): Home brief no longer surfaces Doctor/Health warning
 #     copy; privacy-risk status remains available in the dedicated Health view
 #     instead of leading the morning teacher brief.
@@ -654,7 +676,7 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 153
+version: 156
 # v122 (2026-08-06): Failure-mode hardening. src/web.py: voice-act observation
 #   dedup guard (same 60s window as observe/capture, prevents network-retry
 #   duplicates). src/education/parent_report.py: personal_context evidence

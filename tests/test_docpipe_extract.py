@@ -298,3 +298,101 @@ def test_job_failure_is_honest(tmp_path):
     job = _run(jobs.run_extraction_job("SRC-DOES-NOT-EXIST", root=tmp_path))
     assert job["status"] == "failed"
     assert job["error"]
+
+
+# --- Support xlsx (FIX_SUPPORT_XLSX_LENS_PARSING 2026-08-18) -------------------
+
+
+def _support_workbook_bytes():
+    from io import BytesIO
+
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws1 = wb.active
+    ws1.title = "Classroom Accommodations"
+    ws1.append(["Student Name", "Accommodation"])
+    ws1.append(["Marco Bianchi", "Extended time on assessments"])
+    ws1.append(["Nora Rossi", "Preferential seating"])
+    ws2 = wb.create_sheet("External Support")
+    ws2.append(["Student Name", "Provider", "Service"])
+    ws2.append(["Marco Bianchi", "Dr. Smith", "Speech therapy"])
+    ws3 = wb.create_sheet("Educational Evaluation")
+    ws3.append(["Student Name", "Date", "Summary"])
+    ws3.append(["Nora Rossi", "2026-03-15", "Cognitive assessment complete"])
+    buf = BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def _support_source() -> SourceRecord:
+    source, _ = _source("source_lesson_plan_marco_nora.json", "lesson_plan_marco_nora.md")
+    return SourceRecord({
+        **source.data,
+        "mime": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "original_ext": ".xlsx",
+        "original_filename": "3V ES Student Support .xlsx",
+    })
+
+
+def test_support_xlsx_detects_students_not_sheet_names():
+    """Multi-sheet support xlsx: real students detected, sheet names are NOT."""
+    record = _run(extract_document(_support_source(), _support_workbook_bytes()))
+
+    names = [s["display_name"] for s in record.data["structure"]["students_detected"]]
+    assert "Marco Bianchi" in names
+    assert "Nora Rossi" in names
+    assert "Classroom Accommodations" not in names
+    assert "External Support" not in names
+    assert "Educational Evaluation" not in names
+    assert record.data["structure"]["document_type"] == "student_support"
+    # Spans carry field hints mapping into lens profile fields
+    hints = {s.get("field_hint") for s in record.data["spans"] if s.get("field_hint")}
+    assert "learning_and_cognition" in hints
+    assert "communication_and_language" in hints
+
+
+def test_support_xlsx_passes_grounding_gate():
+    """field_hint is additive — every span is still an exact slice and every
+    detected student is supported by cited spans (nothing dropped)."""
+    record = _run(extract_document(_support_source(), _support_workbook_bytes()))
+    report = verify_extraction(record.data)
+    assert report.ok, report.errors
+    assert not report.dropped
+
+
+def test_support_xlsx_spans_feed_lens_fields():
+    """The field_hint routes each row into the mapped lens field."""
+    from src.lingua_viva.docpipe.lens import _fields_for_span
+
+    record = _run(extract_document(_support_source(), _support_workbook_bytes()))
+    marco_spans = [
+        s for s in record.data["spans"] if "Marco Bianchi" in str(s.get("text"))
+    ]
+    assert marco_spans
+    for span in marco_spans:
+        fields = _fields_for_span(str(span.get("text") or ""), span=span)
+        assert fields == [span["field_hint"]]
+
+
+def test_plain_roster_xlsx_still_uses_generic_path():
+    """A single-sheet roster ("Sheet") must not flip to the support path."""
+    from io import BytesIO
+
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["First", "Last"])
+    ws.append(["Marco", "Bianchi"])
+    buf = BytesIO()
+    wb.save(buf)
+    source, _ = _source("source_lesson_plan_marco_nora.json", "lesson_plan_marco_nora.md")
+    xlsx = SourceRecord({
+        **source.data,
+        "mime": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "original_ext": ".xlsx",
+    })
+    record = _run(extract_document(xlsx, buf.getvalue()))
+    assert record.data["structure"]["document_type"] != "student_support"
+    assert not any(s.get("field_hint") for s in record.data["spans"])

@@ -55,7 +55,59 @@ _NAME_BLOCKLIST = {
     "monday", "tuesday", "wednesday", "thursday", "friday", "saturday",
     "sunday", "january", "february", "march", "april", "may", "june",
     "july", "august", "september", "october", "november", "december",
+    # Education/support vocabulary — sheet names and section headers in
+    # support documents ("Classroom Accommodations", "External Support",
+    # "Tool Kit") are two capitalized words and would otherwise be
+    # detected as students (FIX_SUPPORT_XLSX_LENS_PARSING 2026-08-18).
+    "classroom", "accommodations", "accommodation", "external", "support",
+    "toolkit", "kit", "tool", "evaluation", "educational", "counselor",
+    "counselling", "counseling", "therapy", "therapist", "goals", "coast",
+    "cognitive", "behavioral", "behavioural", "social", "emotional",
+    "sensory", "physical", "motor", "attendance", "engagement",
+    "communication", "executive", "functioning", "strategies", "strengths",
+    "enrichment", "advanced", "intervention", "assessment", "diagnostic",
+    "services", "referral", "placement", "program", "programme",
+    "individual", "individualized", "education", "special", "needs",
+    "overview", "summary", "general", "information", "details",
+    "west", "east", "north", "south",
 }
+
+# Sheet-name → lens profile-field mapping for multi-sheet support xlsx
+# files. Keys are matched against the lowercased, space-collapsed sheet
+# title (exact first, then longest-key substring). Values are
+# docpipe.lens PROFILE_FIELDS ids, verbatim.
+_SHEET_FIELD_MAP = {
+    "classroom accommodations": "learning_and_cognition",
+    "accommodations": "learning_and_cognition",
+    "educational evaluation": "learning_and_cognition",
+    "evaluation": "learning_and_cognition",
+    "assessment": "learning_and_cognition",
+    "goals": "learning_and_cognition",
+    "coast goals": "learning_and_cognition",
+    "external support": "communication_and_language",
+    "communication": "communication_and_language",
+    "speech": "communication_and_language",
+    "executive functioning": "executive_functioning",
+    "executive": "executive_functioning",
+    "social skills": "social_skills",
+    "social": "social_skills",
+    "emotional regulation": "emotional_regulation",
+    "emotional": "emotional_regulation",
+    "behavior": "emotional_regulation",
+    "physical sensory": "physical_sensory_needs",
+    "sensory": "physical_sensory_needs",
+    "physical": "physical_sensory_needs",
+    "attendance": "attendance_and_engagement",
+    "engagement": "attendance_and_engagement",
+    "toolkit": "strategies_trialed",
+    "tool kit": "strategies_trialed",
+    "strategies": "strategies_trialed",
+    "strengths": "academic_strengths",
+}
+# At least this many sheets must map before we treat the workbook as a
+# structured support document (a lone "Strengths" tab in a roster file
+# must not flip the whole extraction path).
+_SUPPORT_SHEET_MATCH_THRESHOLD = 2
 
 _IT_STOPWORDS = {"il", "la", "che", "di", "e", "un", "una", "per", "con", "del", "della", "gli", "sono"}
 _EN_STOPWORDS = {"the", "and", "of", "to", "a", "in", "that", "with", "for", "is", "are", "on"}
@@ -68,9 +120,23 @@ async def extract_document(
     model_client: ModelClient | None = None,
 ) -> ExtractionRecord:
     warnings: list[str] = []
-    text = _normalize(source, content)
-    spans = _build_spans(text)
-    structure = _build_structure(text, spans)
+    # Multi-sheet support xlsx gets a structured, sheet-aware parse first
+    # (per-student rows → field-hinted spans). Anything else — including
+    # xlsx rosters whose sheet names don't match the support map — falls
+    # through to the generic paragraph path.
+    support = None
+    mime = str(source.data.get("mime") or "").lower()
+    ext = str(source.data.get("original_ext") or "").lower()
+    if mime in SPREADSHEET_MIMES or ext in SPREADSHEET_EXTS:
+        support = _xlsx_support_extract(source, content)
+    if support is not None:
+        text = support["text"]
+        spans = support["spans"]
+        structure = support["structure"]
+    else:
+        text = _normalize(source, content)
+        spans = _build_spans(text)
+        structure = _build_structure(text, spans)
     model_used: Optional[str] = None
 
     if model_client is not None:
@@ -191,6 +257,151 @@ def _xlsx_text(content: bytes) -> str:
     return text
 
 
+def _sheet_field(sheet_title: str) -> Optional[str]:
+    """Map a sheet title to a lens profile field, or None."""
+    title = re.sub(r"\s+", " ", sheet_title.strip().lower())
+    if title in _SHEET_FIELD_MAP:
+        return _SHEET_FIELD_MAP[title]
+    # Substring fallback ("Toolkit Is" → "toolkit"), longest key first so
+    # "tool kit" beats "tool"-style partials.
+    for key in sorted(_SHEET_FIELD_MAP, key=len, reverse=True):
+        if key in title:
+            return _SHEET_FIELD_MAP[key]
+    return None
+
+
+def _xlsx_support_extract(
+    source: SourceRecord, content: bytes
+) -> Optional[dict[str, Any]]:
+    """Structured parse for multi-sheet student-support workbooks.
+
+    Returns {"text", "spans", "structure"} when the workbook looks like a
+    support document (>= _SUPPORT_SHEET_MATCH_THRESHOLD sheets map to lens
+    fields), otherwise None — the caller falls back to the generic path.
+    Every span is an exact slice of the normalized text (built through
+    _build_spans), so the grounding gate holds by construction; the added
+    "field_hint" key is additive and routes the entry into the right lens
+    field in docpipe.lens.
+    """
+    import io
+
+    try:
+        import openpyxl
+    except ImportError:
+        return None
+    try:
+        workbook = openpyxl.load_workbook(
+            io.BytesIO(content), read_only=True, data_only=True
+        )
+    except Exception:
+        return None
+
+    matched: list[tuple[str, str, list[tuple[Any, ...]]]] = []
+    try:
+        sheet_fields = [
+            (sheet.title, _sheet_field(sheet.title)) for sheet in workbook.worksheets
+        ]
+        if sum(1 for _, field in sheet_fields if field) < _SUPPORT_SHEET_MATCH_THRESHOLD:
+            return None
+        for sheet in workbook.worksheets:
+            field = _sheet_field(sheet.title)
+            if not field:
+                continue
+            rows = [tuple(row) for row in sheet.iter_rows(values_only=True)]
+            matched.append((sheet.title, field, rows))
+    finally:
+        workbook.close()
+
+    def _clean(cell: Any) -> str:
+        return re.sub(r"\s+", " ", str(cell).strip()) if cell is not None else ""
+
+    blocks: list[str] = []
+    field_hints: list[str] = []
+    students_order: list[str] = []
+    students: dict[str, dict[str, Any]] = {}
+    sheet_blocks: dict[str, list[int]] = {}
+
+    for sheet_title, field, rows in matched:
+        non_empty = [row for row in rows if any(_clean(cell) for cell in row)]
+        if len(non_empty) < 2:
+            continue
+        header = non_empty[0]
+        name_col = 0
+        for idx, cell in enumerate(header):
+            label = _clean(cell).lower()
+            if "name" in label or "student" in label:
+                name_col = idx
+                break
+        for row in non_empty[1:]:
+            name_raw = _clean(row[name_col]) if name_col < len(row) else ""
+            match = _NAME_BIGRAM.search(name_raw)
+            if not match:
+                continue
+            first, last = match.group(1), match.group(2)
+            if first.lower() in _NAME_BLOCKLIST or last.lower() in _NAME_BLOCKLIST:
+                continue
+            display_name = f"{first} {last}"
+            rest = "; ".join(
+                _clean(cell)
+                for idx, cell in enumerate(row)
+                if idx != name_col and _clean(cell)
+            )
+            if not rest:
+                continue
+            blocks.append(f"{display_name} — {sheet_title}: {rest}")
+            field_hints.append(field)
+            sheet_blocks.setdefault(sheet_title, []).append(len(blocks) - 1)
+            student_id = f"student-{_slug(display_name)}"
+            if student_id not in students:
+                students[student_id] = {
+                    "student_id": student_id,
+                    "display_name": display_name,
+                    "confidence": VERBATIM_STUDENT_CONFIDENCE,
+                    "span_ids": [],
+                }
+                students_order.append(student_id)
+
+    if not blocks:
+        return None
+
+    text = _normalize_text("\n\n".join(blocks))
+    spans = _build_spans(text)
+    if len(spans) != len(blocks):
+        # A block contained an unexpected blank line — the span↔hint
+        # pairing would be wrong. Fall back to the generic path.
+        return None
+    for span, hint in zip(spans, field_hints):
+        span["field_hint"] = hint
+
+    for student_id in students_order:
+        student = students[student_id]
+        for span in spans:
+            if student["display_name"] in str(span["text"]):
+                student["span_ids"].append(span["span_id"])
+
+    sections = []
+    span_by_block = {i: span["span_id"] for i, span in enumerate(spans)}
+    for sheet_title, indices in sheet_blocks.items():
+        sections.append({
+            "section_id": _slug(sheet_title) or "support",
+            "heading": sheet_title,
+            "span_ids": [span_by_block[i] for i in indices],
+        })
+
+    filename = str(source.data.get("original_filename") or "").strip()
+    title = re.sub(r"\.xlsx$", "", filename, flags=re.IGNORECASE).strip() or None
+    return {
+        "text": text,
+        "spans": spans,
+        "structure": {
+            "title": title,
+            "document_type": "student_support",
+            "sections": sections,
+            "students_detected": [students[sid] for sid in students_order],
+        },
+    }
+
+
 def _docx_text(content: bytes) -> str:
     import io
 
@@ -296,6 +507,11 @@ def _detect_document_type(spans: list[dict[str, Any]], students: list[dict[str, 
         return "rubric"
     if "progress report" in joined or "term report" in joined:
         return "report"
+    if any(k in joined for k in (
+        "accommodation", "support plan", "student support",
+        "educational evaluation", "external support",
+    )):
+        return "student_support"
     return "unknown"
 
 

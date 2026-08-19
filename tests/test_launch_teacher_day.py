@@ -34,12 +34,20 @@ async def client():
 
 
 @pytest.fixture()
-def student_store(tmp_path):
-    """Create a pre-populated student store for simulation."""
+def student_store(tmp_path, monkeypatch):
+    """Create a pre-populated student store for simulation.
+
+    LV_STUDENT_DB_PATH points the app at the SAME tmp store — without it the
+    web endpoints (e.g. /api/ask's roster-name egress gate) read the
+    machine's real student DB, miss "Marco", and on a machine with a real
+    Perplexity key the student question actually leaves for the network.
+    Hermetic fixture = the gate sees the fixture roster = routes local.
+    """
     from src.education.observation_capture import ObservationCapturePipeline
     from src.education.student_lens import StudentLensStore
 
     db_path = tmp_path / "teacher_day.db"
+    monkeypatch.setenv("LV_STUDENT_DB_PATH", str(db_path))
     store = StudentLensStore(db_path=db_path)
     pipeline = ObservationCapturePipeline(store=store)
 
