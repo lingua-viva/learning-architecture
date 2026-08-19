@@ -30,7 +30,7 @@ def _isolate_runtime(monkeypatch, tmp_path: Path):
             store.create_lens(student_id="student-nora", display_name="Nora")
 
 
-def test_teacher_curriculum_and_prepare_endpoints(monkeypatch, tmp_path):
+def test_teacher_curriculum_and_prepare_endpoints(monkeypatch, tmp_path, seeded_curriculum):
     _isolate_runtime(monkeypatch, tmp_path)
 
     overview = client.get("/api/curriculum/overview")
@@ -96,7 +96,7 @@ def test_observe_students_parents_and_reflect_endpoints(monkeypatch, tmp_path):
     assert (tmp_path / "lv_revision_log.ndjson").exists()
 
 
-def test_assess_and_publication_status(monkeypatch, tmp_path):
+def test_assess_and_publication_status(monkeypatch, tmp_path, seeded_curriculum):
     _isolate_runtime(monkeypatch, tmp_path)
 
     unit_id = client.get("/api/curriculum/grade/G3").json()["units"][0]["unit_id"]

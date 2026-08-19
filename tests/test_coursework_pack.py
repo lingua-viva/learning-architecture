@@ -46,7 +46,7 @@ class SlowEnrichmentEngine(FakeEnrichmentEngine):
 
 
 @pytest.fixture(autouse=True)
-def _state_home(monkeypatch, tmp_path):
+def _state_home(monkeypatch, tmp_path, seeded_curriculum):
     monkeypatch.setenv("LV_STATE_HOME", str(tmp_path / "state"))
     yield
 

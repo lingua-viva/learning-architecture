@@ -1720,7 +1720,10 @@ async def _startup_drive_sync_drain():
 app.router.add_event_handler("startup", _startup_drive_sync_drain)
 
 
-def _safe_unit(unit_id: str | None = None, grade: str | None = None) -> dict:
+def _safe_unit(unit_id: str | None = None, grade: str | None = None) -> dict | None:
+    """Best-effort unit resolution. Returns None when the curriculum has no
+    units at all (fresh installs start empty — Prepare-fix Issue 5 removed
+    the fabricated fallback units); callers must degrade honestly."""
     from src.lingua_viva.curriculum import CurriculumService
 
     service = CurriculumService()
@@ -1732,7 +1735,8 @@ def _safe_unit(unit_id: str | None = None, grade: str | None = None) -> dict:
     units = service.get_grade(grade or "G3")
     if units:
         return units[0]
-    return service.get_grade("G3")[0]
+    units = service.get_grade("G3")
+    return units[0] if units else None
 
 
 def _parse_schedule(schedule_text: str | None) -> dict:
@@ -1796,6 +1800,47 @@ async def curriculum_unit(unit_id: str):
         return await asyncio.to_thread(service.get_unit, unit_id)
     except KeyError:
         return JSONResponse({"error": "Unknown curriculum unit."}, status_code=404)
+
+
+@app.post("/api/curriculum/unit")
+async def curriculum_unit_create(payload: dict):
+    from src.lingua_viva.curriculum import add_unit
+
+    try:
+        unit = await asyncio.to_thread(
+            add_unit,
+            str(payload.get("grade") or ""),
+            str(payload.get("title") or ""),
+            focus=str(payload.get("focus") or ""),
+            cefr_target=str(payload.get("cefr_target") or ""),
+        )
+    except ValueError as exc:
+        return JSONResponse({"error": "invalid_unit", "detail": str(exc)}, status_code=400)
+    return unit
+
+
+@app.put("/api/curriculum/unit/{unit_id}")
+async def curriculum_unit_update(unit_id: str, payload: dict):
+    from src.lingua_viva.curriculum import update_unit
+
+    try:
+        unit = await asyncio.to_thread(update_unit, unit_id, payload)
+    except KeyError:
+        return JSONResponse({"error": "Unknown curriculum unit."}, status_code=404)
+    except ValueError as exc:
+        return JSONResponse({"error": "invalid_unit", "detail": str(exc)}, status_code=400)
+    return unit
+
+
+@app.delete("/api/curriculum/unit/{unit_id}")
+async def curriculum_unit_delete(unit_id: str):
+    from src.lingua_viva.curriculum import delete_unit
+
+    try:
+        await asyncio.to_thread(delete_unit, unit_id)
+    except KeyError:
+        return JSONResponse({"error": "Unknown curriculum unit."}, status_code=404)
+    return {"deleted": True, "unit_id": unit_id}
 
 
 @app.get("/api/brief")
@@ -2370,12 +2415,13 @@ def _save_ingest_job(job: dict) -> None:
     os.replace(tmp, path)
 
 
-def _new_ingest_job(source_id: str, source_name: str) -> dict:
+def _new_ingest_job(source_id: str, source_name: str, teacher_id: str = "teacher:ingest") -> dict:
     job = {
         "job_id": f"JOB-{uuid.uuid4()}",
         "status": "queued",
         "source_id": source_id,
         "source_name": source_name,
+        "teacher_id": teacher_id,
         "students_found": 0,
         "students_created": [],
         "needs_confirmation": [],
@@ -2414,7 +2460,7 @@ def _build_source_record(*, filename: str, content: bytes, origin: str, path: st
     })
 
 
-def _create_lens_for_detected(extraction, detected: dict) -> dict:
+def _create_lens_for_detected(extraction, detected: dict, teacher_id: str = "teacher:ingest") -> dict:
     """Create (or merge into) a lens for one detected student, bridged into
     the roster via StudentLensStore. Runs in a worker thread."""
     from src.lingua_viva.docpipe import lens as docpipe_lens
@@ -2427,7 +2473,7 @@ def _create_lens_for_detected(extraction, detected: dict) -> dict:
             extraction,
             student_id=student_id,
             student_name=display_name,
-            added_by="teacher:ingest",
+            added_by=str(teacher_id or "teacher:ingest").strip() or "teacher:ingest",
             student_store=store,
         )
 
@@ -2496,12 +2542,16 @@ async def _run_ingest_job(job: dict, source, content: bytes) -> None:
             except (TypeError, ValueError):
                 confidence = 0.0
             if roster_import:
-                created = await asyncio.to_thread(_create_lens_for_detected, extraction, student)
+                created = await asyncio.to_thread(
+                    _create_lens_for_detected, extraction, student, job.get("teacher_id") or "teacher:ingest"
+                )
                 job["students_created"].append(created)
                 if confidence < INGEST_CONFIDENCE_THRESHOLD:
                     low_confidence_names.append(str(student.get("display_name")))
             elif confidence >= INGEST_CONFIDENCE_THRESHOLD:
-                created = await asyncio.to_thread(_create_lens_for_detected, extraction, student)
+                created = await asyncio.to_thread(
+                    _create_lens_for_detected, extraction, student, job.get("teacher_id") or "teacher:ingest"
+                )
                 job["students_created"].append(created)
             else:
                 # Never auto-create on a guess — surface for the teacher.
@@ -2560,6 +2610,7 @@ async def students_ingest(request: Request, background_tasks: BackgroundTasks):
     origin = "local"
     drive_file_id = None
     path = ""
+    ingest_teacher = "teacher:ingest"
     if "multipart/form-data" in content_type:
         form = await request.form()
         upload = form.get("file")
@@ -2568,12 +2619,14 @@ async def students_ingest(request: Request, background_tasks: BackgroundTasks):
         content = await upload.read()
         filename = upload.filename or "imported-file"
         path = filename
+        ingest_teacher = str(form.get("teacher_id") or "").strip() or "teacher:ingest"
     else:
         try:
             payload = await request.json()
         except Exception:
             return JSONResponse({"error": "attach a file to import"}, status_code=400)
         drive_ref = str((payload or {}).get("drive_ref", "")).strip()
+        ingest_teacher = str((payload or {}).get("teacher_id") or "").strip() or "teacher:drive"
         if not drive_ref:
             return JSONResponse({"error": "attach a file or provide a drive_ref"}, status_code=400)
         # Real fetch (SPEC_LV_DRIVE_OOTB 2026-08-18, G2) — errors map to
@@ -2600,7 +2653,7 @@ async def students_ingest(request: Request, background_tasks: BackgroundTasks):
             from src.lingua_viva.class_folder_ingest import ingest_class_folder
 
             def run_folder(store):
-                return ingest_class_folder(folder_id, "teacher:drive", store=store)
+                return ingest_class_folder(folder_id, ingest_teacher, store=store)
 
             try:
                 result = await asyncio.to_thread(_with_student_store, run_folder)
@@ -2647,7 +2700,7 @@ async def students_ingest(request: Request, background_tasks: BackgroundTasks):
         path=path, drive_file_id=drive_file_id,
     )
     await asyncio.to_thread(docpipe_vault.put_source, source, content)
-    job = _new_ingest_job(source.source_id, filename)
+    job = _new_ingest_job(source.source_id, filename, teacher_id=ingest_teacher)
     # BackgroundTasks (not a bare create_task): the framework keeps the
     # reference and runs the job after the response is sent, so the browser
     # gets the job_id immediately and the chain cannot be garbage-collected
@@ -2781,10 +2834,32 @@ async def students_ingest_confirm(payload: dict):
     ]
     if display_name and not display_names:
         display_names = [display_name]
+    # Optional starting CEFR level per student (Prepare-fix P3c): either one
+    # level for the single-name form ("cefr_level") or a per-name map
+    # ("cefr_levels": {display_name: level}). Empty values mean "skip".
+    from src.education.student_lens import VALID_CEFR_LEVELS
+
+    cefr_levels: dict[str, str] = {}
+    raw_levels = (payload or {}).get("cefr_levels")
+    if isinstance(raw_levels, dict):
+        cefr_levels = {
+            str(name).strip(): str(level).strip()
+            for name, level in raw_levels.items()
+            if str(level or "").strip()
+        }
+    single_level = str((payload or {}).get("cefr_level") or "").strip()
+    if single_level and display_name:
+        cefr_levels.setdefault(display_name, single_level)
+    invalid_levels = sorted({lvl for lvl in cefr_levels.values() if lvl not in VALID_CEFR_LEVELS})
+    if invalid_levels:
+        return JSONResponse(
+            {"error": f"invalid_cefr_level: {', '.join(invalid_levels)} — valid levels: {', '.join(VALID_CEFR_LEVELS)}"},
+            status_code=400,
+        )
     job = _ingest_job(job_id)
     if job is None:
         return JSONResponse({"error": "import job not found"}, status_code=404)
-    if not display_names:
+    if not display_names and not cefr_levels:
         return JSONResponse({"error": "display_name is required"}, status_code=400)
     pending_names = {
         str(item.get("display_name") or "").strip()
@@ -2793,28 +2868,71 @@ async def students_ingest_confirm(payload: dict):
     missing = [name for name in display_names if name not in pending_names]
     if missing:
         return JSONResponse({"error": "one or more students are not awaiting confirmation"}, status_code=404)
-    try:
-        extraction = await asyncio.to_thread(docpipe_vault.get_extraction, job["source_id"])
-    except FileNotFoundError:
-        return JSONResponse({
-            "error": "The extracted document is no longer available — import the file again (re-imports merge safely).",
-        }, status_code=409)
-    detected_by_name = {
-        str(student.get("display_name") or "").strip(): student
-        for student in extraction.data.get("structure", {}).get("students_detected", [])
-        if isinstance(student, dict)
-    }
     created_students = []
-    for name in display_names:
-        detected = detected_by_name.get(name) or {"display_name": name}
-        created = await asyncio.to_thread(_create_lens_for_detected, extraction, detected)
-        created_students.append(created)
-        job["students_created"].append(created)
-    job["needs_confirmation"] = [
-        item for item in job["needs_confirmation"] if item.get("display_name") not in set(display_names)
-    ]
+    if display_names:
+        try:
+            extraction = await asyncio.to_thread(docpipe_vault.get_extraction, job["source_id"])
+        except FileNotFoundError:
+            return JSONResponse({
+                "error": "The extracted document is no longer available — import the file again (re-imports merge safely).",
+            }, status_code=409)
+        detected_by_name = {
+            str(student.get("display_name") or "").strip(): student
+            for student in extraction.data.get("structure", {}).get("students_detected", [])
+            if isinstance(student, dict)
+        }
+        for name in display_names:
+            detected = detected_by_name.get(name) or {"display_name": name}
+            created = await asyncio.to_thread(
+                _create_lens_for_detected, extraction, detected, job.get("teacher_id") or "teacher:ingest"
+            )
+            level = cefr_levels.get(name)
+            if level:
+                def set_level(store, student_id=created["student_id"], cefr=level):
+                    return store.set_initial_cefr(
+                        student_id, cefr, teacher_id=job.get("teacher_id") or "teacher:import"
+                    )
+
+                await asyncio.to_thread(_with_student_store, set_level)
+                created["cefr_level"] = level
+            created_students.append(created)
+            job["students_created"].append(created)
+        job["needs_confirmation"] = [
+            item for item in job["needs_confirmation"] if item.get("display_name") not in set(display_names)
+        ]
+    # Starting levels for students this job already auto-created (roster
+    # imports create everyone up front, so the confirm step never runs for
+    # them — the level dropdowns on those rows land here instead).
+    cefr_updated = []
+    confirmed_names = set(display_names)
+    created_by_name = {
+        str(item.get("display_name") or "").strip(): item
+        for item in job.get("students_created", [])
+        if isinstance(item, dict) and str(item.get("student_id") or "").strip()
+    }
+    for name, level in cefr_levels.items():
+        if name in confirmed_names:
+            continue
+        existing = created_by_name.get(name)
+        if existing is None:
+            continue
+
+        def set_existing_level(store, student_id=existing["student_id"], cefr=level):
+            return store.set_initial_cefr(
+                student_id, cefr, teacher_id=job.get("teacher_id") or "teacher:import"
+            )
+
+        await asyncio.to_thread(_with_student_store, set_existing_level)
+        existing["cefr_level"] = level
+        cefr_updated.append({
+            "student_id": existing["student_id"],
+            "display_name": name,
+            "cefr_level": level,
+        })
     _save_ingest_job(job)
-    body = {"status": "created", "students": created_students}
+    body = {"status": "created" if created_students else "updated", "students": created_students}
+    if cefr_updated:
+        body["cefr_updated"] = cefr_updated
     if len(created_students) == 1:
         body["student"] = created_students[0]
     return body
@@ -4191,7 +4309,10 @@ async def prepare_activity(payload: dict):
     from src.education.content_differentiator import ContentDifferentiator, LessonInput
 
     unit = _safe_unit(payload.get("unit_id"), payload.get("grade"))
-    grade_number = unit["grade"].removeprefix("G")
+    grade_value = (
+        unit["grade"] if unit else (str(payload.get("grade") or "").strip().upper() or "G3")
+    )
+    grade_number = grade_value.removeprefix("G")
     try:
         duration_minutes = int(payload.get("duration_minutes") or 45)
     except (TypeError, ValueError):
@@ -4199,19 +4320,38 @@ async def prepare_activity(payload: dict):
     lesson = LessonInput(
         ib_programme="PYP",
         subject="Italian",
-        unit_title=str(payload.get("unit_title") or unit["title"]),
-        topic=str(payload.get("topic") or unit["focus"]),
+        unit_title=str(
+            payload.get("unit_title")
+            or (unit["title"] if unit else "")
+            or payload.get("topic")
+            or "Today's lesson"
+        ),
+        topic=str(
+            payload.get("topic")
+            or (unit["focus"] if unit else "")
+            or "Italian language practice"
+        ),
         atl_skills=["communication", "self-management"],
-        cefr_target="A2" if unit["grade"] in ("G3", "G4") else "A1",
+        cefr_target="A2" if grade_value in ("G3", "G4") else "A1",
         duration_minutes=duration_minutes,
         language_of_instruction="it",
         created_by="teacher",
     )
     pack = await asyncio.to_thread(_generate_activity_pack, lesson)
     result = pack.to_dict()
-    result["source_citation"] = f"Generated from Manuale §{unit['manuale_section']}, Grade {grade_number}"
-    result["source_status"] = "authoritative"
-    result["cefr_rule"] = unit["cefr_language"]
+    # Honest provenance (Issue 5): only Manuale-derived units earn the
+    # Manuale citation; teacher-created units and unit-less topic runs say
+    # exactly what they are.
+    if unit and unit.get("manuale_section"):
+        result["source_citation"] = f"Generated from Manuale §{unit['manuale_section']}, Grade {grade_number}"
+        result["source_status"] = "authoritative"
+    elif unit:
+        result["source_citation"] = f"Generated from teacher-created unit \u201c{unit['title']}\u201d"
+        result["source_status"] = "teacher_created"
+    else:
+        result["source_citation"] = "Generated from the teacher-provided topic — no curriculum unit selected."
+        result["source_status"] = "teacher_provided"
+    result["cefr_rule"] = unit["cefr_language"] if unit else ""
     return result
 
 
@@ -6088,6 +6228,10 @@ async def lesson_materials_generate(request: Request, payload: dict):
     student_ids = payload.get("student_ids") if isinstance(payload.get("student_ids"), list) else None
     tier_overrides = _tier_overrides_from_payload(payload)
     push_to_drive = bool(payload.get("push_to_drive", True))
+    try:
+        source_text = await _lesson_source_text_from_payload(payload)
+    except ValueError as exc:
+        return JSONResponse({"error": "invalid_lesson_file", "detail": str(exc)}, status_code=400)
 
     # Store phase in one thread hop (sqlite is thread-bound), seeded roster —
     # same store the cohort endpoints see. LLM phase runs async afterwards.
@@ -6103,6 +6247,7 @@ async def lesson_materials_generate(request: Request, payload: dict):
             tier_groups=split.tier_groups,
             roster_names=split.roster_names,
             individual_support=split.individual_support,
+            source_text=source_text,
         )
     except PermissionError as exc:
         return JSONResponse({"error": "unauthorized_student_ids", "detail": str(exc)}, status_code=422)
@@ -6120,13 +6265,103 @@ async def lesson_materials_generate(request: Request, payload: dict):
     }
 
 
-@app.post("/api/lesson-materials/library/pull")
-async def lesson_materials_library_pull(request: Request, payload: dict):
-    from src.lingua_viva.lesson_materials import pull_course_library
+async def _lesson_source_text_from_payload(payload: dict) -> str | None:
+    """Read the selected coursework file's content for generation.
 
-    folder_id = str(payload.get("folder_id") or "").strip()
+    `lesson_file_path` must live inside the course library (containment is
+    enforced by read_todays_lesson_text). None when no file was selected —
+    topic-only generation stays supported."""
+    lesson_file_path = str(payload.get("lesson_file_path") or "").strip()
+    if not lesson_file_path:
+        return None
+    from src.lingua_viva.lesson_materials import read_todays_lesson_text
+
+    return await asyncio.to_thread(read_todays_lesson_text, lesson_file_path)
+
+
+# Uploaded lesson files are read into memory for the base64 hop; a lesson
+# plan measured in tens of MB is not a lesson plan.
+_LESSON_UPLOAD_MAX_BYTES = 25 * 1024 * 1024
+
+
+@app.post("/api/lesson-materials/library/import-file")
+async def lesson_materials_library_import_file(request: Request, payload: dict):
+    """One-action coursework import: file in → library entry + today's
+    selection + auto-detected metadata out. Accepts either a local
+    `file_path` or browser-uploaded `name` + `content_base64` (drag-drop /
+    file picker, where the renderer has no filesystem path)."""
+    import base64
+
+    from src.lingua_viva.access_roles import effective_teacher_id
+    from src.lingua_viva.lesson_materials import (
+        import_lesson_file_bytes,
+        parse_lesson_file_metadata,
+        pull_local_file,
+        select_todays_lesson,
+    )
+
     grade = str(payload.get("grade") or "").strip()
     subject = str(payload.get("subject") or "language").strip()
+    if not grade:
+        return JSONResponse({"error": "grade_required"}, status_code=400)
+    file_path = str(payload.get("file_path") or "").strip()
+    name = str(payload.get("name") or "").strip()
+    content_base64 = str(payload.get("content_base64") or "").strip()
+    if not file_path and not (name and content_base64):
+        return JSONResponse(
+            {"error": "file_required", "detail": "send file_path or name + content_base64"},
+            status_code=400,
+        )
+    teacher_id = effective_teacher_id(request, str(payload.get("teacher_id") or "local-teacher"))
+    class_id = str(payload.get("class_id") or "default")
+
+    try:
+        if file_path:
+            imported = await asyncio.to_thread(pull_local_file, file_path, grade, subject)
+        else:
+            try:
+                body = base64.b64decode(content_base64, validate=True)
+            except Exception:
+                return JSONResponse({"error": "invalid_file_content"}, status_code=400)
+            if len(body) > _LESSON_UPLOAD_MAX_BYTES:
+                return JSONResponse({"error": "file_too_large", "detail": "25MB limit"}, status_code=400)
+            imported = await asyncio.to_thread(import_lesson_file_bytes, name, body, grade, subject)
+        local_path = str((imported.get("entry") or {}).get("local_path") or "")
+        selection = await asyncio.to_thread(
+            select_todays_lesson,
+            teacher_id=teacher_id,
+            class_id=class_id,
+            grade=grade,
+            subject=subject,
+            local_path=local_path,
+        )
+        metadata = await asyncio.to_thread(parse_lesson_file_metadata, local_path)
+    except ValueError as exc:
+        return JSONResponse({"error": "invalid_lesson_file", "detail": str(exc)}, status_code=400)
+    except Exception as exc:
+        return JSONResponse({"error": "import_failed", "detail": str(exc)}, status_code=422)
+    return {
+        "imported": imported,
+        "selection": selection.__dict__,
+        "metadata": metadata,
+    }
+
+
+@app.post("/api/lesson-materials/library/pull")
+async def lesson_materials_library_pull(request: Request, payload: dict):
+    from src.lingua_viva.google_drive_integration import parse_folder_link
+    from src.lingua_viva.lesson_materials import pull_course_library
+
+    # Teachers paste whatever Drive gives them — a folder URL or a bare ID.
+    raw_folder = str(payload.get("folder_id") or "").strip()
+    folder_id = parse_folder_link(raw_folder) or ""
+    grade = str(payload.get("grade") or "").strip()
+    subject = str(payload.get("subject") or "language").strip()
+    if raw_folder and not folder_id:
+        return JSONResponse(
+            {"error": "invalid_library_request", "detail": "That doesn't look like a Google Drive folder link — paste the link to the folder itself."},
+            status_code=400,
+        )
     if not folder_id or not grade or not subject:
         return JSONResponse({"error": "folder_id_grade_subject_required"}, status_code=400)
     try:
@@ -6166,7 +6401,11 @@ async def lesson_materials_library_list(grade: str, subject: str = "language"):
 @app.post("/api/lesson-materials/today")
 async def lesson_materials_today(request: Request, payload: dict):
     from src.lingua_viva.access_roles import effective_teacher_id
-    from src.lingua_viva.lesson_materials import read_todays_lesson_text, select_todays_lesson
+    from src.lingua_viva.lesson_materials import (
+        parse_lesson_file_metadata,
+        read_todays_lesson_text,
+        select_todays_lesson,
+    )
 
     teacher_id = effective_teacher_id(request, str(payload.get("teacher_id") or "local-teacher"))
     try:
@@ -6179,12 +6418,16 @@ async def lesson_materials_today(request: Request, payload: dict):
             local_path=str(payload.get("local_path") or ""),
         )
         text = await asyncio.to_thread(read_todays_lesson_text, selection.local_path)
+        metadata = await asyncio.to_thread(
+            parse_lesson_file_metadata, selection.local_path, text=text
+        )
     except ValueError as exc:
         return JSONResponse({"error": "invalid_lesson_selection", "detail": str(exc)}, status_code=400)
     return {
         "selection": selection.__dict__,
         "lesson_text": text,
         "lesson_excerpt": text[:1000],
+        "metadata": metadata,
     }
 
 
@@ -6205,6 +6448,10 @@ async def lesson_materials_packet_preview(request: Request, payload: dict):
         return JSONResponse({"error": "invalid_lesson", "detail": str(exc)}, status_code=400)
     student_ids = payload.get("student_ids") if isinstance(payload.get("student_ids"), list) else None
     tier_overrides = _tier_overrides_from_payload(payload)
+    try:
+        source_text = await _lesson_source_text_from_payload(payload)
+    except ValueError as exc:
+        return JSONResponse({"error": "invalid_lesson_file", "detail": str(exc)}, status_code=400)
 
     def load(store):
         return assign_roster_split(store, teacher_id, student_ids, overrides=tier_overrides)
@@ -6218,6 +6465,7 @@ async def lesson_materials_packet_preview(request: Request, payload: dict):
             tier_groups=split.tier_groups,
             roster_names=split.roster_names,
             individual_support=split.individual_support,
+            source_text=source_text,
         )
         packet = render_packet_bundle(
             lesson,
@@ -6295,6 +6543,7 @@ async def lesson_materials_packet_approve(request: Request, payload: dict):
         else:
             student_ids = payload.get("student_ids") if isinstance(payload.get("student_ids"), list) else None
             tier_overrides = _tier_overrides_from_payload(payload)
+            source_text = await _lesson_source_text_from_payload(payload)
 
             def load(store):
                 return assign_roster_split(store, teacher_id, student_ids, overrides=tier_overrides)
@@ -6307,6 +6556,7 @@ async def lesson_materials_packet_approve(request: Request, payload: dict):
                 tier_groups=split.tier_groups,
                 roster_names=split.roster_names,
                 individual_support=split.individual_support,
+                source_text=source_text,
             )
             materials = result.materials
             individual_support = result.individual_support
@@ -6541,6 +6791,8 @@ async def assess_rubric(unit_id: str):
     from src.education.content_differentiator import ContentDifferentiator, LessonInput
 
     unit = _safe_unit(unit_id)
+    if unit is None:
+        return JSONResponse({"error": "Unknown curriculum unit."}, status_code=404)
     lesson = LessonInput(
         ib_programme="PYP",
         subject="Italian",

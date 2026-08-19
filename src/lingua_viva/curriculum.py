@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -118,28 +119,10 @@ class CurriculumService:
         if isinstance(explicit, list):
             return [deepcopy(unit) for unit in explicit if isinstance(unit, dict)]
 
-        units: list[dict] = []
-        for band in data.get("grade_bands", []):
-            grade = str(band.get("grade", ""))
-            focus = str(band.get("curriculum_focus", "Italian language development"))
-            cefr = str(band.get("cefr_target_wording", "designed to target CEFR growth"))
-            themes = self._starter_themes(grade)
-            for index, theme in enumerate(themes, start=1):
-                section = f"{index + 1}.{index}"
-                units.append({
-                    "unit_id": f"{grade.lower()}-unit-{index}",
-                    "grade": grade,
-                    "title": theme,
-                    "focus": focus,
-                    "cefr_target": cefr,
-                    "cefr_language": self._designed_to_sentence(cefr),
-                    "manuale_section": section,
-                    "source_citation": f"Manuale §{section}, Grade {grade.removeprefix('G')}",
-                    "source_status": "authoritative_source_derivative_matrix",
-                    "framework_alignment": deepcopy(data.get("frameworks", [])),
-                    "materials": ["Manuale v1", "teacher notes", "student notebook"],
-                })
-        return units
+        # No explicit units means NO units. A fresh install starts empty —
+        # fabricated "starter theme" units presented as real curriculum were
+        # the Issue-5 defect; teachers create units via the unit CRUD below.
+        return []
 
     @staticmethod
     def _designed_to_sentence(cefr_wording: str) -> str:
@@ -148,12 +131,119 @@ class CurriculumService:
             return wording[0].upper() + wording[1:]
         return f"Designed to target {wording}"
 
-    @staticmethod
-    def _starter_themes(grade: str) -> list[str]:
-        return {
-            "G1": ["Suoni e parole", "La mia classe", "Storie con immagini"],
-            "G2": ["Lettura fluente", "Frasi intenzionali", "Prime strutture grammaticali"],
-            "G3": ["La famiglia e le relazioni", "Testi brevi e autonomi", "Tempi verbali in contesto"],
-            "G4": ["Comprensione avanzata", "Produzione scritta ricca", "Lingua per l'indagine"],
-            "G5": ["Portfolio linguistico", "Testi multiparagrafo", "Prontezza B1"],
-        }.get(grade, ["Unit 1", "Unit 2", "Unit 3"])
+
+# --- Teacher unit CRUD (Issue 5) ---------------------------------------------
+#
+# Writes always target the LIVE matrix copy (teacher-writable); the shipped
+# bundle matrix stays read-only. The first write materializes the currently
+# resolved matrix (bundle or live) with an explicit ``units`` list so later
+# edits are stable.
+
+
+def _live_matrix_path() -> Path:
+    from src.lingua_viva.reconcile import live_root
+
+    return live_root() / "curriculum" / "lingua_viva_matrix.yaml"
+
+
+def _matrix_for_write() -> dict[str, Any]:
+    service = CurriculumService()
+    data = deepcopy(service._load())
+    data["units"] = service._all_units()
+    return data
+
+
+def _write_live_matrix(data: dict[str, Any]) -> None:
+    path = _live_matrix_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        yaml.safe_dump(data, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
+
+
+def _unit_slug(grade: str, title: str, existing_ids: set[str]) -> str:
+    base = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-") or "unit"
+    candidate = f"{grade.lower()}-{base}"
+    counter = 2
+    while candidate in existing_ids:
+        candidate = f"{grade.lower()}-{base}-{counter}"
+        counter += 1
+    return candidate
+
+
+def add_unit(grade: str, title: str, *, focus: str = "", cefr_target: str = "") -> dict:
+    title = str(title or "").strip()
+    if not title:
+        raise ValueError("unit title is required")
+    data = _matrix_for_write()
+    service = CurriculumService()
+    normalized = service._normalize_grade(grade)
+    known_grades = {str(band.get("grade", "")) for band in data.get("grade_bands", [])}
+    if normalized not in known_grades:
+        raise ValueError(f"unknown grade: {grade}")
+    units: list[dict] = data["units"]
+    unit = {
+        "unit_id": _unit_slug(normalized, title, {str(u.get("unit_id")) for u in units}),
+        "grade": normalized,
+        "title": title,
+        "focus": str(focus or "").strip(),
+        "cefr_target": str(cefr_target or "").strip(),
+        "cefr_language": (
+            CurriculumService._designed_to_sentence(str(cefr_target)) if str(cefr_target or "").strip() else ""
+        ),
+        "manuale_section": "",
+        "source_citation": "Teacher-created unit",
+        "source_status": "teacher_created",
+        "framework_alignment": deepcopy(data.get("frameworks", [])),
+        "materials": [],
+    }
+    units.append(unit)
+    _write_live_matrix(data)
+    return deepcopy(unit)
+
+
+def update_unit(unit_id: str, updates: dict) -> dict:
+    data = _matrix_for_write()
+    units: list[dict] = data["units"]
+    unit = next((item for item in units if str(item.get("unit_id")) == unit_id), None)
+    if unit is None:
+        raise KeyError(unit_id)
+    if "title" in updates:
+        title = str(updates.get("title") or "").strip()
+        if not title:
+            raise ValueError("unit title is required")
+        unit["title"] = title
+    if "focus" in updates:
+        unit["focus"] = str(updates.get("focus") or "").strip()
+    if "cefr_target" in updates:
+        cefr_target = str(updates.get("cefr_target") or "").strip()
+        unit["cefr_target"] = cefr_target
+        unit["cefr_language"] = (
+            CurriculumService._designed_to_sentence(cefr_target) if cefr_target else ""
+        )
+    if updates.get("position") is not None:
+        # Position is an index WITHIN the unit's grade — the reorder the
+        # teacher sees in the per-grade dropdown. Units of other grades keep
+        # their slots in the flat list.
+        position = max(0, int(updates["position"]))
+        grade = unit.get("grade")
+        same_grade = [item for item in units if item.get("grade") == grade]
+        same_grade.remove(unit)
+        same_grade.insert(min(position, len(same_grade)), unit)
+        replacement = iter(same_grade)
+        data["units"] = [
+            next(replacement) if item.get("grade") == grade else item for item in units
+        ]
+    _write_live_matrix(data)
+    return deepcopy(unit)
+
+
+def delete_unit(unit_id: str) -> None:
+    data = _matrix_for_write()
+    units: list[dict] = data["units"]
+    remaining = [item for item in units if str(item.get("unit_id")) != unit_id]
+    if len(remaining) == len(units):
+        raise KeyError(unit_id)
+    data["units"] = remaining
+    _write_live_matrix(data)

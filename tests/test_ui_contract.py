@@ -241,7 +241,11 @@ REPO = Path(__file__).resolve().parent.parent
 #     (class-folder ingest, match-by-name, review queue); inline teacher
 #     entry per Category Profile section via POST .../support-entry
 #     (teacher_confirmed — typing it IS the evidence).
-EXPECTED_VERSION = 156
+#   v157 (2026-08-18): Prepare/class-materials fix build — 3-step Prepare with
+#     drop zone, unit CRUD (starter themes removed), file-content generation,
+#     starting CEFR levels at import, teacher_roster, native print, Claudia-
+#     lens copy pass.
+EXPECTED_VERSION = 157
 
 
 def _html() -> str:

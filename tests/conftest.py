@@ -135,6 +135,63 @@ def _hermetic_lv_state(monkeypatch, tmp_path):
 
 
 @pytest.fixture()
+def seeded_curriculum(_hermetic_lv_state):
+    """Explicit replacement for the removed fabricated starter-theme units
+    (Prepare-fix Issue 5): a fresh install has an EMPTY curriculum, so tests
+    that need units (``g3-unit-1``, ...) opt in here instead of inheriting
+    invisible fabrication — same pattern as ``demo_roster`` below. Writes the
+    exact three-units-per-grade shape the old fallback produced, as an
+    explicit ``units`` list in the live (teacher-writable) matrix copy under
+    the hermetic LV_UPDATE_HOME set by ``_hermetic_lv_state``."""
+    from copy import deepcopy
+
+    import yaml
+
+    from src.lingua_viva.curriculum import (
+        DEFAULT_MATRIX,
+        CurriculumService,
+        _write_live_matrix,
+    )
+
+    themes = {
+        "G1": ["Suoni e parole", "La mia classe", "Storie con immagini"],
+        "G2": ["Lettura fluente", "Frasi intenzionali", "Prime strutture grammaticali"],
+        "G3": ["La famiglia e le relazioni", "Testi brevi e autonomi", "Tempi verbali in contesto"],
+        "G4": ["Comprensione avanzata", "Produzione scritta ricca", "Lingua per l'indagine"],
+        "G5": ["Portfolio linguistico", "Testi multiparagrafo", "Prontezza B1"],
+    }
+    with DEFAULT_MATRIX.open(encoding="utf-8") as handle:
+        data = yaml.safe_load(handle)
+    units: list[dict] = []
+    for band in data.get("grade_bands", []):
+        grade = str(band.get("grade", ""))
+        focus = str(band.get("curriculum_focus", "Italian language development"))
+        cefr = str(band.get("cefr_target_wording", "designed to target CEFR growth"))
+        for index, theme in enumerate(themes.get(grade, []), start=1):
+            section = f"{index + 1}.{index}"
+            units.append({
+                "unit_id": f"{grade.lower()}-unit-{index}",
+                "grade": grade,
+                "title": theme,
+                "focus": focus,
+                "cefr_target": cefr,
+                "cefr_language": CurriculumService._designed_to_sentence(cefr),
+                "manuale_section": section,
+                "source_citation": f"Manuale §{section}, Grade {grade.removeprefix('G')}",
+                "source_status": "authoritative_source_derivative_matrix",
+                # deepcopy per unit: shared objects would make safe_dump emit
+                # YAML anchors/aliases, which the guarded live-matrix parse
+                # refuses (alias-bomb defense) — silently falling back to the
+                # unit-less bundle matrix.
+                "framework_alignment": deepcopy(data.get("frameworks", [])),
+                "materials": ["Manuale v1", "teacher notes", "student notebook"],
+            })
+    data["units"] = units
+    _write_live_matrix(data)
+    return units
+
+
+@pytest.fixture()
 def demo_roster():
     """Explicit replacement for the removed web._seed_demo_roster (T9 /
     build-brief hard rule 5, acceptance A6): a fresh install shows an EMPTY

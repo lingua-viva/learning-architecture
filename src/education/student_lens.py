@@ -975,6 +975,27 @@ class StudentLensStore:
 
             CREATE INDEX IF NOT EXISTS idx_evidence_student
                 ON evidence_records(student_id, created_at);
+
+            CREATE TABLE IF NOT EXISTS teacher_roster (
+                teacher_id TEXT NOT NULL,
+                student_id TEXT NOT NULL,
+                added_at TEXT NOT NULL,
+                source TEXT NOT NULL DEFAULT 'observation',
+                PRIMARY KEY (teacher_id, student_id)
+            );
+            """
+        )
+        # Backfill roster membership from observation history (Prepare-fix
+        # P3b): before the teacher_roster table existed, "has observed" was
+        # the only ownership signal. INSERT OR IGNORE keeps this idempotent
+        # on every open; explicit roster rows always win over backfill.
+        self._conn.execute(
+            """
+            INSERT OR IGNORE INTO teacher_roster (teacher_id, student_id, added_at, source)
+            SELECT teacher_id, student_id, MIN(recorded_at), 'backfill:observation'
+            FROM observations
+            WHERE teacher_id != ''
+            GROUP BY teacher_id, student_id
             """
         )
         cursor = self._conn.cursor()
@@ -1106,6 +1127,40 @@ class StudentLensStore:
         )
         self._conn.commit()
         return student_id
+
+    def set_initial_cefr(
+        self, student_id: str, cefr_level: str, teacher_id: str = "teacher:import"
+    ) -> dict:
+        """Teacher-declared starting CEFR level at import time (Prepare-fix
+        P3c). Written as ordinary cefr observations (one per dimension), NOT
+        a direct snapshot write: cefr_snapshot must stay derived from the
+        append-only observation log so get_lens_as_of reconstruction holds —
+        the same law that keeps rti_current_tier out of update_profile().
+        Returns the refreshed lens dict."""
+        level = str(cefr_level or "").strip()
+        if level not in VALID_CEFR_LEVELS:
+            raise ObservationValidationError(
+                f"cefr_level must be one of {VALID_CEFR_LEVELS}"
+            )
+        row = self._get_student_row(student_id)
+        if row is None:
+            raise LensNotFoundError(student_id)
+        for dimension in VALID_CEFR_DIMENSIONS:
+            self.append_observation(
+                Observation(
+                    student_id=student_id,
+                    teacher_id=str(teacher_id or "teacher:import") or "teacher:import",
+                    template_type="cefr",
+                    raw_transcript=(
+                        f"Starting CEFR level {level} ({dimension}) set by the "
+                        "teacher during import."
+                    ),
+                    cefr_dimension=dimension,
+                    cefr_level_observed=level,
+                    source_type="teacher_note",
+                )
+            )
+        return self.get_lens(student_id)
 
     def set_avoid_pairing_with(self, student_id: str, avoid_ids: list[str]) -> None:
         """
@@ -1422,6 +1477,12 @@ class StudentLensStore:
                 else None,
             ),
         )
+        # First observation registers roster membership (Prepare-fix P3b).
+        if str(observation.teacher_id or "").strip():
+            self._conn.execute(
+                "INSERT OR IGNORE INTO teacher_roster (teacher_id, student_id, added_at, source) VALUES (?, ?, ?, 'observation')",
+                (observation.teacher_id, observation.student_id, _now_iso()),
+            )
         self._conn.commit()
 
         support_entries = normalize_support_entries(observation.support_entries)
@@ -1667,26 +1728,48 @@ class StudentLensStore:
         rows = self._conn.execute(query, params).fetchall()
         return [self._row_to_lens_dict(r) for r in rows]
 
+    def add_to_roster(self, teacher_id: str, student_id: str, source: str = "manual") -> None:
+        """Register a student on a teacher's roster (idempotent). Sources:
+        'observation' (first observation), 'ingest' (document import),
+        'backfill:observation' (schema migration), 'manual'."""
+        teacher = str(teacher_id or "").strip()
+        student = str(student_id or "").strip()
+        if not teacher or not student:
+            return
+        self._conn.execute(
+            "INSERT OR IGNORE INTO teacher_roster (teacher_id, student_id, added_at, source) VALUES (?, ?, ?, ?)",
+            (teacher, student, _now_iso(), str(source or "manual")),
+        )
+        self._conn.commit()
+
     def list_lenses_for_teacher(self, teacher_id: str) -> list[dict]:
         """
-        A teacher's roster, defined as: every non-deleted student this
-        teacher has recorded at least one observation for. There is no
-        separate homeroom/class-roster table in this vertical slice —
-        the observation history itself is the ownership signal, which
-        also means this same query is what makes the cross-teacher view
-        possible (Turn 11): ask the same question with a different
-        teacher_id and you get that teacher's overlapping students.
+        A teacher's roster: every non-deleted student on the teacher_roster
+        table for this teacher_id, union every student this teacher has
+        recorded at least one observation for (the pre-roster ownership
+        signal, kept live so the cross-teacher view — same question,
+        different teacher_id — still works). Prepare-fix P3b fallback:
+        a teacher with NO roster and NO observations sees ALL active
+        students rather than an inexplicable empty Prepare view — a fresh
+        single-teacher install must work before any observation exists.
         """
         rows = self._conn.execute(
             """
             SELECT s.* FROM students s
             WHERE s.deleted = 0
-              AND s.student_id IN (
-                  SELECT DISTINCT student_id FROM observations WHERE teacher_id = ?
+              AND (
+                  s.student_id IN (
+                      SELECT student_id FROM teacher_roster WHERE teacher_id = ?
+                  )
+                  OR s.student_id IN (
+                      SELECT DISTINCT student_id FROM observations WHERE teacher_id = ?
+                  )
               )
             """,
-            (teacher_id,),
+            (teacher_id, teacher_id),
         ).fetchall()
+        if not rows:
+            return self.list_lenses()
         return [self._row_to_lens_dict(r) for r in rows]
 
     def teachers_for_student(self, student_id: str) -> list[str]:

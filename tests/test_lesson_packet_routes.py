@@ -190,3 +190,138 @@ def test_roster_split_preview_returns_reasons_without_recording_overrides(monkey
     assert body["overrides"] == {student_b: "extended"}
     assert body["roster_names"][student_a] == "Student A"
     assert not (tmp_path / "roster_overrides.ndjson").exists()
+
+
+def test_library_import_file_uploads_selects_and_detects_metadata(monkeypatch, tmp_path):
+    import base64
+
+    monkeypatch.setenv("LV_STATE_HOME", str(tmp_path / "lv_home"))
+    monkeypatch.setenv("LV_COURSE_LIBRARY_DIR", str(tmp_path / "library"))
+    monkeypatch.setenv("LV_STUDENT_DB_PATH", str(tmp_path / "students.db"))
+    content = (
+        "Class: MYP2 English\nUnit: Migration stories\nTask: Poetry analysis\n\n"
+        "Learning goal: analyse imagery.\n\nWarm-up: read the poem aloud."
+    ).encode("utf-8")
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/lesson-materials/library/import-file",
+            json={
+                "name": "Poetry Lesson.md",
+                "content_base64": base64.b64encode(content).decode("ascii"),
+                "grade": "MYP2",
+                "subject": "english",
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    entry = body["imported"]["entry"]
+    assert entry["status"] == "pulled"
+    assert body["selection"]["local_path"] == entry["local_path"]
+    assert body["metadata"]["grade"] == "MYP2"
+    assert body["metadata"]["unit"] == "Migration stories"
+    assert body["metadata"]["topic"] == "Poetry analysis"
+    assert "read the poem aloud" in body["metadata"]["excerpt"].lower()
+
+
+def test_library_import_file_accepts_local_path(monkeypatch, tmp_path):
+    monkeypatch.setenv("LV_STATE_HOME", str(tmp_path / "lv_home"))
+    monkeypatch.setenv("LV_COURSE_LIBRARY_DIR", str(tmp_path / "library"))
+    source = tmp_path / "Routine Lesson.txt"
+    source.write_text("Warm-up: describe your morning routine.", encoding="utf-8")
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/lesson-materials/library/import-file",
+            json={"file_path": str(source), "grade": "G3", "subject": "language"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["imported"]["entry"]["name"] == "Routine Lesson.txt"
+    assert body["selection"]["grade"] == "G3"
+
+
+def test_library_import_file_requires_grade_and_file(monkeypatch, tmp_path):
+    monkeypatch.setenv("LV_COURSE_LIBRARY_DIR", str(tmp_path / "library"))
+    with TestClient(app) as client:
+        no_grade = client.post(
+            "/api/lesson-materials/library/import-file",
+            json={"name": "a.md", "content_base64": "YQ=="},
+        )
+        no_file = client.post(
+            "/api/lesson-materials/library/import-file",
+            json={"grade": "G3"},
+        )
+    assert no_grade.status_code == 400
+    assert no_grade.json()["error"] == "grade_required"
+    assert no_file.status_code == 400
+    assert no_file.json()["error"] == "file_required"
+
+
+def test_generate_rejects_lesson_file_outside_course_library(monkeypatch, tmp_path):
+    monkeypatch.setenv("LV_COURSE_LIBRARY_DIR", str(tmp_path / "library"))
+    outside = tmp_path / "outside.md"
+    outside.write_text("not in the library", encoding="utf-8")
+
+    payload = {"lesson": _payload()["lesson"], "lesson_file_path": str(outside)}
+    with TestClient(app) as client:
+        response = client.post("/api/lesson-materials/generate", json=payload)
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["error"] == "invalid_lesson_file"
+    assert "outside_course_library" in body["detail"]
+
+
+def test_generate_threads_selected_lesson_file_content(monkeypatch, tmp_path):
+    monkeypatch.setenv("LV_STATE_HOME", str(tmp_path / "lv_home"))
+    monkeypatch.setenv("LV_COURSE_LIBRARY_DIR", str(tmp_path / "library"))
+    monkeypatch.setenv("LV_STUDENT_DB_PATH", str(tmp_path / "students.db"))
+
+    from src.lingua_viva.reasoning import ReasonResult
+
+    prompts = []
+
+    class FakeEngine:
+        async def reason(self, query, context=None, model=None, default_model=None,
+                         system_prompt=None, local_only=False, max_tokens=2000):
+            prompts.append(query)
+            return ReasonResult(
+                content=(
+                    "TITLE: Routine Practice\n"
+                    "INSTRUCTIONS: Read then answer.\n"
+                    "EXERCISE:\n1. Read the model.\n2. Write two sentences.\n"
+                    "SCAFFOLDING NOTES: word bank"
+                ),
+                confidence=0.8,
+                model_used="mock",
+            )
+
+    monkeypatch.setattr("src.lingua_viva.reasoning.ReasoningEngine", FakeEngine)
+
+    source = tmp_path / "Routine Lesson.txt"
+    source.write_text("Il mio quartiere: describe your neighbourhood.", encoding="utf-8")
+
+    with TestClient(app) as client:
+        imported = client.post(
+            "/api/lesson-materials/library/import-file",
+            json={"file_path": str(source), "grade": "G3", "subject": "language"},
+        )
+        assert imported.status_code == 200
+        local_path = imported.json()["imported"]["entry"]["local_path"]
+
+        response = client.post(
+            "/api/lesson-materials/generate",
+            json={
+                "lesson": _payload()["lesson"],
+                "lesson_file_path": local_path,
+                "push_to_drive": False,
+            },
+        )
+
+    assert response.status_code == 200
+    assert len(prompts) == 3
+    for prompt in prompts:
+        assert "Il mio quartiere" in prompt

@@ -1,7 +1,8 @@
 import { app, BrowserWindow, dialog, ipcMain, Notification, session, shell } from "electron";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFile, unlink, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import {
   DEFAULT_PORT,
@@ -557,6 +558,45 @@ function installIpc(root: string): void {
       return null;
     }
     return result.filePaths[0];
+  });
+  ipcMain.handle("lv:print-html", async (_event, html: string) => {
+    // Native print for packet HTML (FIX_PREPARE_CLASS_MATERIALS 2026-08-18,
+    // Issue 8). The renderer's iframe-srcdoc print trick renders blank under
+    // the app CSP + sandbox, so printing happens in a dedicated hidden
+    // window instead. The HTML is written to a temp file (data: URLs choke
+    // on large packets) and removed afterwards.
+    if (typeof html !== "string" || !html.trim()) {
+      return { ok: false, error: "empty_document" };
+    }
+    const tempPath = path.join(
+      os.tmpdir(),
+      `lv-print-${Date.now()}-${Math.random().toString(36).slice(2)}.html`
+    );
+    await writeFile(tempPath, html, "utf8");
+    return await new Promise((resolve) => {
+      const printWindow = new BrowserWindow({
+        show: false,
+        webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false }
+      });
+      const cleanup = () => {
+        if (!printWindow.isDestroyed()) printWindow.close();
+        unlink(tempPath).catch(() => undefined);
+      };
+      printWindow.webContents.once("did-finish-load", () => {
+        printWindow.webContents.print({}, (success, failureReason) => {
+          cleanup();
+          resolve(success ? { ok: true } : { ok: false, error: failureReason || "print_cancelled" });
+        });
+      });
+      printWindow.webContents.once("did-fail-load", () => {
+        cleanup();
+        resolve({ ok: false, error: "load_failed" });
+      });
+      printWindow.loadFile(tempPath).catch(() => {
+        cleanup();
+        resolve({ ok: false, error: "load_failed" });
+      });
+    });
   });
   ipcMain.handle("lv:setup:openExternal", (_event, url: string) => {
     // Only allow known safe URLs

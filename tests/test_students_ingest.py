@@ -779,3 +779,139 @@ def test_bulk_roster_confirm_and_undo_controls_wired():
     assert "Undo this import" in HTML
     assert "/api/students/ingest/${state.ingestJob.job_id}" in HTML
     assert '{method: "DELETE"}' in HTML
+
+
+def test_ingest_teacher_id_passthrough_registers_roster(isolated_state, fixture_extractor):
+    """Prepare-fix P3b: the teacher who imports a document owns the created
+    students on their roster (teacher_roster, source='ingest')."""
+    content = (FIXTURES / "lesson_plan_marco_nora.md").read_bytes()
+    response = client.post(
+        "/api/students/ingest",
+        files={"file": ("lesson_plan_marco_nora.md", content, "text/markdown")},
+        data={"teacher_id": "teacher-claudia"},
+    )
+    assert response.status_code == 200, response.text
+    job = _wait_for_job(response.json()["job_id"])
+    assert job["status"] == "done", job
+
+    def roster_rows(store):
+        rows = store._conn.execute(
+            "SELECT student_id, source FROM teacher_roster WHERE teacher_id = ?",
+            ("teacher-claudia",),
+        ).fetchall()
+        return sorted((r["student_id"], r["source"]) for r in rows)
+
+    rows = web._with_student_store(roster_rows)
+    assert rows, "ingest did not register roster membership"
+    assert all(source == "ingest" for _sid, source in rows)
+
+    def scoped(store):
+        return sorted(str(l.get("display_name")) for l in store.list_lenses_for_teacher("teacher-claudia"))
+
+    assert web._with_student_store(scoped) == ["Marco Bianchi", "Nora Rossi"]
+
+
+def test_confirm_accepts_optional_cefr_level(isolated_state, monkeypatch):
+    """Prepare-fix P3c: the confirmation step can carry a starting CEFR
+    level per student; it lands in the snapshot via audited observations."""
+    async def extract(source, content, *, model_client=None):
+        data = _fixture_extraction(source.source_id)
+        data["source_sha256"] = source.data["sha256"]
+        for student in data["structure"]["students_detected"]:
+            student["confidence"] = 0.4
+        return ExtractionRecord(data)
+
+    from src.lingua_viva.docpipe import extract as docpipe_extract
+
+    monkeypatch.setattr(docpipe_extract, "extract_document", extract)
+    job = _wait_for_job(_upload()["job_id"])
+    names = [item["display_name"] for item in job["needs_confirmation"]]
+    assert "Nora Rossi" in names
+
+    response = client.post("/api/students/ingest/confirm", json={
+        "job_id": job["job_id"],
+        "display_names": names,
+        "cefr_levels": {"Nora Rossi": "A2"},
+    })
+    assert response.status_code == 200, response.text
+    by_name = {s["display_name"]: s for s in response.json()["students"]}
+    assert by_name["Nora Rossi"]["cefr_level"] == "A2"
+    assert "cefr_level" not in by_name["Marco Bianchi"]
+
+    def snapshot(store):
+        return (
+            store.get_lens(by_name["Nora Rossi"]["student_id"])["cefr_snapshot"],
+            store.get_lens(by_name["Marco Bianchi"]["student_id"])["cefr_snapshot"],
+        )
+
+    nora, marco = web._with_student_store(snapshot)
+    assert nora == {"reading": "A2", "writing": "A2", "speaking": "A2", "listening": "A2"}
+    assert set(marco.values()) == {None}
+
+
+def test_confirm_rejects_invalid_cefr_level(isolated_state, monkeypatch):
+    async def extract(source, content, *, model_client=None):
+        data = _fixture_extraction(source.source_id)
+        data["source_sha256"] = source.data["sha256"]
+        for student in data["structure"]["students_detected"]:
+            student["confidence"] = 0.4
+        return ExtractionRecord(data)
+
+    from src.lingua_viva.docpipe import extract as docpipe_extract
+
+    monkeypatch.setattr(docpipe_extract, "extract_document", extract)
+    job = _wait_for_job(_upload()["job_id"])
+
+    response = client.post("/api/students/ingest/confirm", json={
+        "job_id": job["job_id"],
+        "display_name": "Nora Rossi",
+        "cefr_level": "Z9",
+    })
+    assert response.status_code == 400
+    assert "invalid_cefr_level" in response.json()["error"]
+    # Nothing was created by the rejected request.
+    refreshed = client.get(f"/api/students/ingest/{job['job_id']}").json()
+    assert len(refreshed["needs_confirmation"]) == 2
+
+def test_confirm_sets_levels_for_auto_created_students(isolated_state, fixture_extractor):
+    """Claudia-lens audit P0-1 (2026-08-18): roster imports auto-create every
+    student, so the confirm route must also accept starting levels for
+    already-created students — with no display_names at all."""
+    job = _wait_for_job(_upload()["job_id"])
+    assert job["status"] == "done", job
+    created = {s["display_name"]: s for s in job["students_created"]}
+    assert "Nora Rossi" in created and "Marco Bianchi" in created
+
+    response = client.post("/api/students/ingest/confirm", json={
+        "job_id": job["job_id"],
+        "cefr_levels": {"Nora Rossi": "B1"},
+    })
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "updated"
+    assert body["students"] == []
+    updated = {u["display_name"]: u for u in body["cefr_updated"]}
+    assert updated["Nora Rossi"]["cefr_level"] == "B1"
+
+    def snapshots(store):
+        return (
+            store.get_lens(created["Nora Rossi"]["student_id"])["cefr_snapshot"],
+            store.get_lens(created["Marco Bianchi"]["student_id"])["cefr_snapshot"],
+        )
+
+    nora, marco = web._with_student_store(snapshots)
+    assert nora == {"reading": "B1", "writing": "B1", "speaking": "B1", "listening": "B1"}
+    assert set(marco.values()) == {None}
+
+    # The level persists on the job record so re-renders show it as saved.
+    refreshed = client.get(f"/api/students/ingest/{job['job_id']}").json()
+    by_name = {s["display_name"]: s for s in refreshed["students_created"]}
+    assert by_name["Nora Rossi"]["cefr_level"] == "B1"
+
+
+def test_created_row_cefr_controls_wired():
+    """Claudia-lens audit P0-1: the starting-level dropdown renders on
+    auto-created rows too, with its own save control."""
+    assert "data-created-cefr" in HTML
+    assert "data-ingest-save-levels" in HTML
+    assert "Save starting levels" in HTML

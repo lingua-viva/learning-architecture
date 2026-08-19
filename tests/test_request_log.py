@@ -19,7 +19,7 @@ from src.web import app
 client = TestClient(app)
 
 
-def test_request_event_logged_with_path_template_not_raw_url():
+def test_request_event_logged_with_path_template_not_raw_url(seeded_curriculum):
     client.get("/api/curriculum/unit/g3-unit-1")
     events = read_request_events()
     assert events, "expected at least one logged request event"

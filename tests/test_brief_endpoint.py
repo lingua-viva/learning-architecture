@@ -31,7 +31,7 @@ def _seed(monkeypatch, tmp_path: Path):
     return observed, unobserved
 
 
-def test_brief_returns_today_when_schedule_configured(monkeypatch, tmp_path):
+def test_brief_returns_today_when_schedule_configured(monkeypatch, tmp_path, seeded_curriculum):
     _seed(monkeypatch, tmp_path)
     schedule = {"monday": {"grade": "G3", "unit_id": "g3-unit-1"}}
 

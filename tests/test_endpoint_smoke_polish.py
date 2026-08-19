@@ -6,7 +6,7 @@ from src.web import app
 client = TestClient(app)
 
 
-def test_curriculum_unit_endpoint_smoke():
+def test_curriculum_unit_endpoint_smoke(seeded_curriculum):
     response = client.get("/api/curriculum/unit/g3-unit-1")
 
     assert response.status_code == 200

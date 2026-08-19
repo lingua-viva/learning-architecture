@@ -202,3 +202,32 @@ def test_bridge_populates_student_lens_store_without_duplicate_sync(tmp_path: Pa
 
 def _load_observation_fixture() -> ObservationRecord:
     return ObservationRecord(_load("observation_nora_rossi.json"))
+
+
+def test_ingest_registers_student_on_teacher_roster(tmp_path: Path) -> None:
+    """Prepare-fix P3b: importing a document about a student puts that
+    student on the ingesting teacher's roster, so Prepare's group split
+    sees the class without requiring a first observation."""
+    store = StudentLensStore(db_path=tmp_path / "student_lenses.db")
+    try:
+        extraction = ExtractionRecord(_load("expected_extraction_student_work_nora_rossi.json"))
+        lens.create_from_extraction(
+            extraction,
+            student_id="student-nora-rossi",
+            student_name="Nora Rossi",
+            added_by="teacher:federica",
+            root=tmp_path / "vault",
+            student_store=store,
+        )
+        # A second student exists but was never ingested by this teacher.
+        store.create_lens(student_id="student-other", display_name="Other")
+
+        roster = store.list_lenses_for_teacher("teacher:federica")
+        assert [item["student_id"] for item in roster] == ["student-nora-rossi"]
+        row = store._conn.execute(
+            "SELECT source FROM teacher_roster WHERE teacher_id = ? AND student_id = ?",
+            ("teacher:federica", "student-nora-rossi"),
+        ).fetchone()
+        assert row["source"] == "ingest"
+    finally:
+        store.close()

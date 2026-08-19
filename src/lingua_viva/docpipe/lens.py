@@ -121,6 +121,7 @@ def create_from_extraction(
     record = vault.put_lens(LensRecord(data), root=root)
     if student_store is not None:
         record = _sync_to_student_store(record, student_store, root=root)
+        _register_roster(student_store, added_by, student_id)
     return record
 
 
@@ -182,7 +183,18 @@ def merge_observation(
     record = vault.put_lens(LensRecord(data), root=root)
     if student_store is not None:
         record = _sync_to_student_store(record, student_store, root=root)
+        _register_roster(student_store, added_by, data.get("student_id"))
     return record
+
+
+def _register_roster(student_store: Any, teacher_id: Any, student_id: Any) -> None:
+    """Ingesting a document about a student puts that student on the
+    ingesting teacher's roster (Prepare-fix P3b). Duck-typed: test fakes
+    without add_to_roster are simply skipped."""
+    register = getattr(student_store, "add_to_roster", None)
+    if register is None:
+        return
+    register(str(teacher_id or ""), str(student_id or ""), source="ingest")
 
 
 def sync_to_student_lens_store(

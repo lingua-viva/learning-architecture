@@ -425,6 +425,47 @@ def _docx_text(content: bytes) -> str:
     return text
 
 
+def extract_plain_text(content: bytes, ext: str) -> str:
+    """Extension-driven text extraction for course-library lesson files.
+
+    Same readers as _normalize but keyed on extension alone (course-library
+    files carry no mime record). Lets lesson_materials read pdf/docx/xlsx
+    lesson content that a plain utf-8 read would crash on.
+    """
+    ext = ext.lower()
+    if ext in TEXT_EXTS:
+        raw = content.decode("utf-8", errors="replace")
+    elif ext == ".pdf":
+        raw = _pdf_text(content)
+    elif ext in SPREADSHEET_EXTS:
+        raw = _xlsx_text(content)
+    elif ext in DOCX_EXTS:
+        raw = _docx_text(content)
+    else:
+        raise ValueError(
+            f"unsupported lesson file format: {ext or 'unknown'} — "
+            "supported: markdown, plain text, csv, pdf, xlsx, docx"
+        )
+    return _normalize_text(raw)
+
+
+def parse_lesson_metadata(text: str) -> dict[str, Any]:
+    """Deterministic (no-model) lesson metadata from extracted text.
+
+    Reuses the extraction span machinery so Class/Unit/Task labels parse
+    exactly the way full docpipe extraction parses them. Used by Prepare to
+    auto-fill Grade/Unit/Topic from an uploaded lesson file.
+    """
+    spans = _build_spans(text)
+    students = _detect_students(spans)
+    curriculum = _detect_curriculum(spans)
+    return {
+        "title": _detect_title(spans),
+        "document_type": _detect_document_type(spans, students),
+        "curriculum": curriculum,
+    }
+
+
 # --- Spans -------------------------------------------------------------------
 
 

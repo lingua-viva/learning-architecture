@@ -222,7 +222,7 @@ def test_route_poi_record_invalid_tier_422(client):
     assert response.status_code == 422
 
 
-def test_route_coursework_pack_and_list(client, tmp_path):
+def test_route_coursework_pack_and_list(client, tmp_path, seeded_curriculum):
     response = client.post("/api/artifacts/coursework-pack", json={
         "class_id": "G3", "unit_id": "g3-unit-1", "activities_per_unit": 1,
     })

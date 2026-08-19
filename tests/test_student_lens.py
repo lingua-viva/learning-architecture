@@ -540,3 +540,104 @@ def test_export_lens_view_separates_hr_personal_context(store):
     assert "Sensitive family context" in json.dumps(hr_view)
     assert teacher_view["share_scope"]["raw_observations_included"] is False
     assert hr_view["share_scope"]["personal_context_included"] is True
+
+
+# --- teacher_roster (Prepare-fix P3b) ----------------------------------------
+
+
+def _obs(sid, teacher_id="t1"):
+    return Observation(
+        student_id=sid,
+        teacher_id=teacher_id,
+        template_type="literacy",
+        raw_transcript="Read aloud confidently today.",
+    )
+
+
+def test_first_observation_registers_roster_membership(store):
+    sid = store.create_lens(display_name="Marco", grade_level="G3")
+    store.create_lens(display_name="Other", grade_level="G3")
+    store.append_observation(_obs(sid, teacher_id="teacher-a"))
+
+    roster = store.list_lenses_for_teacher("teacher-a")
+    assert [lens["student_id"] for lens in roster] == [sid]
+
+
+def test_add_to_roster_is_idempotent_and_scopes_roster(store):
+    a = store.create_lens(display_name="A")
+    b = store.create_lens(display_name="B")
+    store.add_to_roster("teacher-a", a, source="ingest")
+    store.add_to_roster("teacher-a", a, source="ingest")
+    store.add_to_roster("teacher-b", b)
+
+    assert [l["student_id"] for l in store.list_lenses_for_teacher("teacher-a")] == [a]
+    assert [l["student_id"] for l in store.list_lenses_for_teacher("teacher-b")] == [b]
+
+
+def test_empty_roster_falls_back_to_all_active_students(store):
+    """A fresh single-teacher install has no roster rows and no observations
+    yet — Prepare must still show the class, not an empty view."""
+    a = store.create_lens(display_name="A")
+    b = store.create_lens(display_name="B")
+
+    ids = {l["student_id"] for l in store.list_lenses_for_teacher("brand-new-teacher")}
+    assert ids == {a, b}
+
+    # But once the teacher has ANY roster signal, scoping applies again.
+    store.add_to_roster("brand-new-teacher", a, source="manual")
+    scoped = [l["student_id"] for l in store.list_lenses_for_teacher("brand-new-teacher")]
+    assert scoped == [a]
+
+
+def test_roster_backfills_from_observation_history(store, tmp_path):
+    """Databases created before teacher_roster existed backfill on open."""
+    sid = store.create_lens(display_name="Legacy", grade_level="G3")
+    store.append_observation(_obs(sid, teacher_id="teacher-legacy"))
+    # Simulate a pre-roster database: drop the table, then reopen.
+    store._conn.execute("DROP TABLE teacher_roster")
+    store._conn.commit()
+    db_path = store.db_path
+
+    reopened = StudentLensStore(db_path=db_path)
+    try:
+        rows = reopened._conn.execute(
+            "SELECT teacher_id, student_id, source FROM teacher_roster"
+        ).fetchall()
+        assert [(r["teacher_id"], r["student_id"], r["source"]) for r in rows] == [
+            ("teacher-legacy", sid, "backfill:observation")
+        ]
+        roster = reopened.list_lenses_for_teacher("teacher-legacy")
+        assert [l["student_id"] for l in roster] == [sid]
+    finally:
+        reopened.close()
+
+
+def test_soft_deleted_student_leaves_roster_views(store):
+    sid = store.create_lens(display_name="Gone")
+    store.append_observation(_obs(sid, teacher_id="teacher-a"))
+    store.delete_lens(sid)
+
+    # Roster row remains, but the lens view excludes deleted students —
+    # and the all-students fallback must not resurrect them either.
+    assert store.list_lenses_for_teacher("teacher-a") == []
+
+
+def test_set_initial_cefr_is_observation_backed(store):
+    """Prepare-fix P3c: the import-time CEFR baseline is written as cefr
+    observations (audited, as_of-reconstructable), never a snapshot PATCH."""
+    from src.education.student_lens import ObservationValidationError
+
+    sid = store.create_lens(display_name="Nora", grade_level="G3")
+    lens = store.set_initial_cefr(sid, "A2", teacher_id="teacher:import")
+
+    assert lens["cefr_snapshot"] == {
+        "reading": "A2", "writing": "A2", "speaking": "A2", "listening": "A2"
+    }
+    history = store.local_observation_rows(sid, "teacher:import")
+    cefr_obs = [o for o in history if o["template_type"] == "cefr"]
+    assert len(cefr_obs) == 4
+    assert all(o["source_type"] == "teacher_note" for o in cefr_obs)
+    assert all(o["teacher_id"] == "teacher:import" for o in cefr_obs)
+
+    with pytest.raises(ObservationValidationError):
+        store.set_initial_cefr(sid, "Z9")

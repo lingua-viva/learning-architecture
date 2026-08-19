@@ -373,9 +373,25 @@ def assign_tier_groups(
     return split.tier_groups, split.roster_names
 
 
-def _tier_prompt(tier: str, lesson: LessonInput, student_count: int) -> str:
+def _tier_prompt(
+    tier: str,
+    lesson: LessonInput,
+    student_count: int,
+    source_excerpt: str | None = None,
+) -> str:
     profile = TIER_PROFILES[tier]
     cefr_for_tier = _cefr_shift(lesson.cefr_target, profile["cefr_shift"])
+    source_section = ""
+    if source_excerpt:
+        # The whole point of selecting a coursework file: the worksheet must
+        # adapt THIS content, not invent a fresh activity from the topic name.
+        source_section = (
+            "\nBase the worksheet on this lesson content — adapt its "
+            "vocabulary, examples, and activity, do not invent a new topic:\n"
+            "--- LESSON CONTENT START ---\n"
+            f"{source_excerpt}\n"
+            "--- LESSON CONTENT END ---\n"
+        )
     return (
         f"Create a {tier}-tier worksheet for this lesson:\n"
         f"- Subject: {lesson.subject}\n"
@@ -384,6 +400,7 @@ def _tier_prompt(tier: str, lesson: LessonInput, student_count: int) -> str:
         f"- Duration: {lesson.duration_minutes} minutes\n"
         f"- Scaffolding level: {profile['scaffolding_description']}\n"
         f"- Students at this tier: {student_count}\n"
+        f"{source_section}"
         "\n"
         "Output exactly this format and nothing else:\n"
         "TITLE: (a short, student-friendly title)\n"
@@ -486,13 +503,34 @@ def _check_roster_names(material: TierMaterial, roster_names: list[str]) -> None
             raise ValueError("student_name_in_generated_content")
 
 
+_SOURCE_EXCERPT_CHARS = 1500
+
+
+def _source_excerpt(source_text: str | None) -> str | None:
+    """Bound the lesson-content excerpt so three parallel tier calls still
+    fit a small local model's 60s budget (same C8 constraint as the <120-word
+    output cap)."""
+    if not source_text:
+        return None
+    text = str(source_text).strip()
+    if not text:
+        return None
+    if len(text) <= _SOURCE_EXCERPT_CHARS:
+        return text
+    cut = text[:_SOURCE_EXCERPT_CHARS]
+    if " " in cut:
+        cut = cut.rsplit(None, 1)[0]
+    return cut + " …"
+
+
 async def _generate_tier_material(
     engine,
     tier: str,
     lesson: LessonInput,
     student_ids: list[str],
+    source_excerpt: str | None = None,
 ) -> TierMaterial:
-    prompt = _tier_prompt(tier, lesson, len(student_ids))
+    prompt = _tier_prompt(tier, lesson, len(student_ids), source_excerpt)
     # max_tokens matches the slimmed prompt's <120-word ask: 400 tokens is
     # generous headroom for the four sections while capping the generation
     # time that made qwen2.5:3b blow the 60s budget (C8 root cause).
@@ -726,6 +764,105 @@ def pull_local_folder(folder_path: str, grade: str, subject: str) -> dict:
     }
 
 
+def _import_lesson_bytes(
+    name: str,
+    body: bytes,
+    local_id: str,
+    grade: str,
+    subject: str,
+) -> dict:
+    """Shared single-file import core: copy into the library dir, update the
+    manifest (same shape pull_local_folder/pull_course_library write), and
+    return the manifest entry. Unchanged content (same id + sha256) is a
+    no-op re-import."""
+    suffix = Path(name).suffix.lower()
+    if suffix not in _LOCAL_IMPORT_EXTENSIONS:
+        raise ValueError(
+            f"unsupported lesson file type: {suffix or 'unknown'} — "
+            f"supported: {', '.join(sorted(_LOCAL_IMPORT_EXTENSIONS))}"
+        )
+    target_dir = _library_dir(grade, subject)
+    target_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = _library_manifest_path(grade, subject)
+    manifest = _read_json(manifest_path, {"files": {}})
+    files_by_id = manifest.get("files") if isinstance(manifest.get("files"), dict) else {}
+
+    now = _now_z()
+    digest = hashlib.sha256(body).hexdigest()
+    existing = files_by_id.get(local_id) if isinstance(files_by_id, dict) else None
+    existing_path = Path(str((existing or {}).get("local_path") or ""))
+    if (
+        isinstance(existing, dict)
+        and existing_path.exists()
+        and existing.get("sha256") == digest
+    ):
+        return {
+            "grade": grade,
+            "subject": subject,
+            "library_dir": str(target_dir),
+            "manifest_path": str(manifest_path),
+            "entry": {**existing, "status": "unchanged"},
+        }
+
+    dest = target_dir / _safe_library_filename(name)
+    dest.write_bytes(body)
+    try:
+        os.chmod(dest, 0o600)
+    except OSError:
+        pass
+    entry = CourseLibraryEntry(
+        drive_id=local_id,
+        name=name,
+        local_path=str(dest),
+        sha256=digest,
+        pulled_at=now,
+        status="pulled",
+    )
+    files_by_id[local_id] = asdict(entry)
+    merged = {
+        "version": 1,
+        "grade": grade,
+        "subject": subject,
+        "updated_at": now,
+        "files": files_by_id,
+    }
+    if manifest.get("source_folder"):
+        merged["source_folder"] = manifest["source_folder"]
+    _atomic_write_json(manifest_path, merged)
+    return {
+        "grade": grade,
+        "subject": subject,
+        "library_dir": str(target_dir),
+        "manifest_path": str(manifest_path),
+        "entry": asdict(entry),
+    }
+
+
+def pull_local_file(file_path: str, grade: str, subject: str) -> dict:
+    """Import ONE local lesson file into the course library (Browse button).
+
+    Same downstream effect as pull_local_folder for a single file."""
+    source = Path(file_path).expanduser().resolve()
+    if not source.is_file():
+        raise ValueError(f"Not a file or does not exist: {source}")
+    # Same path-keyed id as pull_local_folder so re-importing the same file
+    # (via Browse or via its parent folder) dedupes to one manifest entry.
+    local_id = f"local:{hashlib.sha256(str(source).encode()).hexdigest()[:16]}"
+    return _import_lesson_bytes(source.name, source.read_bytes(), local_id, grade, subject)
+
+
+def import_lesson_file_bytes(name: str, body: bytes, grade: str, subject: str) -> dict:
+    """Import uploaded lesson file content (drag-and-drop / file picker in the
+    browser, where no filesystem path exists). Content-keyed id: dropping the
+    same bytes twice dedupes."""
+    if not str(name or "").strip():
+        raise ValueError("file name is required")
+    if not body:
+        raise ValueError("uploaded file is empty")
+    local_id = f"upload:{hashlib.sha256(body).hexdigest()[:16]}"
+    return _import_lesson_bytes(str(name).strip(), body, local_id, grade, subject)
+
+
 def list_course_library(grade: str, subject: str) -> dict:
     manifest_path = _library_manifest_path(grade, subject)
     manifest = _read_json(manifest_path, {"files": {}})
@@ -776,11 +913,38 @@ def select_todays_lesson(
 
 
 def read_todays_lesson_text(local_path: str) -> str:
+    """Read lesson content from a course-library file for display AND for
+    generation. Extension-aware: pdf/docx/xlsx go through the docpipe
+    extractors (a plain utf-8 read crashes on binaries)."""
     path = Path(local_path).expanduser().resolve()
     library_root = course_library_root().resolve()
     if library_root not in path.parents:
         raise ValueError("lesson_file_outside_course_library")
-    return path.read_text(encoding="utf-8")
+    if not path.is_file():
+        raise ValueError("lesson_file_missing")
+    from src.lingua_viva.docpipe.extract import extract_plain_text
+
+    return extract_plain_text(path.read_bytes(), path.suffix)
+
+
+def parse_lesson_file_metadata(local_path: str, *, text: str | None = None) -> dict:
+    """Deterministic metadata auto-detect for a course-library lesson file —
+    what Prepare uses to pre-fill Grade/Unit/Topic from the selected file."""
+    if text is None:
+        text = read_todays_lesson_text(local_path)
+    from src.lingua_viva.docpipe.extract import parse_lesson_metadata
+
+    meta = parse_lesson_metadata(text)
+    curriculum = meta.get("curriculum") if isinstance(meta.get("curriculum"), dict) else {}
+    return {
+        "title": meta.get("title"),
+        "document_type": meta.get("document_type"),
+        "grade": curriculum.get("grade"),
+        "subject": curriculum.get("subject"),
+        "unit": curriculum.get("unit"),
+        "topic": curriculum.get("task") or meta.get("title"),
+        "excerpt": text[:1000],
+    }
 
 
 def render_printable_packet_markdown(
@@ -880,10 +1044,17 @@ def render_printable_packet_markdown(
 
 def _validate_printable_packet(markdown: str) -> None:
     lowered = markdown.lower()
-    forbidden = (" rti ", "diagnostic", "generated by ai", "[", "]", "student_ids")
+    # "[" / "]" used to be banned outright here, which failed EVERY packet
+    # containing ordinary teaching brackets ("[word bank]", "[your answer]")
+    # — FIX_PREPARE_CLASS_MATERIALS 2026-08-18 Issue 7. Placeholder-shaped
+    # bracket content ("[no model available]", "[Local reasoning stub]") is
+    # still rejected by the targeted regex below.
+    forbidden = (" rti ", "diagnostic", "generated by ai", "student_ids")
     for token in forbidden:
         if token in lowered:
             raise ValueError("unsafe_or_placeholder_printable_packet")
+    if PLACEHOLDER_OUTPUT_RE.search(markdown):
+        raise ValueError("unsafe_or_placeholder_printable_packet")
     if markdown.count("# Student Handout -") != len(TIERS):
         raise ValueError("printable_packet_missing_tier_handout")
     if "### Activity" not in markdown or "### Exit Ticket" not in markdown:
@@ -1208,6 +1379,7 @@ async def generate_lesson_materials(
     tier_groups: dict[str, list[str]] | None = None,
     roster_names: list[str] | None = None,
     individual_support: list[IndividualSupportStudent] | None = None,
+    source_text: str | None = None,
 ) -> LessonMaterialsResult:
     """Generate tier-differentiated student-facing materials for a lesson.
 
@@ -1250,10 +1422,17 @@ async def generate_lesson_materials(
 
     # All three tiers always generate (even with no students assigned) so a
     # teacher planning ahead still gets the full set — matches the spec's
-    # example output. The three LLM calls run in parallel.
+    # example output. The three LLM calls run in parallel. When a coursework
+    # file is selected, a bounded excerpt of ITS content grounds every tier
+    # (teacher's own lesson material — no student data, per the privacy
+    # contract above).
+    excerpt = _source_excerpt(source_text)
     materials = list(
         await asyncio.gather(
-            *(_generate_tier_material(engine, tier, lesson, groups[tier]) for tier in TIERS)
+            *(
+                _generate_tier_material(engine, tier, lesson, groups[tier], excerpt)
+                for tier in TIERS
+            )
         )
     )
     for material in materials:

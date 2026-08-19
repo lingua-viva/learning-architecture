@@ -16,6 +16,21 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v157 (2026-08-18): Prepare/class-materials fix build (FIX_PREPARE_CLASS_
+#     MATERIALS, all 10 issues + Claudia-lens audit pass). src/web.py: POST
+#     /api/lesson-materials/library/import-file (base64 drop-zone upload);
+#     curriculum unit CRUD (POST/PUT/DELETE /api/curriculum/unit) — fabricated
+#     starter themes REMOVED, fresh installs start empty; prepare_activity
+#     degrades honestly with no unit (topic-only generation, labelled
+#     provenance); teacher_roster table + all-students fallback; ingest
+#     confirm accepts starting CEFR levels as audited observations (also for
+#     auto-created roster imports); library/pull parses pasted Drive folder
+#     links. static/index.html: Prepare restructured into 3 steps with drop
+#     zone + metadata auto-fill; unit editor; Generate blocked when there is
+#     nothing to work from; starting-level dropdowns on created + pending
+#     ingest rows ("Save starting levels"); Browse… for local folder on
+#     desktop; teacher-copy pass (confidence numbers dropped, Drive link not
+#     ID); Curriculum empty state → "Add your first unit".
 #   v156 (2026-08-18): Bulk lens updates + inline entry (operator requests).
 #     src/web.py: /api/students/ingest drive_ref accepts Drive FOLDER links —
 #     routes to class-folder ingest (match-by-name across every document,
@@ -676,7 +691,7 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 156
+version: 157
 # v122 (2026-08-06): Failure-mode hardening. src/web.py: voice-act observation
 #   dedup guard (same 60s window as observe/capture, prevents network-retry
 #   duplicates). src/education/parent_report.py: personal_context evidence

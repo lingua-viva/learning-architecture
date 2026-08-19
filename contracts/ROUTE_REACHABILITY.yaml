@@ -490,6 +490,26 @@ reachable_from_ui:
     call_site: 'api("/api/lesson-materials/library/pull-local"'
     note: "Prepare Course Library panel: import lesson files from a local folder into the library."
 
+  - route: "POST /api/lesson-materials/library/import-file"
+    call_site: 'api("/api/lesson-materials/library/import-file"'
+    note: "Prepare Step 1 drop zone: a dropped/picked lesson file is uploaded (base64) into the library and auto-selected for today."
+
+  - route: "POST /api/curriculum/unit"
+    call_site: 'api("/api/curriculum/unit"'
+    note: "Prepare Step 2 unit editor: teacher creates a curriculum unit (fresh installs start with none)."
+
+  - route: "PUT /api/curriculum/unit/{unit_id}"
+    call_site: '{ method: "PUT", body: JSON.stringify(body) }'
+    note: "Prepare Step 2 unit editor: save edits to an existing teacher-created unit."
+
+  - route: "DELETE /api/curriculum/unit/{unit_id}"
+    call_site: 'api(`/api/curriculum/unit/${encodeURIComponent(select.value)}`, { method: "DELETE" })'
+    note: "Prepare Step 2 unit editor: delete the selected unit after confirmation."
+
+  - route: "GET /api/curriculum/unit/{unit_id}"
+    call_site: 'api(`/api/curriculum/unit/${encodeURIComponent(select.value)}`);'
+    note: "Prepare Step 2 unit editor: load the selected unit's fields before editing (was backend-only until the 2026-08-18 unit CRUD build)."
+
   - route: "GET /api/lesson-materials/library"
     call_site: 'api(`/api/lesson-materials/library?'
     note: "Prepare Course Library panel: refresh local grade/subject files."
@@ -756,14 +776,6 @@ intentionally_backend_only:
       the student lens panel already shows current state, and historical
       comparisons are a programmatic/testing concern.
 
-  - route: "GET /api/curriculum/unit/{unit_id}"
-    status: permanent
-    reason: >-
-      Thin GET wrapper around CurriculumService.get_unit() — consumed by the
-      extraction pipeline (filemap assigns curriculum_unit_source targets),
-      tests, and any future per-unit deep link. The grade-level list view
-      already surfaces unit titles in schedule setup; a standalone detail page
-      adds no teacher value today.
 
   - route: "GET /api/session"
     status: permanent
