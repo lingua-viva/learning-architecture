@@ -430,6 +430,7 @@ def _xlsx_support_extract(
                     "student_id": student_id,
                     "display_name": display_name,
                     "confidence": VERBATIM_STUDENT_CONFIDENCE,
+                    "evidence": "student_column",
                     "span_ids": [],
                 }
                 students_order.append(student_id)
@@ -576,7 +577,14 @@ def _build_spans(text: str) -> list[dict[str, Any]]:
 
 def _build_structure(text: str, spans: list[dict[str, Any]]) -> dict[str, Any]:
     title = _detect_title(spans)
-    students = _detect_students(spans)
+    # STEP 2: structured documents (row spans with column identity) use
+    # positional evidence ONLY. The bigram regex survives strictly as a
+    # fallback for unstructured documents (its output is a lower-confidence
+    # evidence class, "bigram_fallback").
+    if any("cells" in span for span in spans):
+        students = _detect_students_structural(spans)
+    else:
+        students = _detect_students(spans)
     document_type = _detect_document_type(spans, students)
     sections = _build_sections(spans, document_type, title)
     structure: dict[str, Any] = {
@@ -718,6 +726,121 @@ def _slug(name: str) -> str:
 
 _NAME_BIGRAM = re.compile(r"\b([A-ZÀ-Þ][a-zà-ÿ]+)\s+([A-ZÀ-Þ][a-zà-ÿ]+)\b")
 
+# STEP 2 (SPEC_LV_UNIFIED_REAL_DATA_FIX_2026-08-19): detect from structure.
+# A student is a value in a column whose header IS a student-name label —
+# exact label match, never substring: prose that merely mentions students
+# ("Gli studenti sono...", "Student Support Plan") is not a name column.
+# "Say where to go, not where not to go."
+_FULL_NAME_LABELS = {
+    "student", "students", "student name", "students name", "student names",
+    "name", "full name", "nome e cognome", "cognome e nome",
+    "alunno", "alunna", "alunni", "alunne",
+    "studente", "studenti", "studentessa", "studentesse",
+}
+_LAST_NAME_LABELS = {"last", "last name", "surname", "family name", "cognome"}
+_FIRST_NAME_LABELS = {"first", "first name", "given name"}
+# "nome" is Italian for both "name" and "first name": it is a first-name
+# column when a cognome column shares the header row, otherwise full-name
+# (resolved in _sheet_student_columns).
+
+
+def _column_role(label: str) -> Optional[str]:
+    """Classify a header cell: "full" | "first" | "last" | "nome", or None."""
+    label = re.sub(r"\s+", " ", str(label or "").strip().lower()).rstrip(":").strip()
+    if not label:
+        return None
+    if label == "nome":
+        return "nome"
+    if label in _FULL_NAME_LABELS:
+        return "full"
+    if label in _LAST_NAME_LABELS:
+        return "last"
+    if label in _FIRST_NAME_LABELS:
+        return "first"
+    return None
+
+
+def _sheet_student_columns(
+    spans: list[dict[str, Any]],
+) -> dict[str, tuple[int, dict[str, str]]]:
+    """Per sheet: (header_row_index, {column_letter: role}) from the first
+    row whose cells carry a student-name concept."""
+    columns: dict[str, tuple[int, dict[str, str]]] = {}
+    for span in spans:
+        sheet = span.get("sheet")
+        if sheet is None or sheet in columns or "cells" not in span:
+            continue
+        roles = {}
+        for cell in span["cells"]:
+            role = _column_role(cell["text"])
+            if role:
+                roles[cell["column"]] = role
+        if roles:
+            # "Nome" is a first name only when paired with a Cognome column
+            has_last = any(role == "last" for role in roles.values())
+            roles = {
+                column: ("first" if has_last else "full") if role == "nome" else role
+                for column, role in roles.items()
+            }
+            columns[sheet] = (int(span["row_index"]), roles)
+    return columns
+
+
+def _detect_students_structural(spans: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Positional student detection for structured (row-span) documents.
+
+    No bigram requirement — abbreviated names ("Marco B-R") are students
+    because they sit in the Student column. A structured document with no
+    student-name column yields ZERO students: story titles and calendar
+    labels stop being students because they are not in a Student column,
+    not because of blocklist entries. Unstructured documents fall back to
+    _detect_students (the bigram path) in _build_structure.
+    """
+    header_by_sheet = _sheet_student_columns(spans)
+    found: dict[str, dict[str, Any]] = {}
+    order: list[str] = []
+
+    def _add(display_name: str, span_id: str) -> None:
+        display_name = re.sub(r"\s+", " ", display_name).strip()
+        if not display_name:
+            return
+        # a repeated header row is structure, not a student
+        if _column_role(display_name):
+            return
+        student_id = f"student-{_slug(display_name)}"
+        if student_id not in found:
+            found[student_id] = {
+                "student_id": student_id,
+                "display_name": display_name,
+                "confidence": VERBATIM_STUDENT_CONFIDENCE,
+                "evidence": "student_column",
+                "span_ids": [],
+            }
+            order.append(student_id)
+        if span_id not in found[student_id]["span_ids"]:
+            found[student_id]["span_ids"].append(span_id)
+
+    for span in spans:
+        sheet = span.get("sheet")
+        if sheet not in header_by_sheet or "cells" not in span:
+            continue
+        header_row, roles = header_by_sheet[sheet]
+        if int(span["row_index"]) <= header_row:
+            continue
+        first_part = ""
+        last_part = ""
+        for cell in span["cells"]:
+            role = roles.get(cell["column"])
+            if role == "full":
+                _add(cell["text"], span["span_id"])
+            elif role == "first":
+                first_part = cell["text"]
+            elif role == "last":
+                last_part = cell["text"]
+        if first_part or last_part:
+            _add(f"{first_part} {last_part}".strip(), span["span_id"])
+    return [found[student_id] for student_id in order]
+
 
 def _detect_students(spans: list[dict[str, Any]]) -> list[dict[str, Any]]:
     found: dict[str, dict[str, Any]] = {}
@@ -735,6 +858,7 @@ def _detect_students(spans: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     "student_id": student_id,
                     "display_name": display_name,
                     "confidence": VERBATIM_STUDENT_CONFIDENCE,
+                    "evidence": "bigram_fallback",
                     "span_ids": [],
                 }
                 order.append(student_id)
@@ -836,6 +960,7 @@ async def _model_enrich_students(
             "student_id": student_id,
             "display_name": display_name,
             "confidence": MODEL_STUDENT_CONFIDENCE,
+            "evidence": "model",
             "span_ids": span_ids or [span_id],
         })
     return model_used, warnings

@@ -44,17 +44,23 @@
       {
         "section_id": "task",
         "heading": "Task",
-        "span_ids": ["SPN-0002"]
+        "span_ids": [
+          "SPN-0002"
+        ]
       },
       {
         "section_id": "student-response",
         "heading": "Student response",
-        "span_ids": ["SPN-0003"]
+        "span_ids": [
+          "SPN-0003"
+        ]
       },
       {
         "section_id": "teacher-note",
         "heading": "Teacher note",
-        "span_ids": ["SPN-0004"]
+        "span_ids": [
+          "SPN-0004"
+        ]
       }
     ],
     "students_detected": [
@@ -62,7 +68,11 @@
         "student_id": "student-nora-rossi",
         "display_name": "Nora Rossi",
         "confidence": 0.99,
-        "span_ids": ["SPN-0001", "SPN-0003"]
+        "evidence": "bigram_fallback",
+        "span_ids": [
+          "SPN-0001",
+          "SPN-0003"
+        ]
       }
     ],
     "curriculum": {
@@ -71,4 +81,3 @@
   },
   "warnings": []
 }
-

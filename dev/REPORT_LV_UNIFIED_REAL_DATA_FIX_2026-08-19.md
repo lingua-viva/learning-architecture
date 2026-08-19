@@ -119,7 +119,40 @@ Synthetic mirror: K-5 file went 0.17/0.29 → **1.00/1.00** (per-row spans
 kill the cross-row false bigrams that glued staff names together); class
 list/3V/zero-student files move to STEP 2's account.
 
-_(pending — STEPs 2–8, 10, 11; STEP 9 gated on ruling §8-2; STEP 12 only if
+### STEP 2 — Detect from structure, not text shape (L1, L3) — DONE
+
+Structured documents (row spans with column identity) now use POSITIONAL
+evidence only: a student is a value in a column whose header IS a
+student-name label (exact label match — EN + IT: Student/Name/First/Last/
+Nome/Cognome/Alunno/Studente...; "nome" resolves to first-name when paired
+with a cognome column). A structured document with no student-name column
+yields ZERO students. The bigram regex survives ONLY for unstructured
+documents. Every detection now carries an `evidence` class
+(`student_column` | `bigram_fallback` | `model`) — schema extended.
+
+- First cut used SUBSTRING concept matching and failed on the real corpus:
+  prose mentioning students ("...per studenti...", "Gli studenti sono...")
+  and label-like non-name columns ("Student Support Plan") became name
+  columns (curriculum 35 FP, 3V +5 FP). Fixed with the exact-label rule —
+  a header is a label EQUAL to the concept, never prose containing it.
+  Locked by `test_prose_mentioning_students_is_not_a_name_column`.
+- No blocklist additions (§5 honored); the old blocklist now only serves
+  the unstructured fallback. No new hardcoded confidence — the evidence
+  class is the discrimination axis (STEP 3 settles the numbers).
+
+**Gate results (real corpus):**
+
+| real corpus | baseline | after STEP 2 | spec gate |
+|---|---|---|---|
+| curriculum FP | 144 | **0** | 0 ✓ |
+| calendar FP | 86 | **0** | 0 ✓ |
+| 3V recall / FP | 0.00 / 0 | **1.00 (6/6) / 0** | 6 ✓ |
+| class list | 0.14/0.22 | 0 detections | (intermediate — STEP 4 reads the class-pair structure) |
+
+Synthetic mirror: identical picture (3V 1.00/1.00, K-5 1.00/1.00,
+curriculum+calendar 0 det, class list 0 pending STEP 4).
+
+_(pending — STEPs 3–8, 10, 11; STEP 9 gated on ruling §8-2; STEP 12 only if
 time. Each entry: scorer before/after, per-STEP gate result, commits.)_
 
 ## Holdout opening (§6) — NOT YET OPENED

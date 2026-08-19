@@ -62,17 +62,26 @@
       {
         "section_id": "lesson-meta",
         "heading": "Class, date, unit",
-        "span_ids": ["SPN-0002"]
+        "span_ids": [
+          "SPN-0002"
+        ]
       },
       {
         "section_id": "lesson-flow",
         "heading": "Lesson flow",
-        "span_ids": ["SPN-0003", "SPN-0004", "SPN-0005", "SPN-0007"]
+        "span_ids": [
+          "SPN-0003",
+          "SPN-0004",
+          "SPN-0005",
+          "SPN-0007"
+        ]
       },
       {
         "section_id": "differentiation",
         "heading": "Differentiation notes",
-        "span_ids": ["SPN-0006"]
+        "span_ids": [
+          "SPN-0006"
+        ]
       }
     ],
     "students_detected": [
@@ -80,13 +89,19 @@
         "student_id": "student-marco-bianchi",
         "display_name": "Marco Bianchi",
         "confidence": 0.99,
-        "span_ids": ["SPN-0006"]
+        "evidence": "bigram_fallback",
+        "span_ids": [
+          "SPN-0006"
+        ]
       },
       {
         "student_id": "student-nora-rossi",
         "display_name": "Nora Rossi",
         "confidence": 0.99,
-        "span_ids": ["SPN-0006"]
+        "evidence": "bigram_fallback",
+        "span_ids": [
+          "SPN-0006"
+        ]
       }
     ],
     "curriculum": {
@@ -97,4 +112,3 @@
   },
   "warnings": []
 }
-

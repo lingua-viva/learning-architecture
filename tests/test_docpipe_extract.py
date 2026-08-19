@@ -492,3 +492,148 @@ def test_xlsx_extractions_survive_the_vault_schema_gate(tmp_path):
     record = _run(extract_document(_support_source(), _support_workbook_bytes()))
     assert any(s.get("field_hint") for s in record.data["spans"])
     vault.put_extraction(record, root=tmp_path)
+
+
+# --- STEP 2: detect from structure, not text shape (SPEC §STEP 2) --------------
+
+
+def test_structured_zero_student_files_yield_zero_detections():
+    """Gate: curriculum + calendar fixtures → 0 detections. Story titles and
+    calendar labels stop being students because they are not in a Student
+    column — positional evidence, not blocklist additions."""
+    for filename in ("synthetic_curriculum.xlsx", "synthetic_calendar.xlsx"):
+        content = (SYNTHETIC_CORPUS / filename).read_bytes()
+        record = _run(extract_document(_xlsx_source(filename), content))
+        assert record.data["structure"]["students_detected"] == [], filename
+
+
+def test_student_column_detects_abbreviated_names():
+    """Gate: 3V fixture → 6. Abbreviated names ('Marco B-R') are students
+    because they sit in the Student column — no full-bigram requirement."""
+    content = (SYNTHETIC_CORPUS / "synthetic_support_3v.xlsx").read_bytes()
+    record = _run(extract_document(_xlsx_source("synthetic_support_3v.xlsx"), content))
+
+    students = record.data["structure"]["students_detected"]
+    assert len(students) == 6, [s["display_name"] for s in students]
+    assert all(s["evidence"] == "student_column" for s in students)
+    names = {s["display_name"] for s in students}
+    assert "Marco B-R" in names
+    # every detection cites its own row span
+    for student in students:
+        assert student["span_ids"], student["display_name"]
+
+
+def test_staff_block_above_header_is_not_students():
+    """K-5 shape: staff first names sit ABOVE the Student/Accommodations
+    header row — position says they are not students."""
+    content = (SYNTHETIC_CORPUS / "synthetic_support_k5.xlsx").read_bytes()
+    record = _run(extract_document(_xlsx_source("synthetic_support_k5.xlsx"), content))
+
+    names = {s["display_name"] for s in record.data["structure"]["students_detected"]}
+    assert names == {
+        "Marco Bianchi", "Nora Rossi", "Sara Conti",
+        "Giulia Riva", "Pietro Serra", "Leo Fontana", "Camilla Gatti",
+    }
+
+
+def test_first_last_column_pair_joins_names():
+    from io import BytesIO
+
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["First", "Last", "Notes"])
+    ws.append(["Marco", "Bianchi", "reading"])
+    ws.append(["Nora", "Rossi", ""])
+    buf = BytesIO()
+    wb.save(buf)
+    record = _run(extract_document(_xlsx_source("pair.xlsx"), buf.getvalue()))
+    names = [s["display_name"] for s in record.data["structure"]["students_detected"]]
+    assert names == ["Marco Bianchi", "Nora Rossi"]
+
+
+def test_adult_name_columns_are_never_student_columns():
+    from io import BytesIO
+
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["Teacher Name", "Room"])
+    ws.append(["Ilaria Moretti", "12"])
+    buf = BytesIO()
+    wb.save(buf)
+    record = _run(extract_document(_xlsx_source("teachers.xlsx"), buf.getvalue()))
+    assert record.data["structure"]["students_detected"] == []
+
+
+def test_unstructured_documents_keep_the_bigram_fallback():
+    """Markdown lesson plans have no columns — the bigram path survives as
+    the fallback, tagged as its own (lower-confidence) evidence class."""
+    source, content = _source("source_lesson_plan_marco_nora.json", "lesson_plan_marco_nora.md")
+    record = _run(extract_document(source, content))
+    students = record.data["structure"]["students_detected"]
+    assert students, "bigram fallback must still detect in unstructured docs"
+    assert all(s["evidence"] == "bigram_fallback" for s in students)
+
+
+def test_repeated_header_rows_are_structure_not_students():
+    from io import BytesIO
+
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["Student", "class"])
+    ws.append(["Marco B-R", "V"])
+    ws.append(["Student", "class"])  # page-break header repeat
+    ws.append(["Nora R-S", "A"])
+    buf = BytesIO()
+    wb.save(buf)
+    record = _run(extract_document(_xlsx_source("repeat.xlsx"), buf.getvalue()))
+    names = [s["display_name"] for s in record.data["structure"]["students_detected"]]
+    assert names == ["Marco B-R", "Nora R-S"]
+
+
+def test_prose_mentioning_students_is_not_a_name_column():
+    """Exact-label rule: a header IS a student-name label, never prose that
+    contains one — mottos ('...per studenti...'), plan columns ('Student
+    Support Plan'), and descriptions ('Gli studenti sono...') are not name
+    columns. This is what produced the curriculum/3V false positives."""
+    from io import BytesIO
+
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["Niente senza gioia · per studenti curiosi", "Unità"])
+    ws.append(["Le Stagioni", "Uno"])
+    ws2 = wb.create_sheet("Plan")
+    ws2.append(["Student", "Student Support Plan", "Gli studenti sono qui descritti"])
+    ws2.append(["Marco B-R", "Piano Alfa", "Nota Lunga"])
+    buf = BytesIO()
+    wb.save(buf)
+    record = _run(extract_document(_xlsx_source("prose.xlsx"), buf.getvalue()))
+    names = [s["display_name"] for s in record.data["structure"]["students_detected"]]
+    # only the exact "Student" column detects; plan/prose columns never do
+    assert names == ["Marco B-R"]
+
+
+def test_nome_cognome_pair_and_lone_nome_column():
+    from io import BytesIO
+
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["Nome", "Cognome"])
+    ws.append(["Marco", "Bianchi"])
+    ws2 = wb.create_sheet("Lone")
+    ws2.append(["Nome", "Classe"])
+    ws2.append(["Nora Rossi", "3V"])
+    buf = BytesIO()
+    wb.save(buf)
+    record = _run(extract_document(_xlsx_source("nome.xlsx"), buf.getvalue()))
+    names = {s["display_name"] for s in record.data["structure"]["students_detected"]}
+    assert names == {"Marco Bianchi", "Nora Rossi"}
