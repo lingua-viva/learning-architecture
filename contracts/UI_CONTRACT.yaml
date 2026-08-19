@@ -16,6 +16,14 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v160 (2026-08-19): STEP 3 of SPEC_LV_UNIFIED_REAL_DATA_FIX — the dead
+#     numeric confidence gate is deleted (INGEST_CONFIDENCE_THRESHOLD could
+#     never fire: confidence is a flat 0.99 constant). src/web.py: trust now
+#     rides on the corpus-measured evidence class (_trusted_detection —
+#     student_column precision 1.00 vs bigram fallback 0.14 on the real
+#     corpus): preview low_confidence badge, small-import needs_confirmation,
+#     and roster warning flags all derive from evidence, not a number. No UI
+#     file changed — the boolean badge contract (v157) is unchanged.
 #   v159 (2026-08-19): Phase 0A always-preview ingest (SPEC_LV_UNIFIED_REAL_
 #     DATA_FIX §2A). src/web.py: /api/students/ingest stops at status
 #     "preview" (creates NOTHING, syncs NOTHING); creation moved to
@@ -708,7 +716,7 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 159
+version: 160
 # v122 (2026-08-06): Failure-mode hardening. src/web.py: voice-act observation
 #   dedup guard (same 60s window as observe/capture, prevents network-retry
 #   duplicates). src/education/parent_report.py: personal_context evidence

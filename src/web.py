@@ -2374,7 +2374,6 @@ async def ask_endpoint(payload: dict):
 # ---------------------------------------------------------------------------
 
 INGEST_MAX_BYTES = 15 * 1024 * 1024
-INGEST_CONFIDENCE_THRESHOLD = 0.7
 BULK_IMPORT_CONFIRMATION_THRESHOLD = 2
 _INGEST_JOBS: dict[str, dict] = {}
 
@@ -2506,6 +2505,19 @@ def _safe_confidence(student: dict) -> float:
         return 0.0
 
 
+def _trusted_detection(student: dict) -> bool:
+    """STEP 3 (SPEC_LV_UNIFIED_REAL_DATA_FIX_2026-08-19): trust rides on HOW
+    the name was found, not on a number. The numeric confidence is a flat
+    constant (VERBATIM_STUDENT_CONFIDENCE = 0.99), so the old
+    INGEST_CONFIDENCE_THRESHOLD = 0.7 gate could never fire — a check that
+    reported as working but did not happen. The corpus proved the evidence
+    CLASS discriminates instead: student_column detections scored precision
+    1.00 on every real file, while the bigram fallback scored 0.14/0.00/0.00
+    on the same files. Detections without an evidence class (older
+    extractions) are untrusted."""
+    return student.get("evidence") == "student_column"
+
+
 def _detected_students(extraction) -> list[dict]:
     return [
         student
@@ -2523,23 +2535,23 @@ async def _create_from_preview(job: dict, extraction) -> None:
         # SPEC_LV_DRIVE_OOTB 2026-08-18 (G3): roster-style imports (more than
         # BULK_IMPORT_CONFIRMATION_THRESHOLD students) auto-create EVERY
         # detected student — the teacher contract allows no per-name confirm
-        # clicks. Low-confidence names are still created but flagged in
-        # warnings; "Undo this import" (one click, archives all) is the
-        # review mechanism. Small imports keep the confidence gate: a single
-        # low-confidence guess in one student's document must not silently
-        # become a roster entry.
+        # clicks. Untrusted names are still created but flagged in warnings;
+        # "Undo this import" (one click, archives all) is the review
+        # mechanism. Small imports keep the gate: a single pattern-matched
+        # guess in one student's document must not silently become a roster
+        # entry. STEP 3: the gate is the corpus-measured evidence class
+        # (_trusted_detection), not a numeric threshold that never fired.
         roster_import = len(detected) > BULK_IMPORT_CONFIRMATION_THRESHOLD
         low_confidence_names: list[str] = []
         for student in detected:
-            confidence = _safe_confidence(student)
             if roster_import:
                 created = await asyncio.to_thread(
                     _create_lens_for_detected, extraction, student, job.get("teacher_id") or "teacher:ingest"
                 )
                 job["students_created"].append(created)
-                if confidence < INGEST_CONFIDENCE_THRESHOLD:
+                if not _trusted_detection(student):
                     low_confidence_names.append(str(student.get("display_name")))
-            elif confidence >= INGEST_CONFIDENCE_THRESHOLD:
+            elif _trusted_detection(student):
                 created = await asyncio.to_thread(
                     _create_lens_for_detected, extraction, student, job.get("teacher_id") or "teacher:ingest"
                 )
@@ -2548,8 +2560,8 @@ async def _create_from_preview(job: dict, extraction) -> None:
                 # Never auto-create on a guess — surface for the teacher.
                 job["needs_confirmation"].append({
                     "display_name": str(student.get("display_name")),
-                    "confidence": confidence,
-                    "reason": "Low-confidence match in the document.",
+                    "confidence": _safe_confidence(student),
+                    "reason": "Found by pattern-matching the text, not in a student-name column.",
                 })
         if low_confidence_names:
             job["warnings"].append(
@@ -2620,7 +2632,7 @@ async def _run_ingest_job(job: dict, source, content: bytes) -> None:
             {
                 "display_name": str(student.get("display_name") or "").strip(),
                 "confidence": _safe_confidence(student),
-                "low_confidence": _safe_confidence(student) < INGEST_CONFIDENCE_THRESHOLD,
+                "low_confidence": not _trusted_detection(student),
                 "span_ids": [str(sid) for sid in (student.get("span_ids") or [])],
             }
             for student in detected

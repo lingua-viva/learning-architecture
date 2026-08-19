@@ -152,7 +152,40 @@ documents. Every detection now carries an `evidence` class
 Synthetic mirror: identical picture (3V 1.00/1.00, K-5 1.00/1.00,
 curriculum+calendar 0 det, class list 0 pending STEP 4).
 
-_(pending — STEPs 3–8, 10, 11; STEP 9 gated on ruling §8-2; STEP 12 only if
+### STEP 3 — Confidence discriminates, or the gate is deleted (L1) — DONE
+
+Spec outcome taken: **the gate is deleted** — and replaced by the evidence
+class, which the corpus proved DOES discriminate. `VERBATIM_STUDENT_
+CONFIDENCE = 0.99` flat made `INGEST_CONFIDENCE_THRESHOLD = 0.7` a check
+that could never fire; it reported as a working gate on every import.
+
+**Measured discrimination (the STEP 3 evidence), same real files:**
+
+| evidence class | precision | source |
+|---|---|---|
+| `student_column` (STEP 2) | **1.00** (6/6 on 3V, 0 FP everywhere) | current scorer run |
+| `bigram_fallback` (baseline) | **0.14 / 0.00 / 0.00** | frozen baseline tables above |
+
+The evidence class predicts correctness; the number never did. So:
+
+- `INGEST_CONFIDENCE_THRESHOLD` deleted (web.py). No replacement number —
+  `_trusted_detection(student)` = `evidence == "student_column"`; missing
+  evidence (older extractions) is untrusted (§5: no new hardcoded
+  confidence).
+- Preview `low_confidence` badge, small-import `needs_confirmation`, and
+  roster warning flags all derive from the evidence class. Prose documents
+  (bigram fallback, measured precision 0.14) now always require per-name
+  confirmation on small imports — a high number can no longer buy trust.
+- Class lock: `test_gate_rides_on_evidence_class_not_confidence_number` —
+  bigram detection with confidence 0.99 still needs confirmation; detection
+  with no evidence class is untrusted; the dead constant stays deleted
+  (`not hasattr(web, "INGEST_CONFIDENCE_THRESHOLD")`).
+- Real-corpus scorer re-run after the change: identical to STEP 2 (gate
+  change, not a detection change).
+- UI_CONTRACT bumped v159 → **v160** (server-side only; the boolean badge
+  contract from v157 is unchanged — raw numbers still never render).
+
+_(pending — STEPs 4–8, 10, 11; STEP 9 gated on ruling §8-2; STEP 12 only if
 time. Each entry: scorer before/after, per-STEP gate result, commits.)_
 
 ## Holdout opening (§6) — NOT YET OPENED

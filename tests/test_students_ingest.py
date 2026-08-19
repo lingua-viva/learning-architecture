@@ -35,6 +35,12 @@ def isolated_state(tmp_path, monkeypatch):
 def _fixture_extraction(source_id: str) -> dict:
     data = json.loads((FIXTURES / "expected_extraction_lesson_plan_marco_nora.json").read_text(encoding="utf-8"))
     data["source_id"] = source_id
+    # The golden fixture carries the real pipeline's evidence for this markdown
+    # file (bigram_fallback). Ingest tests simulate a TRUSTED structured source
+    # by default; tests about the untrusted path override this per student
+    # (STEP 3, SPEC_LV_UNIFIED_REAL_DATA_FIX_2026-08-19).
+    for student in data["structure"]["students_detected"]:
+        student["evidence"] = "student_column"
     return data
 
 
@@ -67,6 +73,7 @@ def _roster_extraction(source_id: str, names: list[str]) -> dict:
                     "student_id": f"student-{name.lower().replace(' ', '-')}",
                     "display_name": name,
                     "confidence": 0.99,
+                    "evidence": "student_column",
                     "span_ids": ["SPN-0001"],
                 }
                 for name in names
@@ -134,6 +141,20 @@ def _run_to_done(job_id: str, timeout: float = 10.0) -> dict:
     return _wait_for_job(job_id, timeout)
 
 
+def _confirm_pending(job: dict) -> dict:
+    """STEP 3 (SPEC_LV_UNIFIED_REAL_DATA_FIX_2026-08-19): names detected by
+    the prose fallback (bigram_fallback evidence) require per-name
+    confirmation on small imports. Drive the confirm step for everything
+    pending and return the refreshed job."""
+    names = [item["display_name"] for item in job.get("needs_confirmation", [])]
+    if names:
+        response = client.post("/api/students/ingest/confirm", json={
+            "job_id": job["job_id"], "display_names": names,
+        })
+        assert response.status_code == 200, response.text
+    return client.get(f"/api/students/ingest/{job['job_id']}").json()
+
+
 def test_full_chain_creates_grounded_lenses(isolated_state, fixture_extractor):
     started = _upload()
     job = _run_to_done(started["job_id"])
@@ -199,7 +220,7 @@ def test_low_confidence_student_needs_confirmation(isolated_state, monkeypatch):
         data = _fixture_extraction(source.source_id)
         data["source_sha256"] = source.data["sha256"]
         for student in data["structure"]["students_detected"]:
-            student["confidence"] = 0.4
+            student["evidence"] = "bigram_fallback"
         return ExtractionRecord(data)
 
     from src.lingua_viva.docpipe import extract as docpipe_extract
@@ -225,12 +246,12 @@ def test_low_confidence_student_needs_confirmation(isolated_state, monkeypatch):
 
 def test_small_import_confirm_multiple_names_at_once(isolated_state, monkeypatch):
     """The confirm endpoint's display_names batch form still serves the
-    small-import path (≤2 students below the confidence bar)."""
+    small-import path (≤2 students detected without a student-name column)."""
     async def extract(source, content, *, model_client=None):
         data = _fixture_extraction(source.source_id)
         data["source_sha256"] = source.data["sha256"]
         for student in data["structure"]["students_detected"]:
-            student["confidence"] = 0.4
+            student["evidence"] = "bigram_fallback"
         return ExtractionRecord(data)
 
     from src.lingua_viva.docpipe import extract as docpipe_extract
@@ -281,8 +302,9 @@ def test_bulk_roster_auto_creates_every_student(isolated_state, monkeypatch):
 
 
 def test_bulk_roster_low_confidence_names_created_and_flagged(isolated_state, monkeypatch):
-    """Low-confidence roster names are still created (no confirm clicks) but
-    flagged in warnings so the teacher knows which names to double-check."""
+    """Untrusted roster names (no student-name column behind them) are still
+    created (no confirm clicks) but flagged in warnings so the teacher knows
+    which names to double-check."""
     names = ["Marco Bianchi", "Nora Rossi", "Luca Verdi", "Sara Conti", "Maya Singh"]
 
     async def extract(source, content, *, model_client=None):
@@ -290,7 +312,7 @@ def test_bulk_roster_low_confidence_names_created_and_flagged(isolated_state, mo
         data["source_sha256"] = source.data["sha256"]
         for student in data["structure"]["students_detected"]:
             if student["display_name"] in ("Nora Rossi", "Maya Singh"):
-                student["confidence"] = 0.4
+                student["evidence"] = "bigram_fallback"
         return ExtractionRecord(data)
 
     from src.lingua_viva.docpipe import extract as docpipe_extract
@@ -307,6 +329,39 @@ def test_bulk_roster_low_confidence_names_created_and_flagged(isolated_state, mo
     assert "Marco Bianchi" not in flagged[0]
 
 
+def test_gate_rides_on_evidence_class_not_confidence_number(isolated_state, monkeypatch):
+    """STEP 3 class lock (SPEC_LV_UNIFIED_REAL_DATA_FIX_2026-08-19): the old
+    numeric gate was dead code — confidence is a flat constant, so
+    `confidence >= threshold` could never fail. Trust now rides on the
+    corpus-measured evidence class: a fallback guess with a HIGH number still
+    needs confirmation, and a detection with no evidence class at all is
+    untrusted. No number can buy trust, and the dead constant stays deleted."""
+    assert not hasattr(web, "INGEST_CONFIDENCE_THRESHOLD")
+
+    async def extract(source, content, *, model_client=None):
+        data = _fixture_extraction(source.source_id)
+        data["source_sha256"] = source.data["sha256"]
+        students = data["structure"]["students_detected"]
+        students[0]["evidence"] = "bigram_fallback"
+        students[0]["confidence"] = 0.99  # a high number buys nothing
+        del students[1]["evidence"]  # unknown origin — untrusted
+        return ExtractionRecord(data)
+
+    from src.lingua_viva.docpipe import extract as docpipe_extract
+
+    monkeypatch.setattr(docpipe_extract, "extract_document", extract)
+    job = _wait_for_job(_upload()["job_id"])
+    assert job["status"] == "preview"
+    assert all(s["low_confidence"] is True for s in job["preview_students"])
+
+    response = client.post("/api/students/ingest/approve", json={"job_id": job["job_id"]})
+    assert response.status_code == 200, response.text
+    job = _wait_for_job(job["job_id"])
+    assert job["status"] == "done"
+    assert job["students_created"] == []
+    assert len(job["needs_confirmation"]) == 2
+
+
 def test_bulk_undo_archives_only_students_from_that_import(isolated_state, monkeypatch):
     existing = client.post("/api/students", json={"display_name": "Existing Student", "grade_level": "G3"})
     assert existing.status_code == 200, existing.text
@@ -320,6 +375,7 @@ def test_bulk_undo_archives_only_students_from_that_import(isolated_state, monke
                 "student_id": f"student-{name.lower().replace(' ', '-')}",
                 "display_name": name,
                 "confidence": 0.99,
+                "evidence": "student_column",
                 "span_ids": ["SPN-0001"],
             }
             for name in names
@@ -355,6 +411,7 @@ def test_bulk_undo_does_not_touch_students_from_another_import(isolated_state, m
                 "student_id": f"student-{name.lower().replace(' ', '-')}",
                 "display_name": name,
                 "confidence": 0.99,
+                "evidence": "student_column",
                 "span_ids": ["SPN-0001"],
             }
             for name in names
@@ -403,6 +460,13 @@ def test_real_extraction_end_to_end_no_mock(isolated_state, monkeypatch):
     )
     job = _run_to_done(_upload()["job_id"])
     assert job["status"] == "done", job
+    # Prose markdown → bigram_fallback evidence → the real flow asks for
+    # per-name confirmation before creating anything (STEP 3): the corpus
+    # measured the fallback at precision 0.14, so it never auto-creates.
+    assert job["students_created"] == []
+    pending = sorted(item["display_name"] for item in job["needs_confirmation"])
+    assert pending == ["Marco Bianchi", "Nora Rossi"]
+    job = _confirm_pending(job)
     names = sorted(s["display_name"] for s in job["students_created"])
     assert names == ["Marco Bianchi", "Nora Rossi"]
     root = vault.vault_root()
@@ -576,12 +640,15 @@ def test_support_document_updates_existing_lenses_no_duplicates(isolated_state, 
         docpipe_model, "LocalModelClient",
         lambda *a, **k: (_ for _ in ()).throw(RuntimeError("no model in test")),
     )
-    # Day 1: bare roster — lenses exist, profile fields empty.
+    # Day 1: bare roster — lenses exist, profile fields empty. A prose
+    # markdown roster is bigram_fallback evidence, so the teacher confirms
+    # the two names (STEP 3) before anything is created.
     roster = "Class list\n\nMarco Bianchi\n\nNora Rossi\n"
     job = _run_to_done(
         _upload_bytes("roster.md", roster.encode("utf-8"), "text/markdown")["job_id"]
     )
     assert job["status"] == "done"
+    job = _confirm_pending(job)
     ids_before = {s["display_name"]: s["student_id"] for s in job["students_created"]}
     assert sorted(ids_before) == ["Marco Bianchi", "Nora Rossi"]
 
@@ -595,6 +662,7 @@ def test_support_document_updates_existing_lenses_no_duplicates(isolated_state, 
         _upload_bytes("support-notes.md", support_doc.encode("utf-8"), "text/markdown")["job_id"]
     )
     assert job2["status"] == "done"
+    job2 = _confirm_pending(job2)
     updated = {s["display_name"]: s for s in job2["students_created"]}
     # Same student_ids: the import merged, it did not mint new students.
     for name, sid in ids_before.items():
@@ -832,7 +900,7 @@ def test_confirm_accepts_optional_cefr_level(isolated_state, monkeypatch):
         data = _fixture_extraction(source.source_id)
         data["source_sha256"] = source.data["sha256"]
         for student in data["structure"]["students_detected"]:
-            student["confidence"] = 0.4
+            student["evidence"] = "bigram_fallback"
         return ExtractionRecord(data)
 
     from src.lingua_viva.docpipe import extract as docpipe_extract
@@ -868,7 +936,7 @@ def test_confirm_rejects_invalid_cefr_level(isolated_state, monkeypatch):
         data = _fixture_extraction(source.source_id)
         data["source_sha256"] = source.data["sha256"]
         for student in data["structure"]["students_detected"]:
-            student["confidence"] = 0.4
+            student["evidence"] = "bigram_fallback"
         return ExtractionRecord(data)
 
     from src.lingua_viva.docpipe import extract as docpipe_extract
@@ -998,7 +1066,7 @@ def test_preview_flags_low_confidence_names_without_creating(isolated_state, mon
         data["source_sha256"] = source.data["sha256"]
         for student in data["structure"]["students_detected"]:
             if student["display_name"] == "Maya Singh":
-                student["confidence"] = 0.4
+                student["evidence"] = "bigram_fallback"
         return ExtractionRecord(data)
 
     from src.lingua_viva.docpipe import extract as docpipe_extract

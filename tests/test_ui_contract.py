@@ -250,7 +250,9 @@ REPO = Path(__file__).resolve().parent.parent
 #     broad-permission line removed), honest DriveAuthError passthrough.
 #   v159 (2026-08-19): Phase 0A always-preview ingest — imports stop at a
 #     preview that writes nothing; explicit approve/cancel routes + panel.
-EXPECTED_VERSION = 159
+#   v160 (2026-08-19): STEP 3 — dead numeric confidence gate deleted; trust
+#     rides on the corpus-measured evidence class (server-side only).
+EXPECTED_VERSION = 160
 
 
 def _html() -> str:
