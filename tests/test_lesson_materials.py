@@ -246,6 +246,32 @@ def test_safety_check_rejects_unsafe():
         _generate(engine=FakeEngine(content=unsafe))
 
 
+def test_italian_words_containing_rti_are_not_blocked():
+    """Fix #1 (FIXES_NEEDED_v0.2.68): the unsafe-copy filter used raw substring
+    matching, so 'rti' inside normal Italian words (parti, articolo, forti,
+    aperti, certi, riporti, quarti, sportivi) blocked all Italian generation."""
+    italian_phrases = [
+        "Scrivi le parti del corpo",
+        "Leggi l'articolo",
+        "Gli animali sono forti",
+        "I libri sono aperti",
+        "Certi animali reagiscono",
+        "Osserva e riporti quello che vedi",
+        "i quarti di finale",
+        "sono sportivi",
+    ]
+    for phrase in italian_phrases:
+        content = GOOD_CONTENT.replace("EXERCISE:", f"EXERCISE:\n{phrase}")
+        result = _generate(engine=FakeEngine(content=content))
+        assert len(result.materials) == 3, f"Blocked on: {phrase}"
+
+    # Standalone "RTI" and "Tier 2" must still be caught.
+    for bad in ["This is RTI material", "Designed for Tier 2 students"]:
+        unsafe = GOOD_CONTENT.replace("EXERCISE:", f"EXERCISE:\n{bad}")
+        with pytest.raises(ValueError, match="unsafe_student_facing_copy"):
+            _generate(engine=FakeEngine(content=unsafe))
+
+
 def test_placeholder_shaped_model_copy_falls_back_to_deterministic_material():
     placeholder = (
         "TITLE: [Placeholder title]\n"

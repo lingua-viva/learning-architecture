@@ -412,6 +412,10 @@ export const PINNED_DEPS = [
   // throws ModuleNotFoundError, surfacing as a red "Something went wrong"
   // banner on every Settings/view load.
   "jsonschema>=4.0,<5",
+  // Fix #3 (FIXES_NEEDED_v0.2.68): reportlab powers every PDF route
+  // (artifacts router). Without it the router fails to import on startup,
+  // all PDF endpoints 404, and the app silently loses a third of its routes.
+  "reportlab>=4.0",
 ];
 
 // macOS python.org installs ship WITHOUT SSL certs configured (need

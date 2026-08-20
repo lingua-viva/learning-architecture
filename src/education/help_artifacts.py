@@ -152,7 +152,7 @@ def _validate_safe_text(*values: str) -> None:
     joined = "\n".join(values)
     lowered = joined.lower()
     for marker in UNSAFE_STUDENT_COPY:
-        if marker in lowered:
+        if re.search(r"\b" + re.escape(marker) + r"\b", lowered):
             raise ValueError(f"unsafe_student_facing_copy:{marker}")
     _check_trauma_safety(joined)
 

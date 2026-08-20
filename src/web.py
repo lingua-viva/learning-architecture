@@ -6681,7 +6681,14 @@ async def lesson_materials_generate(request: Request, payload: dict):
     except PermissionError as exc:
         return JSONResponse({"error": "unauthorized_student_ids", "detail": str(exc)}, status_code=422)
     except ValueError as exc:
-        return JSONResponse({"error": "generation_failed", "detail": str(exc)}, status_code=422)
+        detail = str(exc)
+        if "unsafe_student_facing_copy" in detail:
+            detail = (
+                "The generated text contained a clinical term that should not "
+                "appear in student-facing materials. Try regenerating — the model "
+                "usually finds a different phrasing."
+            )
+        return JSONResponse({"error": "generation_failed", "detail": detail}, status_code=422)
 
     # F3 (SPEC_LV_DEMO_EVE_FIX_2026-08-19 §2): persist what the teacher is
     # about to review. Packet preview/print renders THIS stored artifact —

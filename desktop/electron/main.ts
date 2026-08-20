@@ -162,12 +162,17 @@ async function runSetupFlow(root: string, window: BrowserWindow): Promise<void> 
   const hwRec = recommendedModel();
   const modelOverride = process.env.LV_OLLAMA_MODEL || undefined;
 
+  // Fix #6 (FIXES_NEEDED_v0.2.68): the label must reflect what will actually
+  // be installed, not the pre-consent ultra_gpu pick. ensureOllamaModel falls
+  // back to strong_gpu when nemotron isn't already present; show that name.
+  const displayModel = modelOverride || (hwRec.tier === "ultra_gpu" ? "qwen2.5:14b" : hwRec.model);
+  const displaySize = modelOverride ? hwRec.sizeLabel : (hwRec.tier === "ultra_gpu" ? "9.0 GB" : hwRec.sizeLabel);
+
   if (ollamaCheck.ok) {
     emitProgress(window, "ollama_ok", ollamaCheck.detail);
     if (process.env.LV_SKIP_MODEL_PULL !== "1") {
-      const modelName = modelOverride || hwRec.model;
       emitProgress(window, "model",
-        `Preparing ${modelName} for your hardware (${hwRec.tier}, ${hwRec.sizeLabel})...`);
+        `Preparing ${displayModel} for your hardware (${hwRec.tier}, ${displaySize})...`);
       modelPull = ensureOllamaModel(modelOverride)
         .catch((err) => ({ ok: false, detail: String(err instanceof Error ? err.message : err) }));
     }
@@ -179,9 +184,8 @@ async function runSetupFlow(root: string, window: BrowserWindow): Promise<void> 
     await waitForOllamaResolution(window);
     // If they installed Ollama during resolution, still ensure a model exists.
     if (process.env.LV_SKIP_MODEL_PULL !== "1" && (await checkOllama()).ok) {
-      const modelName = modelOverride || hwRec.model;
       emitProgress(window, "model",
-        `Preparing ${modelName} for your hardware (${hwRec.tier}, ${hwRec.sizeLabel})...`);
+        `Preparing ${displayModel} for your hardware (${hwRec.tier}, ${displaySize})...`);
       modelPull = ensureOllamaModel(modelOverride)
         .catch((err) => ({ ok: false, detail: String(err instanceof Error ? err.message : err) }));
     }
