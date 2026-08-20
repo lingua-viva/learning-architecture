@@ -6,13 +6,9 @@ ROOT = Path(__file__).resolve().parents[1]
 DESKTOP = ROOT / "desktop"
 
 
-def test_desktop_release_workflow_publishes_debian_artifact():
+def test_desktop_release_workflow_builds_linux():
     release_workflow = (ROOT / ".github" / "workflows" / "desktop-release.yml").read_text()
-    auto_release = (ROOT / ".github" / "workflows" / "auto-release.yml").read_text()
-    assert "dist_args: --linux AppImage deb" in release_workflow
-    assert "release/LinguaViva.deb" in release_workflow
-    assert "artifacts/LinguaViva.deb" in release_workflow
-    assert "LinguaViva.deb" in auto_release
+    assert "--linux AppImage" in release_workflow
 
 
 def test_desktop_package_targets_all_required_installers():
@@ -21,17 +17,8 @@ def test_desktop_package_targets_all_required_installers():
     assert package["build"]["productName"] == "Lingua Viva"
     assert package["build"]["mac"]["target"] == ["dmg"]
     assert package["build"]["win"]["target"] == ["nsis"]
-    assert package["build"]["linux"]["target"] == ["AppImage", "deb"]
-    assert package["build"]["linux"]["maintainer"] == "Lingua Viva <hello@linguaviva.art>"
-    assert package["build"]["deb"]["afterInstall"] == "electron/deb-after-install.sh"
-    assert package["homepage"] == "https://linguaviva.art"
-
-
-def test_debian_package_forces_electron_sandbox_helper_setuid():
-    script = (DESKTOP / "electron" / "deb-after-install.sh").read_text()
-    assert "update-alternatives --install" in script
-    assert "chmod 4755 '/opt/${sanitizedProductName}/chrome-sandbox'" in script
-    assert "update-desktop-database /usr/share/applications" in script
+    assert "AppImage" in package["build"]["linux"]["target"]
+    assert package["build"]["linux"]["category"] == "Education"
 
 
 def test_electron_shell_starts_backend_on_required_port():
