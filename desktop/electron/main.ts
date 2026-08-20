@@ -49,6 +49,16 @@ const ALLOWED_EXTERNAL_URLS = [
   "https://ollama.com/download",
 ];
 
+// AppImage bundles cannot satisfy the SUID sandbox requirement (chrome-sandbox
+// must be root-owned mode 4755, impossible inside a FUSE mount). Without this
+// the app crashes immediately with "The SUID sandbox helper binary was found,
+// but is not configured correctly." The APPIMAGE env var is set automatically
+// by the AppImage runtime — when present, disable the Chromium SUID sandbox so
+// the app can launch without requiring --no-sandbox on the command line.
+if (process.env.APPIMAGE) {
+  app.commandLine.appendSwitch("no-sandbox");
+}
+
 let mainWindow: BrowserWindow | null = null;
 let backend: ChildProcessWithoutNullStreams | null = null;
 let isQuitting = false;
