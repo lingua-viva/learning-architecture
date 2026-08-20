@@ -1,7 +1,13 @@
 # Lingua Viva QA Harness — for Chip (desktop-v0.2.38, 2026-08-04)
-**Supersedes `PROMPT_CHIP_QA_0.2.36_2026-08-04.md` — use this file for the next run, not that
-one.** Prepared in advance so there's no gap between Chip finishing her 0.2.36 report and
-starting this cycle.
+
+> **Archived prompt. Do not use for current production verification.**
+> This file was the 2026-08-04 `desktop-v0.2.38` QA harness and is kept only as
+> historical evidence. Current production is `desktop-v0.2.60`; use the live
+> site downloads and current launch/readiness checks instead of this prompt.
+
+**Superseded historical note:** this originally superseded
+`PROMPT_CHIP_QA_0.2.36_2026-08-04.md` for the 2026-08-04 QA cycle only.
+It is no longer the next-run prompt.
 
 **How to use (10 seconds):**
 
@@ -38,7 +44,7 @@ watch everything the app does, write a plain-language report, and publish it.
     entitlement that made the Observe mic completely dead on macOS regardless of OS permission —
     confirm this is actually fixed on real hardware (Round 1 below), it's never been verified
     outside the fix itself.
-  - **desktop-v0.2.38** (current, what she should be testing): fixed F3 — Ask used to give a
+  - **desktop-v0.2.38** (release under test for this archived 2026-08-04 cycle): fixed F3 — Ask used to give a
     generic non-answer to any student-named support question ("What support should I prepare for
     Marco Bianchi tomorrow?") because the ontology classifier never routed it to the module that
     reads a student's real record. Root cause was a narrow signal-matching gap in
@@ -103,9 +109,9 @@ Reports publish to the `qa/` folder of `pretendhome/mission-canvas`.
    runs fresh — `~/.lingua-viva` on Mac, `%APPDATA%\lingua-viva` on Windows.
 2. Have her download from **linguaviva.art** (the site button, not a GitHub page), install,
    open.
-3. The build MUST be **desktop-v0.2.38** — the site should offer exactly one version per
-   platform. Anything else is itself a P0 finding (a stale build being served, or two versions
-   live at once). Record the exact version and installer name.
+3. Archived-cycle requirement: the build was **desktop-v0.2.38** for this
+   2026-08-04 test only. For current production, do not use this requirement;
+   verify the live site points at the latest release instead.
 4. Health-check the local URL (usually http://127.0.0.1:8787) until it responds. If it never
    comes up: "P0 — the app cannot launch", save everything, STOP.
 

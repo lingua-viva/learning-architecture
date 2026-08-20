@@ -11,7 +11,9 @@ school files.** The two workflows being demoed are exactly the two this build fi
 
 1. **Lesson-content diversification** from a real IB coursework file (Prepare → 3 tiers).
 2. **Student lens creation** from the real school file set — lenses ONLY for her class
-   (~39 students), enriched from the support files, ignoring the curriculum/calendar
+   (20 students — her class COLUMN; the grade sheet holds 41 across two side-by-side
+   class columns, and both-columns-as-one-class is a FAIL), enriched from the support
+   files, ignoring the curriculum/calendar
    files entirely.
 
 **Current state (measured 2026-08-19, desktop-v0.2.64 live):** both workflows fail on
@@ -143,7 +145,8 @@ next STEP with a red scorer regression.
 ## Verification and shipping
 
 - Binding acceptance gates: spec §6 — the per-file scorer table, the single end-to-end
-  assertion (~39 attributed + enriched lenses, zero from curriculum/calendar), the
+  assertion (20 attributed + enriched lenses — count never grows on enrichment — zero
+  from curriculum/calendar), the
   content-side check (real PDF → grounded 3 tiers with honest status on the governed
   auto-pick), then the holdout, once.
 - Full test suite green (`pytest -q tests/`), `lv preflight` green, UI contract bumped

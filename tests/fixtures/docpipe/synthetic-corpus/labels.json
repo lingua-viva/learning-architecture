@@ -26,7 +26,7 @@
         "Oscar Sanna"
       ],
       "sealed": false,
-      "note": "row1 class pairs, row2 teachers, Last/First columns, note rows are not students"
+      "note": "row1 class pairs, row2 teachers, Last/First roster, then two stacked 1/2-groups tables (complete name per column) that are not students"
     },
     {
       "file": "synthetic_support_3v.xlsx",

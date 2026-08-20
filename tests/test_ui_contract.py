@@ -264,7 +264,9 @@ REPO = Path(__file__).resolve().parent.parent
 #     on tier materials + loud template-fallback badge; blank tiers dead.
 #   v165 (2026-08-19): pre-push audit P0 — class-folder ingest renders plain
 #     English attribution, never raw confidence numbers or method tokens.
-EXPECTED_VERSION = 165
+#   v166 (2026-08-19): demo-eve F4+F5 — version badge in topbar, preview-first
+#     import copy, xlsx-specific not-found hint.
+EXPECTED_VERSION = 166
 
 
 def _html() -> str:

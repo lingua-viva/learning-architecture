@@ -768,6 +768,7 @@
         <div class="topbar-actions">
           <img src="/assets/still-i-rise-topbar.jpg" alt="Still I Rise students" class="sir-topbar-photo">
           <span id="route-badge" class="role-pill">local route</span>
+          <span id="app-version" class="role-pill" style="font-size:11px;opacity:.7;cursor:default" title="App version"></span>
           <button id="change-role" type="button">Change role</button>
         </div>
       </div>
@@ -2812,7 +2813,7 @@
         <div class="view-head"><div><h2>Student Lenses</h2><p>View profiles, observations, CEFR trajectory, grouping notes, and support proposals. The system suggests; the teacher decides.</p></div></div>
         <div class="panel" style="margin-bottom:14px;">
           <h3>Import your roster</h3>
-          <p class="voice-hint">Point at your class list or roster — whatever file you already have (Google Doc, Sheet, Word, PDF, CSV, or text). Every student gets a profile automatically; one click undoes the whole import.</p>
+          <p class="voice-hint">Point at your class list or roster — whatever file you already have (Google Doc, Sheet, Word, PDF, CSV, or text). Nothing is created until you review and confirm the extracted names.</p>
           <div id="drive-roster-import" style="margin-bottom:8px;"></div>
           <form id="ingest-form" class="row" style="gap:8px;align-items:center;flex-wrap:wrap;">
             <input id="ingest-file" type="file" accept=".xlsx,.docx,.csv,.txt,.md,.markdown,.pdf,text/plain,text/csv,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style="width:auto;">
@@ -3115,7 +3116,15 @@
       if (job.status === "done") {
         const created = (job.students_created || []).length;
         if (job.folder) return `${job.folder.files_processed} document${job.folder.files_processed === 1 ? "" : "s"} read from your Drive folder — ${created} student lens${created === 1 ? "" : "es"} updated${job.folder.unattributed ? `, ${job.folder.unattributed} document${job.folder.unattributed === 1 ? "" : "s"} waiting for review below` : ""}.`;
-        if (!job.students_found) return `No student names found in ${job.source_name}. The app looks for first and last names in the document text. If this is a scanned PDF, it may not have extractable text — try a Word or text version instead.`;
+        if (!job.students_found) {
+          const ext = (job.source_name || "").split(".").pop().toLowerCase();
+          const hint = ext === "pdf"
+            ? " If this is a scanned PDF, it may not have extractable text — try a Word or text version instead."
+            : ext === "xlsx"
+            ? " For spreadsheets, ensure the roster has first and last names in the first two columns."
+            : "";
+          return `No student names found in ${job.source_name}.${hint}`;
+        }
         if ((job.needs_confirmation || []).length) return `${job.needs_confirmation.length} name${job.needs_confirmation.length === 1 ? "" : "s"} found in ${job.source_name}. Review before creating student profiles.`;
         return `${created} student${created === 1 ? "" : "s"} added from ${job.source_name}.`;
       }
@@ -3140,25 +3149,48 @@
         const classes = job.preview_classes || [];
         const scope = classes.includes(state.ingestClassScope) ? state.ingestClassScope : "";
         const scoped = scope ? allStudents.filter(student => student.class === scope) : allStudents;
+        // F1b (SPEC_LV_DEMO_EVE_FIX_2026-08-19): per-entry exclude — clicking
+        // a name pill toggles it out of the confirm set. Reset per job.
+        if (state.ingestExcludedJobId !== job.job_id) { state.ingestExcludedJobId = job.job_id; state.ingestExcludedNames = []; }
+        const excluded = new Set(state.ingestExcludedNames || []);
+        const included = scoped.filter(student => !excluded.has(student.display_name));
         const classCounts = {};
         allStudents.forEach(student => { if (student.class) classCounts[student.class] = (classCounts[student.class] || 0) + 1; });
         const scopePicker = classes.length ? `<div class="row" style="margin-bottom:8px;"><select data-ingest-class-scope style="width:auto;"><option value="">All classes (${allStudents.length} students)</option>${classes.map(name => `<option value="${escapeHtml(name)}"${scope === name ? " selected" : ""}>Only ${escapeHtml(name)} (${classCounts[name] || 0} students)</option>`).join("")}</select><span class="voice-hint">This file lists more than one class — you can import only yours.</span></div>` : "";
-        const previewRows = scoped.map(student => `
-          <div class="source-line" style="align-items:center;"><span class="badge${student.low_confidence ? " warn" : " ok"}">${escapeHtml(student.display_name)}</span>${student.class ? `<span class="badge">${escapeHtml(student.class)}${student.teacher_attribution ? ` — ${escapeHtml(student.teacher_attribution)}` : ""}</span>` : ""}${student.low_confidence ? '<span class="badge">check this name — it was hard to read</span>' : ""}${student.removal_proposed ? `<span class="badge warn">may not be a student — ${escapeHtml(student.removal_proposed)}</span>` : ""}</div>`).join("");
-        host.innerHTML = scopePicker + previewRows + `<div class="row" style="margin-top:8px;"><button type="button" class="primary" data-ingest-approve>Create these ${scoped.length} student${scoped.length === 1 ? "" : "s"}</button><button type="button" data-ingest-cancel>Cancel</button><span class="voice-hint">Nothing has been saved yet — cancelling leaves no trace.</span></div>`;
+        const previewRows = scoped.map(student => {
+          const out = excluded.has(student.display_name);
+          return `
+          <div class="source-line" style="align-items:center;"><span class="badge${out ? "" : (student.low_confidence ? " warn" : " ok")}" data-ingest-toggle="${escapeHtml(student.display_name)}" role="button" tabindex="0" title="${out ? "Click to include this name again" : "Click to leave this name out"}" style="cursor:pointer;${out ? "text-decoration:line-through;opacity:.55;" : ""}">${escapeHtml(student.display_name)}</span>${out ? '<span class="badge">left out — will not be created</span>' : ""}${student.class ? `<span class="badge">${escapeHtml(student.class)}${student.teacher_attribution ? ` — ${escapeHtml(student.teacher_attribution)}` : ""}</span>` : ""}${student.source_rows ? `<span class="badge" title="Where this name was read from in the file">${escapeHtml(student.source_rows)}</span>` : ""}${student.low_confidence ? '<span class="badge">check this name — it was hard to read</span>' : ""}${student.removal_proposed ? `<span class="badge warn">may not be a student — ${escapeHtml(student.removal_proposed)}</span>` : ""}</div>`;
+        }).join("");
+        host.innerHTML = scopePicker + previewRows + `<div class="row" style="margin-top:8px;"><button type="button" class="primary" data-ingest-approve${included.length ? "" : " disabled"}>Create these ${included.length} student${included.length === 1 ? "" : "s"}</button><button type="button" data-ingest-cancel>Cancel</button><span class="voice-hint">Nothing has been saved yet — click a name to leave it out; cancelling leaves no trace.</span></div>`;
         const scopeSelect = host.querySelector("[data-ingest-class-scope]");
         if (scopeSelect) scopeSelect.addEventListener("change", () => {
           state.ingestClassScope = scopeSelect.value;
           renderIngestResults();
         });
+        host.querySelectorAll("[data-ingest-toggle]").forEach(pill => {
+          const toggle = () => {
+            const name = pill.dataset.ingestToggle;
+            const names = new Set(state.ingestExcludedNames || []);
+            if (names.has(name)) names.delete(name); else names.add(name);
+            state.ingestExcludedNames = Array.from(names);
+            renderIngestResults();
+          };
+          pill.addEventListener("click", toggle);
+          pill.addEventListener("keydown", event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); toggle(); } });
+        });
         const approveBtn = host.querySelector("[data-ingest-approve]");
         approveBtn.addEventListener("click", async () => {
           approveBtn.disabled = true;
           try {
+            const excludeNames = scoped.filter(student => excluded.has(student.display_name)).map(student => student.display_name);
+            const body = {job_id: job.job_id};
+            if (scope) body.classes = [scope];
+            if (excludeNames.length) body.exclude = excludeNames;
             const response = await fetch("/api/students/ingest/approve", {
               method: "POST",
               headers: {"Content-Type": "application/json"},
-              body: JSON.stringify(scope ? {job_id: job.job_id, classes: [scope]} : {job_id: job.job_id})
+              body: JSON.stringify(body)
             });
             const data = await response.json();
             if (!response.ok) throw new Error(data.error || "approve failed");
@@ -8130,6 +8162,21 @@
       state.role = "teacher";
     }
     renderShell();
+    // F4 (SPEC_LV_DEMO_EVE_FIX_2026-08-19 §2): surface app version in the topbar.
+    // Desktop: Electron preload exposes lvDesktop.getVersion().
+    // Browser: fall back to /api/health which includes the backend version.
+    (async () => {
+      try {
+        let v;
+        if (window.lvDesktop && window.lvDesktop.getVersion) {
+          v = await window.lvDesktop.getVersion();
+        } else {
+          const h = await fetch("/api/health").then(r => r.json());
+          v = h.version || null;
+        }
+        if (v) $("app-version").textContent = "v" + v;
+      } catch (_) { /* non-critical — badge stays empty */ }
+    })();
     initVoiceCompanion();
     renderView();
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});

@@ -133,3 +133,16 @@ def test_daily_view_renders_the_briefing():
     assert "renderDailyBriefing()" in body, "briefing never called from renderDaily"
     assert 'id="daily-briefing"' in body
     assert 'api("/api/daily/briefing")' in body
+
+
+def test_daily_view_is_wired_to_ops_and_briefing_sources():
+    """Daily must stay a cross-app coordination surface, not just a Slack card."""
+    body = client.get("/").text
+    render_start = body.index("async function renderDaily()")
+    render_end = body.index("async function renderOpsSetup()", render_start)
+    render_daily = body[render_start:render_end]
+
+    assert 'api("/api/slack/ops/status")' in render_daily
+    assert 'api("/api/ops/daily")' in render_daily
+    assert 'api("/api/ops/staffing-summary")' in render_daily
+    assert 'await renderDailyBriefing()' in render_daily

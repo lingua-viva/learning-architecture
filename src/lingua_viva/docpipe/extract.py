@@ -931,6 +931,69 @@ def _sheet_class_pairs(spans: list[dict[str, Any]]) -> dict[str, dict[str, Any]]
     return pairs_by_sheet
 
 
+def _class_pair_roster_blocks(
+    sheet_spans: list[dict[str, Any]], info: dict[str, Any]
+) -> dict[str, dict[str, Any]]:
+    """F1 (SPEC_LV_DEMO_EVE_FIX_2026-08-19 §2): roster-block segmentation.
+
+    A grade sheet stacks several tables in the same column pairs: the roster
+    (surname | first name), then group tables ("1/2 groups for …") where EACH
+    column holds a COMPLETE name. Joining surname+firstname across a group
+    table fuses two real children into one non-existent student.
+
+    Per class column-pair, the roster block is the FIRST maximal run of
+    CONSECUTIVE rows after the teacher row in which BOTH pair columns are
+    filled. Block boundaries are structural, never textual:
+    - a row-index gap (blank separator rows emit no span),
+    - a partial-fill row (single-cell titles like a group-table heading),
+    - a row filling columns outside the class pairs (foreign table data).
+    Everything after the first boundary is a later block — group tables —
+    and is NEVER a student-creation source.
+
+    Returns {pair_start_column: {"rows": set[int], "first_row": int,
+    "last_row": int}}; a pair with no both-filled run yields no block and
+    therefore zero students (fail closed).
+    """
+    spans_sorted = sorted(sheet_spans, key=lambda span: int(span["row_index"]))
+    teacher_row = int(info["teacher_row"])
+    allowed = info["allowed_columns"]
+    blocks: dict[str, dict[str, Any]] = {}
+    for column, pair in info["pairs"].items():
+        rows: set[int] = set()
+        first_row: Optional[int] = None
+        last_row: Optional[int] = None
+        for span in spans_sorted:
+            row_index = int(span["row_index"])
+            if row_index <= teacher_row:
+                continue
+            cells = {cell["column"]: cell["text"] for cell in span["cells"]}
+            foreign = any(col not in allowed for col in cells)
+            both_filled = (
+                not foreign
+                and str(cells.get(column) or "").strip() != ""
+                and str(cells.get(pair["neighbour"]) or "").strip() != ""
+            )
+            if first_row is None:
+                if both_filled:
+                    first_row = last_row = row_index
+                    rows.add(row_index)
+                continue
+            if both_filled and last_row is not None and row_index == last_row + 1:
+                last_row = row_index
+                rows.add(row_index)
+                continue
+            # First structural boundary after the block began: the roster
+            # block is sealed. Later blocks are group tables, never students.
+            break
+        if first_row is not None and last_row is not None:
+            blocks[column] = {
+                "rows": rows,
+                "first_row": first_row,
+                "last_row": last_row,
+            }
+    return blocks
+
+
 def _detect_students_structural(spans: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Positional student detection for structured (row-span) documents.
 
@@ -946,6 +1009,17 @@ def _detect_students_structural(spans: list[dict[str, Any]]) -> list[dict[str, A
         sheet: info
         for sheet, info in _sheet_class_pairs(spans).items()
         if sheet not in header_by_sheet  # an explicit label header wins
+    }
+    roster_blocks_by_sheet = {
+        sheet: _class_pair_roster_blocks(
+            [
+                span
+                for span in spans
+                if span.get("sheet") == sheet and "cells" in span
+            ],
+            info,
+        )
+        for sheet, info in class_pairs_by_sheet.items()
     }
     found: dict[str, dict[str, Any]] = {}
     order: list[str] = []
@@ -1011,6 +1085,14 @@ def _detect_students_structural(spans: list[dict[str, Any]]) -> list[dict[str, A
             if any(column not in info["allowed_columns"] for column in cells):
                 continue  # fills beyond the pairs — table data, not a roster row
             for column, pair in info["pairs"].items():
+                # F1: the surname+firstname join applies ONLY inside the
+                # pair's roster block. Group tables stacked below the roster
+                # hold a COMPLETE name per column — joining them fabricates
+                # students. Blocks are structural (first consecutive
+                # both-filled run); no name heuristics.
+                block = roster_blocks_by_sheet.get(sheet, {}).get(column)
+                if block is None or row_index not in block["rows"]:
+                    continue
                 last_part = str(cells.get(column) or "").strip()
                 first_part = str(cells.get(pair["neighbour"]) or "").strip()
                 # A roster row fills BOTH columns of the pair; a row with one
@@ -1021,6 +1103,12 @@ def _detect_students_structural(spans: list[dict[str, Any]]) -> list[dict[str, A
                         "class": pair["class"],
                         "grade": str(sheet),
                         "teacher_attribution": pair["teacher"],
+                        # block provenance: a wrong segmentation must be
+                        # visible in the preview before confirm (spec §2 F1.4)
+                        "source_rows": (
+                            f"{sheet} rows {block['first_row']}–{block['last_row']}"
+                            f" cols {column}+{pair['neighbour']}"
+                        ),
                     })
     return [found[student_id] for student_id in order]
 

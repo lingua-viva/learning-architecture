@@ -848,15 +848,106 @@ def test_teacher_row_is_attribution_never_a_student():
     assert attributions == teachers
 
 
-def test_note_rows_inside_roster_columns_are_not_students():
-    """'1/2 groups...' scheduling notes live INSIDE the roster columns but
-    fill only one cell of the pair — excluded structurally, not by text
-    matching or blocklist (§5)."""
+def test_title_rows_inside_roster_columns_are_not_students():
+    """'1/2 groups...' title rows live INSIDE the roster columns but fill
+    only one cell of the pair — excluded structurally, not by text matching
+    or blocklist (§5)."""
     content = (SYNTHETIC_CORPUS / "synthetic_class_list.xlsx").read_bytes()
     record = _run(extract_document(_xlsx_source("synthetic_class_list.xlsx"), content))
 
     names = {s["display_name"] for s in record.data["structure"]["students_detected"]}
     assert not any("groups" in name for name in names)
+
+
+# --- F1 (SPEC_LV_DEMO_EVE_FIX_2026-08-19): roster-block segmentation ----------
+
+
+_ROSTER_NAMES = {
+    # Verdi (Grade 3, cols A/B)
+    "Marco Bianchi", "Nora Rossi", "Sara Conti",
+    "Luca Ferri", "Elisa Greco", "Tommaso Marini",
+    # Arancioni (Grade 3, cols C/D)
+    "Giulia Riva", "Pietro Serra", "Anna (Annie) Villa",
+    "Leo Fontana", "Camilla Gatti",
+    # Blu (Grade 6, cols A/B)
+    "Matteo Barbieri", "Sofia Caruso", "Emma Longo", "Diego Marchetti",
+    # Gialli (Grade 6, cols C/D)
+    "Alice Monti", "Filippo Neri", "Viola Pellegrini", "Oscar Sanna",
+}
+
+
+def test_group_table_blocks_never_create_students():
+    """CLASS LOCK (F1, demo-blocking Finding 1): the fixture stacks two
+    '1/2 groups' tables below each roster in the SAME column pairs, each
+    column holding a COMPLETE name. The surname+firstname join applied to
+    those blocks fused two real children into one non-existent student
+    (18 → 35 on the real file). The join applies ONLY inside the roster
+    block: detection must return exactly the roster names — zero fused."""
+    content = (SYNTHETIC_CORPUS / "synthetic_class_list.xlsx").read_bytes()
+    record = _run(extract_document(_xlsx_source("synthetic_class_list.xlsx"), content))
+
+    names = {s["display_name"] for s in record.data["structure"]["students_detected"]}
+    assert names == _ROSTER_NAMES
+    # the specific fabrication shape: "First1 Last1 First2 Last2"
+    fused = {n for n in names if len(n.split()) >= 4 and "(" not in n}
+    assert fused == set(), fused
+
+
+def test_roster_block_provenance_on_every_class_pair_student():
+    """F1.4: preview must show WHICH rows the names came from, so a wrong
+    segmentation is visible before confirm. Every class-pair student carries
+    source_rows naming sheet, roster row range and column pair."""
+    content = (SYNTHETIC_CORPUS / "synthetic_class_list.xlsx").read_bytes()
+    record = _run(extract_document(_xlsx_source("synthetic_class_list.xlsx"), content))
+
+    students = record.data["structure"]["students_detected"]
+    assert students
+    for s in students:
+        assert "source_rows" in s, s["display_name"]
+        assert s["grade"] in s["source_rows"]
+        assert "rows 3–" in s["source_rows"]  # rosters start at row 3
+        assert "cols" in s["source_rows"]
+
+
+def test_asymmetric_rosters_segment_per_pair():
+    """Two classes side by side with DIFFERENT roster lengths (real shape:
+    17 + 19): the shorter pair's block ends where its columns stop filling;
+    the longer pair keeps its full roster. Rows where only the other pair
+    is filled never leak across."""
+    from io import BytesIO
+
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Grade 4"
+    ws.append(["Rossi Class", None, "Blu Class"])            # row 1: class names
+    ws.append(["Teacher Uno", None, "Teacher Due"])          # row 2: teachers
+    ws.append(["Alfa", "Anna", "Delta", "Dario"])            # rosters
+    ws.append(["Beta", "Bruno", "Echo", "Enea"])
+    ws.append([None, None, "Foxtrot", "Fabio"])              # only right pair
+    ws.append([None, None, "Golf", "Gaia"])
+    ws.append([])                                             # blank separator
+    ws.append(["1/2 groups for Music/Homeroom", None, "1/2 groups for Music/Homeroom"])
+    ws.append(["Anna Alfa", "Bruno Beta", "Dario Delta", "Enea Echo"])
+    ws.append([None, None, "Fabio Foxtrot", "Gaia Golf"])
+    buf = BytesIO()
+    wb.save(buf)
+    record = _run(extract_document(_xlsx_source("asym.xlsx"), buf.getvalue()))
+
+    students = record.data["structure"]["students_detected"]
+    names = {s["display_name"] for s in students}
+    assert names == {
+        "Anna Alfa", "Bruno Beta",
+        "Dario Delta", "Enea Echo", "Fabio Foxtrot", "Gaia Golf",
+    }
+    by_class: dict = {}
+    for s in students:
+        by_class.setdefault(s["class"], set()).add(s["display_name"])
+    assert by_class["Rossi Class"] == {"Anna Alfa", "Bruno Beta"}
+    assert by_class["Blu Class"] == {
+        "Dario Delta", "Enea Echo", "Fabio Foxtrot", "Gaia Golf",
+    }
 
 
 def test_title_and_subtitle_over_a_grid_is_not_a_class_pair():

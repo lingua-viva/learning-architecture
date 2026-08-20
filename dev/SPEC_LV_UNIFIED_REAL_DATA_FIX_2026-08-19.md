@@ -72,7 +72,10 @@ denominator. Build the corpus BEFORE fixes:
 1. **Hand-label the 5 real files** (locally, never committed): per file, the exact
    expected student set (names as they appear in that file); for the class list, the
    teacher→class→roster mapping including the target teacher's row-2 cell ⇒ her class
-   column ⇒ the ~39 names below it; for curriculum mapping and 6-day calendar, the
+   column ⇒ the 20 names in HER class column below it (CORRECTED 08-19 eve by human
+   hand-count: a grade sheet holds TWO class columns side by side, 41 students total;
+   the audit's "~39" wrongly counted both columns — her column alone is ground truth);
+   for curriculum mapping and 6-day calendar, the
    **empty set** (the most valuable rows — the false-positive traps); for 3V, the 6
    students, which 3 are hers, and the category→column mapping; known cross-file identity
    collisions (same child, multiple spellings).
@@ -130,11 +133,12 @@ Detected students carry `class`, `grade`, `teacher_attribution`. Import gains a 
 option ("only my class"). Teachers stop being ingested as students — position says row 2
 is a teacher row. Wire attribution into the existing `teacher_roster` table.
 - **Verify (scorer):** class-list fixture → roster attributed to the correct teacher,
-  teachers not in the student set. The teacher wants her ~39, not 400.
+  teachers not in the student set. The teacher wants her 20, not 41 and not 400 —
+  a grade sheet is two classes, and attribution must split at the class COLUMN.
 
 ### STEP 5 — Identity resolution (L8) — ruling §8-3
 `student_id = slug(display_name)` makes identity BE the spelling. Needed: canonical id +
-set of observed surface forms, resolution scoped to a class roster (matching within ~39
+set of observed surface forms, resolution scoped to a class roster (matching within ~20
 names, not globally), and an **unresolved queue for a human** rather than a silent guess
 (reuse the existing unattributed-review queue pattern, `/api/students/ingest/unattributed`).
 - Default until ruling §8-3 says otherwise: **always queue, never auto-merge** —
@@ -235,11 +239,12 @@ On the frozen corpus, per file (scorer output, not eyeballs):
 | Curriculum mapping | **0** | false positives — must be 0 |
 | 6-day calendar | **0** | false positives — must be 0 |
 | 3V support | **6** | recall — currently 0 |
-| Class list (target teacher's column) | **~39, attributed to her** | precision AND attribution — currently 0 |
+| Class list (target teacher's class column) | **20, attributed to her class** (grade sheet total = 41 across two class columns — both-columns = FAIL) | precision AND attribution |
 | K-5 support | ~76 | precision (no roles as students) |
 
 **End-to-end assertion (the product requirement, one check):** import all five real
-files → ~39 lenses for the target teacher's class, enriched from the support files,
+files → 20 lenses for the target teacher's class (support-file matches ENRICH existing
+lenses — the count stays 20, never grows), enriched from the support files,
 **zero** lenses from the curriculum map or the calendar.
 
 **Content side:** the real IB PDF → 3 genuinely file-grounded tiers within the timeout

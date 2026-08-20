@@ -1,6 +1,8 @@
 # Lingua Viva — Demo Script: The Trust Story
-**Date written:** 2026-08-04. **Target build:** `desktop-v0.2.38` (live, signed, verified — see
-`dev/LV_STATUS_AND_VOICE_WALKBACK_2026-08-04.md`). **Runtime:** ~6-8 minutes.
+**Date written:** 2026-08-04. **Current production build:** `desktop-v0.2.60`
+(verified 2026-08-17 from `https://linguaviva.art/` live download links and
+GitHub release assets). **Original target build:** `desktop-v0.2.38`, now
+archived. **Runtime:** ~6-8 minutes.
 
 No new draft existed for this — `dev/EXECUTION_PROMPT_LV_DEMO_READINESS_2026-07-22_KIRO.md` is a
 different, past demo (2026-07-23, Linux machine, lesson-differentiation focus). This is a fresh

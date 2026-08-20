@@ -120,7 +120,11 @@ the other files, ignoring everything irrelevant. **Ground truth IS in the files:
 - **Class list** (`2026-2027 Class List Drafts`): one sheet per grade; classes are
   COLUMN PAIRS ("Grade 3 Verdi" | "Grade 3 Arancioni"); **row 2 names the teachers**
   — Grade 3 sheet, col A: "Claudia Canu-Fautre & Stella Rubinacci" → her class is
-  Grade 3 Verdi; her roster is the ~39 names below that cell. Full first+last names.
+  Grade 3 Verdi; her roster is the names below that cell IN HER CLASS COLUMN ONLY.
+  Full first+last names. **CORRECTION (08-19 eve, operator hand-count): her class =
+  20 students; the grade sheet = 41 across the two class columns. This doc's original
+  "~39" wrongly counted both columns — any corpus/scorer labeled from it must be
+  relabeled to 20/41.**
 - **`3V ES Student Support`**: single sheet "3rd", proper column headers (Student /
   class / Classroom Accommodations / Internal support / External Support / Student
   Support Plan / Notes). **6 students**, names abbreviated ("First L-W" style), class
@@ -270,7 +274,7 @@ being a thinking model (see C1a).
 
 **The target workflow is not achievable on today's build.** Importing all 5 files
 as-is would create roughly **940+ student lenses, most fake, all synced toward
-Drive** — while the 6 students with actual support data (and the ~39 real names of
+Drive** — while the 6 students with actual support data (and the 20 real names of
 Claudia's roster with class attribution available in the file) yield zero correctly
 attributed, zero enriched lenses. Both pipelines fail through the SAME classes of
 defect:
@@ -289,3 +293,15 @@ The unified solution should treat these as six failure classes, not sixteen bugs
 *Diagnostics executed 2026-08-19 on the dev machine, `MC_AGENT=1`, read-only —
 no lenses were created, no student store writes, no Drive calls. Repro code inline in
 the session transcript (`a7005cb6`).*
+
+---
+
+## Correction (2026-08-20, demo-eve fix wave)
+
+The 08-19 "20/41" correction in this document is itself superseded. The teacher's
+confirmed count for her class is **18** (two Grade 3 sections: 17 + 19). The
+expected-count numbers previously stated in this document (~39, then 20/41) were
+wrong because of Finding 1 itself: stacked non-roster tables inflate any naive
+column count. Per SPEC_LV_DEMO_EVE_FIX_2026-08-19 §1, counts now flow only
+through the ground-truth procedure (fixed extractor prints roster names → human
+confirms → label sealed).

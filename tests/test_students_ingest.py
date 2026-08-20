@@ -1184,7 +1184,8 @@ def test_preview_controls_wired():
     assert "data-ingest-cancel" in HTML
     assert '"/api/students/ingest/approve"' in HTML
     assert '"/api/students/ingest/cancel"' in HTML
-    assert "Create these ${scoped.length} student" in HTML
+    # F1b: the confirm count reflects the INCLUDED set, not everything scoped
+    assert "Create these ${included.length} student" in HTML
     assert "Nothing has been saved yet" in HTML
     # Claudia-lens rule (v157): raw confidence numbers never render in the UI.
     assert "student.confidence" not in HTML
@@ -1226,6 +1227,8 @@ def _class_list_extraction(source_id: str) -> dict:
         student["class"] = class_name
         student["grade"] = "Grade 3"
         student["teacher_attribution"] = teacher
+        # F1.4 block provenance, as the roster-block detector emits it
+        student["source_rows"] = "Grade 3 rows 3–5 cols A+B"
     return data
 
 
@@ -1315,7 +1318,74 @@ def test_class_scope_ui_wired():
     assert "data-ingest-class-scope" in HTML
     assert "preview_classes" in HTML
     assert "you can import only yours" in HTML
-    assert "classes: [scope]" in HTML
+    assert "body.classes = [scope]" in HTML
+
+
+# --- F1/F1b (SPEC_LV_DEMO_EVE_FIX_2026-08-19): provenance + per-entry exclude --
+
+
+def test_preview_carries_source_rows_provenance(isolated_state, class_list_extractor, sync_spies):
+    """F1.4: the preview surfaces WHICH rows/columns each name came from, so
+    a wrong roster segmentation is visible before confirm."""
+    job = _wait_for_job(_upload()["job_id"])
+    assert job["status"] == "preview"
+    rows = {row["display_name"]: row for row in job["preview_students"]}
+    assert rows["Marco Bianchi"]["source_rows"] == "Grade 3 rows 3–5 cols A+B"
+
+
+def test_approve_with_excluded_names_never_creates_them(isolated_state, class_list_extractor, sync_spies):
+    """F1b: names the teacher toggled out of the confirm set are never
+    created — the per-entry remedy the baseline report found missing
+    ('create-all-35 or Cancel')."""
+    job = _wait_for_job(_upload()["job_id"])
+    assert job["status"] == "preview"
+
+    response = client.post("/api/students/ingest/approve", json={
+        "job_id": job["job_id"], "exclude": ["Nora Rossi", "Sofia Caruso"],
+    })
+    assert response.status_code == 200, response.text
+    done = _wait_for_job(job["job_id"])
+    assert done["status"] == "done"
+    created = sorted(s["display_name"] for s in done["students_created"])
+    assert created == ["Marco Bianchi", "Matteo Barbieri", "Sara Conti"]
+    assert _store_count() == 3
+    assert any("Left out 2" in w for w in done["warnings"]), done["warnings"]
+
+
+def test_exclude_composes_with_class_scope(isolated_state, class_list_extractor, sync_spies):
+    job = _wait_for_job(_upload()["job_id"])
+    response = client.post("/api/students/ingest/approve", json={
+        "job_id": job["job_id"], "classes": ["Verdi"], "exclude": ["Sara Conti"],
+    })
+    assert response.status_code == 200, response.text
+    done = _wait_for_job(job["job_id"])
+    created = sorted(s["display_name"] for s in done["students_created"])
+    assert created == ["Marco Bianchi", "Nora Rossi"]
+    assert _store_count() == 2
+
+
+def test_approve_with_unknown_excluded_name_is_refused(isolated_state, class_list_extractor, sync_spies):
+    """An unknown excluded name is a 422, never a silent no-op — the job
+    stays at preview."""
+    job = _wait_for_job(_upload()["job_id"])
+    response = client.post("/api/students/ingest/approve", json={
+        "job_id": job["job_id"], "exclude": ["Nobody Here"],
+    })
+    assert response.status_code == 422
+    assert _store_count() == 0
+    refreshed = client.get(f"/api/students/ingest/{job['job_id']}").json()
+    assert refreshed["status"] == "preview"
+
+
+def test_per_entry_exclude_ui_wired():
+    """F1b UI: name pills toggle exclusion, the confirm count updates from
+    the included set, and the approve sends the excluded names."""
+    assert "data-ingest-toggle" in HTML
+    assert "body.exclude = excludeNames" in HTML
+    assert "Create these ${included.length}" in HTML
+    assert "left out — will not be created" in HTML
+    # F1 provenance badge in the preview row
+    assert "student.source_rows" in HTML
 
 
 # --- STEP 5 (SPEC_LV_UNIFIED_REAL_DATA_FIX §STEP 5): identity resolution ------

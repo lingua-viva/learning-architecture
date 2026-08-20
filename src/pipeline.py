@@ -640,6 +640,62 @@ class SynthesisEngine:
         )
 
 
+def _student_zero_data_refusal(query: str) -> Optional[str]:
+    """F2 (SPEC_LV_DEMO_EVE_FIX_2026-08-19 §2): the zero-data refusal gate.
+
+    When a query references a student who has ZERO observations, ZERO
+    evidence records and NO CEFR dimension set, return a fixed honest
+    refusal — the model must never invent a progress narrative from
+    nothing ("has been making good progress" over an empty scaffold,
+    read aloud, was demo-blocking Finding 2).
+
+    Returns the refusal text, or None when the query is not student-scoped,
+    the student has any recorded data, or anything at all goes wrong: the
+    gate refuses only on POSITIVE evidence of zero data (fail-open — a
+    broken roster must not silence every answer).
+    """
+    try:
+        from src.education.student_lens import StudentLensStore
+        from src.lingua_viva.voice_intent import detect_student_detailed
+
+        db_override = os.environ.get("LV_STUDENT_DB_PATH")
+        if db_override:
+            db_path = Path(db_override)
+        else:
+            from src.lingua_viva.config import lv_home
+
+            db_path = lv_home() / "runtime" / "student_lenses.db"
+        if not db_path.exists():
+            return None
+        with StudentLensStore(db_path=db_path) as store:
+            roster = [
+                {
+                    "student_id": lens.get("student_id"),
+                    "display_name": lens.get("display_name"),
+                }
+                for lens in store.list_lenses()
+            ]
+            detection = detect_student_detailed(query, roster)
+            if not detection.student_id or detection.match_quality not in ("exact", "fuzzy"):
+                return None
+            lens = store.export_lens(detection.student_id)
+            if lens.get("observations"):
+                return None
+            if store.list_evidence(detection.student_id):
+                return None
+            cefr = lens.get("cefr_snapshot") or {}
+            if any(value for value in cefr.values()):
+                return None
+            display_name = str(lens.get("display_name") or "this student").strip()
+            return (
+                f"There are no observations recorded for {display_name} yet — "
+                "I can't describe their progress. Add an observation and ask "
+                "again, and I'll answer from what you actually recorded."
+            )
+    except Exception:
+        return None
+
+
 class Pipeline:
     """
     Legacy 8-step pipeline retained until the Lingua Viva native pipeline replaces it.
@@ -774,6 +830,66 @@ class Pipeline:
                 steps_executed.append("EXECUTE")
                 gap_signals.append(
                     f"education_execute:{execution_result.status}:{classification.riu_id}"
+                )
+
+        # ================================================================
+        # Step 1c: STUDENT ZERO-DATA GATE (F2, SPEC_LV_DEMO_EVE_FIX_2026-08-19)
+        # ================================================================
+        # A question about a student with ZERO recorded data (no
+        # observations, no evidence records, no CEFR dimension) gets a fixed
+        # refusal-with-reason, never a model-invented progress narrative.
+        # The gate is code, before any model call, on every caller of
+        # Pipeline.run (ask, voice, query, query/stream) — the model cannot
+        # route around it. Education-module output (execution_result) is
+        # deterministic roster data, not invention, so it proceeds.
+        if execution_result is None:
+            refusal = _student_zero_data_refusal(query)
+            if refusal is not None:
+                gap_signals.append("refused:no_student_data")
+                steps_executed.append("REFUSE(no_student_data)")
+                synthesis_result = SynthesisResult(
+                    content=refusal,
+                    confidence=1.0,
+                    intent="PROTECT",
+                    model_used="none:no_student_data",
+                )
+                duration_ms = int((time.time() - start_time) * 1000)
+                path_record = PathRecord(
+                    session_id=session_id,
+                    query_hash=query_hash,
+                    domain=classification.domain,
+                    entry_node=classification.riu_id,
+                    path=[classification.riu_id] + steps_executed + ["STORE"],
+                    confidence_at_entry=classification.confidence,
+                    confidence_at_exit=1.0,
+                    model_used="none:no_student_data",
+                    external_called=False,
+                    outcome="refused_no_student_data",
+                    intent=classification.default_intent,
+                    lens_applied=None,
+                    knowledge_entries_used=[],
+                    gap_signals=gap_signals,
+                    duration_ms=duration_ms,
+                    # The refusal makes no generative claims — there is
+                    # nothing to ground; it is literally true by construction.
+                    gir_score=1.0,
+                    gir_method="refusal:no_generative_claims",
+                    voice_tone="plain",
+                )
+                if not eval_mode:
+                    self.memory.write_path(path_record)
+                steps_executed.append("STORE" if not eval_mode else "STORE(skipped)")
+                return PipelineResult(
+                    session_id=session_id,
+                    query_hash=query_hash,
+                    classification=classification,
+                    synthesis=synthesis_result,
+                    path_record=path_record,
+                    duration_ms=duration_ms,
+                    steps_executed=steps_executed,
+                    external_called=False,
+                    gap_signals=gap_signals,
+                    grounding=None,
                 )
 
         # Gap signal if confidence is below threshold

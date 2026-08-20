@@ -20,8 +20,18 @@ def test_home_renders_brief_and_action_links():
     assert "/api/brief" in html
     assert "Go to Observe" in html
     assert "Go to Students" in html
+    assert "Ready for class" in html
     assert 'state.view = "observe"' in html
     assert 'state.view = "students"' in html
+
+
+def test_home_does_not_surface_doctor_health_warning_copy():
+    html = (ROOT / "static" / "index.html").read_text()
+    home = html[html.index("async function renderHome()") : html.index("async function renderObserve()")]
+
+    assert "System:" not in home
+    assert "<h3>Health</h3>" not in home
+    assert "data.health?.summary" not in home
 
 
 def test_logo_click_returns_to_home():
@@ -29,6 +39,23 @@ def test_logo_click_returns_to_home():
 
     assert 'id="brand-home"' in html
     assert 'state.view = state.role === "coordinator" ? "programme" : "home"' in html
+
+
+def test_still_i_rise_photo_is_mounted_in_topbar():
+    html = (ROOT / "static" / "index.html").read_text()
+
+    assert 'class="topbar-actions"' in html
+    assert 'src="/assets/still-i-rise-topbar.jpg"' in html
+    assert 'class="sir-topbar-photo"' in html
+
+
+def test_version_badge_wired_in_topbar():
+    """F4: the UI must surface the app version somewhere always-reachable."""
+    html = (ROOT / "static" / "index.html").read_text()
+
+    assert 'id="app-version"' in html
+    assert "lvDesktop.getVersion" in html
+    assert '"/api/health"' in html
 
 
 def test_first_launch_welcome_explains_privacy_and_lands_on_home():

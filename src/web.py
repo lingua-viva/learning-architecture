@@ -312,6 +312,9 @@ async def health():
     # in /api/health instead of silently 404ing every feature route.
     result["routers_loaded"] = _routers_loaded
     result["routers_expected"] = _routers_expected
+    # F4: surface the backend version so the UI can display it in browser mode.
+    from src.lingua_viva import __version__
+    result["version"] = __version__
     return result
 
 
@@ -2606,6 +2609,25 @@ async def _create_from_preview(job: dict, extraction) -> None:
                     f"class ({', '.join(approved_classes)})."
                 )
             detected = in_scope
+        # F1b (SPEC_LV_DEMO_EVE_FIX_2026-08-19 §2): names the teacher toggled
+        # OUT of the confirm set in the preview are never created — her
+        # per-entry remedy against the next structural surprise.
+        excluded_names = {
+            str(item).strip()
+            for item in (job.get("excluded_names") or [])
+            if str(item).strip()
+        }
+        if excluded_names:
+            before = len(detected)
+            detected = [
+                student for student in detected
+                if str(student.get("display_name") or "").strip() not in excluded_names
+            ]
+            removed = before - len(detected)
+            if removed:
+                job["warnings"].append(
+                    f"Left out {removed} name(s) you unticked in the preview."
+                )
         # SPEC_LV_DRIVE_OOTB 2026-08-18 (G3): roster-style imports (more than
         # BULK_IMPORT_CONFIRMATION_THRESHOLD students) auto-create EVERY
         # detected student — the teacher contract allows no per-name confirm
@@ -2756,7 +2778,16 @@ async def _run_ingest_job(job: dict, source, content: bytes) -> None:
                 "span_ids": [str(sid) for sid in (student.get("span_ids") or [])],
                 **{
                     key: str(student.get(key))
-                    for key in ("class", "grade", "teacher_attribution", "removal_proposed")
+                    for key in (
+                        "class",
+                        "grade",
+                        "teacher_attribution",
+                        "removal_proposed",
+                        # F1.4: block provenance — which sheet rows/columns the
+                        # name came from, so a wrong segmentation is visible
+                        # in the preview before confirm.
+                        "source_rows",
+                    )
                     if str(student.get(key) or "").strip()
                 },
             }
@@ -3118,7 +3149,13 @@ async def students_ingest_approve(payload: dict, background_tasks: BackgroundTas
 
     STEP 4 (SPEC §STEP 4, L4): the payload may carry `classes` — a list of
     class names from the preview's `preview_classes` — to scope creation to
-    "only my class". An unknown class name is a 422, not a silent no-op."""
+    "only my class". An unknown class name is a 422, not a silent no-op.
+
+    F1b (SPEC_LV_DEMO_EVE_FIX_2026-08-19 §2): the payload may carry
+    `exclude` — display names the teacher toggled OUT of the confirm set in
+    the preview. Her safety net against the next structural surprise: a
+    per-entry remedy instead of create-all-or-Cancel. An unknown name is a
+    422, not a silent no-op."""
     from src.lingua_viva.docpipe import vault as docpipe_vault
 
     job_id = str((payload or {}).get("job_id", "")).strip()
@@ -3146,6 +3183,23 @@ async def students_ingest_approve(payload: dict, background_tasks: BackgroundTas
                 + ". Pick from the classes shown in the preview."
             ),
         }, status_code=422)
+    excluded = [
+        str(item).strip()
+        for item in ((payload or {}).get("exclude") or [])
+        if str(item).strip()
+    ]
+    preview_names = {
+        str(student.get("display_name") or "").strip()
+        for student in (job.get("preview_students") or [])
+    }
+    unknown_names = [name for name in excluded if name not in preview_names]
+    if unknown_names:
+        return JSONResponse({
+            "error": (
+                "Unknown excluded name(s): " + ", ".join(unknown_names)
+                + ". Pick from the names shown in the preview."
+            ),
+        }, status_code=422)
     try:
         extraction = await asyncio.to_thread(docpipe_vault.get_extraction, job["source_id"])
     except FileNotFoundError:
@@ -3153,6 +3207,7 @@ async def students_ingest_approve(payload: dict, background_tasks: BackgroundTas
             "error": "The extracted document is no longer available — import the file again (re-imports merge safely).",
         }, status_code=409)
     job["approved_classes"] = classes
+    job["excluded_names"] = excluded
     job["status"] = "creating"
     _save_ingest_job(job)
     background_tasks.add_task(_create_from_preview, job, extraction)
@@ -6591,6 +6646,7 @@ async def lesson_materials_generate(request: Request, payload: dict):
         assign_roster_split,
         generate_lesson_materials,
         materials_as_dicts,
+        store_generated_materials,
     )
 
     teacher_id = effective_teacher_id(request, str(payload.get("teacher_id") or "local-teacher"))
@@ -6626,6 +6682,11 @@ async def lesson_materials_generate(request: Request, payload: dict):
         return JSONResponse({"error": "unauthorized_student_ids", "detail": str(exc)}, status_code=422)
     except ValueError as exc:
         return JSONResponse({"error": "generation_failed", "detail": str(exc)}, status_code=422)
+
+    # F3 (SPEC_LV_DEMO_EVE_FIX_2026-08-19 §2): persist what the teacher is
+    # about to review. Packet preview/print renders THIS stored artifact —
+    # regenerating replaces it, nothing else does.
+    await asyncio.to_thread(store_generated_materials, lesson, result, teacher_id)
 
     return {
         "materials": materials_as_dicts(result),
@@ -6806,11 +6867,15 @@ async def lesson_materials_today(request: Request, payload: dict):
 
 @app.post("/api/lesson-materials/packet/preview")
 async def lesson_materials_packet_preview(request: Request, payload: dict):
+    # F3 (SPEC_LV_DEMO_EVE_FIX_2026-08-19 §2): the packet prints what the
+    # teacher reviewed. This endpoint renders the STORED artifact from the
+    # last generation — zero model calls. If nothing was generated yet, it
+    # says so honestly instead of silently inventing fresh content.
     from src.lingua_viva.access_roles import effective_teacher_id
     from src.lingua_viva.lesson_materials import (
-        assign_roster_split,
-        generate_lesson_materials,
-        materials_as_dicts,
+        IndividualSupportStudent,
+        load_generated_materials,
+        material_from_dict,
         render_packet_bundle,
     )
 
@@ -6819,37 +6884,44 @@ async def lesson_materials_packet_preview(request: Request, payload: dict):
         lesson = _cohort_lesson_from_payload(payload, teacher_id)
     except (TypeError, ValueError) as exc:
         return JSONResponse({"error": "invalid_lesson", "detail": str(exc)}, status_code=400)
-    student_ids = payload.get("student_ids") if isinstance(payload.get("student_ids"), list) else None
-    tier_overrides = _tier_overrides_from_payload(payload)
-    try:
-        source_text = await _lesson_source_text_from_payload(payload)
-    except ValueError as exc:
-        return JSONResponse({"error": "invalid_lesson_file", "detail": str(exc)}, status_code=400)
 
-    def load(store):
-        return assign_roster_split(store, teacher_id, student_ids, overrides=tier_overrides)
-
-    try:
-        split = await asyncio.to_thread(_with_student_store, load)
-        result = await generate_lesson_materials(
-            lesson=lesson,
-            teacher_id=teacher_id,
-            push_to_drive=False,
-            tier_groups=split.tier_groups,
-            roster_names=split.roster_names,
-            individual_support=split.individual_support,
-            source_text=source_text,
+    record = await asyncio.to_thread(load_generated_materials, lesson, teacher_id)
+    if record is None:
+        return JSONResponse(
+            {
+                "error": "no_generated_materials",
+                "detail": (
+                    "No materials have been generated for this lesson yet. "
+                    "Generate and review the tier cards first — the packet "
+                    "prints exactly what you reviewed."
+                ),
+            },
+            status_code=409,
         )
+
+    materials = [
+        material_from_dict(item)
+        for item in record["materials"]
+        if isinstance(item, dict)
+    ]
+    individual_support = [
+        IndividualSupportStudent(
+            student_id=str(item.get("student_id") or ""),
+            display_name=str(item.get("display_name") or item.get("student_id") or ""),
+            reason=str(item.get("reason") or ""),
+        )
+        for item in record.get("individual_support", [])
+        if isinstance(item, dict)
+    ]
+    try:
         packet = render_packet_bundle(
             lesson,
-            result.materials,
+            materials,
             status="DRAFT",
-            individual_support=result.individual_support,
+            individual_support=individual_support,
         )
-    except PermissionError as exc:
-        return JSONResponse({"error": "unauthorized_student_ids", "detail": str(exc)}, status_code=422)
     except ValueError as exc:
-        return JSONResponse({"error": "generation_failed", "detail": str(exc)}, status_code=422)
+        return JSONResponse({"error": "packet_render_failed", "detail": str(exc)}, status_code=422)
 
     return {
         "packet": {
@@ -6861,9 +6933,10 @@ async def lesson_materials_packet_preview(request: Request, payload: dict):
             "filename": None,
             "printable": True,
         },
-        "materials": materials_as_dicts(result),
-        "individual_support": [item.__dict__ for item in result.individual_support],
-        "lesson_summary": result.lesson_summary,
+        "materials": record["materials"],
+        "individual_support": record.get("individual_support", []),
+        "lesson_summary": record.get("lesson_summary", ""),
+        "generated_at": record.get("generated_at"),
         "requires_teacher_approval": True,
         "writes": {"deliverables": 0, "audit_receipts": 0},
     }
@@ -6881,8 +6954,7 @@ async def lesson_materials_packet_approve(request: Request, payload: dict):
     from src.lingua_viva.deliverables.store import upsert_deliverable
     from src.lingua_viva.lesson_materials import (
         IndividualSupportStudent,
-        assign_roster_split,
-        generate_lesson_materials,
+        load_generated_materials,
         material_from_dict,
         materials_as_dicts,
         render_packet_bundle,
@@ -6914,25 +6986,39 @@ async def lesson_materials_packet_approve(request: Request, payload: dict):
             if len(materials) != 3:
                 raise ValueError("materials must contain exactly three tiers")
         else:
-            student_ids = payload.get("student_ids") if isinstance(payload.get("student_ids"), list) else None
-            tier_overrides = _tier_overrides_from_payload(payload)
-            source_text = await _lesson_source_text_from_payload(payload)
-
-            def load(store):
-                return assign_roster_split(store, teacher_id, student_ids, overrides=tier_overrides)
-
-            split = await asyncio.to_thread(_with_student_store, load)
-            result = await generate_lesson_materials(
-                lesson=lesson,
-                teacher_id=teacher_id,
-                push_to_drive=False,
-                tier_groups=split.tier_groups,
-                roster_names=split.roster_names,
-                individual_support=split.individual_support,
-                source_text=source_text,
-            )
-            materials = result.materials
-            individual_support = result.individual_support
+            # F3 (SPEC_LV_DEMO_EVE_FIX_2026-08-19 §2): approval without an
+            # explicit materials payload uses the STORED reviewed artifact —
+            # never a fresh generation the teacher hasn't seen.
+            record = await asyncio.to_thread(load_generated_materials, lesson, teacher_id)
+            if record is None:
+                return JSONResponse(
+                    {
+                        "error": "no_generated_materials",
+                        "detail": (
+                            "No materials have been generated for this lesson yet. "
+                            "Generate and review the tier cards first — approval "
+                            "prints exactly what you reviewed."
+                        ),
+                    },
+                    status_code=409,
+                )
+            materials = [
+                material_from_dict(item)
+                for item in record["materials"]
+                if isinstance(item, dict)
+            ]
+            if len(materials) != 3:
+                raise ValueError("stored materials must contain exactly three tiers")
+            if not individual_support:
+                individual_support = [
+                    IndividualSupportStudent(
+                        student_id=str(item.get("student_id") or ""),
+                        display_name=str(item.get("display_name") or item.get("student_id") or ""),
+                        reason=str(item.get("reason") or ""),
+                    )
+                    for item in record.get("individual_support", [])
+                    if isinstance(item, dict)
+                ]
     except PermissionError as exc:
         return JSONResponse({"error": "unauthorized_student_ids", "detail": str(exc)}, status_code=422)
     except ValueError as exc:

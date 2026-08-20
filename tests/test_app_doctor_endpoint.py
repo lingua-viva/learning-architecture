@@ -21,3 +21,6 @@ def test_health_endpoint_returns_doctor_status(monkeypatch):
     body = response.json()
     assert body["status"] == "OK"
     assert isinstance(body["status"], str)
+    # F4: health endpoint must include the backend version for the UI.
+    assert "version" in body
+    assert isinstance(body["version"], str)

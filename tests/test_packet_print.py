@@ -118,28 +118,25 @@ def test_render_packet_bundle_student_variant_prints_without_support_litter():
     assert bundle["student_print_html"].count("Student Handout") == 3
 
 
-def test_packet_preview_route_returns_both_print_variants(monkeypatch):
-    from src.lingua_viva import lesson_materials
-
-    monkeypatch.setattr(
-        lesson_materials,
-        "assign_roster_split",
-        lambda *args, **kwargs: SimpleNamespace(
-            tier_groups={m.tier: m.student_ids for m in _materials()},
-            roster_names={},
-            individual_support=_support(),
-        ),
+def test_packet_preview_route_returns_both_print_variants(monkeypatch, tmp_path):
+    # F3: preview renders the STORED artifact from the last generation — no
+    # generation machinery involved. Seed the store the way generate does.
+    from src.lingua_viva.lesson_materials import (
+        LessonMaterialsResult,
+        store_generated_materials,
     )
 
-    async def fake_generate_lesson_materials(**kwargs):
-        return SimpleNamespace(
+    monkeypatch.setenv("LV_GENERATED_MATERIALS_DIR", str(tmp_path / "generated"))
+    store_generated_materials(
+        _lesson(),
+        LessonMaterialsResult(
             materials=_materials(),
-            individual_support=_support(),
             lesson_summary="fake summary",
             sync_status="not_requested",
-        )
-
-    monkeypatch.setattr(lesson_materials, "generate_lesson_materials", fake_generate_lesson_materials)
+            individual_support=_support(),
+        ),
+        teacher_id="teacher-a",
+    )
 
     with TestClient(app) as client:
         response = client.post("/api/lesson-materials/packet/preview", json=_payload())
@@ -151,6 +148,19 @@ def test_packet_preview_route_returns_both_print_variants(monkeypatch):
     assert "Teacher-Only Individual Support" in packet["print_html"]
     assert "Teacher-Only Individual Support" not in packet["student_print_html"]
     assert "Zoe Rivera" not in packet["student_print_html"]
+
+
+def test_packet_preview_without_generation_is_refused(monkeypatch, tmp_path):
+    # F3: never invent a packet the teacher hasn't reviewed.
+    monkeypatch.setenv("LV_GENERATED_MATERIALS_DIR", str(tmp_path / "empty"))
+
+    with TestClient(app) as client:
+        response = client.post("/api/lesson-materials/packet/preview", json=_payload())
+
+    assert response.status_code == 409
+    body = response.json()
+    assert body["error"] == "no_generated_materials"
+    assert "reviewed" in body["detail"]
 
 
 def test_packet_approve_route_returns_both_print_variants(monkeypatch, tmp_path):

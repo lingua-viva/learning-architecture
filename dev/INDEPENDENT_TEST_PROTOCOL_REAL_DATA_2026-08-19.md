@@ -43,10 +43,10 @@ pasted into shared docs. Your written results use COUNTS and redacted placeholde
 | Curriculum mapping xlsx | **0 students detected** | any detection at all |
 | 6-day calendar xlsx | **0 students detected** | any detection at all |
 | 3V support xlsx | **6 students** (abbreviated names) | 0, or garbage names |
-| Class list xlsx, scoped to the teacher's class | **~39, attributed to her class** | 400+, teachers-as-students, class names as students |
+| Class list xlsx, scoped to the teacher's class | **20, attributed to her class column** (human-counted 08-19; grade sheet = 41 across TWO class columns) | ~35–41 (both columns merged into one class), 400+, teachers-as-students, class names as students |
 | K-5 support xlsx | ~76, no roles (e.g. "Include Specialist") as students | roles/headers as students |
 
-**End-to-end:** after importing all five files the app holds **~39 lenses for the one
+**End-to-end:** after importing all five files the app holds **20 lenses for the one
 class, enriched from the support files, ZERO lenses originating from the curriculum or
 calendar files.** Count them. That single number is the product requirement.
 
@@ -119,15 +119,15 @@ Also watch for (previous-generation bugs that must stay dead):
 
 ## 5. The test script — two arcs, in order
 
-### Arc A — Student lenses (the ~39)
+### Arc A — Student lenses (the 20)
 
 | # | Action | Expected on screen | Record |
 |---|---|---|---|
 | A1 | Open Students view, fresh app | zero students, coherent empty state | screenshot |
 | A2 | Import the CURRICULUM xlsx | **preview shows 0 students**; no create offered/needed | store count unchanged (§3.1) |
 | A3 | Import the CALENDAR xlsx | **preview shows 0 students** | store count unchanged |
-| A4 | Import the CLASS LIST xlsx | preview appears BEFORE anything is created; class/teacher scoping offered; her class ⇒ ~39 names, no teachers in the list | screenshot preview; store count STILL unchanged |
-| A5 | Confirm creation | ~39 lenses exist, attributed to her class | store count = ~39; Drive queue state |
+| A4 | Import the CLASS LIST xlsx | preview appears BEFORE anything is created; class/teacher scoping offered; her class column ⇒ **20 names exactly** (NOT ~35–41 — a grade sheet holds TWO classes side by side; both-columns merged = FAIL), no teachers in the list | screenshot preview; store count STILL unchanged |
+| A5 | Confirm creation | 20 lenses exist, attributed to her class | store count = 20; Drive queue state |
 | A6 | Import the 3V SUPPORT xlsx | 6 students recognized; her 3 matched to existing lenses (enrich, not duplicate); the other 3 handled visibly (ignored or queued — but VISIBLY) | store count must NOT grow by 6; unresolved queue contents |
 | A7 | Open one enriched lens | support info in the correct categories, traceable to the source file | screenshot (redact before sharing) |
 | A8 | Import the K-5 xlsx (last year) | no duplicate lenses; whatever the build's ruling on history, behavior is explained on screen | store count delta; any duplicates = FAIL |

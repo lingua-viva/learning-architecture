@@ -1485,3 +1485,72 @@ async def generate_lesson_materials(
 def materials_as_dicts(result: LessonMaterialsResult | list[TierMaterial]) -> list[dict]:
     materials = result if isinstance(result, list) else result.materials
     return [asdict(material) for material in materials]
+
+
+# --- F3 (SPEC_LV_DEMO_EVE_FIX_2026-08-19 §2): the packet prints what the
+# teacher reviewed. Generation persists its output here; the packet
+# preview/print path renders THIS stored artifact with zero model calls.
+# New content only ever comes from an explicit regenerate (which calls
+# store_generated_materials again and replaces the record).
+
+
+def generated_materials_dir() -> Path:
+    override = os.environ.get("LV_GENERATED_MATERIALS_DIR")
+    return Path(override).expanduser() if override else lesson_materials_runtime_dir() / "generated"
+
+
+def _generated_materials_key(lesson: LessonInput, teacher_id: str) -> str:
+    raw = "|".join(
+        [
+            teacher_id,
+            lesson.ib_programme,
+            lesson.subject,
+            lesson.unit_title,
+            lesson.topic,
+            lesson.cefr_target,
+            lesson.language_of_instruction,
+        ]
+    )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
+
+
+def store_generated_materials(
+    lesson: LessonInput,
+    result: LessonMaterialsResult,
+    teacher_id: str = "local-teacher",
+) -> Path:
+    """Persist the artifact the teacher is about to review, keyed to the lesson.
+
+    Local JSON only (lv_home runtime dir) — same privacy boundary as every
+    other lesson-materials artifact.
+    """
+    directory = generated_materials_dir()
+    directory.mkdir(parents=True, exist_ok=True)
+    record = {
+        "lesson": asdict(lesson),
+        "materials": materials_as_dicts(result),
+        "individual_support": [asdict(item) for item in result.individual_support],
+        "lesson_summary": result.lesson_summary,
+        "generated_at": _now_z(),
+        "teacher_id": teacher_id,
+    }
+    path = directory / f"{_generated_materials_key(lesson, teacher_id)}.json"
+    path.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+    return path
+
+
+def load_generated_materials(
+    lesson: LessonInput,
+    teacher_id: str = "local-teacher",
+) -> dict | None:
+    """Return the stored record for this lesson, or None if never generated."""
+    path = generated_materials_dir() / f"{_generated_materials_key(lesson, teacher_id)}.json"
+    if not path.exists():
+        return None
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(record, dict) or not isinstance(record.get("materials"), list):
+        return None
+    return record
