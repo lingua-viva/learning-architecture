@@ -16,6 +16,9 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v167 (2026-08-20): demo-morning fix #9 — generation_failed error for
+#     unsafe_student_facing_copy now returns plain-language teacher message
+#     instead of raw internal code.
 #   v166 (2026-08-19): SPEC_LV_DEMO_EVE_FIX F4+F5 — app version badge in
 #     topbar (desktop: lvDesktop.getVersion(), browser: /api/health .version),
 #     import roster copy corrected to preview-first truth, xlsx-specific
@@ -757,7 +760,7 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 166
+version: 167
 # v122 (2026-08-06): Failure-mode hardening. src/web.py: voice-act observation
 #   dedup guard (same 60s window as observe/capture, prevents network-retry
 #   duplicates). src/education/parent_report.py: personal_context evidence
