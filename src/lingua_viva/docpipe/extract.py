@@ -968,8 +968,15 @@ def _class_pair_roster_blocks(
                 continue
             cells = {cell["column"]: cell["text"] for cell in span["cells"]}
             foreign = any(col not in allowed for col in cells)
-            both_filled = (
+            either_filled = (
                 not foreign
+                and (
+                    str(cells.get(column) or "").strip() != ""
+                    or str(cells.get(pair["neighbour"]) or "").strip() != ""
+                )
+            )
+            both_filled = (
+                either_filled
                 and str(cells.get(column) or "").strip() != ""
                 and str(cells.get(pair["neighbour"]) or "").strip() != ""
             )
@@ -978,7 +985,13 @@ def _class_pair_roster_blocks(
                     first_row = last_row = row_index
                     rows.add(row_index)
                 continue
-            if both_filled and last_row is not None and row_index == last_row + 1:
+            if last_row is not None and row_index == last_row + 1 and either_filled:
+                # A consecutive, non-foreign row where at least one pair
+                # column is filled stays inside the roster block — a missing
+                # surname or firstname is a data-quality gap in the
+                # spreadsheet, not a structural boundary. The student-emit
+                # loop still requires both_filled, so partial rows are
+                # safely skipped there without fabricating names.
                 last_row = row_index
                 rows.add(row_index)
                 continue
@@ -1095,11 +1108,14 @@ def _detect_students_structural(spans: list[dict[str, Any]]) -> list[dict[str, A
                     continue
                 last_part = str(cells.get(column) or "").strip()
                 first_part = str(cells.get(pair["neighbour"]) or "").strip()
-                # A roster row fills BOTH columns of the pair; a row with one
-                # cell (scheduling notes inside the roster columns) is not a
-                # student — structurally, no text matching.
-                if last_part and first_part:
-                    _add(f"{first_part} {last_part}", span["span_id"], {
+                if not last_part and not first_part:
+                    continue
+                # Prefer surname+firstname join; fall back to whichever
+                # column is present (a real student with a missing surname
+                # cell, e.g. Grade 3 row 14 in the real class list).
+                display = f"{first_part} {last_part}".strip()
+                if display:
+                    _add(display, span["span_id"], {
                         "class": pair["class"],
                         "grade": str(sheet),
                         "teacher_attribution": pair["teacher"],
