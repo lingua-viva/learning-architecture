@@ -313,6 +313,80 @@ def render_lesson_pdf(
     )
 
 
+def render_lesson_plan_artifact_pdf(
+    plan: dict,
+    output_path: Optional[Path | str] = None,
+) -> bytes | Path:
+    """Render a teacher-facing structured lesson plan artifact."""
+    structure = plan.get("lesson_structure") if isinstance(plan.get("lesson_structure"), dict) else {}
+    differentiation = plan.get("differentiation") if isinstance(plan.get("differentiation"), dict) else {}
+    sections: list[dict] = [
+        {
+            "heading": "Learning Objectives",
+            "bullets": list(plan.get("learning_objectives") or []),
+        },
+        {
+            "heading": "Materials Needed",
+            "bullets": list(plan.get("materials") or []),
+        },
+        {"heading": "Lesson Structure"},
+    ]
+    for key, label in (
+        ("warmup", "Warm-up / Hook"),
+        ("main_activity", "Main Activity"),
+        ("guided_practice", "Guided Practice"),
+        ("independent_work", "Independent Work / Extension"),
+        ("wrapup", "Wrap-up / Assessment"),
+    ):
+        phase = structure.get(key) if isinstance(structure.get(key), dict) else {}
+        sections.append({
+            "subheading": f"{label} ({phase.get('duration', '')})",
+            "paragraphs": [
+                str(phase.get("activity") or ""),
+                str(phase.get("instructions") or ""),
+            ],
+        })
+    tier_rows = []
+    for key, label, detail_key in (
+        ("foundation", "Foundation", "modifications"),
+        ("core", "Core", "activities"),
+        ("extension", "Extension", "challenges"),
+    ):
+        tier = differentiation.get(key) if isinstance(differentiation.get(key), dict) else {}
+        tier_rows.append([
+            label,
+            str(tier.get("description") or ""),
+            str(tier.get(detail_key) or ""),
+        ])
+    sections.extend([
+        {
+            "heading": "Differentiation",
+            "table": {
+                "header": ["Tier", "Focus", "Classroom move"],
+                "rows": tier_rows,
+            },
+        },
+        {"heading": "Assessment", "paragraphs": [str(plan.get("assessment") or "")]},
+        {"heading": "Notes", "paragraphs": [str(plan.get("teacher_notes") or "")]},
+    ])
+    citations = [str(item) for item in plan.get("curriculum_citations") or [] if str(item).strip()]
+    if citations:
+        sections.append({"heading": "Curriculum Citations", "bullets": citations})
+    return render_document(
+        title=f"Lesson plan — {plan.get('topic') or 'Lesson'}",
+        metadata={
+            "Subject": plan.get("subject", ""),
+            "Grade": plan.get("grade", ""),
+            "Date": plan.get("date", ""),
+            "Duration": f"{plan.get('duration_minutes', '')} min" if plan.get("duration_minutes") else "",
+            "Teacher": plan.get("teacher_name", ""),
+            "Curriculum": plan.get("curriculum_standard", ""),
+        },
+        sections=sections,
+        output_path=output_path,
+    )
+
+
 def render_parent_report_pdf(
     report: dict,
     output_path: Optional[Path | str] = None,

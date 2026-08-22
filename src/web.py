@@ -2520,7 +2520,7 @@ def _trusted_detection(student: dict) -> bool:
     1.00 on every real file, while the bigram fallback scored 0.14/0.00/0.00
     on the same files. Detections without an evidence class (older
     extractions) are untrusted."""
-    return student.get("evidence") == "student_column"
+    return student.get("evidence") in {"student_column", "per_class_sheet_support"}
 
 
 def _detected_students(extraction) -> list[dict]:
@@ -2576,6 +2576,20 @@ def _resolve_or_queue(student: dict, *, job: dict, roster: list[dict]) -> Option
         job.setdefault("identity_review", []).append({
             "display_name": display_name,
             "candidates": resolution["candidates"],
+        })
+        return None
+    if student.get("evidence") == "per_class_sheet_support":
+        identity.enqueue_unresolved(
+            teacher_id=str(job.get("teacher_id") or "teacher:ingest"),
+            display_name=display_name,
+            source_id=str(job.get("source_id") or ""),
+            candidates=[],
+            job_id=str(job.get("job_id") or ""),
+        )
+        job.setdefault("identity_review", []).append({
+            "display_name": display_name,
+            "candidates": [],
+            "possible_new_student": True,
         })
         return None
     return student
@@ -6718,6 +6732,244 @@ async def _lesson_source_text_from_payload(payload: dict) -> str | None:
     from src.lingua_viva.lesson_materials import read_todays_lesson_text
 
     return await asyncio.to_thread(read_todays_lesson_text, lesson_file_path)
+
+
+@app.post("/api/lesson-plans/generate")
+async def lesson_plans_generate(request: Request, payload: dict):
+    from src.lingua_viva.access_roles import effective_teacher_id
+    from src.lingua_viva.lesson_materials import (
+        assign_roster_split,
+        generate_lesson_plan_artifact,
+        store_generated_lesson_plan,
+    )
+
+    teacher_id = effective_teacher_id(request, str(payload.get("teacher_id") or "local-teacher"))
+    try:
+        lesson = _cohort_lesson_from_payload(payload, teacher_id)
+    except (TypeError, ValueError) as exc:
+        return JSONResponse({"error": "invalid_lesson", "detail": str(exc)}, status_code=400)
+    student_ids = payload.get("student_ids") if isinstance(payload.get("student_ids"), list) else None
+    tier_overrides = _tier_overrides_from_payload(payload)
+    teacher_name = str(payload.get("teacher_name") or payload.get("teacher") or teacher_id)
+    try:
+        source_text = await _lesson_source_text_from_payload(payload)
+    except ValueError as exc:
+        return JSONResponse({"error": "invalid_lesson_file", "detail": str(exc)}, status_code=400)
+
+    def load_split(store):
+        return assign_roster_split(
+            store,
+            teacher_id,
+            student_ids,
+            overrides=tier_overrides,
+            record_overrides=False,
+        )
+
+    try:
+        split = await asyncio.to_thread(_with_student_store, load_split)
+        result = await generate_lesson_plan_artifact(
+            lesson,
+            teacher_id=teacher_id,
+            teacher_name=teacher_name,
+            tier_groups=split.tier_groups,
+            roster_names=split.roster_names,
+            individual_support=split.individual_support,
+            source_text=source_text,
+        )
+    except PermissionError as exc:
+        return JSONResponse({"error": "unauthorized_student_ids", "detail": str(exc)}, status_code=422)
+    except LookupError:
+        return JSONResponse(
+            {
+                "error": "missing_curriculum_knowledge",
+                "detail": "No local curriculum knowledge entry matches this lesson request. Add or select curriculum context before generating a grounded lesson plan.",
+            },
+            status_code=422,
+        )
+    except ValueError as exc:
+        return JSONResponse({"error": "generation_failed", "detail": str(exc)}, status_code=422)
+
+    await asyncio.to_thread(store_generated_lesson_plan, lesson, result, teacher_id)
+    return {
+        "plan": result.plan,
+        "artifact": {
+            "format": "html+markdown",
+            "html": result.html,
+            "markdown": result.markdown,
+            "print_html": result.print_html,
+            "printable": True,
+        },
+        "generation_status": result.generation_status,
+        "curriculum_sources": result.curriculum_sources,
+        "generated_at": result.generated_at,
+        "requires_teacher_approval": True,
+        "writes": {"deliverables": 0, "audit_receipts": 0},
+    }
+
+
+@app.post("/api/lesson-plans/revise")
+async def lesson_plans_revise(request: Request, payload: dict):
+    from src.lingua_viva.access_roles import effective_teacher_id
+    from src.lingua_viva.lesson_materials import (
+        load_generated_lesson_plan,
+        revise_lesson_plan_artifact,
+        store_generated_lesson_plan,
+    )
+
+    teacher_id = effective_teacher_id(request, str(payload.get("teacher_id") or "local-teacher"))
+    try:
+        lesson = _cohort_lesson_from_payload(payload, teacher_id)
+    except (TypeError, ValueError) as exc:
+        return JSONResponse({"error": "invalid_lesson", "detail": str(exc)}, status_code=400)
+    revision_text = str(payload.get("revision_text") or payload.get("message") or "").strip()
+    if not revision_text:
+        return JSONResponse({"error": "revision_text_required"}, status_code=400)
+    current = payload.get("plan") if isinstance(payload.get("plan"), dict) else None
+    if current is None:
+        record = await asyncio.to_thread(load_generated_lesson_plan, lesson, teacher_id)
+        if record is None:
+            return JSONResponse(
+                {
+                    "error": "no_generated_lesson_plan",
+                    "detail": "Generate and review a lesson plan first. Revision edits the stored plan instead of starting over.",
+                },
+                status_code=409,
+            )
+        current = record["plan"]
+    try:
+        result = await revise_lesson_plan_artifact(
+            lesson,
+            current,
+            revision_text,
+            teacher_id=teacher_id,
+            teacher_name=str(payload.get("teacher_name") or teacher_id),
+        )
+    except LookupError:
+        return JSONResponse({"error": "missing_curriculum_knowledge"}, status_code=422)
+    except ValueError as exc:
+        return JSONResponse({"error": "revision_failed", "detail": str(exc)}, status_code=422)
+    await asyncio.to_thread(store_generated_lesson_plan, lesson, result, teacher_id)
+    return {
+        "plan": result.plan,
+        "artifact": {
+            "format": "html+markdown",
+            "html": result.html,
+            "markdown": result.markdown,
+            "print_html": result.print_html,
+            "printable": True,
+        },
+        "generation_status": result.generation_status,
+        "curriculum_sources": result.curriculum_sources,
+        "generated_at": result.generated_at,
+        "requires_teacher_approval": True,
+    }
+
+
+@app.post("/api/lesson-plans/preview")
+async def lesson_plans_preview(request: Request, payload: dict):
+    from src.lingua_viva.access_roles import effective_teacher_id
+    from src.lingua_viva.lesson_materials import load_generated_lesson_plan, render_lesson_plan_bundle
+
+    teacher_id = effective_teacher_id(request, str(payload.get("teacher_id") or "local-teacher"))
+    try:
+        lesson = _cohort_lesson_from_payload(payload, teacher_id)
+    except (TypeError, ValueError) as exc:
+        return JSONResponse({"error": "invalid_lesson", "detail": str(exc)}, status_code=400)
+    record = await asyncio.to_thread(load_generated_lesson_plan, lesson, teacher_id)
+    if record is None:
+        return JSONResponse(
+            {
+                "error": "no_generated_lesson_plan",
+                "detail": "No lesson plan has been generated for this lesson yet. Preview renders the stored reviewed plan only.",
+            },
+            status_code=409,
+        )
+    artifact = render_lesson_plan_bundle(record["plan"])
+    return {
+        "plan": record["plan"],
+        "artifact": {
+            "format": "html+markdown",
+            "html": artifact["html"],
+            "markdown": artifact["markdown"],
+            "print_html": artifact["print_html"],
+            "printable": True,
+        },
+        "generation_status": record.get("generation_status"),
+        "generated_at": record.get("generated_at"),
+        "requires_teacher_approval": True,
+        "writes": {"deliverables": 0, "audit_receipts": 0},
+    }
+
+
+@app.post("/api/lesson-plans/print")
+async def lesson_plans_print(request: Request, payload: dict):
+    from src.lingua_viva.access_roles import effective_teacher_id
+    from src.lingua_viva.audit_receipts.builder import build_receipt
+    from src.lingua_viva.deliverables.schema import (
+        DeliverableLocation,
+        DeliverableRecord,
+        compute_deliverable_id,
+    )
+    from src.lingua_viva.deliverables.store import upsert_deliverable
+    from src.lingua_viva.lesson_materials import (
+        load_generated_lesson_plan,
+        render_lesson_plan_bundle,
+        write_lesson_plan_pdf,
+    )
+
+    teacher_id = effective_teacher_id(request, str(payload.get("teacher_id") or "local-teacher"))
+    try:
+        lesson = _cohort_lesson_from_payload(payload, teacher_id)
+    except (TypeError, ValueError) as exc:
+        return JSONResponse({"error": "invalid_lesson", "detail": str(exc)}, status_code=400)
+    record = await asyncio.to_thread(load_generated_lesson_plan, lesson, teacher_id)
+    if record is None:
+        return JSONResponse(
+            {
+                "error": "no_generated_lesson_plan",
+                "detail": "No lesson plan has been generated for this lesson yet. Print uses the stored reviewed plan only.",
+            },
+            status_code=409,
+        )
+    plan = record["plan"]
+    pdf_path = await asyncio.to_thread(write_lesson_plan_pdf, plan)
+    artifact = render_lesson_plan_bundle(plan)
+    trace_id = f"lesson-plan-{uuid.uuid4().hex[:12]}"
+    deliverable_id = compute_deliverable_id(trace_id, "")
+    deliverable = DeliverableRecord(
+        deliverable_id=deliverable_id,
+        session_id=broadcaster.session_id or "",
+        trace_id=trace_id,
+        type="cohort_lesson_plan",
+        title=f"Printable lesson plan: {plan.get('topic') or lesson.topic}",
+        status="created",
+        location=DeliverableLocation(kind="local_path", path=str(pdf_path)),
+        source_record_ids=[str(item) for item in plan.get("curriculum_citations", []) if str(item).strip()],
+        summary="Teacher-approved printable lesson plan PDF. Local until explicitly shared.",
+        content_hash=hashlib.sha256(Path(pdf_path).read_bytes()).hexdigest(),
+    )
+    upsert_deliverable(deliverable)
+    receipt = build_receipt(
+        scope="cohort_lesson_plan",
+        session_id=broadcaster.session_id or "",
+        trace_id=trace_id,
+        deliverable_id=deliverable_id,
+        source_record_ids=[str(item) for item in plan.get("curriculum_citations", []) if str(item).strip()],
+    )
+    return {
+        "plan": plan,
+        "artifact": {
+            "format": "html+markdown+pdf",
+            "html": artifact["html"],
+            "markdown": artifact["markdown"],
+            "print_html": artifact["print_html"],
+            "file_path": str(pdf_path),
+            "printable": True,
+        },
+        "deliverable": deliverable.as_dict(),
+        "audit_receipt": receipt.as_dict(),
+        "generated_at": record.get("generated_at"),
+    }
 
 
 # Uploaded lesson files are read into memory for the base64 hop; a lesson
