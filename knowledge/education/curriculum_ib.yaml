@@ -107,3 +107,25 @@ entries:
   - transfer
   - key concepts
   verified: true
+- id: LV-KL-031
+  title: IB PYP Italian Vocabulary Lesson Design
+  content: >
+    In an IB PYP language lesson for young learners, vocabulary instruction should connect a concrete
+    communicative purpose to inquiry, oral rehearsal, visual support, and student agency. For Grade 3
+    Italian family-vocabulary work, a grounded lesson can align to PYP language learning by using familiar
+    relationship words in meaningful exchanges, pairing oral practice with images or gestures, and checking
+    understanding through short formative responses rather than isolated word memorization.
+  ontology_nodes:
+  - LV-CUR-001
+  - LV-CUR-003
+  evidence_tier: 2
+  citations:
+  - "IBO (2018). Primary Years Programme: From Principles into Practice."
+  - "Council of Europe (2020). Common European Framework of Reference for Languages — Companion Volume."
+  tags:
+  - IB PYP
+  - Italian
+  - vocabulary instruction
+  - family vocabulary
+  - Grade 3
+  verified: true

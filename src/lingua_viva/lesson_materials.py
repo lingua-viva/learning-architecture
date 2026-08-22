@@ -48,6 +48,19 @@ SYSTEM_PROMPT = (
     "practices the target language."
 )
 
+LESSON_PLAN_SYSTEM_PROMPT = (
+    "You are a curriculum planner for an Italian-immersion IB PYP elementary classroom. "
+    "Return ONLY a valid JSON object for a teacher-facing lesson plan. Do not include "
+    "student names, diagnoses, RTI labels, AI language, markdown, or prose outside JSON. "
+    "Use only the supplied curriculum context for curriculum-standard claims."
+)
+
+LESSON_PLAN_REVISION_SYSTEM_PROMPT = (
+    "You revise an existing structured lesson plan. Return ONLY the complete revised "
+    "lesson-plan JSON object with the same schema. Modify only the sections requested "
+    "by the teacher and preserve the rest."
+)
+
 # Per-tier generation parameters: CEFR shift relative to the lesson target,
 # scaffolding description sent to the LLM, and the deterministic (local-only,
 # never LLM-generated) teacher note template.
@@ -121,6 +134,26 @@ class LessonMaterialsResult:
     lesson_summary: str
     sync_status: str  # "pushed_to_drive" | "drive_not_configured" | "push_failed" | "not_requested"
     individual_support: list[IndividualSupportStudent] = field(default_factory=list)
+
+
+@dataclass
+class CurriculumKnowledgeEntry:
+    id: str
+    title: str
+    content: str
+    citations: list[str]
+    source_path: str
+
+
+@dataclass
+class LessonPlanArtifactResult:
+    plan: dict
+    html: str
+    print_html: str
+    markdown: str
+    generation_status: str
+    curriculum_sources: list[dict]
+    generated_at: str
 
 
 @dataclass
@@ -1554,3 +1587,616 @@ def load_generated_materials(
     if not isinstance(record, dict) or not isinstance(record.get("materials"), list):
         return None
     return record
+
+
+# --- Lesson-plan artifact loop (SPEC_LV_LESSON_PLAN_ARTIFACT_2026-08-22).
+# This is separate from tier worksheet packets but deliberately reuses the
+# same LessonInput, roster split, runtime storage, and print-integrity pattern.
+
+
+def curriculum_knowledge_root() -> Path:
+    override = os.environ.get("LV_KNOWLEDGE_DIR")
+    if override:
+        return Path(override).expanduser()
+    return Path(__file__).resolve().parents[2] / "knowledge"
+
+
+def load_curriculum_knowledge(subject: str, topic: str, *, root: Path | None = None) -> list[CurriculumKnowledgeEntry]:
+    import yaml
+
+    base = root or curriculum_knowledge_root()
+    education = base / "education"
+    if not education.exists():
+        return []
+    query = f"{subject} {topic}".lower()
+    candidates: list[CurriculumKnowledgeEntry] = []
+    for path in sorted(education.glob("*.yaml")):
+        try:
+            data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except (OSError, yaml.YAMLError):
+            continue
+        for entry in data.get("entries") or []:
+            if not isinstance(entry, dict):
+                continue
+            nodes = {str(item) for item in entry.get("ontology_nodes") or []}
+            tags = " ".join(str(item) for item in entry.get("tags") or [])
+            haystack = " ".join([
+                str(entry.get("id") or ""),
+                str(entry.get("title") or ""),
+                str(entry.get("content") or ""),
+                tags,
+                " ".join(nodes),
+            ]).lower()
+            is_curriculum = bool(nodes & {"LV-CUR-001", "LV-CUR-002", "LV-CUR-003", "LV-CUR-004", "LV-CUR-005"})
+            mentions_request = any(token in haystack for token in re.findall(r"[a-zA-Z]+", query) if len(token) >= 4)
+            if is_curriculum or mentions_request:
+                candidates.append(
+                    CurriculumKnowledgeEntry(
+                        id=str(entry.get("id") or ""),
+                        title=str(entry.get("title") or ""),
+                        content=str(entry.get("content") or ""),
+                        citations=[str(item) for item in entry.get("citations") or []],
+                        source_path=str(path),
+                    )
+                )
+    return candidates[:8]
+
+
+def _curriculum_context(entries: list[CurriculumKnowledgeEntry]) -> str:
+    parts = []
+    for entry in entries:
+        citation = "; ".join(entry.citations)
+        parts.append(f"- {entry.id}: {entry.title}\n  {entry.content[:700]}\n  Citations: {citation}")
+    return "\n".join(parts)
+
+
+def _lesson_plan_prompt(
+    lesson: LessonInput,
+    curriculum_entries: list[CurriculumKnowledgeEntry],
+    split: RosterSplit | None,
+    source_text: str | None = None,
+) -> str:
+    tier_counts = {tier: 0 for tier in TIERS}
+    individual_support_count = 0
+    if split is not None:
+        tier_counts = {tier: len(split.tier_groups.get(tier, [])) for tier in TIERS}
+        individual_support_count = len(split.individual_support)
+    source_section = ""
+    excerpt = _source_excerpt(source_text)
+    if excerpt:
+        source_section = f"\nOptional teacher-provided lesson/coursework content:\n{excerpt}\n"
+    return f"""Create a printable lesson plan as JSON.
+
+Lesson input:
+- Programme: {lesson.ib_programme}
+- Subject: {lesson.subject}
+- Grade/unit: {lesson.unit_title}
+- Topic: {lesson.topic}
+- Duration: {lesson.duration_minutes} minutes
+- CEFR target: {lesson.cefr_target}
+- Language of instruction: {lesson.language_of_instruction}
+
+Curriculum context, the only allowed source for standards:
+{_curriculum_context(curriculum_entries)}
+{source_section}
+Differentiation context, counts only:
+- Foundation/foundational count: {tier_counts.get('foundational', 0)}
+- Core/on-track count: {tier_counts.get('on_track', 0)}
+- Extension count: {tier_counts.get('extended', 0)}
+- Teacher-handled individual support count: {individual_support_count}
+
+Output ONLY this JSON object shape:
+{{
+  "subject": "...",
+  "grade": "...",
+  "date": "...",
+  "duration_minutes": 45,
+  "teacher_name": "...",
+  "topic": "...",
+  "curriculum_standard": "cite one supplied KL id and title",
+  "curriculum_citations": ["KL id or citation"],
+  "learning_objectives": ["...", "...", "..."],
+  "materials": ["...", "..."],
+  "lesson_structure": {{
+    "warmup": {{"duration": "5 min", "activity": "...", "instructions": "..."}},
+    "main_activity": {{"duration": "20 min", "activity": "...", "instructions": "..."}},
+    "guided_practice": {{"duration": "10 min", "activity": "...", "instructions": "..."}},
+    "independent_work": {{"duration": "5 min", "activity": "...", "instructions": "..."}},
+    "wrapup": {{"duration": "5 min", "activity": "...", "instructions": "..."}}
+  }},
+  "differentiation": {{
+    "foundation": {{"description": "...", "modifications": "..."}},
+    "core": {{"description": "...", "activities": "..."}},
+    "extension": {{"description": "...", "challenges": "..."}}
+  }},
+  "assessment": "...",
+  "teacher_notes": "..."
+}}"""
+
+
+def parse_lesson_plan_json(text: str) -> dict | None:
+    raw = str(text or "").strip()
+    if not raw:
+        return None
+    fence = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw, re.DOTALL | re.IGNORECASE)
+    if fence:
+        raw = fence.group(1).strip()
+    else:
+        start = raw.find("{")
+        end = raw.rfind("}")
+        if start >= 0 and end > start:
+            raw = raw[start:end + 1]
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _phase(value: object, fallback_activity: str, fallback_instructions: str, duration: str) -> dict:
+    data = value if isinstance(value, dict) else {}
+    return {
+        "duration": str(data.get("duration") or duration),
+        "activity": str(data.get("activity") or fallback_activity),
+        "instructions": str(data.get("instructions") or fallback_instructions),
+    }
+
+
+def _normalize_lesson_plan(plan: dict, lesson: LessonInput, entries: list[CurriculumKnowledgeEntry], teacher_name: str = "") -> dict:
+    first = entries[0] if entries else CurriculumKnowledgeEntry("missing", "Missing curriculum knowledge", "", [], "")
+    structure = plan.get("lesson_structure") if isinstance(plan.get("lesson_structure"), dict) else {}
+    differentiation = plan.get("differentiation") if isinstance(plan.get("differentiation"), dict) else {}
+    normalized = {
+        "subject": str(plan.get("subject") or lesson.subject),
+        "grade": str(plan.get("grade") or lesson.unit_title or "Grade 3"),
+        "date": str(plan.get("date") or datetime.now(timezone.utc).date().isoformat()),
+        "duration_minutes": int(plan.get("duration_minutes") or lesson.duration_minutes),
+        "teacher_name": str(plan.get("teacher_name") or teacher_name or lesson.created_by or ""),
+        "topic": str(plan.get("topic") or lesson.topic),
+        "curriculum_standard": str(plan.get("curriculum_standard") or f"{first.id}: {first.title}"),
+        "curriculum_citations": [
+            str(item) for item in (
+                plan.get("curriculum_citations")
+                if isinstance(plan.get("curriculum_citations"), list)
+                else [first.id, *first.citations[:1]]
+            )
+            if str(item).strip()
+        ],
+        "learning_objectives": [str(item) for item in plan.get("learning_objectives") or [] if str(item).strip()][:3],
+        "materials": [str(item) for item in plan.get("materials") or [] if str(item).strip()],
+        "lesson_structure": {
+            "warmup": _phase(structure.get("warmup"), "Vocabulary hook", "Activate prior knowledge with visuals and oral repetition.", "5 min"),
+            "main_activity": _phase(structure.get("main_activity"), "Guided inquiry", "Model the target language, then practice through a shared task.", "20 min"),
+            "guided_practice": _phase(structure.get("guided_practice"), "Small-group practice", "Students rehearse with sentence frames and teacher circulation.", "10 min"),
+            "independent_work": _phase(structure.get("independent_work"), "Independent transfer", "Students complete a short individual or partner task.", "5 min"),
+            "wrapup": _phase(structure.get("wrapup"), "Exit check", "Students show one example of understanding before closing.", "5 min"),
+        },
+        "differentiation": {
+            "foundation": differentiation.get("foundation") if isinstance(differentiation.get("foundation"), dict) else {},
+            "core": differentiation.get("core") if isinstance(differentiation.get("core"), dict) else {},
+            "extension": differentiation.get("extension") if isinstance(differentiation.get("extension"), dict) else {},
+        },
+        "assessment": str(plan.get("assessment") or "Use the wrap-up response and guided-practice notes to check understanding."),
+        "teacher_notes": str(plan.get("teacher_notes") or "Record what to adjust after the lesson."),
+    }
+    if not normalized["learning_objectives"]:
+        normalized["learning_objectives"] = [
+            f"Students use target vocabulary for {lesson.topic}.",
+            "Students respond orally with increasing independence.",
+            "Students show understanding through a short formative check.",
+        ]
+    if not normalized["materials"]:
+        normalized["materials"] = ["visual vocabulary cards", "whiteboard or chart paper", "student notebooks"]
+    defaults = {
+        "foundation": ("Concrete visuals, word bank, gestures, and sentence starters.", "Use pointing, repetition, and partner rehearsal before independent response."),
+        "core": ("Shared target with moderate scaffolding.", "Complete the main task with one model and peer practice."),
+        "extension": ("Greater independence and transfer.", "Add detail, explain a choice, or create a new example."),
+    }
+    for key, (description, detail) in defaults.items():
+        tier = normalized["differentiation"][key]
+        if not isinstance(tier, dict):
+            tier = {}
+        if key == "foundation":
+            tier = {"description": str(tier.get("description") or description), "modifications": str(tier.get("modifications") or detail)}
+        elif key == "core":
+            tier = {"description": str(tier.get("description") or description), "activities": str(tier.get("activities") or detail)}
+        else:
+            tier = {"description": str(tier.get("description") or description), "challenges": str(tier.get("challenges") or detail)}
+        normalized["differentiation"][key] = tier
+    _validate_lesson_plan_safety(normalized)
+    return normalized
+
+
+def _deterministic_lesson_plan(lesson: LessonInput, entries: list[CurriculumKnowledgeEntry], split: RosterSplit | None, teacher_name: str = "") -> dict:
+    first = entries[0]
+    return _normalize_lesson_plan(
+        {
+            "curriculum_standard": f"{first.id}: {first.title}",
+            "curriculum_citations": [first.id, *first.citations[:1]],
+            "learning_objectives": [
+                f"Use key language for {lesson.topic} in a supported oral exchange.",
+                "Match words or phrases to visual examples and classroom contexts.",
+                "Show understanding through one spoken or written exit response.",
+            ],
+            "materials": ["picture cards", "word bank", "mini whiteboards", "exit ticket slips"],
+            "lesson_structure": {
+                "warmup": {"duration": "5 min", "activity": "Visual vocabulary activation", "instructions": "Show images, say each word aloud, and invite gesture-based responses."},
+                "main_activity": {"duration": "20 min", "activity": "Model and guided practice", "instructions": "Model two examples, then have students practice the language in pairs."},
+                "guided_practice": {"duration": "10 min", "activity": "Teacher-led check", "instructions": "Circulate, prompt with visuals, and collect quick oral responses from each group."},
+                "independent_work": {"duration": "5 min", "activity": "Personalized example", "instructions": "Students create one example using the target vocabulary."},
+                "wrapup": {"duration": "5 min", "activity": "Exit response", "instructions": "Students share or submit one accurate target-language phrase."},
+            },
+        },
+        lesson,
+        entries,
+        teacher_name,
+    )
+
+
+def _validate_lesson_plan_safety(plan: dict, roster_names: list[str] | None = None) -> None:
+    text = json.dumps(plan, ensure_ascii=False).lower()
+    for token in (" rti ", "diagnosis", "diagnostic", "generated by ai", "student_ids"):
+        if token in text:
+            raise ValueError("unsafe_lesson_plan")
+    for name in roster_names or []:
+        lowered = str(name).strip().lower()
+        if len(lowered) >= 3 and lowered in text:
+            raise ValueError("student_name_in_lesson_plan")
+
+
+async def generate_lesson_plan_artifact(
+    lesson: LessonInput,
+    *,
+    teacher_id: str = "local-teacher",
+    teacher_name: str = "",
+    store=None,
+    engine=None,
+    student_ids: list[str] | None = None,
+    tier_groups: dict[str, list[str]] | None = None,
+    roster_names: list[str] | None = None,
+    individual_support: list[IndividualSupportStudent] | None = None,
+    source_text: str | None = None,
+    curriculum_entries: list[CurriculumKnowledgeEntry] | None = None,
+) -> LessonPlanArtifactResult:
+    errors = lesson.validate()
+    if errors:
+        raise ValueError(f"Invalid LessonInput: {errors}")
+    curriculum_entries = curriculum_entries if curriculum_entries is not None else load_curriculum_knowledge(lesson.subject, lesson.topic)
+    if not curriculum_entries:
+        raise LookupError("missing_curriculum_knowledge")
+    split: RosterSplit | None = None
+    if tier_groups is None:
+        own_store = store is None
+        active = store
+        if own_store:
+            from src.education.student_lens import StudentLensStore
+
+            active = StudentLensStore()
+        try:
+            split = assign_roster_split(active, teacher_id, student_ids) if active is not None else None
+        finally:
+            if own_store and active is not None:
+                active.close()
+    else:
+        split = RosterSplit(tier_groups, roster_names or [], individual_support or [])
+    if engine is None:
+        from src.lingua_viva.reasoning import ReasoningEngine
+
+        engine = ReasoningEngine()
+    prompt = _lesson_plan_prompt(lesson, curriculum_entries, split, source_text)
+    result = await engine.reason(prompt, context={}, system_prompt=LESSON_PLAN_SYSTEM_PROMPT, max_tokens=1200)
+    content = getattr(result, "content", "") or ""
+    model_used = str(getattr(result, "model_used", "") or "")
+    error = str(getattr(result, "error", "") or "")
+    parsed = None if error or model_used.startswith("none") else parse_lesson_plan_json(content)
+    generation_status = "generated"
+    if parsed is None:
+        parsed = _deterministic_lesson_plan(lesson, curriculum_entries, split, teacher_name)
+        generation_status = "template_fallback"
+    plan = _normalize_lesson_plan(parsed, lesson, curriculum_entries, teacher_name)
+    _validate_lesson_plan_safety(plan, (split.roster_names if split else roster_names) or [])
+    rendered = render_lesson_plan_bundle(plan)
+    return LessonPlanArtifactResult(
+        plan=plan,
+        html=rendered["html"],
+        print_html=rendered["print_html"],
+        markdown=rendered["markdown"],
+        generation_status=generation_status,
+        curriculum_sources=[asdict(entry) for entry in curriculum_entries],
+        generated_at=_now_z(),
+    )
+
+
+def _lesson_plan_title(plan: dict) -> str:
+    return f"Lesson Plan - {plan.get('topic') or 'Lesson'}"
+
+
+def render_lesson_plan_markdown(plan: dict) -> str:
+    lines = [
+        f"# {_lesson_plan_title(plan)}",
+        "",
+        f"- Subject: {plan.get('subject', '')}",
+        f"- Grade: {plan.get('grade', '')}",
+        f"- Date: {plan.get('date', '')}",
+        f"- Duration: {plan.get('duration_minutes', '')} minutes",
+        f"- Teacher: {plan.get('teacher_name', '')}",
+        f"- Curriculum standard: {plan.get('curriculum_standard', '')}",
+        "",
+        "## Learning Objectives",
+        "",
+    ]
+    lines.extend(f"- {item}" for item in plan.get("learning_objectives") or [])
+    lines.extend(["", "## Materials Needed", ""])
+    lines.extend(f"- {item}" for item in plan.get("materials") or [])
+    lines.extend(["", "## Lesson Structure", ""])
+    labels = [
+        ("warmup", "Warm-up / Hook"),
+        ("main_activity", "Main Activity"),
+        ("guided_practice", "Guided Practice"),
+        ("independent_work", "Independent Work / Extension"),
+        ("wrapup", "Wrap-up / Assessment"),
+    ]
+    structure = plan.get("lesson_structure") or {}
+    for key, label in labels:
+        phase = structure.get(key) or {}
+        lines.extend([
+            f"### {label} ({phase.get('duration', '')})",
+            "",
+            f"**{phase.get('activity', '')}**",
+            "",
+            str(phase.get("instructions") or ""),
+            "",
+        ])
+    lines.extend(["## Differentiation", ""])
+    for key, label in (("foundation", "Foundation"), ("core", "Core"), ("extension", "Extension")):
+        tier = (plan.get("differentiation") or {}).get(key) or {}
+        detail = tier.get("modifications") or tier.get("activities") or tier.get("challenges") or ""
+        lines.extend([f"### {label}", "", str(tier.get("description") or ""), "", str(detail), ""])
+    lines.extend([
+        "## Assessment",
+        "",
+        str(plan.get("assessment") or ""),
+        "",
+        "## Notes",
+        "",
+        str(plan.get("teacher_notes") or ""),
+        "",
+    ])
+    citations = [str(item) for item in plan.get("curriculum_citations") or [] if str(item).strip()]
+    if citations:
+        lines.extend(["## Curriculum Citations", ""])
+        lines.extend(f"- {item}" for item in citations)
+        lines.append("")
+    return "\n".join(lines)
+
+
+def render_lesson_plan_html(plan: dict, *, print_ready: bool = False) -> str:
+    def esc(value: object) -> str:
+        return html.escape(str(value if value is not None else ""))
+
+    structure = plan.get("lesson_structure") or {}
+    phases = [
+        ("warmup", "Warm-up / Hook"),
+        ("main_activity", "Main Activity"),
+        ("guided_practice", "Guided Practice"),
+        ("independent_work", "Independent Work / Extension"),
+        ("wrapup", "Wrap-up / Assessment"),
+    ]
+    diff = plan.get("differentiation") or {}
+    css = """
+      body { font-family: Arial, Helvetica, sans-serif; color: #17202a; line-height: 1.42; margin: 28px; }
+      .lesson-plan { max-width: 960px; margin: 0 auto; }
+      h1 { font-size: 26px; margin: 0 0 8px; }
+      h2 { font-size: 17px; margin: 22px 0 8px; border-bottom: 1px solid #d8dee4; padding-bottom: 3px; }
+      h3 { font-size: 13px; margin: 0 0 4px; }
+      .meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 14px; font-size: 12px; margin: 12px 0 18px; }
+      .phase { break-inside: avoid; border-left: 3px solid #f06820; padding-left: 10px; margin: 10px 0 14px; }
+      .duration { color: #5f6b76; font-size: 12px; font-weight: normal; }
+      .tiers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+      .tier { border: 1px solid #d8dee4; border-radius: 6px; padding: 10px; break-inside: avoid; }
+      ul { margin-top: 4px; padding-left: 20px; }
+      @media print { body { margin: 14mm; } .lesson-plan { max-width: none; } .tiers { grid-template-columns: repeat(3, 1fr); } }
+      @media (max-width: 720px) { .meta, .tiers { grid-template-columns: 1fr; } }
+    """
+    body = [
+        '<article class="lesson-plan">',
+        f"<h1>{esc(_lesson_plan_title(plan))}</h1>",
+        '<section class="meta">',
+        f"<div><strong>Subject</strong><br>{esc(plan.get('subject'))}</div>",
+        f"<div><strong>Grade</strong><br>{esc(plan.get('grade'))}</div>",
+        f"<div><strong>Date</strong><br>{esc(plan.get('date'))}</div>",
+        f"<div><strong>Duration</strong><br>{esc(plan.get('duration_minutes'))} min</div>",
+        f"<div><strong>Teacher</strong><br>{esc(plan.get('teacher_name'))}</div>",
+        f"<div><strong>Curriculum</strong><br>{esc(plan.get('curriculum_standard'))}</div>",
+        "</section>",
+        "<h2>Learning Objectives</h2>",
+        "<ul>",
+    ]
+    body.extend(f"<li>{esc(item)}</li>" for item in plan.get("learning_objectives") or [])
+    body.extend(["</ul>", "<h2>Materials Needed</h2>", "<ul>"])
+    body.extend(f"<li>{esc(item)}</li>" for item in plan.get("materials") or [])
+    body.extend(["</ul>", "<h2>Lesson Structure</h2>"])
+    for key, label in phases:
+        phase = structure.get(key) or {}
+        body.extend([
+            '<section class="phase">',
+            f"<h3>{esc(label)} <span class=\"duration\">{esc(phase.get('duration'))}</span></h3>",
+            f"<p><strong>{esc(phase.get('activity'))}</strong></p>",
+            f"<p>{esc(phase.get('instructions'))}</p>",
+            "</section>",
+        ])
+    body.extend(["<h2>Differentiation</h2>", '<section class="tiers">'])
+    for key, label, detail_key in (("foundation", "Foundation", "modifications"), ("core", "Core", "activities"), ("extension", "Extension", "challenges")):
+        tier = diff.get(key) or {}
+        body.extend([
+            '<div class="tier">',
+            f"<h3>{label}</h3>",
+            f"<p>{esc(tier.get('description'))}</p>",
+            f"<p>{esc(tier.get(detail_key))}</p>",
+            "</div>",
+        ])
+    body.extend([
+        "</section>",
+        "<h2>Assessment</h2>",
+        f"<p>{esc(plan.get('assessment'))}</p>",
+        "<h2>Notes</h2>",
+        f"<p>{esc(plan.get('teacher_notes'))}</p>",
+        "</article>",
+    ])
+    document = f"<style>{css}</style>\n{''.join(body)}"
+    if not print_ready:
+        return document
+    return "<!doctype html><html><head><meta charset=\"utf-8\"><title>Printable Lesson Plan</title></head><body>" + document + "</body></html>"
+
+
+def render_lesson_plan_bundle(plan: dict) -> dict[str, str]:
+    return {
+        "markdown": render_lesson_plan_markdown(plan),
+        "html": render_lesson_plan_html(plan),
+        "print_html": render_lesson_plan_html(plan, print_ready=True),
+    }
+
+
+def generated_lesson_plans_dir() -> Path:
+    override = os.environ.get("LV_GENERATED_LESSON_PLANS_DIR")
+    return Path(override).expanduser() if override else lesson_materials_runtime_dir() / "lesson_plans"
+
+
+def _generated_lesson_plan_key(lesson: LessonInput, teacher_id: str) -> str:
+    return _generated_materials_key(lesson, teacher_id)
+
+
+def store_generated_lesson_plan(
+    lesson: LessonInput,
+    result: LessonPlanArtifactResult,
+    teacher_id: str = "local-teacher",
+) -> Path:
+    directory = generated_lesson_plans_dir()
+    directory.mkdir(parents=True, exist_ok=True)
+    record = {
+        "lesson": asdict(lesson),
+        "plan": result.plan,
+        "generation_status": result.generation_status,
+        "curriculum_sources": result.curriculum_sources,
+        "generated_at": result.generated_at,
+        "teacher_id": teacher_id,
+    }
+    path = directory / f"{_generated_lesson_plan_key(lesson, teacher_id)}.json"
+    path.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+    return path
+
+
+def load_generated_lesson_plan(lesson: LessonInput, teacher_id: str = "local-teacher") -> dict | None:
+    path = generated_lesson_plans_dir() / f"{_generated_lesson_plan_key(lesson, teacher_id)}.json"
+    if not path.exists():
+        return None
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(record, dict) or not isinstance(record.get("plan"), dict):
+        return None
+    return record
+
+
+def _revision_prompt(plan: dict, revision_text: str) -> str:
+    return (
+        "Here is the current lesson plan JSON:\n"
+        f"{json.dumps(plan, ensure_ascii=False, indent=2)}\n\n"
+        f'Teacher revision request: "{revision_text}"\n\n'
+        "Return the COMPLETE revised lesson plan JSON with the same structure. "
+        "Only modify the relevant section and preserve everything else."
+    )
+
+
+def _apply_deterministic_revision(plan: dict, revision_text: str) -> dict:
+    revised = json.loads(json.dumps(plan))
+    text = revision_text.lower()
+    if "song" in text and ("warm" in text or "hook" in text):
+        warmup = revised.setdefault("lesson_structure", {}).setdefault("warmup", {})
+        warmup["activity"] = "Song and movement vocabulary hook"
+        warmup["instructions"] = "Start with a short call-and-response song using the target words, add gestures, then repeat with student volunteers leading."
+    elif "visual" in text:
+        revised.setdefault("materials", [])
+        if "visual cue cards" not in revised["materials"]:
+            revised["materials"].append("visual cue cards")
+        foundation = revised.setdefault("differentiation", {}).setdefault("foundation", {})
+        foundation["modifications"] = "Add visual cue cards, gesture prompts, and picture matching before oral production."
+    elif "extension" in text and ("hard" in text or "challenge" in text):
+        extension = revised.setdefault("differentiation", {}).setdefault("extension", {})
+        extension["challenges"] = "Create a new example, explain the choice, and ask a follow-up question using the target language."
+    else:
+        notes = revised.get("teacher_notes") or ""
+        revised["teacher_notes"] = (notes + f"\nRevision request to consider: {revision_text}").strip()
+    return revised
+
+
+async def revise_lesson_plan_artifact(
+    lesson: LessonInput,
+    current_plan: dict,
+    revision_text: str,
+    *,
+    teacher_id: str = "local-teacher",
+    teacher_name: str = "",
+    engine=None,
+    curriculum_entries: list[CurriculumKnowledgeEntry] | None = None,
+) -> LessonPlanArtifactResult:
+    if not str(revision_text or "").strip():
+        raise ValueError("revision_text_required")
+    curriculum_entries = curriculum_entries if curriculum_entries is not None else load_curriculum_knowledge(lesson.subject, lesson.topic)
+    if not curriculum_entries:
+        raise LookupError("missing_curriculum_knowledge")
+    if engine is None:
+        from src.lingua_viva.reasoning import ReasoningEngine
+
+        engine = ReasoningEngine()
+    result = await engine.reason(
+        _revision_prompt(current_plan, revision_text),
+        context={},
+        system_prompt=LESSON_PLAN_REVISION_SYSTEM_PROMPT,
+        max_tokens=1200,
+    )
+    content = getattr(result, "content", "") or ""
+    model_used = str(getattr(result, "model_used", "") or "")
+    error = str(getattr(result, "error", "") or "")
+    parsed = None if error or model_used.startswith("none") else parse_lesson_plan_json(content)
+    generation_status = "revised"
+    if parsed is None:
+        parsed = _apply_deterministic_revision(current_plan, revision_text)
+        generation_status = "template_fallback"
+    plan = _normalize_lesson_plan(parsed, lesson, curriculum_entries, teacher_name)
+    rendered = render_lesson_plan_bundle(plan)
+    return LessonPlanArtifactResult(
+        plan=plan,
+        html=rendered["html"],
+        print_html=rendered["print_html"],
+        markdown=rendered["markdown"],
+        generation_status=generation_status,
+        curriculum_sources=[asdict(entry) for entry in curriculum_entries],
+        generated_at=_now_z(),
+    )
+
+
+def lesson_plan_pdf_stem(plan: dict) -> str:
+    payload = json.dumps(plan, sort_keys=True, ensure_ascii=True)
+    digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
+    return f"lesson-plan-{_safe_slug(str(plan.get('topic') or 'lesson'))}-{digest}"
+
+
+def write_lesson_plan_pdf(plan: dict, *, directory: Path | None = None) -> Path:
+    from src.lingua_viva.pdf_generator import artifacts_dir, render_lesson_plan_artifact_pdf
+
+    target_dir = directory or artifacts_dir("lesson_plans")
+    target_dir.mkdir(parents=True, exist_ok=True)
+    path = target_dir / f"{lesson_plan_pdf_stem(plan)}.pdf"
+    if not path.exists():
+        render_lesson_plan_artifact_pdf(plan, output_path=path)
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+    return path

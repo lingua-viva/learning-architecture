@@ -1843,14 +1843,17 @@
         </div>
         <div class="panel" style="margin-top:14px;">
           <div class="view-head"><div><h3>Step 3 — Generate</h3><p>With a coursework file selected, the three tiers adapt that content; without one they build from the topic alone.</p></div></div>
-          <div class="row">
-            <button id="generate-activity" class="primary" type="button">Generate Activity</button>
-            <button id="preview-lesson-packet" type="button">Preview Printable Packet</button>
-          </div>
+	          <div class="row">
+	            <button id="generate-activity" class="primary" type="button">Generate Activity</button>
+	            <button id="generate-lesson-plan" type="button">Create Lesson Plan</button>
+	            <button id="preview-lesson-plan" type="button">Preview Lesson Plan</button>
+	            <button id="preview-lesson-packet" type="button">Preview Printable Packet</button>
+	          </div>
           <div id="prepare-privacy-preview" class="source-line" style="margin-top:10px;"></div>
-        </div>
-        <div id="activity-output" class="grid three" style="margin-top:14px;"></div>
-        <div id="lesson-packet-output" class="panel" style="margin-top:14px;display:none;"></div>
+	        </div>
+	        <div id="activity-output" class="grid three" style="margin-top:14px;"></div>
+	        <div id="lesson-plan-output" class="panel" style="margin-top:14px;display:none;"></div>
+	        <div id="lesson-packet-output" class="panel" style="margin-top:14px;display:none;"></div>
         <div id="differentiated-groups" class="panel" style="margin-top:14px;"><h3>Differentiated Groups</h3><p>Loading tier assignments...</p></div>`;
       // BUG-6: a "create a worksheet about X" typed into Ask lands here with
       // the topic already carried over — one-shot, then cleared.
@@ -1859,9 +1862,11 @@
         state.grade = event.target.value;
         await populateUnitSelect("prep-unit");
       });
-      await populateUnitSelect("prep-unit");
-      $("generate-activity").addEventListener("click", generateActivity);
-      $("preview-lesson-packet").addEventListener("click", previewLessonPacket);
+	      await populateUnitSelect("prep-unit");
+	      $("generate-activity").addEventListener("click", generateActivity);
+	      $("generate-lesson-plan").addEventListener("click", generateLessonPlan);
+	      $("preview-lesson-plan").addEventListener("click", previewLessonPlan);
+	      $("preview-lesson-packet").addEventListener("click", previewLessonPacket);
       $("pull-local-library").addEventListener("click", pullLocalLibrary);
       $("pull-course-library").addEventListener("click", pullCourseLibrary);
       $("select-todays-lesson").addEventListener("click", selectTodaysLesson);
@@ -2094,7 +2099,7 @@
       }
     }
 
-    async function generateActivity() {
+	    async function generateActivity() {
       const output = $("activity-output");
       // Never generate from nothing: with no file, no unit, and no topic the
       // pack would be confident-looking filler about "Current lesson".
@@ -2123,7 +2128,7 @@
       const overrideRows = Object.keys(overrides).length
         ? `<div class="panel"><h3>Applied Overrides</h3><div class="source-line">${Object.entries(overrides).map(([studentId, tier]) => `<span class="badge warn">${escapeHtml((state.rosterSplit && state.rosterSplit.roster_names && state.rosterSplit.roster_names[studentId]) || studentId)} → ${escapeHtml(TIER_LABELS[tier] || tier)}</span>`).join("")}</div></div>`
         : "";
-      output.innerHTML = tiers.map(tier => {
+	      output.innerHTML = tiers.map(tier => {
         const item = byTier[tier] || {};
         // STEP 10 (C2): template fallback must be LOUD — the teacher sees
         // that AI generation did not run, never silently receives template
@@ -2139,10 +2144,113 @@
           <div class="output">${escapeHtml(item.exercise_body || "")}</div>
           ${(item.scaffolding || []).length ? `<p><strong>Scaffolds:</strong> ${escapeHtml((item.scaffolding || []).join(", "))}</p>` : ""}
         </div>`;
-      }).join("") + overrideRows;
-    }
+	      }).join("") + overrideRows;
+	    }
 
-    async function refreshCourseLibrary() {
+	    function renderLessonPlanPanel(data, statusLabel) {
+	      const output = $("lesson-plan-output");
+	      const artifact = data.artifact || {};
+	      const rendered = artifact.html || "";
+	      const printButton = artifact.print_html ? `<button id="print-lesson-plan" type="button">Print</button>` : "";
+	      const saveButton = `<button id="save-lesson-plan" class="primary" type="button">Save PDF</button>`;
+	      output.style.display = "block";
+	      output.innerHTML = `
+	        <div class="view-head"><div><h3>Lesson Plan</h3><p>Review and revise the structured plan before printing.</p></div><span class="badge ${statusLabel === "approved" ? "ok" : "warn"}">${escapeHtml(statusLabel || "draft")}</span></div>
+	        <div class="output lesson-packet-rendered" style="max-height:560px;overflow:auto;">${rendered}</div>
+	        <div class="form-grid" style="margin-top:12px;">
+	          <label class="full">Revision request<input id="lesson-plan-revision" placeholder="e.g. Add a song activity to the warm-up"></label>
+	        </div>
+	        <div class="row" style="margin-top:12px;">
+	          <button id="revise-lesson-plan" type="button">Revise</button>
+	          ${printButton}
+	          ${saveButton}
+	        </div>`;
+	      $("revise-lesson-plan").addEventListener("click", reviseLessonPlan);
+	      $("save-lesson-plan").addEventListener("click", saveLessonPlanPdf);
+	      const printButtonEl = $("print-lesson-plan");
+	      if (printButtonEl) printButtonEl.addEventListener("click", () => printPacketHtml(artifact.print_html, "Lesson plan"));
+	    }
+
+	    async function generateLessonPlan() {
+	      const output = $("lesson-plan-output");
+	      const unitSelect = $("prep-unit");
+	      const hasUnit = !!(unitSelect && unitSelect.value);
+	      const hasTopic = !!$("prep-topic").value.trim();
+	      if (!state.selectedLessonFile && !hasUnit && !hasTopic) {
+	        output.style.display = "block";
+	        output.innerHTML = `<p>Nothing to work from yet — choose a coursework file, pick a unit, or type a topic.</p>`;
+	        return;
+	      }
+	      output.style.display = "block";
+	      output.innerHTML = `<p>Creating the lesson plan...</p>`;
+	      try {
+	        const data = await api("/api/lesson-plans/generate", {
+	          method: "POST",
+	          body: JSON.stringify(lessonPayload())
+	        });
+	        state.lessonPlanDraft = data;
+	        renderLessonPlanPanel(data, data.generation_status === "template_fallback" ? "template fallback" : "draft");
+	      } catch (error) {
+	        output.innerHTML = `<p>${escapeHtml(error.detail || error.message)}</p>`;
+	      }
+	    }
+
+	    async function reviseLessonPlan() {
+	      const output = $("lesson-plan-output");
+	      const revision = ($("lesson-plan-revision") && $("lesson-plan-revision").value || "").trim();
+	      if (!revision) {
+	        showToast("Type a revision request first.", "error");
+	        return;
+	      }
+	      output.style.display = "block";
+	      output.innerHTML = `<p>Revising the lesson plan...</p>`;
+	      try {
+	        const data = await api("/api/lesson-plans/revise", {
+	          method: "POST",
+	          body: JSON.stringify({ ...lessonPayload(), revision_text: revision })
+	        });
+	        state.lessonPlanDraft = data;
+	        renderLessonPlanPanel(data, data.generation_status === "template_fallback" ? "template fallback" : "draft");
+	      } catch (error) {
+	        output.innerHTML = `<p>${escapeHtml(error.detail || error.message)}</p>`;
+	      }
+	    }
+
+	    async function previewLessonPlan() {
+	      const output = $("lesson-plan-output");
+	      output.style.display = "block";
+	      output.innerHTML = `<p>Loading the stored lesson plan...</p>`;
+	      try {
+	        const data = await api("/api/lesson-plans/preview", {
+	          method: "POST",
+	          body: JSON.stringify(lessonPayload())
+	        });
+	        state.lessonPlanDraft = data;
+	        renderLessonPlanPanel(data, "draft");
+	      } catch (error) {
+	        output.innerHTML = `<p>${escapeHtml(error.detail || error.message)}</p>`;
+	      }
+	    }
+
+	    async function saveLessonPlanPdf() {
+	      const output = $("lesson-plan-output");
+	      output.style.display = "block";
+	      output.innerHTML = `<p>Writing the lesson plan PDF...</p>`;
+	      try {
+	        const data = await api("/api/lesson-plans/print", {
+	          method: "POST",
+	          body: JSON.stringify(lessonPayload())
+	        });
+	        state.lessonPlanDraft = data;
+	        renderLessonPlanPanel(data, "approved");
+	        const path = ((data.artifact || {}).file_path || "");
+	        if (path) showSaveToast("lesson plan saved");
+	      } catch (error) {
+	        output.innerHTML = `<p>${escapeHtml(error.detail || error.message)}</p>`;
+	      }
+	    }
+
+	    async function refreshCourseLibrary() {
       const grade = $("prep-grade").value;
       const subject = $("course-library-subject").value.trim() || "language";
       const output = $("course-library-output");

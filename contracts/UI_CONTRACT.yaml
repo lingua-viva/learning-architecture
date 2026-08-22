@@ -16,6 +16,11 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v168 (2026-08-22): Stream 8 lesson-plan artifact loop — Prepare now has
+#     Create Lesson Plan / Preview Lesson Plan controls, rendered structured
+#     lesson-plan preview, targeted revision field, and PDF save/print using
+#     stored lesson-plan JSON. src/web.py adds /api/lesson-plans generate,
+#     revise, preview, and print routes.
 #   v167 (2026-08-20): demo-morning fix #9 — generation_failed error for
 #     unsafe_student_facing_copy now returns plain-language teacher message
 #     instead of raw internal code.
@@ -760,7 +765,7 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 167
+version: 168
 # v122 (2026-08-06): Failure-mode hardening. src/web.py: voice-act observation
 #   dedup guard (same 60s window as observe/capture, prevents network-retry
 #   duplicates). src/education/parent_report.py: personal_context evidence
