@@ -266,7 +266,7 @@ REPO = Path(__file__).resolve().parent.parent
 #     English attribution, never raw confidence numbers or method tokens.
 #   v166 (2026-08-19): demo-eve F4+F5 — version badge in topbar, preview-first
 #     import copy, xlsx-specific not-found hint.
-EXPECTED_VERSION = 168
+EXPECTED_VERSION = 169
 
 
 def _html() -> str:
