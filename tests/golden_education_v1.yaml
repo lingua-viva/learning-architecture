@@ -209,3 +209,131 @@ queries:
   expected_intent: REFLECT
   difficulty: decoy
   note: "Overlaps LV-TCH-003 ('routine') and LV-CUR-006 ('progression'-adjacent) signal-wise; 'last year' + 'carry forward' should still resolve to institutional memory, not scaffold bank."
+
+# --- Lesson plan generation (P1-TEST-001, added 2026-08-23) ---
+# These test CLASSIFICATION of lesson-plan-generation asks, not generation
+# itself. Plain "lesson plan for X" phrasing carries exactly one signal
+# ("lesson plan") and routes to LV-PLN-001 Weekly Planning Support — NOT
+# LV-CUR-001, which fires only on unit-level IB phrasing (central idea,
+# lines of inquiry, unit of inquiry). expected_grounding lists the real
+# knowledge-library entries (all verified: true) a generator should cite;
+# the golden runner ignores these fields — they are checked by
+# tests/test_golden_metadata.py.
+- id: GOLD-LP-001
+  query: "Write a lesson plan for teaching family vocabulary to Grade 3 in a 45 minute block"
+  expected_node: LV-PLN-001
+  expected_intent: CREATE
+  expected_artifact: lesson_plan
+  expected_grounding: [LV-KL-031, LV-KL-050]
+  difficulty: easy
+- id: GOLD-LP-002
+  query: "I need a lesson plan introducing Italian greetings to my kindergarten class"
+  expected_node: LV-PLN-001
+  expected_intent: CREATE
+  expected_artifact: lesson_plan
+  expected_grounding: [LV-KL-047, LV-KL-051]
+  difficulty: easy
+- id: GOLD-LP-003
+  query: "Help me plan our Year 4 unit of inquiry on ecosystems with a central idea and lines of inquiry"
+  expected_node: LV-CUR-001
+  expected_intent: CREATE
+  expected_artifact: lesson_plan
+  expected_grounding: [LV-KL-001]
+  difficulty: easy
+  note: "Unit-level IB phrasing (central idea, lines of inquiry) routes to the unit planner, not weekly planning."
+- id: GOLD-LP-004
+  query: "Create a lesson plan where students practice the Communicators learner profile attribute in Italian"
+  expected_node: LV-PLN-001
+  expected_intent: CREATE
+  expected_artifact: lesson_plan
+  expected_grounding: [LV-KL-040]
+  difficulty: medium
+  note: "'Communicators' alone carries no signal — the ask still resolves via 'lesson plan'; the learner-profile grounding is the generator's job, not the classifier's."
+- id: GOLD-LP-005
+  query: "Make a lesson plan using TPR movement for body parts vocabulary in Grade 1"
+  expected_node: LV-PLN-001
+  expected_intent: CREATE
+  expected_artifact: lesson_plan
+  expected_grounding: [LV-KL-048, LV-KL-050]
+  difficulty: easy
+- id: GOLD-LP-006
+  query: "Differentiate this vocabulary activity into tiered versions for my mixed level class"
+  expected_node: LV-CUR-002
+  expected_intent: CREATE
+  expected_artifact: lesson_plan
+  expected_grounding: [LV-KL-007]
+  difficulty: medium
+  note: "Three-tier differentiation ask — differentiation signals (differentiate, tiered, mixed level) outrank generic planning."
+- id: GOLD-LP-007
+  query: "Write a lesson plan that builds research skills through an Italian animal facts activity"
+  expected_node: LV-PLN-001
+  expected_intent: CREATE
+  expected_artifact: lesson_plan
+  expected_grounding: [LV-KL-033]
+  difficulty: medium
+  note: "ATL Research skills phrased inside a lesson-plan ask stays with planning; LV-KL-033 is the grounding the plan should cite."
+- id: GOLD-LP-008
+  query: "Design a multimodal exploration for teaching colors through songs and movement"
+  expected_node: LV-CUR-005
+  expected_intent: CREATE
+  expected_artifact: lesson_plan
+  expected_grounding: [LV-KL-049, LV-KL-051]
+  difficulty: medium
+  note: "Reggio-voice phrasing (multimodal, exploration) routes to Multimodal Activity Design rather than weekly planning."
+- id: GOLD-LP-009
+  query: "Plan next week day by day for our food unit, Monday through Friday"
+  expected_node: LV-PLN-001
+  expected_intent: CREATE
+  expected_artifact: lesson_plan
+  expected_grounding: [LV-KL-031, LV-KL-050]
+  difficulty: easy
+  note: "Week-long unit ask — weekly signals (next week, day by day, Monday) route to weekly planning."
+- id: GOLD-LP-010
+  query: "Map the language progression for daily routines vocabulary from A1 to A2 across grade expectations"
+  expected_node: LV-CUR-003
+  expected_intent: CREATE
+  expected_artifact: lesson_plan
+  expected_grounding: [LV-KL-002, LV-KL-050]
+  difficulty: medium
+  note: "CEFR progression phrasing (A1, A2, language progression, grade expectations) routes to the CEFR Vertical Mapper."
+
+# --- Parent report generation (P1-TEST-002, added 2026-08-23) ---
+# Real routing, verified against the engine: teacher-voice 'progress
+# report' → LV-TCH-004 Narrative Report Support; parent-facing phrasings
+# (parent update, family report, progress summary) → LV-PAR-002 Progress
+# Summary (Parent-Facing). LV-PAR-001 is Home Connection Suggestions
+# (at-home activities), NOT report generation. Student names below are
+# fictional (repo privacy rule).
+- id: GOLD-PR-001
+  query: "Draft a progress report comment about Sofia's growth in Italian speaking"
+  expected_node: LV-TCH-004
+  expected_intent: CREATE
+  expected_artifact: parent_report
+  difficulty: easy
+  note: "Teacher-voice 'progress report' is an LV-TCH-004 signal — the narrative-report node, upstream of the parent-facing summary."
+- id: GOLD-PR-002
+  query: "Write a parent update about Emma's reading progress in Italian"
+  expected_node: LV-PAR-002
+  expected_intent: CREATE
+  expected_artifact: parent_report
+  difficulty: easy
+- id: GOLD-PR-003
+  query: "Prepare a family report about Marco's participation in class discussions"
+  expected_node: LV-PAR-002
+  expected_intent: CREATE
+  expected_artifact: parent_report
+  difficulty: easy
+- id: GOLD-PR-004
+  query: "Create a mid-year progress summary for the whole class to send home to parents"
+  expected_node: LV-PAR-002
+  expected_intent: CREATE
+  expected_artifact: parent_report
+  difficulty: medium
+  note: "Whole-class (no student named) parent-facing summary still routes to LV-PAR-002."
+- id: GOLD-PR-005
+  query: "Write a parent update explaining what families will see at the PYP Exhibition"
+  expected_node: LV-PAR-002
+  expected_intent: CREATE
+  expected_artifact: parent_report
+  difficulty: medium
+  note: "Event letter, not a progress narrative — 'parent update' is the routing signal."
