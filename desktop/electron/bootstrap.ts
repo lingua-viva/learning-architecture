@@ -7,15 +7,16 @@ import os from "node:os";
 import path from "node:path";
 
 export const DEFAULT_PORT = 8787;
-export const DEFAULT_MODEL = "qwen2.5:3b";
+export const DEFAULT_MODEL = "qwen3:8b";
+export const DEFAULT_MODEL_SIZE_LABEL = "5.2 GB";
 
-// Hardware-tier model map (same as MC onboarding.py and LV config.py)
+// Hardware-tier model map (same as LV config.py)
 const TIER_MODEL_MAP: Record<string, { model: string; sizeLabel: string }> = {
-  ultra_gpu:  { model: "nemotron-3.5-lightning", sizeLabel: "23.7 GB" },
-  strong_gpu: { model: "qwen2.5:14b",           sizeLabel: "9.0 GB" },
-  mid_gpu:    { model: "qwen2.5:7b",            sizeLabel: "4.7 GB" },
-  weak_gpu:   { model: "qwen2.5:3b",            sizeLabel: "1.9 GB" },
-  cpu_only:   { model: "qwen2.5:3b",            sizeLabel: "1.9 GB" },
+  ultra_gpu:  { model: DEFAULT_MODEL,             sizeLabel: DEFAULT_MODEL_SIZE_LABEL },
+  strong_gpu: { model: DEFAULT_MODEL,             sizeLabel: DEFAULT_MODEL_SIZE_LABEL },
+  mid_gpu:    { model: DEFAULT_MODEL,             sizeLabel: DEFAULT_MODEL_SIZE_LABEL },
+  weak_gpu:   { model: DEFAULT_MODEL,             sizeLabel: DEFAULT_MODEL_SIZE_LABEL },
+  cpu_only:   { model: DEFAULT_MODEL,             sizeLabel: DEFAULT_MODEL_SIZE_LABEL },
 };
 
 export type BootstrapCheck = {
@@ -161,7 +162,7 @@ async function ollamaHasModel(model: string): Promise<boolean> {
     const body = await resp.json() as { models?: Array<{ name?: string }> };
     return (body.models || []).some((m) => {
       const name = m.name || "";
-      // "qwen2.5:3b" matches exactly; a tagless request matches any tag of it.
+      // "qwen3:8b" matches exactly; a tagless request matches any tag of it.
       return name === model || name === `${model}:latest`
         || (!model.includes(":") && name.split(":")[0] === model);
     });
@@ -182,22 +183,11 @@ export async function ensureOllamaModel(model?: string): Promise<BootstrapCheck>
     return { ok: false, detail: "Ollama is not installed or not on PATH." };
   }
 
-  // Hardware-aware model selection (same process as Mission Canvas):
-  // detect GPU tier, pick the right model. For ultra_gpu (nemotron), only
-  // use it if already installed — the 23.7GB pull requires explicit consent
-  // from the setup wizard. Otherwise fall back to strong_gpu tier.
+  // Hardware-aware model selection now uses qwen3:8b as the default quality
+  // floor on every tier. Larger models are opt-in via LV_OLLAMA_MODEL.
   if (!model) {
     const rec = recommendedModel();
-    if (rec.tier === "ultra_gpu") {
-      // Only use nemotron if already installed (consent-gated)
-      if (await ollamaHasModel(rec.model)) {
-        model = rec.model;
-      } else {
-        model = TIER_MODEL_MAP.strong_gpu.model;
-      }
-    } else {
-      model = rec.model;
-    }
+    model = rec.model;
   }
 
   if (await ollamaHasModel(model)) {

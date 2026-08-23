@@ -157,16 +157,14 @@ async function runSetupFlow(root: string, window: BrowserWindow): Promise<void> 
   // but its RESULT is awaited and reported before the wizard finishes.
   let modelPull: Promise<{ ok: boolean; detail: string }> | null = null;
 
-  // Hardware-adaptive model selection (same process as Mission Canvas):
-  // detect GPU tier, pick the right model size automatically.
+  // Hardware-adaptive model selection: keep the tier visible, but use qwen3:8b
+  // as the default quality floor unless the teacher explicitly overrides it.
   const hwRec = recommendedModel();
   const modelOverride = process.env.LV_OLLAMA_MODEL || undefined;
 
-  // Fix #6 (FIXES_NEEDED_v0.2.68): the label must reflect what will actually
-  // be installed, not the pre-consent ultra_gpu pick. ensureOllamaModel falls
-  // back to strong_gpu when nemotron isn't already present; show that name.
-  const displayModel = modelOverride || (hwRec.tier === "ultra_gpu" ? "qwen2.5:14b" : hwRec.model);
-  const displaySize = modelOverride ? hwRec.sizeLabel : (hwRec.tier === "ultra_gpu" ? "9.0 GB" : hwRec.sizeLabel);
+  // The label must reflect what will actually be installed.
+  const displayModel = modelOverride || hwRec.model;
+  const displaySize = hwRec.sizeLabel;
 
   if (ollamaCheck.ok) {
     emitProgress(window, "ollama_ok", ollamaCheck.detail);

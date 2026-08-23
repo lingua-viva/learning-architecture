@@ -17,7 +17,7 @@ Rules for these messages:
 from __future__ import annotations
 
 # Kept in sync with desktop/electron/bootstrap.ts DEFAULT_MODEL.
-DEFAULT_LOCAL_MODEL = "qwen2.5:3b"
+DEFAULT_LOCAL_MODEL = "qwen3:8b"
 
 
 def no_model_message() -> str:
