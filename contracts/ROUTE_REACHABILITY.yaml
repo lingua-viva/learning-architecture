@@ -291,6 +291,22 @@ reachable_from_ui:
     call_site: 'api("/api/lesson-materials/generate"'
     note: "Prepare Generate Materials button; carries tier_overrides from the roster split review."
 
+  - route: "POST /api/lesson-plans/generate"
+    call_site: 'api("/api/lesson-plans/generate"'
+    note: "Prepare Create Lesson Plan button: generates the structured lesson-plan artifact from selected file/unit/topic and roster context."
+
+  - route: "POST /api/lesson-plans/revise"
+    call_site: 'api("/api/lesson-plans/revise"'
+    note: "Prepare lesson-plan panel Revise button: applies a teacher revision request to the stored draft."
+
+  - route: "POST /api/lesson-plans/preview"
+    call_site: 'api("/api/lesson-plans/preview"'
+    note: "Prepare lesson-plan panel Preview Lesson Plan button: reloads the stored printable draft without calling the model."
+
+  - route: "POST /api/lesson-plans/print"
+    call_site: 'api("/api/lesson-plans/print"'
+    note: "Prepare lesson-plan panel Save PDF button: writes the stored lesson plan as a printable PDF."
+
   - route: "GET /api/teacher/lens"
     call_site: 'fetch("/api/teacher/lens"'
 

@@ -16,6 +16,8 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v169 (2026-08-22): qwen3:8b default-model release — src/web.py voice
+#     question fallback now uses ollama/qwen3:8b instead of qwen2.5:3b.
 #   v168 (2026-08-22): Stream 8 lesson-plan artifact loop — Prepare now has
 #     Create Lesson Plan / Preview Lesson Plan controls, rendered structured
 #     lesson-plan preview, targeted revision field, and PDF save/print using
@@ -765,7 +767,7 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 168
+version: 169
 # v122 (2026-08-06): Failure-mode hardening. src/web.py: voice-act observation
 #   dedup guard (same 60s window as observe/capture, prevents network-retry
 #   duplicates). src/education/parent_report.py: personal_context evidence
