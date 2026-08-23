@@ -4587,7 +4587,7 @@ async def voice_act(request: Request, payload: dict):
         result = await asyncio.wait_for(
             run_teacher_query(
                 transcript, intent=None, session_id=session_id, eval_mode=False,
-                explicit_model="ollama/qwen2.5:3b", max_tokens=256,
+                explicit_model="ollama/qwen3:8b", max_tokens=256,
             ),
             timeout=float(payload.get("timeout_seconds") or 60),
         )

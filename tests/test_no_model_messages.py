@@ -50,7 +50,7 @@ async def test_engine_no_model_fallback_uses_shared_message(monkeypatch):
 
     result = await ReasoningEngine().reason(
         "come stai?",
-        model="qwen2.5:3b",
+        model=DEFAULT_LOCAL_MODEL,
         system_prompt="Answer briefly.",
     )
 
@@ -72,7 +72,7 @@ async def test_pipeline_engine_no_model_fallback_uses_shared_message(monkeypatch
     result = await PipelineEngine().reason(
         "come stai?",
         {},
-        model="qwen2.5:3b",
+        model=DEFAULT_LOCAL_MODEL,
         system_prompt="Answer briefly.",
     )
 

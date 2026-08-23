@@ -9,22 +9,20 @@ from typing import Optional
 from urllib import error, request
 
 
-# qwen3:* demoted to last resort (2026-08-02): they are thinking models, and
-# LV's reasoning path uses the OpenAI-compatible endpoint with no think
-# suppression — on CPU-only hardware they burn the whole 60s budget emitting
-# <think> tokens. Trace ledger evidence: 3 traces on 2026-08-02 at ~60,073ms
-# with qwen3:8b and token_count=0 (the teacher got a timeout, not an answer).
-# Keep in sync with LOCAL_PREFERENCE in src/pipeline.py.
+# qwen3:8b is the local quality floor (2026-08-22): qwen2.5:3b is small
+# enough for broad hardware, but not capable enough for lesson plans/lenses.
+# The native Ollama path now sends think=false for qwen3/nemotron-class models,
+# so qwen3:8b no longer has the old hidden-token timeout failure mode.
 LOCAL_MODEL_PREFERENCE = [
     "nemotron-3.5-lightning",  # 30B MoE, 3B active — 3.9x faster than dense on GPU
+    "qwen3:8b",
+    "qwen3:14b",
     "phi4:14b",
     "qwen2.5:14b",
     "llama3.1:8b",
     "qwen2.5:7b",
     "mistral:7b",
     "qwen2.5:3b",
-    "qwen3:14b",
-    "qwen3:8b",
 ]
 
 # Models that declare the "thinking" capability: their visible answer is
@@ -46,11 +44,11 @@ def is_thinking_model(model: str | None) -> bool:
 # Tier thresholds and model sizes verified against ollama.com/library.
 
 _TIER_MODEL_MAP = {
-    "ultra_gpu":  "nemotron-3.5-lightning",  # 23.7GB, >=32GB usable GPU memory
-    "strong_gpu": "qwen2.5:14b",    # 9.0GB, fits 12GB+ VRAM with headroom
-    "mid_gpu":    "qwen2.5:7b",     # 4.7GB, fits 6GB+ VRAM with headroom
-    "weak_gpu":   "qwen2.5:3b",     # 1.9GB, fits 3-6GB VRAM
-    "cpu_only":   "qwen2.5:3b",     # 1.9GB, fastest CPU option
+    "ultra_gpu":  "qwen3:8b",       # default quality floor; larger models are opt-in
+    "strong_gpu": "qwen3:8b",       # 5.2GB, minimum viable LV quality floor
+    "mid_gpu":    "qwen3:8b",       # 5.2GB, fits M1 Pro 16GB with headroom
+    "weak_gpu":   "qwen3:8b",       # quality floor; may be slower than 3B
+    "cpu_only":   "qwen3:8b",       # quality floor; setup can still be skipped
 }
 
 
@@ -185,18 +183,13 @@ def gpu_tier() -> str:
 
 
 def recommended_model(installed_models: list[str] | None = None) -> str:
-    """Return the best Ollama model for this machine's hardware.
+    """Return the default Ollama model for this machine's hardware.
 
-    For ultra_gpu tier: nemotron requires a consent-gated 23.7GB pull, so
-    only return it if it's already installed. Otherwise fall back to
-    strong_gpu recommendation. Same download process as Mission Canvas."""
+    qwen3:8b is the minimum viable quality floor for LV workflows. Larger
+    models such as nemotron can still be used when explicitly configured or
+    detected as an installed fallback, but they are not the default pull."""
     tier = gpu_tier()
-    if tier == "ultra_gpu":
-        models = installed_models or []
-        if any("nemotron" in m for m in models):
-            return "nemotron-3.5-lightning"
-        return _TIER_MODEL_MAP["strong_gpu"]
-    return _TIER_MODEL_MAP.get(tier, "qwen2.5:3b")
+    return _TIER_MODEL_MAP.get(tier, "qwen3:8b")
 
 SUPPORTED_PROVIDERS = {
     "openai": {

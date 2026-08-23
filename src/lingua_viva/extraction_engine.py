@@ -36,7 +36,7 @@ from src.lingua_viva.data_in_contracts import (
 )
 from src.lingua_viva.reasoning import ReasoningEngine
 
-DEFAULT_MODEL = "ollama/qwen2.5:3b"
+DEFAULT_MODEL = "ollama/qwen3:8b"
 
 CEFR_LEVELS = ("A1", "A1+", "A2", "A2+", "B1", "B1+", "B2", "C1", "C2")
 
