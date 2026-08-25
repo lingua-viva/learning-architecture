@@ -2930,6 +2930,16 @@
           </form>
           <div id="ingest-results" style="margin-top:8px;"></div>
         </div>
+        <div class="panel" style="margin-bottom:14px;">
+          <h3>Update lenses from documents</h3>
+          <p class="voice-hint">Upload a report card, assessment, or progress report. The system will extract information and update your student lenses.</p>
+          <form id="doc-import-form" class="row" style="gap:8px;align-items:center;flex-wrap:wrap;">
+            <input id="doc-import-file" type="file" accept=".pdf,.docx,.xlsx,.txt,.md,.csv,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style="width:auto;">
+            <button class="primary" type="submit">Upload and extract</button>
+            <span id="doc-import-status" class="voice-hint" aria-live="polite"></span>
+          </form>
+          <div id="doc-import-results" style="margin-top:8px;"></div>
+        </div>
         <div id="unattributed-review-panel" class="panel" style="margin-bottom:14px;"></div>
         <div id="identity-review-panel" class="panel" style="margin-bottom:14px;"></div>
         <div class="panel" style="margin-bottom:14px;">
@@ -2950,6 +2960,7 @@
       $("ingest-form").addEventListener("submit", submitStudentsIngest);
       renderDriveRosterImport();
       renderIngestResults();
+      $("doc-import-form").addEventListener("submit", submitDocumentImport);
       await renderUnattributedReviewQueue("unattributed-review-panel");
       await renderIdentityReviewQueue("identity-review-panel");
       // Resume polling for an in-flight import when the teacher returns to
@@ -3584,6 +3595,104 @@
       state.ingestClassScope = "";
       renderIngestResults();
       pollIngestJob();
+    }
+
+    async function submitDocumentImport(event) {
+      event.preventDefault();
+      const input = $("doc-import-file");
+      const file = input && input.files && input.files[0];
+      if (!file) {
+        if ($("doc-import-status")) $("doc-import-status").textContent = "Choose a file first.";
+        return;
+      }
+      const btn = event.target.querySelector("button[type=submit]");
+      if (btn) { btn.disabled = true; btn.textContent = "Extracting…"; }
+      if ($("doc-import-status")) $("doc-import-status").textContent = `Processing ${file.name}…`;
+      const body = new FormData();
+      body.append("file", file);
+      let data;
+      try {
+        const response = await fetch("/api/students/import-document", {method: "POST", body});
+        data = await response.json();
+        if (!response.ok) throw new Error(data.error || "import failed");
+      } catch (error) {
+        if (btn) { btn.disabled = false; btn.textContent = "Upload and extract"; }
+        $("doc-import-results").innerHTML = `<p style="color:var(--c-warn)">${escapeHtml(error.message)}</p>`;
+        return;
+      }
+      if (btn) { btn.disabled = false; btn.textContent = "Upload and extract"; }
+      if ($("doc-import-status")) $("doc-import-status").textContent = "";
+
+      const results = $("doc-import-results");
+      if (!data.matched_students || data.matched_students.length === 0) {
+        results.innerHTML = `<p>${escapeHtml(data.message || "No student data found.")}</p>`;
+        return;
+      }
+
+      // Show extraction preview
+      let html = `<p>${escapeHtml(data.message)}</p>`;
+      html += `<div class="list">`;
+      for (const student of data.matched_students) {
+        const preview = (data.extractions_preview || {})[student.student_id] || {};
+        const fieldCount = preview.field_count || 0;
+        const fields = preview.fields || [];
+        html += `<details style="margin-bottom:8px;">`;
+        html += `<summary style="cursor:pointer;"><strong>${escapeHtml(student.display_name)}</strong> — ${fieldCount} field(s) found (match: ${escapeHtml(student.match_source)}, ${Math.round((student.confidence || 0) * 100)}%)</summary>`;
+        if (fields.length > 0) {
+          html += `<div style="padding:6px 12px;font-size:0.9em;">`;
+          for (const f of fields) {
+            const badge = f.status === "verified" ? "ok" : f.status === "needs_confirmation" ? "warn" : "";
+            html += `<div class="row" style="gap:6px;margin:2px 0;"><code>${escapeHtml(f.field_path)}</code><span>${escapeHtml(String(f.value))}</span><span class="badge ${badge}">${escapeHtml(f.status)}</span></div>`;
+          }
+          html += `</div>`;
+        }
+        if (preview.unresolved_questions && preview.unresolved_questions.length) {
+          html += `<p class="voice-hint" style="padding:0 12px;">Unresolved: ${preview.unresolved_questions.map(q => escapeHtml(q)).join("; ")}</p>`;
+        }
+        html += `</details>`;
+      }
+      html += `</div>`;
+      html += `<div class="row" style="gap:8px;margin-top:8px;">`;
+      html += `<button class="primary" id="doc-import-apply" type="button">Update all lenses</button>`;
+      html += `<button id="doc-import-cancel" type="button">Cancel</button>`;
+      html += `</div>`;
+      results.innerHTML = html;
+
+      // Wire apply button
+      $("doc-import-apply").addEventListener("click", async () => {
+        $("doc-import-apply").disabled = true;
+        $("doc-import-apply").textContent = "Updating…";
+        try {
+          const applyRes = await fetch("/api/students/apply-extractions", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+              extraction_log_path: data.extraction_log_path,
+              confirmed_students: data.matched_students.map(s => s.student_id),
+            }),
+          });
+          const applyData = await applyRes.json();
+          if (!applyRes.ok) throw new Error(applyData.error || "apply failed");
+          const updated = applyData.updated_students || [];
+          let summary = updated.map(u =>
+            `<span class="badge ok">${escapeHtml(u.student_id)} — ${u.written_count} field(s) updated</span>`
+          ).join(" ");
+          results.innerHTML = `<p>Lenses updated.</p><div class="source-line">${summary}</div>`;
+          showToast(`Updated ${updated.length} student lens(es).`, "ok");
+          state.students = null;
+          await renderStudents();
+        } catch (err) {
+          $("doc-import-apply").disabled = false;
+          $("doc-import-apply").textContent = "Update all lenses";
+          results.innerHTML += `<p style="color:var(--c-warn)">${escapeHtml(err.message)}</p>`;
+        }
+      });
+
+      // Wire cancel button
+      $("doc-import-cancel").addEventListener("click", () => {
+        results.innerHTML = "";
+        if ($("doc-import-status")) $("doc-import-status").textContent = "";
+      });
     }
 
     async function submitStudentsIngest(event) {

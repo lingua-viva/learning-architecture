@@ -63,7 +63,7 @@ Documented as a known limitation, not hidden.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -100,6 +100,9 @@ class ParentReportDraft:
     body: str
     home_activities: list
     tone: str
+    strengths: list = field(default_factory=list)
+    growth_areas: list = field(default_factory=list)
+    intro: str = ""
 
 
 @dataclass
@@ -216,6 +219,31 @@ class ParentReportGenerator:
         for activity in activities:
             _check_trauma_safety(activity)
 
+        # Build structured strengths/growth_areas for rendering
+        strengths: list[str] = []
+        growth_areas: list[str] = []
+        intro = ""
+
+        if progressed_dims:
+            dim = progressed_dims[0]
+            strengths.append(
+                f"In {dim.dimension}, {name}'s progress is visible in growing confidence "
+                "and more independent choices."
+            )
+        if trend.sel_positive_count > 0:
+            strengths.append(f"{name} has brought care and attention to class moments this month.")
+
+        if not progressed_dims and trend.cefr_dimensions:
+            dim = trend.cefr_dimensions[0]
+            growth_areas.append(
+                f"In {dim.dimension}, we are watching for the next small signs of confidence."
+            )
+
+        if not trend.cefr_dimensions and not trend.sel_positive_count:
+            intro = "We are still collecting classroom observations so the next note can be more specific."
+        else:
+            intro = f"We noticed {name} trying new ways to make meaning in class."
+
         return ParentReportDraft(
             student_id=student_id,
             teacher_id=teacher_id,
@@ -225,6 +253,9 @@ class ParentReportGenerator:
             body=body,
             home_activities=activities,
             tone=tone,
+            strengths=strengths,
+            growth_areas=growth_areas,
+            intro=intro,
         )
 
     def approve(
@@ -253,3 +284,84 @@ class ParentReportGenerator:
             language=language,
             attribution_visible_to_parent=False,
         )
+
+
+# ---------------------------------------------------------------------------
+# HTML rendering (SPEC_LV_IMPROVEMENT_CIRCUIT_2026-08-24, Phase 1A)
+# ---------------------------------------------------------------------------
+
+import html as _html_mod
+
+
+def render_parent_report_html(report: dict) -> str:
+    """Render a parent report dict to an HTML string for display/print.
+
+    Input dict keys:
+      student_name: str — blank renders as a fill-in line
+      strengths: list[str] — empty renders "None noted for this period."
+      growth_areas: list[str] — empty renders "None noted for this period."
+      home_activities: list[str]
+      intro: str — empty renders placeholder text
+
+    Safety rules:
+      - All content HTML-escaped (XSS protection)
+      - ZERO AI attribution anywhere
+      - Signature line for teacher (hand-signed, no AI)
+    """
+    student_name = report.get("student_name", "")
+    strengths = report.get("strengths") or []
+    growth_areas = report.get("growth_areas") or []
+    home_activities = report.get("home_activities") or []
+    intro = report.get("intro", "")
+
+    def esc(text: str) -> str:
+        return _html_mod.escape(str(text))
+
+    # Student name or fill-in line
+    if student_name.strip():
+        name_html = f"<strong>{esc(student_name)}</strong>"
+    else:
+        name_html = '<span class="fill-line">___________________________</span>'
+
+    # Intro
+    if intro and intro.strip():
+        intro_html = f"<p>{esc(intro).replace(esc(student_name), 'your child') if student_name else esc(intro)}</p>"
+    else:
+        intro_html = "<p>We are still collecting classroom observations for this section.</p>"
+
+    # Strengths
+    if strengths:
+        items = "".join(f"<li>{esc(s).replace(esc(student_name), 'your child') if student_name else esc(s)}</li>" for s in strengths)
+        strengths_html = f"<h3>Strengths</h3><ul>{items}</ul>"
+    else:
+        strengths_html = "<h3>Strengths</h3><p>None noted for this period.</p>"
+
+    # Growth areas
+    if growth_areas:
+        items = "".join(f"<li>{esc(g).replace(esc(student_name), 'your child') if student_name else esc(g)}</li>" for g in growth_areas)
+        growth_html = f"<h3>Growth Areas</h3><ul>{items}</ul>"
+    else:
+        growth_html = "<h3>Growth Areas</h3><p>None noted for this period.</p>"
+
+    # Home activities
+    if home_activities:
+        items = "".join(f"<li>{esc(a)}</li>" for a in home_activities)
+        activities_html = f"<h3>Things to Try at Home</h3><ul>{items}</ul>"
+    else:
+        activities_html = ""
+
+    # Replace student name with "your child" throughout
+    # (blank name already uses fill-line, no replacement needed)
+
+    return (
+        f"<div class='parent-report'>"
+        f"<h2>Progress Report for {name_html}</h2>"
+        f"{intro_html}"
+        f"{strengths_html}"
+        f"{growth_html}"
+        f"{activities_html}"
+        f"<div class='signature'>"
+        f"<p>Teacher signature: ___________________________</p>"
+        f"</div>"
+        f"</div>"
+    )

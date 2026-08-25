@@ -40,6 +40,11 @@ from src.education.content_differentiator import (
 from src.education.help_artifacts import _validate_safe_text
 from src.lingua_viva.config import lv_home
 
+IB_LEARNER_PROFILE_ATTRIBUTES: tuple[str, ...] = (
+    "Inquirers", "Knowledgeable", "Thinkers", "Communicators", "Principled",
+    "Open-minded", "Caring", "Risk-takers", "Balanced", "Reflective",
+)
+
 SYSTEM_PROMPT = (
     "You are a curriculum materials writer for an international school. You produce "
     "student-facing exercises — clear, age-appropriate, and scaffolded to the "
@@ -1778,6 +1783,11 @@ def _normalize_lesson_plan(plan: dict, lesson: LessonInput, entries: list[Curric
         },
         "assessment": str(plan.get("assessment") or "Use the wrap-up response and guided-practice notes to check understanding."),
         "teacher_notes": str(plan.get("teacher_notes") or "Record what to adjust after the lesson."),
+        "atl_skills": [str(s) for s in (plan.get("atl_skills") or getattr(lesson, "atl_skills", None) or [])],
+        "learner_profile_attributes": [
+            attr for attr in (plan.get("learner_profile_attributes") or [])
+            if isinstance(attr, dict) and attr.get("attribute") in IB_LEARNER_PROFILE_ATTRIBUTES
+        ],
     }
     if not normalized["learning_objectives"]:
         normalized["learning_objectives"] = [
@@ -1809,28 +1819,45 @@ def _normalize_lesson_plan(plan: dict, lesson: LessonInput, entries: list[Curric
 
 def _deterministic_lesson_plan(lesson: LessonInput, entries: list[CurriculumKnowledgeEntry], split: RosterSplit | None, teacher_name: str = "") -> dict:
     first = entries[0]
-    return _normalize_lesson_plan(
-        {
-            "curriculum_standard": f"{first.id}: {first.title}",
-            "curriculum_citations": [first.id, *first.citations[:1]],
-            "learning_objectives": [
-                f"Use key language for {lesson.topic} in a supported oral exchange.",
-                "Match words or phrases to visual examples and classroom contexts.",
-                "Show understanding through one spoken or written exit response.",
-            ],
-            "materials": ["picture cards", "word bank", "mini whiteboards", "exit ticket slips"],
-            "lesson_structure": {
-                "warmup": {"duration": "5 min", "activity": "Visual vocabulary activation", "instructions": "Show images, say each word aloud, and invite gesture-based responses."},
-                "main_activity": {"duration": "20 min", "activity": "Model and guided practice", "instructions": "Model two examples, then have students practice the language in pairs."},
-                "guided_practice": {"duration": "10 min", "activity": "Teacher-led check", "instructions": "Circulate, prompt with visuals, and collect quick oral responses from each group."},
-                "independent_work": {"duration": "5 min", "activity": "Personalized example", "instructions": "Students create one example using the target vocabulary."},
-                "wrapup": {"duration": "5 min", "activity": "Exit response", "instructions": "Students share or submit one accurate target-language phrase."},
-            },
+    # ATL skills come from the teacher's lesson input, never the model
+    atl_skills = list(getattr(lesson, "atl_skills", None) or [])
+    # Learner profile attributes: select from the official IB 10 based on topic
+    lp_attrs = _select_learner_profile_attributes(lesson)
+    plan = {
+        "curriculum_standard": f"{first.id}: {first.title}",
+        "curriculum_citations": [first.id, *first.citations[:1]],
+        "learning_objectives": [
+            f"Use key language for {lesson.topic} in a supported oral exchange.",
+            "Match words or phrases to visual examples and classroom contexts.",
+            "Show understanding through one spoken or written exit response.",
+        ],
+        "materials": ["picture cards", "word bank", "mini whiteboards", "exit ticket slips"],
+        "lesson_structure": {
+            "warmup": {"duration": "5 min", "activity": "Visual vocabulary activation", "instructions": "Show images, say each word aloud, and invite gesture-based responses."},
+            "main_activity": {"duration": "20 min", "activity": "Model and guided practice", "instructions": "Model two examples, then have students practice the language in pairs."},
+            "guided_practice": {"duration": "10 min", "activity": "Teacher-led check", "instructions": "Circulate, prompt with visuals, and collect quick oral responses from each group."},
+            "independent_work": {"duration": "5 min", "activity": "Personalized example", "instructions": "Students create one example using the target vocabulary."},
+            "wrapup": {"duration": "5 min", "activity": "Exit response", "instructions": "Students share or submit one accurate target-language phrase."},
         },
-        lesson,
-        entries,
-        teacher_name,
-    )
+        "atl_skills": atl_skills,
+        "learner_profile_attributes": lp_attrs,
+    }
+    return _normalize_lesson_plan(plan, lesson, entries, teacher_name)
+
+
+def _select_learner_profile_attributes(lesson: LessonInput) -> list[dict]:
+    """Select relevant IB Learner Profile attributes for a lesson.
+    Only official IB 10 attributes are allowed."""
+    # Default selection based on language lessons
+    attrs = [
+        {"attribute": "Communicators", "connection": f"Developing language skills through {getattr(lesson, 'topic', 'classroom activities')}"},
+    ]
+    atl = getattr(lesson, "atl_skills", None) or []
+    if "self-management" in atl:
+        attrs.append({"attribute": "Balanced", "connection": "Practicing self-management during learning activities"})
+    if "thinking" in atl:
+        attrs.append({"attribute": "Thinkers", "connection": "Applying thinking skills to language challenges"})
+    return attrs
 
 
 def _validate_lesson_plan_safety(plan: dict, roster_names: list[str] | None = None) -> None:

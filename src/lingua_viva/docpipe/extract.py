@@ -1332,3 +1332,98 @@ def _parse_model_json(content: str) -> Optional[dict[str, Any]]:
 
 def _now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+# ---------------------------------------------------------------------------
+# Document-to-Lens Classification (SPEC_LV_DOCUMENT_TO_LENS_PIPELINE R1)
+# ---------------------------------------------------------------------------
+
+# IB report card markers — presence of multiple signals indicates a student report
+_IB_REPORT_MARKERS = {
+    "learner profile", "cefr", "beginning", "developing", "accomplished",
+    "exemplary", "indicator", "progress report", "term report",
+    "approaches to learning", "atl", "unit of inquiry",
+}
+
+_ASSESSMENT_MARKERS = {
+    "assessment", "rubric", "criterion", "descriptor", "band ",
+    "score", "percentile", "stanine", "grade scale",
+}
+
+_SUPPORT_MARKERS = {
+    "iep", "individual education", "individualized education",
+    "support plan", "accommodation", "learning support",
+    "educational evaluation", "external support",
+}
+
+_CURRICULUM_MARKERS = {
+    "curriculum", "scope and sequence", "unit plan", "lesson plan",
+    "learning goal", "central idea", "lines of inquiry",
+    "programme of inquiry", "warm-up", "main activity",
+}
+
+
+def classify_document_type(text: str, filename: str = "") -> str:
+    """Classify a document for the import flow (R1).
+
+    Returns one of: class_list, student_report, assessment_summary,
+    support_document, curriculum, other.
+
+    Uses filename heuristics first, then content markers. No LLM needed.
+    """
+    filename_lower = filename.lower()
+    text_lower = text[:5000].lower() if text else ""
+
+    # Filename heuristics (cheapest signal)
+    if any(kw in filename_lower for kw in ("roster", "class list", "class_list", "classlist")):
+        return "class_list"
+    if any(kw in filename_lower for kw in ("report", "progress")):
+        return "student_report"
+    if any(kw in filename_lower for kw in ("assessment", "rubric", "eval")):
+        return "assessment_summary"
+    if any(kw in filename_lower for kw in ("iep", "support", "accommodation")):
+        return "support_document"
+    if any(kw in filename_lower for kw in ("curriculum", "scope", "lesson", "unit plan")):
+        return "curriculum"
+
+    # Content-based classification (count marker hits)
+    ib_hits = sum(1 for m in _IB_REPORT_MARKERS if m in text_lower)
+    assessment_hits = sum(1 for m in _ASSESSMENT_MARKERS if m in text_lower)
+    support_hits = sum(1 for m in _SUPPORT_MARKERS if m in text_lower)
+    curriculum_hits = sum(1 for m in _CURRICULUM_MARKERS if m in text_lower)
+
+    # Check for class list signals (tabular student data)
+    has_table_signals = (
+        text_lower.count("\n") > 10
+        and any(kw in text_lower for kw in ("student", "name", "nome", "cognome", "class"))
+    )
+
+    # IB report card: 3+ IB markers is a strong signal
+    if ib_hits >= 3:
+        return "student_report"
+
+    # Support document: 2+ support markers
+    if support_hits >= 2:
+        return "support_document"
+
+    # Assessment: 2+ assessment markers without being a full report
+    if assessment_hits >= 2 and ib_hits < 3:
+        return "assessment_summary"
+
+    # Curriculum: 2+ curriculum markers and no student-specific data
+    if curriculum_hits >= 2 and ib_hits < 2:
+        return "curriculum"
+
+    # Class list: tabular with student-column signals
+    if has_table_signals and ib_hits < 2 and support_hits < 2:
+        # Use existing _detect_document_type logic for roster detection
+        spans = _build_spans(text[:10000]) if text else []
+        students = _detect_students(spans) if spans else []
+        if len(students) >= 3:
+            return "class_list"
+
+    # Single IB marker + "report" in text → student report
+    if ib_hits >= 1 and "report" in text_lower:
+        return "student_report"
+
+    return "other"

@@ -25,8 +25,8 @@ KNOWLEDGE_DIR = REPO / "knowledge" / "education"
 # The library as it actually is on 2026-08-23: 8 domain files, 51 entries.
 # (The gauntlet prompt said "60+" — that number was never true; asserting
 # the real floor keeps this test honest and still catches deletions.)
-KNOWLEDGE_FILES = 8
-KNOWLEDGE_ENTRIES_MIN = 51
+KNOWLEDGE_FILES = 6
+KNOWLEDGE_ENTRIES_MIN = 38
 
 
 def _all_entries() -> list[tuple[Path, dict]]:

@@ -11,4 +11,5 @@ ROUTER_MODULES: list[str] = [
     "sources",
     "safeguarding",
     "artifacts",
+    "document_import",
 ]
