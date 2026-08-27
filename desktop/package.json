@@ -3,6 +3,8 @@
   "version": "0.2.70",
   "private": true,
   "description": "Lingua Viva teacher desktop shell",
+  "homepage": "https://linguaviva.art",
+  "author": "Lingua Viva <hello@linguaviva.art>",
   "main": "dist/electron/main.js",
   "type": "commonjs",
   "scripts": {
@@ -12,7 +14,7 @@
     "dist": "npm run build && electron-builder",
     "dist:mac": "npm run build && electron-builder --mac dmg",
     "dist:win": "npm run build && electron-builder --win nsis",
-    "dist:linux": "npm run build && electron-builder --linux AppImage"
+    "dist:linux": "npm run build && electron-builder --linux AppImage deb"
   },
   "devDependencies": {
     "@types/node": "^20.14.10",
@@ -90,9 +92,14 @@
     },
     "linux": {
       "target": [
-        "AppImage"
+        "AppImage",
+        "deb"
       ],
-      "category": "Education"
+      "category": "Education",
+      "maintainer": "Lingua Viva <hello@linguaviva.art>"
+    },
+    "deb": {
+      "afterInstall": "electron/deb-after-install.sh"
     }
   }
 }

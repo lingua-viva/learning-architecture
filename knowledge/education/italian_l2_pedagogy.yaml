@@ -1,0 +1,156 @@
+domain: education
+version: '1.0'
+entries:
+- id: LV-KL-047
+  title: L2 Acquisition Stages — Comprehensible Input, BICS/CALP, Production Stages
+  content: >
+    Second-language acquisition in children follows predictable stages. Krashen's Input
+    Hypothesis holds that acquisition happens when learners receive comprehensible input
+    slightly beyond their current level ("i+1"), and that a low-anxiety environment (low
+    "affective filter") is a precondition for that input to be acquired. Krashen & Terrell's
+    Natural Approach describes the production sequence: a silent period / preproduction stage
+    (comprehension without speech — normal and not a concern, often weeks to months in young
+    learners), early production (single words and two-word phrases), speech emergence (short
+    sentences with errors), and intermediate fluency (longer connected speech, emerging
+    academic language). Cummins distinguishes BICS (basic interpersonal communicative skills —
+    conversational fluency, typically 1-2 years to develop) from CALP (cognitive academic
+    language proficiency — the decontextualized academic language of school, typically 5-7
+    years). Practical consequence for an immersion classroom: a student who chats comfortably
+    in Italian may still legitimately need scaffolds for academic tasks in Italian, and a
+    silent newcomer may be acquiring rapidly while producing nothing.
+  ontology_nodes:
+  - LV-CUR-001
+  - LV-CUR-003
+  evidence_tier: 1
+  citations:
+  - "Krashen, S. (1982). Principles and Practice in Second Language Acquisition. Pergamon."
+  - "Krashen, S. & Terrell, T. (1983). The Natural Approach: Language Acquisition in the Classroom. Alemany Press."
+  - "Cummins, J. (2000). Language, Power and Pedagogy: Bilingual Children in the Crossfire. Multilingual Matters."
+  tags:
+  - second language acquisition
+  - Krashen
+  - Cummins
+  - BICS CALP
+  - silent period
+  - comprehensible input
+  verified: true
+- id: LV-KL-048
+  title: TPR — Total Physical Response for Vocabulary in Immersion
+  content: >
+    Total Physical Response (Asher) teaches vocabulary by pairing spoken commands in the
+    target language with whole-body actions: the teacher gives a command ("alzatevi",
+    "toccate la testa", "mettete il libro sotto la sedia"), models the action, and students
+    respond physically before they are ever asked to speak. Core principles: comprehension
+    precedes production; movement creates memory traces that outlast translation-based study;
+    students speak only when ready, mirroring first-language acquisition. In an immersion
+    setting TPR is delivered with zero L1 translation — meaning is carried entirely by
+    modeling, gesture, objects, and context. Effective K-5 use: new command sets of 3-5 items
+    at a time, recombined with known vocabulary into novel (sometimes silly) commands to
+    verify comprehension rather than routine memorization, then transitioned into TPR
+    storytelling and games where students give the commands themselves.
+  ontology_nodes:
+  - LV-CUR-001
+  - LV-CUR-003
+  evidence_tier: 1
+  citations:
+  - "Asher, J. (2009). Learning Another Language Through Actions (7th ed.). Sky Oaks Productions."
+  tags:
+  - TPR
+  - vocabulary instruction
+  - immersion
+  - Italian
+  - comprehension-based teaching
+  verified: true
+- id: LV-KL-049
+  title: Italian Phonological Patterns for English-Speaking Learners
+  content: >
+    Italian phonology differs from English in ways that predict specific learner errors.
+    (1) Geminate (double) consonants are phonemic in Italian — they change meaning
+    (pala/palla, caro/carro, nono/nonno) — while English has no length contrast, so
+    English-speaking learners tend not to hear or produce the lengthened consonant; minimal
+    pair listening and clapping the "held" consonant make the contrast perceivable.
+    (2) Italian has seven pure vowels ([a, e, ɛ, i, o, ɔ, u]) with no reduction: every vowel
+    is pronounced fully in every syllable, whereas English reduces unstressed vowels to schwa —
+    the single most audible transfer error ("banàna" with schwas). (3) Italian syllable
+    structure strongly prefers open consonant+vowel syllables and almost all words end in a
+    vowel, giving the language its even, syllable-timed rhythm against English's stress-timed
+    rhythm. (4) Stress most commonly falls on the penultimate syllable (parole piane), with
+    exceptions marked in writing only when final (città, perché); learners default to English
+    stress habits, so new vocabulary should be taught with its stress pattern (clapping
+    syllables, marking the strong syllable) from first exposure.
+  ontology_nodes:
+  - LV-CUR-001
+  - LV-CUR-003
+  evidence_tier: 2
+  citations:
+  - "Krämer, M. (2009). The Phonology of Italian. Oxford University Press."
+  tags:
+  - Italian phonology
+  - geminates
+  - vowels
+  - contrastive analysis
+  - pronunciation
+  verified: true
+- id: LV-KL-050
+  title: Grade-Level Italian Vocabulary Expectations in K-5 Immersion
+  content: >
+    Typical vocabulary scope in a K-5 Italian immersion program builds from concrete
+    self-and-surroundings language toward abstract academic language. Kindergarten: greetings
+    and courtesy formulas (ciao, buongiorno, grazie, per favore), colors, numbers to 10-20,
+    classroom routine commands. Grade 1: body parts, immediate family, clothing, days of the
+    week, weather. Grade 2: animals, food and meals, numbers to 100, likes/dislikes (mi
+    piace / non mi piace), simple descriptive adjectives. Grade 3: home and rooms, community
+    places and helpers, feelings and emotions vocabulary, telling time, prepositions of
+    place — the year conversational sentence production consolidates. Grade 4: science and
+    geography terms (habitats, landforms, the water cycle), measurement language, past-tense
+    narration of events. Grade 5: abstract and academic vocabulary (cause/effect connectors,
+    opinion and argument language, subject-specific terms), preparing students for
+    text-driven MYP-style language work. These are professional-practice expectations for
+    this program, not an official national standard: individual students range widely around
+    them, and receptive vocabulary at every grade runs well ahead of productive vocabulary.
+  ontology_nodes:
+  - LV-CUR-001
+  - LV-CUR-003
+  evidence_tier: 2
+  citations:
+  - "Professional practice — K-8 Italian program scope and sequence, C. Canu Fautré (Italian Language Program Coordinator, IB international school)."
+  tags:
+  - Italian
+  - vocabulary progression
+  - immersion
+  - K-5
+  - scope and sequence
+  verified: true
+- id: LV-KL-051
+  title: Immersion Best Practices — Program Models and Classroom Techniques
+  content: >
+    Established practices in one-way (foreign language) immersion programs: (1) Program
+    models are named by target-language share of instructional time — a 90/10 model delivers
+    ~90% of instruction in the target language in the earliest grades, shifting gradually
+    toward 50/50 by upper elementary; full-immersion primaries keep the target language
+    dominant throughout. (2) Preview-review structures a lesson so a brief preview (in one
+    language) activates prior knowledge, the main lesson runs in the target language, and a
+    short review consolidates — keeping content comprehension from gating on language alone.
+    (3) Sheltered instruction techniques make grade-level content comprehensible in the L2:
+    consistent routines, visuals and realia, modeling, slowed and clearly articulated teacher
+    speech, chunked instructions, and frequent comprehension checks. (4) Comprehensible input
+    is the engine: teachers deliberately keep their language slightly above the students'
+    current level while carrying meaning with context. (5) Output is invited, never forced:
+    students respond physically or non-verbally until they self-select into speech, because
+    forced production raises anxiety and slows acquisition. Content and language objectives
+    are planned together — every content lesson is also a language lesson with named target
+    structures and vocabulary.
+  ontology_nodes:
+  - LV-CUR-001
+  - LV-CUR-003
+  evidence_tier: 2
+  citations:
+  - "Fortune, T.W. & Tedick, D.J. (eds.) (2008). Pathways to Multilingualism: Evolving Perspectives on Immersion Education. Multilingual Matters."
+  - "Krashen, S. (1982). Principles and Practice in Second Language Acquisition. Pergamon."
+  tags:
+  - immersion
+  - 90/10 model
+  - sheltered instruction
+  - preview-review
+  - comprehensible input
+  verified: true

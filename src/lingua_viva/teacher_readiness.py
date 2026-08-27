@@ -208,7 +208,11 @@ def _create_student(client, name: str, grade: str = "G3") -> str:
         for row in roster:
             if row.get("display_name") == name:
                 return row["student_id"]
-        raise RuntimeError(f"could not create student {name}: {data}")
+        # Privacy: no student name and no raw API echo (which repeats the
+        # name) in exception text — exceptions reach stderr/crash logs.
+        raise RuntimeError(
+            f"could not create readiness-control student (HTTP {response.status_code})"
+        )
     return str(data["student_id"])
 
 

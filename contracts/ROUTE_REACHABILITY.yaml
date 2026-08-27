@@ -2,7 +2,9 @@
 # Proposed by dev/ROOT_CAUSE_BUILT_NOT_MOUNTED_2026-07-23.md §5, built
 # SPEC_LV_ROUTE_REACHABILITY_GATE_2026-07-23.md.
 #
-# Every @app.get/post/put/delete/websocket route in src/web.py must appear in
+# Every route on the web surface — @app.* in src/web.py AND @router.* in
+# src/lingua_viva/routers/*.py (router plug-in pattern, APIRouter prefix
+# resolved; scanner extended in the P1-ARCH-001 web.py split) — must appear in
 # EXACTLY ONE of the two lists below. There is no third option and no default —
 # a route not listed in either fails the check outright. That is deliberate:
 # the whole point of this manifest is "prove it's reachable or say why it
@@ -598,6 +600,13 @@ reachable_from_ui:
       Template Updates panel [Keep mine]/[Take new] buttons. take_new
       archives the teacher's copy before replacing — never destroys work.
 
+  - route: "GET /api/poi/progression/{student_id}"
+    call_site: "/api/poi/progression/${encodeURIComponent(studentId)}"
+    note: >-
+      POI progression strip in the student lens view. Router-registered
+      (routers/artifacts.py) — first classified when the reachability
+      scanner was extended to cover routers (P1-ARCH-001 web.py split).
+
 intentionally_backend_only:
   - route: "POST /api/students/{student_id}/lens/pdf"
     status: permanent
@@ -821,3 +830,119 @@ intentionally_backend_only:
       {"active": false} on every real install. A UI control for it would
       be misleading, not a fix.
       See dev/specs/SPEC_LV_SESSION_ROUTE_RECLASSIFY_2026-07-23.md.
+
+  # ── Router-registered routes, first classified when the scanner was
+  # extended to cover src/lingua_viva/routers/*.py (P1-ARCH-001 web.py
+  # split, 2026-08-22). These were live the whole time — included at app
+  # startup — but invisible to this gate while it scanned only web.py.
+
+  - route: "POST /api/sources/records"
+    status: deferred_undecided
+    reason: >-
+      Write path for the sources ledger (routers/sources.py, W1 spine).
+      The UI reads records (GET has a call site) but has no capture
+      control that POSTs; writes come from tests and programmatic flows.
+      Decide: build a UI capture control or reclassify permanent.
+
+  - route: "POST /api/sources/observations"
+    status: deferred_undecided
+    reason: >-
+      Write path for source observations (routers/sources.py, W1 spine).
+      Same shape as POST /api/sources/records: UI reads observations but
+      never writes them; writes are programmatic/test-driven today.
+
+  - route: "GET /api/library/status"
+    status: deferred_undecided
+    reason: >-
+      Per-machine knowledge library status (routers/sources.py). No UI
+      call site exists yet — library surface not built into index.html.
+
+  - route: "GET /api/library/search"
+    status: deferred_undecided
+    reason: >-
+      Knowledge library search (routers/sources.py). No UI call site —
+      library surface not built into index.html yet.
+
+  - route: "POST /api/library/add"
+    status: deferred_undecided
+    reason: >-
+      Knowledge library add (routers/sources.py). No UI call site —
+      library surface not built into index.html yet.
+
+  - route: "POST /api/library/research"
+    status: deferred_undecided
+    reason: >-
+      External research via the fail-closed perplexity_gateway (refuses
+      unless PERPLEXITY_API_KEY AND LV_ALLOW_RESEARCH=1 are both set).
+      Only egress-capable route in routers/sources.py; no UI call site.
+
+  - route: "GET /api/safeguarding/restricted"
+    status: deferred_undecided
+    reason: >-
+      Restricted safeguarding ledger read (routers/safeguarding.py, W2).
+      Coordinator-gated under LV_AUTH_MODE=local_header; no UI call site
+      in index.html — safeguarding review surface not built yet.
+
+  - route: "POST /api/safeguarding/drain"
+    status: deferred_undecided
+    reason: >-
+      Safeguarding queue drain (routers/safeguarding.py, W2). Role-gated
+      operational endpoint; no UI call site — invoked programmatically.
+
+  - route: "POST /api/safeguarding/restricted/{entry_id}/status"
+    status: deferred_undecided
+    reason: >-
+      Restricted-entry status transition (routers/safeguarding.py, W2).
+      Coordinator-gated; no UI call site — review surface not built yet.
+
+  - route: "GET /api/sharing/check"
+    status: deferred_undecided
+    reason: >-
+      Sharing-safety pre-check (routers/safeguarding.py, W2). No UI call
+      site — sharing flows call publication-safety gates server-side.
+
+  - route: "POST /api/absences"
+    status: deferred_undecided
+    reason: >-
+      Absence recording (routers/safeguarding.py, W2). No UI call site —
+      absence tracking surface not built into index.html yet.
+
+  - route: "GET /api/absences"
+    status: deferred_undecided
+    reason: >-
+      Absence list read (routers/safeguarding.py, W2). No UI call site —
+      absence tracking surface not built into index.html yet.
+
+  - route: "GET /api/absences/calendar"
+    status: deferred_undecided
+    reason: >-
+      Absence calendar aggregation (routers/safeguarding.py, W2). No UI
+      call site — absence tracking surface not built yet.
+
+  - route: "POST /api/artifacts/coursework-pack"
+    status: deferred_undecided
+    reason: >-
+      Coursework-pack PDF generation (routers/artifacts.py, W3). No UI
+      call site — current Prepare UI uses the lesson-materials routes;
+      pack generation is CLI/test-driven today.
+
+  - route: "GET /api/artifacts/list"
+    status: deferred_undecided
+    reason: >-
+      Generated-artifact listing (routers/artifacts.py, W3). No UI call
+      site yet — built so the teacher can browse packs from the browser,
+      but the panel was never wired into index.html.
+
+  - route: "GET /api/artifacts/download"
+    status: deferred_undecided
+    reason: >-
+      Serves ONE pdf strictly from inside artifacts_dir (traversal
+      rejected; app binds 127.0.0.1). No UI call site yet — same missing
+      panel as GET /api/artifacts/list.
+
+  - route: "POST /api/poi/record"
+    status: deferred_undecided
+    reason: >-
+      Appends one PoI activity iteration (routers/artifacts.py, W3). The
+      UI reads progression (GET has a call site) but has no record
+      control; writes are programmatic/test-driven today.

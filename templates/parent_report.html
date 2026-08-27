@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Parent Progress Report</title>
+  <style>
+    body { font-family: Georgia, 'Times New Roman', serif; color: #17202a; line-height: 1.5; margin: 16mm; }
+    .parent-report { max-width: 720px; margin: 0 auto; }
+    h1 { font-size: 22px; margin: 0 0 6px; }
+    h2 { font-size: 15px; margin: 18px 0 6px; border-bottom: 1px solid #d8dee4; padding-bottom: 3px; }
+    .meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 14px; font-size: 12px; margin: 10px 0 16px; }
+    .fill-line { display: inline-block; min-width: 140px; border-bottom: 1px solid #5f6b76; }
+    ul { margin-top: 4px; padding-left: 20px; }
+    .empty-note { color: #5f6b76; font-style: italic; }
+    .signature { margin-top: 28px; break-inside: avoid; }
+    .signature .line { border-bottom: 1px solid #17202a; width: 220px; height: 24px; }
+    .signature .label { font-size: 11px; color: #5f6b76; margin-top: 2px; }
+  </style>
+</head>
+<body>
+  <!-- Runtime renderer: src.education.parent_report.render_parent_report_html.
+       Placeholders below document the supported fields. Rules the renderer
+       enforces: no student IDs, no AI attribution, empty sections render an
+       honest note ("None noted for this period.") instead of invented
+       content; a blank student name renders as a fill-in line so the
+       teacher writes it in after review. -->
+  <article class="parent-report">
+    <h1>{{ subject_line }}</h1>
+    <section class="meta">
+      <div><strong>Student</strong><br>{{ student_name }}</div>
+      <div><strong>Grade</strong><br>{{ grade_level }}</div>
+      <div><strong>Reporting period</strong><br>{{ reporting_period }}</div>
+    </section>
+    <p>{{ intro }}</p> <!-- teacher-edited body replaces this when edited -->
+    <h2>Strengths</h2>
+    {{ strengths }} <!-- bullets from observation evidence (report-grade only, personal_context always excluded) -->
+    <h2>Growth areas</h2>
+    {{ growth_areas }} <!-- encouraging framing only — never RTI tier / clinical language -->
+    <h2>Next steps — things to try at home</h2>
+    {{ home_activities }}
+    <section class="signature">
+      <p>&mdash; {{ from_label }}</p>
+      <div class="line"></div>
+      <p class="label">Teacher signature / date</p>
+    </section>
+  </article>
+</body>
+</html>

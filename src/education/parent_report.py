@@ -63,6 +63,7 @@ Documented as a known limitation, not hidden.
 
 from __future__ import annotations
 
+import html as _html
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
@@ -100,9 +101,14 @@ class ParentReportDraft:
     body: str
     home_activities: list
     tone: str
+    # Structured sections (P1-DOC-001): the same sentences that make up
+    # `body`, kept separately so the print template controls layout.
+    intro: str = ""
     strengths: list = field(default_factory=list)
     growth_areas: list = field(default_factory=list)
-    intro: str = ""
+    student_name: str = ""
+    grade_level: str = ""
+    reporting_period: str = ""
 
 
 @dataclass
@@ -116,6 +122,18 @@ class ParentArtifact:
     from_label: str
     language: str
     attribution_visible_to_parent: bool = False  # hard-locked, never a parameter
+    # Structured print fields (P1-DOC-001). student_name here is by design:
+    # the parent-facing artifact names their own child (same as
+    # to_printable_text has always done) — internal IDs stay forbidden.
+    student_name: str = ""
+    grade_level: str = ""
+    reporting_period: str = ""
+    intro: str = ""
+    strengths: list = field(default_factory=list)
+    growth_areas: list = field(default_factory=list)
+
+    def to_print_html(self) -> str:
+        return render_parent_report_html(self.__dict__)
 
     def to_printable_text(self) -> str:
         lines = [self.subject_line, "", self.body, ""]
@@ -147,32 +165,45 @@ class ParentReportGenerator:
         trend = self.analyzer.analyze_student(student_id)
         name = lens.get("display_name") or "your child"
 
-        body_parts = [
-            f"We noticed {name} trying new ways to make meaning in class."
-        ]
+        intro = f"We noticed {name} trying new ways to make meaning in class."
+        body_parts = [intro]
+        # Structured sections mirror body_parts sentence-for-sentence:
+        # every strength/growth sentence also joins the body, so the
+        # existing trauma-safety and publication-safety gates (which run
+        # on the body) cover the sections too.
+        strengths: list = []
+        growth_areas: list = []
         activities: list = []
 
         progressed_dims = [d for d in trend.cefr_dimensions if d.direction == "improved"]
         if progressed_dims:
             dim = progressed_dims[0]
-            body_parts.append(
+            sentence = (
                 f"In {dim.dimension}, {name}'s progress is visible in growing confidence "
                 "and more independent choices."
             )
+            body_parts.append(sentence)
+            strengths.append(sentence)
             activities.append(_CEFR_ACTIVITY.get(dim.dimension, _GENERAL_ACTIVITY))
         elif trend.cefr_dimensions:
             dim = trend.cefr_dimensions[0]
-            body_parts.append(
+            sentence = (
                 f"In {dim.dimension}, we are watching for the next small signs of confidence."
             )
+            body_parts.append(sentence)
+            growth_areas.append(sentence)
             activities.append(_CEFR_ACTIVITY.get(dim.dimension, _GENERAL_ACTIVITY))
         else:
+            # Honest empty: no observations means no strengths/growth
+            # sections get invented — the body says so instead.
             body_parts.append(
                 f"We are still collecting classroom observations so the next note can be more specific."
             )
 
         if trend.sel_positive_count > 0:
-            body_parts.append(f"{name} has brought care and attention to class moments this month.")
+            sentence = f"{name} has brought care and attention to class moments this month."
+            body_parts.append(sentence)
+            strengths.append(sentence)
 
         # Evidence summaries (SPEC_LV_EVIDENCE_ETHOS_TRAITS_2026-08-01):
         # report-grade ledger evidence only (teacher_confirmed /
@@ -206,6 +237,7 @@ class ParentReportGenerator:
                 for item in picked:
                     summary = str(item.get("summary") or "").strip().rstrip(".")
                     body_parts.append(f"{summary}.")
+                    strengths.append(f"{summary}.")
 
         if not activities:
             activities.append(_GENERAL_ACTIVITY)
@@ -219,43 +251,24 @@ class ParentReportGenerator:
         for activity in activities:
             _check_trauma_safety(activity)
 
-        # Build structured strengths/growth_areas for rendering
-        strengths: list[str] = []
-        growth_areas: list[str] = []
-        intro = ""
-
-        if progressed_dims:
-            dim = progressed_dims[0]
-            strengths.append(
-                f"In {dim.dimension}, {name}'s progress is visible in growing confidence "
-                "and more independent choices."
-            )
-        if trend.sel_positive_count > 0:
-            strengths.append(f"{name} has brought care and attention to class moments this month.")
-
-        if not progressed_dims and trend.cefr_dimensions:
-            dim = trend.cefr_dimensions[0]
-            growth_areas.append(
-                f"In {dim.dimension}, we are watching for the next small signs of confidence."
-            )
-
-        if not trend.cefr_dimensions and not trend.sel_positive_count:
-            intro = "We are still collecting classroom observations so the next note can be more specific."
-        else:
-            intro = f"We noticed {name} trying new ways to make meaning in class."
-
+        generated_at = _now_iso()
         return ParentReportDraft(
             student_id=student_id,
             teacher_id=teacher_id,
             template_type=template_type,
-            generated_at=_now_iso(),
+            generated_at=generated_at,
             subject_line=subject_line,
             body=body,
             home_activities=activities,
             tone=tone,
+            intro=intro,
             strengths=strengths,
             growth_areas=growth_areas,
-            intro=intro,
+            student_name=name,
+            grade_level=str(lens.get("grade_level") or ""),
+            # Honest label: this is when the note was written, not a school
+            # term boundary the system has no data for.
+            reporting_period=datetime.now(timezone.utc).strftime("%B %Y"),
         )
 
     def approve(
@@ -283,85 +296,106 @@ class ParentReportGenerator:
             from_label=f"{teacher_display_name} (Class Teacher)",
             language=language,
             attribution_visible_to_parent=False,
+            student_name=draft.student_name,
+            grade_level=draft.grade_level,
+            reporting_period=draft.reporting_period,
+            # A teacher edit is the message — it replaces the opening
+            # paragraph in the printed report too. The structured sections
+            # stay: they are derived from the same reviewed data.
+            intro=body if teacher_edited_body is not None else draft.intro,
+            strengths=list(draft.strengths),
+            growth_areas=list(draft.growth_areas),
         )
 
 
 # ---------------------------------------------------------------------------
-# HTML rendering (SPEC_LV_IMPROVEMENT_CIRCUIT_2026-08-24, Phase 1A)
+# Print template (P1-DOC-001). `templates/parent_report.html` documents the
+# fields this renderer supports — keep the two in sync, same contract as
+# templates/lesson_plan.html and render_lesson_plan_html.
 # ---------------------------------------------------------------------------
 
-import html as _html_mod
+_PARENT_REPORT_CSS = """
+    body { font-family: Georgia, 'Times New Roman', serif; color: #17202a; line-height: 1.5; margin: 16mm; }
+    .parent-report { max-width: 720px; margin: 0 auto; }
+    h1 { font-size: 22px; margin: 0 0 6px; }
+    h2 { font-size: 15px; margin: 18px 0 6px; border-bottom: 1px solid #d8dee4; padding-bottom: 3px; }
+    .meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 14px; font-size: 12px; margin: 10px 0 16px; }
+    .fill-line { display: inline-block; min-width: 140px; border-bottom: 1px solid #5f6b76; }
+    ul { margin-top: 4px; padding-left: 20px; }
+    .empty-note { color: #5f6b76; font-style: italic; }
+    .signature { margin-top: 28px; break-inside: avoid; }
+    .signature .line { border-bottom: 1px solid #17202a; width: 220px; height: 24px; }
+    .signature .label { font-size: 11px; color: #5f6b76; margin-top: 2px; }
+"""
+
+
+def _esc(value: object) -> str:
+    return _html.escape(str(value or ""))
+
+
+def _bullets(items: list, empty_note: str) -> str:
+    cleaned = [str(item).strip() for item in items or [] if str(item).strip()]
+    if not cleaned:
+        return f'<p class="empty-note">{_esc(empty_note)}</p>'
+    lis = "".join(f"<li>{_esc(item)}</li>" for item in cleaned)
+    return f"<ul>{lis}</ul>"
 
 
 def render_parent_report_html(report: dict) -> str:
-    """Render a parent report dict to an HTML string for display/print.
+    """Render a printable parent report from a ParentArtifact-shaped dict.
 
-    Input dict keys:
-      student_name: str — blank renders as a fill-in line
-      strengths: list[str] — empty renders "None noted for this period."
-      growth_areas: list[str] — empty renders "None noted for this period."
-      home_activities: list[str]
-      intro: str — empty renders placeholder text
-
-    Safety rules:
-      - All content HTML-escaped (XSS protection)
-      - ZERO AI attribution anywhere
-      - Signature line for teacher (hand-signed, no AI)
+    Privacy contract: renders ONLY the fields it is given — it never reaches
+    back into any store, adds no IDs, no AI attribution, no internal fields.
+    A blank student_name renders as a fill-in line (the name-stripped draft
+    surface in web.py uses this on purpose: the teacher writes the name in
+    after review). Empty sections render an honest note, never invented
+    content.
     """
-    student_name = report.get("student_name", "")
-    strengths = report.get("strengths") or []
-    growth_areas = report.get("growth_areas") or []
-    home_activities = report.get("home_activities") or []
-    intro = report.get("intro", "")
-
-    def esc(text: str) -> str:
-        return _html_mod.escape(str(text))
-
-    # Student name or fill-in line
-    if student_name.strip():
-        name_html = f"<strong>{esc(student_name)}</strong>"
-    else:
-        name_html = '<span class="fill-line">___________________________</span>'
-
-    # Intro
-    if intro and intro.strip():
-        intro_html = f"<p>{esc(intro).replace(esc(student_name), 'your child') if student_name else esc(intro)}</p>"
-    else:
-        intro_html = "<p>We are still collecting classroom observations for this section.</p>"
-
-    # Strengths
-    if strengths:
-        items = "".join(f"<li>{esc(s).replace(esc(student_name), 'your child') if student_name else esc(s)}</li>" for s in strengths)
-        strengths_html = f"<h3>Strengths</h3><ul>{items}</ul>"
-    else:
-        strengths_html = "<h3>Strengths</h3><p>None noted for this period.</p>"
-
-    # Growth areas
-    if growth_areas:
-        items = "".join(f"<li>{esc(g).replace(esc(student_name), 'your child') if student_name else esc(g)}</li>" for g in growth_areas)
-        growth_html = f"<h3>Growth Areas</h3><ul>{items}</ul>"
-    else:
-        growth_html = "<h3>Growth Areas</h3><p>None noted for this period.</p>"
-
-    # Home activities
-    if home_activities:
-        items = "".join(f"<li>{esc(a)}</li>" for a in home_activities)
-        activities_html = f"<h3>Things to Try at Home</h3><ul>{items}</ul>"
-    else:
-        activities_html = ""
-
-    # Replace student name with "your child" throughout
-    # (blank name already uses fill-line, no replacement needed)
-
-    return (
-        f"<div class='parent-report'>"
-        f"<h2>Progress Report for {name_html}</h2>"
-        f"{intro_html}"
-        f"{strengths_html}"
-        f"{growth_html}"
-        f"{activities_html}"
-        f"<div class='signature'>"
-        f"<p>Teacher signature: ___________________________</p>"
-        f"</div>"
-        f"</div>"
+    student_name = str(report.get("student_name") or "").strip()
+    name_html = (
+        _esc(student_name)
+        if student_name
+        else '<span class="fill-line">&nbsp;</span>'
     )
+    opening = str(report.get("intro") or report.get("body") or "").strip()
+    from_label = str(report.get("from_label") or "").strip()
+
+    parts = [
+        "<!doctype html>",
+        '<html lang="en"><head><meta charset="utf-8">',
+        f"<title>{_esc(report.get('subject_line') or 'A note from class')}</title>",
+        f"<style>{_PARENT_REPORT_CSS}</style>",
+        "</head><body>",
+        '<article class="parent-report">',
+        f"<h1>{_esc(report.get('subject_line') or 'A note from class')}</h1>",
+        '<section class="meta">',
+        f"<div><strong>Student</strong><br>{name_html}</div>",
+        f"<div><strong>Grade</strong><br>{_esc(report.get('grade_level'))}</div>",
+        f"<div><strong>Reporting period</strong><br>{_esc(report.get('reporting_period'))}</div>",
+        "</section>",
+    ]
+    if opening:
+        parts.append(f"<p>{_esc(opening)}</p>")
+    parts.append("<h2>Strengths</h2>")
+    parts.append(_bullets(
+        report.get("strengths") or [],
+        "We are still collecting classroom observations for this section.",
+    ))
+    parts.append("<h2>Growth areas</h2>")
+    parts.append(_bullets(
+        report.get("growth_areas") or [],
+        "None noted for this period.",
+    ))
+    parts.append("<h2>Next steps — things to try at home</h2>")
+    parts.append(_bullets(
+        report.get("home_activities") or [],
+        "None noted for this period.",
+    ))
+    parts.append('<section class="signature">')
+    if from_label:
+        parts.append(f"<p>&mdash; {_esc(from_label)}</p>")
+    parts.append('<div class="line"></div>')
+    parts.append('<p class="label">Teacher signature / date</p>')
+    parts.append("</section>")
+    parts.append("</article></body></html>")
+    return "\n".join(parts)

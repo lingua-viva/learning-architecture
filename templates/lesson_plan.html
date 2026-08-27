@@ -15,6 +15,12 @@
     .tiers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
     .tier { border: 1px solid #d8dee4; border-radius: 6px; padding: 10px; break-inside: avoid; }
     ul { margin-top: 4px; padding-left: 20px; }
+    .ib-framing { border: 1px solid #d8dee4; border-left: 3px solid #f06820; border-radius: 6px; padding: 10px 12px; margin: 10px 0 14px; break-inside: avoid; }
+    .checklist { list-style: none; padding-left: 4px; }
+    .checklist li::before { content: "\2610\00a0 "; }
+    .linked-standard { color: #5f6b76; font-size: 12px; }
+    .reflection { border: 1px dashed #aab4bd; border-radius: 6px; padding: 10px 12px; break-inside: avoid; }
+    .reflection p { border-bottom: 1px solid #d8dee4; padding-bottom: 16px; margin: 10px 0 0; font-size: 12px; color: #5f6b76; }
     @media print { .lesson-plan { max-width: none; } .tiers { grid-template-columns: repeat(3, 1fr); } }
   </style>
 </head>
@@ -31,18 +37,37 @@
       <div><strong>Teacher</strong><br>{{ teacher_name }}</div>
       <div><strong>Curriculum</strong><br>{{ curriculum_standard }}</div>
     </section>
+    <h2>IB PYP Framing</h2>
+    <section class="ib-framing">
+      <p><strong>Central idea:</strong> {{ central_idea }}</p>
+      <p><strong>Lines of inquiry:</strong></p>
+      {{ lines_of_inquiry }}
+      <p class="atl"><strong>Approaches to Learning:</strong> {{ atl_skills }}</p>
+      <p><strong>Learner Profile:</strong></p>
+      {{ learner_profile_attributes }}
+    </section>
     <h2>Learning Objectives</h2>
     {{ learning_objectives }}
     <h2>Materials Needed</h2>
-    {{ materials }}
+    {{ materials }} <!-- rendered as a print checklist (☐), quantities inline -->
     <h2>Lesson Structure</h2>
     {{ lesson_structure }}
     <h2>Differentiation</h2>
     {{ differentiation }}
+    <h2>Cross-Curricular Connections</h2>
+    {{ cross_curricular_connections }}
     <h2>Assessment</h2>
     {{ assessment }}
+    {{ success_criteria }}
+    <p class="linked-standard">Linked standard: {{ curriculum_standard }}</p>
     <h2>Notes</h2>
     {{ teacher_notes }}
+    <h2>Teacher Reflection (after the lesson)</h2>
+    <section class="reflection">
+      <p>What worked:</p>
+      <p>What to adjust:</p>
+      <p>Students to follow up with (initials only):</p>
+    </section>
   </article>
 </body>
 </html>

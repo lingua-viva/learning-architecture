@@ -27,6 +27,7 @@ import html
 import json
 import os
 import re
+import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -235,6 +236,120 @@ def _read_json(path: Path, default: dict | None = None) -> dict:
     except (FileNotFoundError, json.JSONDecodeError, OSError):
         return dict(default or {})
     return data if isinstance(data, dict) else dict(default or {})
+
+
+def _file_sha256(path: Path) -> str | None:
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return None
+
+
+def _unique_library_path(directory: Path, filename: str, digest: str) -> Path:
+    """Return a path that will not overwrite a different existing file."""
+    base = directory / _safe_library_filename(filename)
+    existing_digest = _file_sha256(base) if base.exists() else None
+    if existing_digest is None or existing_digest == digest:
+        return base
+    stem = base.stem or "lesson"
+    suffix = base.suffix
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    for attempt in range(20):
+        extra = "" if attempt == 0 else f"-{attempt + 1}"
+        candidate = directory / f"{stem}-{stamp}-{digest[:8]}{extra}{suffix}"
+        if not candidate.exists() or _file_sha256(candidate) == digest:
+            return candidate
+    return directory / f"{stem}-{stamp}-{digest[:8]}-{uuid.uuid4().hex[:8]}{suffix}"
+
+
+def _write_private_bytes_no_overwrite(path: Path, body: bytes) -> None:
+    if path.exists() and _file_sha256(path) == hashlib.sha256(body).hexdigest():
+        return
+    with path.open("xb") as handle:
+        handle.write(body)
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+
+
+def _snapshot_stem(key: str) -> str:
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return f"{key}-{stamp}-{uuid.uuid4().hex[:12]}"
+
+
+def _append_snapshot_index(directory: Path, record: dict) -> None:
+    index_path = directory / "index.ndjson"
+    with index_path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
+    try:
+        os.chmod(index_path, 0o600)
+    except OSError:
+        pass
+
+
+def _write_immutable_json_snapshot(directory: Path, key: str, record_type: str, record: dict) -> Path:
+    directory.mkdir(parents=True, exist_ok=True)
+    stored_at = _now_z()
+    for _ in range(20):
+        path = directory / f"{_snapshot_stem(key)}.json"
+        try:
+            with path.open("x", encoding="utf-8") as handle:
+                handle.write(json.dumps(record, ensure_ascii=False, indent=2))
+            break
+        except FileExistsError:
+            continue
+    else:
+        path = directory / f"{_snapshot_stem(key)}-{uuid.uuid4().hex}.json"
+        with path.open("x", encoding="utf-8") as handle:
+            handle.write(json.dumps(record, ensure_ascii=False, indent=2))
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+    _append_snapshot_index(
+        directory,
+        {
+            "version": 1,
+            "record_type": record_type,
+            "key": key,
+            "path": path.name,
+            "teacher_id": record.get("teacher_id"),
+            "generated_at": record.get("generated_at"),
+            "stored_at": stored_at,
+        },
+    )
+    return path
+
+
+def _load_latest_json_snapshot(
+    directory: Path,
+    key: str,
+    record_type: str,
+    is_valid,
+) -> dict | None:
+    index_path = directory / "index.ndjson"
+    try:
+        lines = index_path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        lines = []
+    for line in reversed(lines):
+        try:
+            item = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(item, dict):
+            continue
+        if item.get("key") != key or item.get("record_type") != record_type:
+            continue
+        name = str(item.get("path") or "")
+        if not name or Path(name).name != name:
+            continue
+        record = _read_json(directory / name)
+        if is_valid(record):
+            return record
+    legacy = _read_json(directory / f"{key}.json")
+    return legacy if is_valid(legacy) else None
 
 
 def _is_explicit_individual_support(lens: dict) -> bool:
@@ -693,14 +808,8 @@ def pull_course_library(folder_id: str, grade: str, subject: str) -> dict:
             text = download_file_text(drive_id)
             body = text.encode("utf-8")
             digest = hashlib.sha256(body).hexdigest()
-            path = target_dir / _safe_library_filename(name)
-            if path.exists() and path.name != _safe_library_filename(name):
-                path = target_dir / f"{path.stem}-{drive_id[:8]}{path.suffix}"
-            path.write_bytes(body)
-            try:
-                os.chmod(path, 0o600)
-            except OSError:
-                pass
+            path = _unique_library_path(target_dir, name, digest)
+            _write_private_bytes_no_overwrite(path, body)
             entry = CourseLibraryEntry(
                 drive_id=drive_id,
                 name=name,
@@ -785,14 +894,8 @@ def pull_local_folder(folder_path: str, grade: str, subject: str) -> dict:
         try:
             body = src_file.read_bytes()
             digest = hashlib.sha256(body).hexdigest()
-            dest = target_dir / _safe_library_filename(name)
-            if dest.exists() and dest.name != _safe_library_filename(name):
-                dest = target_dir / f"{dest.stem}-{local_id[:8]}{dest.suffix}"
-            dest.write_bytes(body)
-            try:
-                os.chmod(dest, 0o600)
-            except OSError:
-                pass
+            dest = _unique_library_path(target_dir, name, digest)
+            _write_private_bytes_no_overwrite(dest, body)
             entry = CourseLibraryEntry(
                 drive_id=local_id,
                 name=name,
@@ -869,12 +972,8 @@ def _import_lesson_bytes(
             "entry": {**existing, "status": "unchanged"},
         }
 
-    dest = target_dir / _safe_library_filename(name)
-    dest.write_bytes(body)
-    try:
-        os.chmod(dest, 0o600)
-    except OSError:
-        pass
+    dest = _unique_library_path(target_dir, name, digest)
+    _write_private_bytes_no_overwrite(dest, body)
     entry = CourseLibraryEntry(
         drive_id=local_id,
         name=name,
@@ -1529,7 +1628,7 @@ def materials_as_dicts(result: LessonMaterialsResult | list[TierMaterial]) -> li
 # teacher reviewed. Generation persists its output here; the packet
 # preview/print path renders THIS stored artifact with zero model calls.
 # New content only ever comes from an explicit regenerate (which calls
-# store_generated_materials again and replaces the record).
+# store_generated_materials again and records a new immutable snapshot).
 
 
 def generated_materials_dir() -> Path:
@@ -1572,9 +1671,8 @@ def store_generated_materials(
         "generated_at": _now_z(),
         "teacher_id": teacher_id,
     }
-    path = directory / f"{_generated_materials_key(lesson, teacher_id)}.json"
-    path.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
-    return path
+    key = _generated_materials_key(lesson, teacher_id)
+    return _write_immutable_json_snapshot(directory, key, "generated_materials", record)
 
 
 def load_generated_materials(
@@ -1582,16 +1680,13 @@ def load_generated_materials(
     teacher_id: str = "local-teacher",
 ) -> dict | None:
     """Return the stored record for this lesson, or None if never generated."""
-    path = generated_materials_dir() / f"{_generated_materials_key(lesson, teacher_id)}.json"
-    if not path.exists():
-        return None
-    try:
-        record = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-    if not isinstance(record, dict) or not isinstance(record.get("materials"), list):
-        return None
-    return record
+    key = _generated_materials_key(lesson, teacher_id)
+    return _load_latest_json_snapshot(
+        generated_materials_dir(),
+        key,
+        "generated_materials",
+        lambda record: isinstance(record, dict) and isinstance(record.get("materials"), list),
+    )
 
 
 # --- Lesson-plan artifact loop (SPEC_LV_LESSON_PLAN_ARTIFACT_2026-08-22).
@@ -1677,6 +1772,7 @@ Lesson input:
 - Subject: {lesson.subject}
 - Grade/unit: {lesson.unit_title}
 - Topic: {lesson.topic}
+- ATL skills (teacher-selected, fixed): {", ".join(lesson.atl_skills) or "none specified"}
 - Duration: {lesson.duration_minutes} minutes
 - CEFR target: {lesson.cefr_target}
 - Language of instruction: {lesson.language_of_instruction}
@@ -1700,8 +1796,13 @@ Output ONLY this JSON object shape:
   "topic": "...",
   "curriculum_standard": "cite one supplied KL id and title",
   "curriculum_citations": ["KL id or citation"],
+  "central_idea": "one transdisciplinary sentence for this unit",
+  "lines_of_inquiry": ["...", "...", "..."],
+  "learner_profile_attributes": [{{"attribute": "one of the 10 IB attributes", "connection": "how this lesson develops it"}}],
+  "cross_curricular_connections": ["subject: connection", "..."],
   "learning_objectives": ["...", "...", "..."],
-  "materials": ["...", "..."],
+  "success_criteria": ["Students can ...", "..."],
+  "materials": ["item (quantity)", "..."],
   "lesson_structure": {{
     "warmup": {{"duration": "5 min", "activity": "...", "instructions": "..."}},
     "main_activity": {{"duration": "20 min", "activity": "...", "instructions": "..."}},
@@ -1747,6 +1848,29 @@ def _phase(value: object, fallback_activity: str, fallback_instructions: str, du
     }
 
 
+# The 10 official IB Learner Profile attributes — model output is validated
+# against this list so a hallucinated attribute never prints on a plan.
+IB_LEARNER_PROFILE_ATTRIBUTES = (
+    "Inquirers", "Knowledgeable", "Thinkers", "Communicators", "Principled",
+    "Open-minded", "Caring", "Risk-takers", "Balanced", "Reflective",
+)
+
+
+def _normalize_learner_profile(value: object) -> list[dict[str, str]]:
+    allowed = {item.lower(): item for item in IB_LEARNER_PROFILE_ATTRIBUTES}
+    normalized: list[dict[str, str]] = []
+    for item in value if isinstance(value, list) else []:
+        if isinstance(item, dict):
+            attribute = str(item.get("attribute") or "").strip()
+            connection = str(item.get("connection") or "").strip()
+        else:
+            attribute, connection = str(item).strip(), ""
+        canonical = allowed.get(attribute.lower())
+        if canonical:
+            normalized.append({"attribute": canonical, "connection": connection})
+    return normalized[:3]
+
+
 def _normalize_lesson_plan(plan: dict, lesson: LessonInput, entries: list[CurriculumKnowledgeEntry], teacher_name: str = "") -> dict:
     first = entries[0] if entries else CurriculumKnowledgeEntry("missing", "Missing curriculum knowledge", "", [], "")
     structure = plan.get("lesson_structure") if isinstance(plan.get("lesson_structure"), dict) else {}
@@ -1767,7 +1891,24 @@ def _normalize_lesson_plan(plan: dict, lesson: LessonInput, entries: list[Curric
             )
             if str(item).strip()
         ],
+        # IB PYP framing. ATL skills are the teacher's own lesson-input
+        # selection — ground truth, never the model's.
+        "central_idea": str(plan.get("central_idea") or "").strip()
+        or f"{lesson.unit_title}: we build {lesson.subject} understanding through {lesson.topic}.",
+        "lines_of_inquiry": [str(item).strip() for item in plan.get("lines_of_inquiry") or [] if str(item).strip()][:3]
+        or [
+            f"Key words and phrases for {lesson.topic}",
+            f"How we use this language in daily life",
+            "Expressing ourselves with growing independence",
+        ],
+        "atl_skills": [str(item) for item in lesson.atl_skills if str(item).strip()],
+        "learner_profile_attributes": _normalize_learner_profile(plan.get("learner_profile_attributes"))
+        or [{"attribute": "Communicators", "connection": "Students express ideas in more than one language."}],
+        "cross_curricular_connections": [
+            str(item).strip() for item in plan.get("cross_curricular_connections") or [] if str(item).strip()
+        ][:3],
         "learning_objectives": [str(item) for item in plan.get("learning_objectives") or [] if str(item).strip()][:3],
+        "success_criteria": [str(item).strip() for item in plan.get("success_criteria") or [] if str(item).strip()][:4],
         "materials": [str(item) for item in plan.get("materials") or [] if str(item).strip()],
         "lesson_structure": {
             "warmup": _phase(structure.get("warmup"), "Vocabulary hook", "Activate prior knowledge with visuals and oral repetition.", "5 min"),
@@ -1911,7 +2052,10 @@ async def generate_lesson_plan_artifact(
 
         engine = ReasoningEngine()
     prompt = _lesson_plan_prompt(lesson, curriculum_entries, split, source_text)
-    result = await engine.reason(prompt, context={}, system_prompt=LESSON_PLAN_SYSTEM_PROMPT, max_tokens=1200)
+    # 1600 (was 1200): the IB PYP fields (central idea, lines of inquiry,
+    # learner profile, success criteria) grew the JSON — truncated JSON would
+    # silently demote every generation to template_fallback.
+    result = await engine.reason(prompt, context={}, system_prompt=LESSON_PLAN_SYSTEM_PROMPT, max_tokens=1600)
     content = getattr(result, "content", "") or ""
     model_used = str(getattr(result, "model_used", "") or "")
     error = str(getattr(result, "error", "") or "")
@@ -1949,12 +2093,23 @@ def render_lesson_plan_markdown(plan: dict) -> str:
         f"- Teacher: {plan.get('teacher_name', '')}",
         f"- Curriculum standard: {plan.get('curriculum_standard', '')}",
         "",
-        "## Learning Objectives",
+        "## IB PYP Framing",
+        "",
+        f"**Central idea:** {plan.get('central_idea', '')}",
+        "",
+        "**Lines of inquiry:**",
         "",
     ]
+    lines.extend(f"- {item}" for item in plan.get("lines_of_inquiry") or [])
+    atl = ", ".join(plan.get("atl_skills") or [])
+    lines.extend(["", f"**Approaches to Learning:** {atl or 'none selected'}", "", "**Learner Profile:**", ""])
+    for item in plan.get("learner_profile_attributes") or []:
+        connection = str(item.get("connection") or "").strip()
+        lines.append(f"- {item.get('attribute', '')}" + (f" — {connection}" if connection else ""))
+    lines.extend(["", "## Learning Objectives", ""])
     lines.extend(f"- {item}" for item in plan.get("learning_objectives") or [])
     lines.extend(["", "## Materials Needed", ""])
-    lines.extend(f"- {item}" for item in plan.get("materials") or [])
+    lines.extend(f"- [ ] {item}" for item in plan.get("materials") or [])
     lines.extend(["", "## Lesson Structure", ""])
     labels = [
         ("warmup", "Warm-up / Hook"),
@@ -1979,10 +2134,26 @@ def render_lesson_plan_markdown(plan: dict) -> str:
         tier = (plan.get("differentiation") or {}).get(key) or {}
         detail = tier.get("modifications") or tier.get("activities") or tier.get("challenges") or ""
         lines.extend([f"### {label}", "", str(tier.get("description") or ""), "", str(detail), ""])
+    connections = plan.get("cross_curricular_connections") or []
+    lines.extend(["## Cross-Curricular Connections", ""])
+    if connections:
+        lines.extend(f"- {item}" for item in connections)
+    else:
+        lines.append("None noted for this lesson.")
     lines.extend([
+        "",
         "## Assessment",
         "",
         str(plan.get("assessment") or ""),
+        "",
+    ])
+    criteria = plan.get("success_criteria") or []
+    if criteria:
+        lines.extend(["**Success criteria:**", ""])
+        lines.extend(f"- {item}" for item in criteria)
+        lines.append("")
+    lines.extend([
+        f"Linked standard: {plan.get('curriculum_standard', '')}",
         "",
         "## Notes",
         "",
@@ -1994,6 +2165,14 @@ def render_lesson_plan_markdown(plan: dict) -> str:
         lines.extend(["## Curriculum Citations", ""])
         lines.extend(f"- {item}" for item in citations)
         lines.append("")
+    lines.extend([
+        "## Teacher Reflection (after the lesson)",
+        "",
+        "- What worked: ____________________________________________",
+        "- What to adjust: _________________________________________",
+        "- Students to follow up with (initials only): _____________",
+        "",
+    ])
     return "\n".join(lines)
 
 
@@ -2022,6 +2201,14 @@ def render_lesson_plan_html(plan: dict, *, print_ready: bool = False) -> str:
       .tiers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
       .tier { border: 1px solid #d8dee4; border-radius: 6px; padding: 10px; break-inside: avoid; }
       ul { margin-top: 4px; padding-left: 20px; }
+      .ib-framing { border: 1px solid #d8dee4; border-left: 3px solid #f06820; border-radius: 6px; padding: 10px 12px; margin: 10px 0 14px; break-inside: avoid; }
+      .ib-framing p, .ib-framing ul { margin: 4px 0; font-size: 13px; }
+      .atl { color: #5f6b76; font-size: 12px; }
+      .checklist { list-style: none; padding-left: 4px; }
+      .checklist li::before { content: "\\2610\\00a0 "; }
+      .linked-standard { color: #5f6b76; font-size: 12px; }
+      .reflection { border: 1px dashed #aab4bd; border-radius: 6px; padding: 10px 12px; break-inside: avoid; }
+      .reflection p { border-bottom: 1px solid #d8dee4; padding-bottom: 16px; margin: 10px 0 0; font-size: 12px; color: #5f6b76; }
       @media print { body { margin: 14mm; } .lesson-plan { max-width: none; } .tiers { grid-template-columns: repeat(3, 1fr); } }
       @media (max-width: 720px) { .meta, .tiers { grid-template-columns: 1fr; } }
     """
@@ -2036,11 +2223,27 @@ def render_lesson_plan_html(plan: dict, *, print_ready: bool = False) -> str:
         f"<div><strong>Teacher</strong><br>{esc(plan.get('teacher_name'))}</div>",
         f"<div><strong>Curriculum</strong><br>{esc(plan.get('curriculum_standard'))}</div>",
         "</section>",
-        "<h2>Learning Objectives</h2>",
+        "<h2>IB PYP Framing</h2>",
+        '<section class="ib-framing">',
+        f"<p><strong>Central idea:</strong> {esc(plan.get('central_idea'))}</p>",
+        "<p><strong>Lines of inquiry:</strong></p>",
         "<ul>",
     ]
+    body.extend(f"<li>{esc(item)}</li>" for item in plan.get("lines_of_inquiry") or [])
+    atl = ", ".join(str(item) for item in plan.get("atl_skills") or [])
+    body.extend([
+        "</ul>",
+        f'<p class="atl"><strong>Approaches to Learning:</strong> {esc(atl or "none selected")}</p>',
+        "<p><strong>Learner Profile:</strong></p>",
+        "<ul>",
+    ])
+    for item in plan.get("learner_profile_attributes") or []:
+        connection = str(item.get("connection") or "").strip()
+        suffix = f" — {esc(connection)}" if connection else ""
+        body.append(f"<li><strong>{esc(item.get('attribute'))}</strong>{suffix}</li>")
+    body.extend(["</ul>", "</section>", "<h2>Learning Objectives</h2>", "<ul>"])
     body.extend(f"<li>{esc(item)}</li>" for item in plan.get("learning_objectives") or [])
-    body.extend(["</ul>", "<h2>Materials Needed</h2>", "<ul>"])
+    body.extend(["</ul>", "<h2>Materials Needed</h2>", '<ul class="checklist">'])
     body.extend(f"<li>{esc(item)}</li>" for item in plan.get("materials") or [])
     body.extend(["</ul>", "<h2>Lesson Structure</h2>"])
     for key, label in phases:
@@ -2062,12 +2265,34 @@ def render_lesson_plan_html(plan: dict, *, print_ready: bool = False) -> str:
             f"<p>{esc(tier.get(detail_key))}</p>",
             "</div>",
         ])
+    body.append("</section>")
+    connections = plan.get("cross_curricular_connections") or []
+    body.append("<h2>Cross-Curricular Connections</h2>")
+    if connections:
+        body.append("<ul>")
+        body.extend(f"<li>{esc(item)}</li>" for item in connections)
+        body.append("</ul>")
+    else:
+        body.append("<p>None noted for this lesson.</p>")
     body.extend([
-        "</section>",
         "<h2>Assessment</h2>",
         f"<p>{esc(plan.get('assessment'))}</p>",
+    ])
+    criteria = plan.get("success_criteria") or []
+    if criteria:
+        body.extend(["<p><strong>Success criteria:</strong></p>", "<ul>"])
+        body.extend(f"<li>{esc(item)}</li>" for item in criteria)
+        body.append("</ul>")
+    body.extend([
+        f'<p class="linked-standard">Linked standard: {esc(plan.get("curriculum_standard"))}</p>',
         "<h2>Notes</h2>",
         f"<p>{esc(plan.get('teacher_notes'))}</p>",
+        "<h2>Teacher Reflection (after the lesson)</h2>",
+        '<section class="reflection">',
+        "<p>What worked:</p>",
+        "<p>What to adjust:</p>",
+        "<p>Students to follow up with (initials only):</p>",
+        "</section>",
         "</article>",
     ])
     document = f"<style>{css}</style>\n{''.join(body)}"
@@ -2108,26 +2333,18 @@ def store_generated_lesson_plan(
         "generated_at": result.generated_at,
         "teacher_id": teacher_id,
     }
-    path = directory / f"{_generated_lesson_plan_key(lesson, teacher_id)}.json"
-    path.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
-    try:
-        os.chmod(path, 0o600)
-    except OSError:
-        pass
-    return path
+    key = _generated_lesson_plan_key(lesson, teacher_id)
+    return _write_immutable_json_snapshot(directory, key, "generated_lesson_plan", record)
 
 
 def load_generated_lesson_plan(lesson: LessonInput, teacher_id: str = "local-teacher") -> dict | None:
-    path = generated_lesson_plans_dir() / f"{_generated_lesson_plan_key(lesson, teacher_id)}.json"
-    if not path.exists():
-        return None
-    try:
-        record = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-    if not isinstance(record, dict) or not isinstance(record.get("plan"), dict):
-        return None
-    return record
+    key = _generated_lesson_plan_key(lesson, teacher_id)
+    return _load_latest_json_snapshot(
+        generated_lesson_plans_dir(),
+        key,
+        "generated_lesson_plan",
+        lambda record: isinstance(record, dict) and isinstance(record.get("plan"), dict),
+    )
 
 
 def _revision_prompt(plan: dict, revision_text: str) -> str:
@@ -2185,7 +2402,8 @@ async def revise_lesson_plan_artifact(
         _revision_prompt(current_plan, revision_text),
         context={},
         system_prompt=LESSON_PLAN_REVISION_SYSTEM_PROMPT,
-        max_tokens=1200,
+        # Matches generation: the revised plan carries the full IB PYP schema.
+        max_tokens=1600,
     )
     content = getattr(result, "content", "") or ""
     model_used = str(getattr(result, "model_used", "") or "")

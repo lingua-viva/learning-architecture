@@ -1,17 +1,21 @@
 #!/usr/bin/env python3
 """Route reachability checker (dev/ROOT_CAUSE_BUILT_NOT_MOUNTED_2026-07-23.md §5).
 
-Every @app.get/post/put/delete/websocket route in src/web.py must be classified
-in contracts/ROUTE_REACHABILITY.yaml as either reachable_from_ui (with a literal
+Every route registered on the web surface — @app.* routes in src/web.py AND
+@router.* routes in src/lingua_viva/routers/*.py (the router plug-in pattern,
+with any APIRouter prefix resolved) — must be classified in
+contracts/ROUTE_REACHABILITY.yaml as either reachable_from_ui (with a literal
 call-site string proven to still exist) or intentionally_backend_only (with a
 reason and a status). A route in neither list fails the check outright — the
 default is "prove it", not "assume it's fine because the tests pass."
 
   check (default)   Verify every live route is classified, every
                     reachable_from_ui call_site literal still exists in its
-                    file, no route is registered twice in src/web.py (the
-                    second definition would silently shadow the first), and
-                    no manifest entry references a route that's been removed.
+                    file, no route is registered twice across the web surface
+                    (the second definition would silently shadow the first —
+                    and a web.py route duplicating a router route is dead
+                    code, because routers are included first), and no
+                    manifest entry references a route that's been removed.
                     Exit 1 on any violation.
   --sync-stale      Same stale-entry check as above, reported on its own
                     without needing to trigger the full check — never writes.
@@ -29,11 +33,16 @@ import yaml
 
 REPO = Path(__file__).resolve().parent.parent
 WEB_PY = REPO / "src" / "web.py"
+ROUTERS_DIR = REPO / "src" / "lingua_viva" / "routers"
 MANIFEST = REPO / "contracts" / "ROUTE_REACHABILITY.yaml"
 
 ROUTE_RE = re.compile(
     r'@app\.(get|post|put|patch|delete|websocket)\(\s*"([^"]+)"'
 )
+ROUTER_ROUTE_RE = re.compile(
+    r'@router\.(get|post|put|patch|delete|websocket)\(\s*"([^"]+)"'
+)
+ROUTER_PREFIX_RE = re.compile(r'APIRouter\(\s*prefix\s*=\s*"([^"]*)"')
 METHOD_LABEL = {
     "get": "GET",
     "post": "POST",
@@ -49,15 +58,30 @@ def fail(msg: str) -> None:
 
 
 def live_routes() -> list[str]:
-    """Every route registration in src/web.py, in source order, WITH duplicates
-    preserved — callers that need to detect a route registered twice (a real
-    FastAPI footgun: the second definition silently shadows the first) must
-    see the raw list, not a de-duplicated set."""
+    """Every route registration on the web surface, in source order, WITH
+    duplicates preserved — callers that need to detect a route registered
+    twice (a real FastAPI footgun: the second definition silently shadows the
+    first) must see the raw list, not a de-duplicated set.
+
+    Covers src/web.py (@app.*) plus every module in src/lingua_viva/routers/
+    (@router.*, with the module's APIRouter prefix resolved), because the
+    router plug-in point in web.py includes those routers at startup — a
+    route living in a router file is exactly as live as one in web.py."""
     text = WEB_PY.read_text(encoding="utf-8")
     routes = []
     for match in ROUTE_RE.finditer(text):
         method, path = match.group(1), match.group(2)
         routes.append(f"{METHOD_LABEL[method]} {path}")
+    if ROUTERS_DIR.is_dir():
+        for router_file in sorted(ROUTERS_DIR.glob("*.py")):
+            if router_file.name == "__init__.py":
+                continue
+            rtext = router_file.read_text(encoding="utf-8")
+            prefix_match = ROUTER_PREFIX_RE.search(rtext)
+            prefix = prefix_match.group(1) if prefix_match else ""
+            for match in ROUTER_ROUTE_RE.finditer(rtext):
+                method, path = match.group(1), match.group(2)
+                routes.append(f"{METHOD_LABEL[method]} {prefix}{path}")
     return routes
 
 
@@ -87,7 +111,7 @@ def check() -> int:
     for route, n in counts.items():
         if n > 1:
             failures.append(
-                f"{route} — registered {n} times in src/web.py. The second "
+                f"{route} — registered {n} times on the web surface (src/web.py + routers). The second "
                 "definition silently shadows the first; this is a bug to fix "
                 "in web.py, not something this manifest can classify away."
             )
@@ -100,7 +124,7 @@ def check() -> int:
     for route in sorted(manifest_routes - live_set):
         failures.append(
             f"{route} — manifest entry references a route that no longer "
-            "exists in src/web.py. Remove it (see --sync-stale)."
+            "exists on the web surface (src/web.py + routers). Remove it (see --sync-stale)."
         )
 
     for route in live_set:
@@ -172,7 +196,7 @@ def sync_stale() -> int:
     if not stale:
         print("[route-reachability] no stale manifest entries")
         return 0
-    print(f"[route-reachability] {len(stale)} manifest entries reference routes no longer in src/web.py:")
+    print(f"[route-reachability] {len(stale)} manifest entries reference routes no longer on the web surface (src/web.py + routers):")
     for route in stale:
         print(f"  - {route}")
     print("[route-reachability] remove these by hand — this command reports only, never writes.")

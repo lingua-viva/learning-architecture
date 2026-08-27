@@ -693,6 +693,38 @@ def test_staff_block_above_header_is_not_students():
     }
 
 
+def test_per_class_support_sheet_without_name_header_detects_abbreviations(tmp_path):
+    """K-5 holdout shape: class-code sheet, no labelled name column, abbreviated
+    row keys, and support categories in the other columns. Staff/header/summary
+    rows must not become students."""
+    from io import BytesIO
+
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "2V"
+    ws.append(["2V", "2025-26 historical support"])
+    ws.append(["Include Specialist", "support staff"])
+    ws.append(["Sofia M.", "Classroom accommodations: extra time", "Medical needs: none"])
+    ws.append(["Marco B-R", "Internal support weekly", "End-of-year notes: decoding support"])
+    ws.append(["Summary", "Two students continue with support"])
+    other = wb.create_sheet("Calendar")
+    other.append(["Buddy Readers", "Assembly Notes"])
+    buf = BytesIO()
+    wb.save(buf)
+
+    record = _run(extract_document(_xlsx_source("k5-support.xlsx"), buf.getvalue()))
+    students = record.data["structure"]["students_detected"]
+
+    assert [s["display_name"] for s in students] == ["Sofia M.", "Marco B-R"]
+    assert {s["evidence"] for s in students} == {"per_class_sheet_support"}
+    assert {s["class"] for s in students} == {"2V"}
+    assert all(s["source_rows"].startswith("2V row ") for s in students)
+    assert record.data["structure"]["document_type"] == "student_support"
+    vault.put_extraction(record, root=tmp_path)
+
+
 def test_first_last_column_pair_joins_names():
     from io import BytesIO
 

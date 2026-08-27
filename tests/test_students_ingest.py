@@ -16,6 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import src.web as web
+from src.lingua_viva.routers import students as students_router
 from src.lingua_viva.docpipe import vault
 from src.lingua_viva.docpipe.contracts import ExtractionRecord
 
@@ -28,7 +29,7 @@ client = TestClient(web.app)
 def isolated_state(tmp_path, monkeypatch):
     monkeypatch.setenv("LV_STATE_HOME", str(tmp_path))
     monkeypatch.setenv("LV_STUDENT_DB_PATH", str(tmp_path / "student_lenses.db"))
-    monkeypatch.setattr(web, "_INGEST_JOBS", {})
+    monkeypatch.setattr(students_router, "_INGEST_JOBS", {})
     return tmp_path
 
 
@@ -439,7 +440,7 @@ def test_bulk_undo_does_not_touch_students_from_another_import(isolated_state, m
 
 def test_ingest_job_status_survives_memory_reset(isolated_state, fixture_extractor):
     job = _run_to_done(_upload()["job_id"])
-    web._INGEST_JOBS = {}
+    students_router._INGEST_JOBS = {}
 
     response = client.get(f"/api/students/ingest/{job['job_id']}")
 
@@ -776,7 +777,7 @@ def test_no_students_found_is_honest(isolated_state, monkeypatch):
 
 
 def test_oversized_upload_is_rejected(isolated_state, monkeypatch):
-    monkeypatch.setattr(web, "INGEST_MAX_BYTES", 10)
+    monkeypatch.setattr(students_router, "INGEST_MAX_BYTES", 10)
     response = client.post(
         "/api/students/ingest",
         files={"file": ("big.md", b"x" * 11, "text/markdown")},
@@ -1168,7 +1169,7 @@ def test_preview_survives_memory_reset_and_still_approves(isolated_state, roster
     must not lose the teacher's pending import."""
     job = _wait_for_job(_upload()["job_id"])
     assert job["status"] == "preview"
-    web._INGEST_JOBS = {}
+    students_router._INGEST_JOBS = {}
 
     response = client.post("/api/students/ingest/approve", json={"job_id": job["job_id"]})
     assert response.status_code == 200, response.text
@@ -1400,11 +1401,13 @@ def test_per_entry_exclude_ui_wired():
 @pytest.fixture()
 def switchable_extractor(monkeypatch):
     """Extractor whose detections the test can swap between uploads."""
-    names_box = {"names": ["Marco Bianchi", "Nora Rossi", "Luca Verdi"]}
+    names_box = {"names": ["Marco Bianchi", "Nora Rossi", "Luca Verdi"], "evidence": "student_column"}
 
     async def extract(source, content, *, model_client=None):
         data = _roster_extraction(source.source_id, list(names_box["names"]))
         data["source_sha256"] = source.data["sha256"]
+        for student in data["structure"]["students_detected"]:
+            student["evidence"] = names_box.get("evidence") or "student_column"
         return ExtractionRecord(data)
 
     from src.lingua_viva.docpipe import extract as docpipe_extract
@@ -1442,6 +1445,28 @@ def test_abbreviated_spelling_queues_never_duplicates(isolated_state, switchable
     queue = client.get("/api/students/ingest/identity").json()["items"]
     assert [item["display_name"] for item in queue] == ["Marco B-R"]
     assert queue[0]["status"] == "open"
+
+
+def test_k5_per_class_support_candidates_queue_even_without_match(isolated_state, switchable_extractor):
+    """The K-5 historical-support genre is enrichment/identity-review input,
+    not a roster-creation source. Plausible abbreviations queue with candidates;
+    no-match abbreviations queue as possible new students instead of becoming
+    duplicate lenses."""
+    first = _run_to_done(_upload_bytes("class_list.md", b"class list v1\n", "text/markdown")["job_id"])
+    assert first["status"] == "done"
+    assert len(first["students_created"]) == 3
+
+    switchable_extractor["names"] = ["Marco B-R", "Tommaso G."]
+    switchable_extractor["evidence"] = "per_class_sheet_support"
+    job = _run_to_done(_upload_bytes("k5_support.xlsx", b"k5 support\n", "text/markdown")["job_id"])
+
+    assert job["students_created"] == []
+    assert [item["display_name"] for item in job["identity_review"]] == ["Marco B-R", "Tommaso G."]
+    by_name = {item["display_name"]: item for item in job["identity_review"]}
+    assert [c["display_name"] for c in by_name["Marco B-R"]["candidates"]] == ["Marco Bianchi"]
+    assert by_name["Tommaso G."]["candidates"] == []
+    assert by_name["Tommaso G."]["possible_new_student"] is True
+    assert _store_count() == 3
 
 
 def test_exact_respelling_merges_into_canonical_lens(isolated_state, switchable_extractor):

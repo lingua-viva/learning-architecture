@@ -808,6 +808,25 @@ _CLASS_LABELS = {"class", "classe"}
 # "nome" is Italian for both "name" and "first name": it is a first-name
 # column when a cognome column shares the header row, otherwise full-name
 # (resolved in _sheet_student_columns).
+_CLASS_CODE_SHEET = re.compile(r"^\d{1,2}[A-Za-z]{1,2}$")
+_SUPPORT_FIRST_COL_HEADERS = {
+    "name", "student", "student name", "students", "nome", "alunno", "studente",
+    "id", "#", "class", "classe",
+}
+_SUPPORT_ROLE_WORDS = {
+    "assistant", "coordinator", "counselor", "counsellor", "include",
+    "inclusion", "learning specialist", "specialist", "staff", "teacher",
+    "therapist", "therapy",
+}
+_SUPPORT_NON_STUDENT_ROW_KEYS = {
+    "comment", "comments", "note", "notes", "overview", "summary", "total",
+}
+_SUPPORT_DATA_HINTS = {
+    "accommodation", "accommodations", "allerg", "counsel", "evaluation",
+    "external", "flag", "internal", "learning plan", "medical", "note",
+    "notes", "ot", "plan", "pull out", "push in", "review", "speech",
+    "support", "therapy",
+}
 
 
 def _column_role(label: str) -> Optional[str]:
@@ -1007,6 +1026,112 @@ def _class_pair_roster_blocks(
     return blocks
 
 
+def _sheet_per_class_support_rows(spans: list[dict[str, Any]]) -> dict[str, set[int]]:
+    """Detect the K-5 historical support genre.
+
+    Real shape: each worksheet is a class code ("2V", "3A"), the first
+    column is the row key, and there may be no "Student" header above that
+    column. Names are abbreviated ("Sofia M.", "Marco B-R") and the support
+    categories live in the other columns. This is not a roster-creation
+    genre: extraction only surfaces candidates so the identity queue can ask
+    the teacher to confirm each match.
+    """
+    by_sheet: dict[str, list[dict[str, Any]]] = {}
+    for span in spans:
+        sheet = str(span.get("sheet") or "").strip()
+        if not sheet or "cells" not in span:
+            continue
+        by_sheet.setdefault(sheet, []).append(span)
+
+    support_rows: dict[str, set[int]] = {}
+    for sheet, sheet_spans in by_sheet.items():
+        if not _CLASS_CODE_SHEET.fullmatch(sheet):
+            continue
+        rows: set[int] = set()
+        support_header_seen = False
+        for span in sorted(sheet_spans, key=lambda item: int(item["row_index"])):
+            cells = {cell["column"]: str(cell["text"]).strip() for cell in span["cells"]}
+            first = re.sub(r"\s+", " ", cells.get("A", "")).strip()
+            other_values = [
+                value for column, value in cells.items()
+                if column != "A" and str(value).strip()
+            ]
+            if _looks_like_support_header(first, other_values):
+                support_header_seen = True
+                continue
+            if not _support_row_key_looks_like_student(first):
+                continue
+            if not support_header_seen and not _row_has_support_data(other_values):
+                continue
+            rows.add(int(span["row_index"]))
+        if rows:
+            support_rows[sheet] = rows
+    return support_rows
+
+
+def _support_row_key_looks_like_student(value: str) -> bool:
+    text = re.sub(r"\s+", " ", str(value or "")).strip()
+    if not text:
+        return False
+    comparable = re.sub(r"\([^)]*\)", " ", text)
+    comparable = re.sub(r"\s+", " ", comparable).strip()
+    lowered = text.casefold().strip(":")
+    if lowered in _SUPPORT_FIRST_COL_HEADERS:
+        return False
+    if lowered in _SUPPORT_NON_STUDENT_ROW_KEYS:
+        return False
+    if lowered in _SUPPORT_ROLE_WORDS or any(word in lowered for word in _SUPPORT_ROLE_WORDS):
+        return False
+    if _CLASS_CODE_SHEET.fullmatch(text):
+        return False
+    tokens = comparable.replace("\u2010", "-").replace("\u2011", "-").split()
+    if not (1 <= len(tokens) <= 4):
+        return False
+    first = tokens[0].strip(".")
+    if not re.fullmatch(r"[A-ZÀ-Þ][A-Za-zÀ-ÿ'’-]+", first):
+        return False
+    if len(tokens) == 1:
+        # First-name-only rows exist in the real genre, but they are too easy
+        # to confuse with staff names unless the support-data columns carry
+        # the evidence. _row_has_support_data is the second half of the gate.
+        return True
+    for token in tokens[1:]:
+        part = token.strip()
+        if re.fullmatch(r"[A-ZÀ-Þ]\.?", part):
+            continue
+        if re.fullmatch(r"[A-ZÀ-Þ](?:[-.][A-ZÀ-Þ]\.?)+", part):
+            continue
+        if re.fullmatch(r"[A-ZÀ-Þ][A-Za-zÀ-ÿ'’-]+", part):
+            continue
+        return False
+    return True
+
+
+def _looks_like_support_header(first_cell: str, values: list[str]) -> bool:
+    if first_cell and first_cell.casefold().strip(":") in _SUPPORT_FIRST_COL_HEADERS:
+        return True
+    joined = " ".join(re.sub(r"\s+", " ", str(value or "")).strip() for value in values)
+    lowered = joined.casefold()
+    hits = sum(1 for hint in _SUPPORT_DATA_HINTS if hint in lowered)
+    return not first_cell.strip() and hits >= 2
+
+
+def _row_has_support_data(values: list[str]) -> bool:
+    joined = " ".join(re.sub(r"\s+", " ", str(value or "")).strip() for value in values)
+    if not joined:
+        return False
+    lowered = joined.casefold()
+    if any(hint in lowered for hint in _SUPPORT_DATA_HINTS):
+        return True
+    if re.search(r"\b\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\b", joined):
+        return True
+    if any(value.strip() in {"✓", "✔", "x", "X", "yes", "Yes", "Y"} for value in values):
+        return True
+    # A short free-text note in a support workbook is enough when paired
+    # with a class-code sheet and a name-like row key.
+    return len(joined) >= 8 and any(ch.isalpha() for ch in joined)
+
+
 def _detect_students_structural(spans: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Positional student detection for structured (row-span) documents.
 
@@ -1018,10 +1143,16 @@ def _detect_students_structural(spans: list[dict[str, Any]]) -> list[dict[str, A
     _detect_students (the bigram path) in _build_structure.
     """
     header_by_sheet = _sheet_student_columns(spans)
+    per_class_support_by_sheet = {
+        sheet: rows
+        for sheet, rows in _sheet_per_class_support_rows(spans).items()
+        if sheet not in header_by_sheet
+    }
     class_pairs_by_sheet = {
         sheet: info
         for sheet, info in _sheet_class_pairs(spans).items()
-        if sheet not in header_by_sheet  # an explicit label header wins
+        # explicit label headers and per-class support rows win
+        if sheet not in header_by_sheet and sheet not in per_class_support_by_sheet
     }
     roster_blocks_by_sheet = {
         sheet: _class_pair_roster_blocks(
@@ -1126,6 +1257,17 @@ def _detect_students_structural(spans: list[dict[str, Any]]) -> list[dict[str, A
                             f" cols {column}+{pair['neighbour']}"
                         ),
                     })
+        elif sheet in per_class_support_by_sheet:
+            if row_index not in per_class_support_by_sheet[sheet]:
+                continue
+            cells = {cell["column"]: cell["text"] for cell in span["cells"]}
+            display = str(cells.get("A") or "").strip()
+            if display:
+                _add(display, span["span_id"], {
+                    "class": str(sheet),
+                    "source_rows": f"{sheet} row {row_index}",
+                    "evidence": "per_class_sheet_support",
+                })
     return [found[student_id] for student_id in order]
 
 

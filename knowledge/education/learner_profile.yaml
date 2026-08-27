@@ -1,0 +1,233 @@
+domain: education
+version: '1.0'
+entries:
+- id: LV-KL-037
+  title: IB Learner Profile — Inquirers
+  content: >
+    The IB Learner Profile describes Inquirers as learners who nurture curiosity, develop
+    skills for inquiry and research, know how to learn independently and with others, and
+    sustain a love of learning throughout life. In a Grade 3 Italian immersion classroom this
+    looks like: a student who asks "come si dice...?" to get the Italian word they need for a
+    question they genuinely want answered, who chooses to investigate a wondering from the
+    unit of inquiry during choice time, or who tries more than one strategy (picture clues,
+    asking a partner, a word wall) before asking the teacher.
+  ontology_nodes:
+  - LV-CUR-001
+  - LV-CUR-003
+  evidence_tier: 1
+  citations:
+  - "IBO (2013). IB Learner Profile."
+  tags:
+  - IB PYP
+  - learner profile
+  - inquirers
+  - Grade 3
+  verified: true
+- id: LV-KL-038
+  title: IB Learner Profile — Knowledgeable
+  content: >
+    The IB Learner Profile describes Knowledgeable learners as those who develop and use
+    conceptual understanding, exploring knowledge across a range of disciplines, and who
+    engage with issues and ideas that have local and global significance. In a Grade 3
+    Italian immersion classroom this looks like: a student who connects the unit's central
+    idea to something from home or another subject ("this is like when we measured in math"),
+    who can explain a concept from the unit in their own words in Italian or English, or who
+    brings prior knowledge from one culture or language into a discussion in another.
+  ontology_nodes:
+  - LV-CUR-001
+  - LV-CUR-003
+  evidence_tier: 1
+  citations:
+  - "IBO (2013). IB Learner Profile."
+  tags:
+  - IB PYP
+  - learner profile
+  - knowledgeable
+  - Grade 3
+  verified: true
+- id: LV-KL-039
+  title: IB Learner Profile — Thinkers
+  content: >
+    The IB Learner Profile describes Thinkers as learners who use critical and creative
+    thinking skills to analyse and take responsible action on complex problems, and who
+    exercise initiative in making reasoned, ethical decisions. In a Grade 3 Italian immersion
+    classroom this looks like: a student who explains WHY they sorted words or objects a
+    particular way, who proposes a different way to solve a group problem, or who — when
+    their first sentence in Italian doesn't work — reformulates it with different words
+    instead of abandoning the idea.
+  ontology_nodes:
+  - LV-CUR-001
+  - LV-CUR-003
+  evidence_tier: 1
+  citations:
+  - "IBO (2013). IB Learner Profile."
+  tags:
+  - IB PYP
+  - learner profile
+  - thinkers
+  - Grade 3
+  verified: true
+- id: LV-KL-040
+  title: IB Learner Profile — Communicators
+  content: >
+    The IB Learner Profile describes Communicators as learners who express themselves
+    confidently and creatively in more than one language and in many ways, and who
+    collaborate effectively, listening carefully to the perspectives of other individuals and
+    groups. This is the attribute most directly served by a language-immersion programme: the
+    IB explicitly values expression in MORE THAN ONE language, so code-switching and
+    translanguaging are evidence of the attribute, not a deficit. In a Grade 3 Italian
+    immersion classroom this looks like: a student who risks saying it in Italian even with
+    imperfect grammar, who uses gesture or drawing to carry meaning the words can't yet
+    carry, or who restates a classmate's idea to check they understood it.
+  ontology_nodes:
+  - LV-CUR-001
+  - LV-CUR-003
+  evidence_tier: 1
+  citations:
+  - "IBO (2013). IB Learner Profile."
+  tags:
+  - IB PYP
+  - learner profile
+  - communicators
+  - multilingualism
+  - Grade 3
+  verified: true
+- id: LV-KL-041
+  title: IB Learner Profile — Principled
+  content: >
+    The IB Learner Profile describes Principled learners as those who act with integrity and
+    honesty, with a strong sense of fairness and justice, and with respect for the dignity
+    and rights of people everywhere, taking responsibility for their actions and their
+    consequences. In a Grade 3 Italian immersion classroom this looks like: a student who
+    follows the class essential agreements even when the teacher isn't watching, who owns a
+    mistake ("sono stato io") without being cornered into it, or who speaks up when a game's
+    rules are being applied unfairly to a classmate.
+  ontology_nodes:
+  - LV-CUR-001
+  - LV-CUR-003
+  evidence_tier: 1
+  citations:
+  - "IBO (2013). IB Learner Profile."
+  tags:
+  - IB PYP
+  - learner profile
+  - principled
+  - Grade 3
+  verified: true
+- id: LV-KL-042
+  title: IB Learner Profile — Open-minded
+  content: >
+    The IB Learner Profile describes Open-minded learners as those who critically appreciate
+    their own cultures and personal histories as well as the values and traditions of others,
+    and who seek and evaluate a range of points of view, being willing to grow from the
+    experience. In a Grade 3 Italian immersion classroom this looks like: a student who
+    notices and enjoys that things have different names, customs, or foods across the
+    languages of the classroom, who listens to a classmate's different solution before
+    defending their own, or who asks a question about a tradition instead of declaring it
+    "weird".
+  ontology_nodes:
+  - LV-CUR-001
+  - LV-CUR-003
+  evidence_tier: 1
+  citations:
+  - "IBO (2013). IB Learner Profile."
+  tags:
+  - IB PYP
+  - learner profile
+  - open-minded
+  - intercultural understanding
+  - Grade 3
+  verified: true
+- id: LV-KL-043
+  title: IB Learner Profile — Caring
+  content: >
+    The IB Learner Profile describes Caring learners as those who show empathy, compassion
+    and respect, who have a commitment to service, and who act to make a positive difference
+    in the lives of others and in the world around them. In a Grade 3 Italian immersion
+    classroom this looks like: a student who quietly helps a newer Italian speaker find the
+    word they're reaching for, who notices a classmate sitting alone and invites them in, or
+    who takes real responsibility for a shared job (plants, library, materials) because the
+    class depends on it.
+  ontology_nodes:
+  - LV-CUR-001
+  - LV-CUR-003
+  evidence_tier: 1
+  citations:
+  - "IBO (2013). IB Learner Profile."
+  tags:
+  - IB PYP
+  - learner profile
+  - caring
+  - Grade 3
+  verified: true
+- id: LV-KL-044
+  title: IB Learner Profile — Risk-takers
+  content: >
+    The IB Learner Profile describes Risk-takers (also called Courageous) as learners who
+    approach uncertainty with forethought and determination, who work independently and
+    cooperatively to explore new ideas and innovative strategies, and who are resourceful and
+    resilient in the face of challenges and change. In an immersion setting this attribute is
+    exercised every day by definition: speaking in a language you are still building IS the
+    risk. In a Grade 3 Italian immersion classroom this looks like: a student who volunteers
+    an answer in Italian without being certain it's right, who tries a new role in group work
+    (presenter, timekeeper), or who attempts the harder version of a task and treats the
+    errors as information.
+  ontology_nodes:
+  - LV-CUR-001
+  - LV-CUR-003
+  evidence_tier: 1
+  citations:
+  - "IBO (2013). IB Learner Profile."
+  tags:
+  - IB PYP
+  - learner profile
+  - risk-takers
+  - language immersion
+  - Grade 3
+  verified: true
+- id: LV-KL-045
+  title: IB Learner Profile — Balanced
+  content: >
+    The IB Learner Profile describes Balanced learners as those who understand the importance
+    of balancing different aspects of their lives — intellectual, physical, and emotional —
+    to achieve well-being for themselves and others, and who recognize their interdependence
+    with other people and with the world. In a Grade 3 Italian immersion classroom this looks
+    like: a student who can move between energetic activities (TPR, games, singing) and calm
+    focused work without getting stuck in either mode, who takes a self-chosen break strategy
+    when frustrated and then returns to the task, or who makes room for both work and play in
+    how they use free-choice time.
+  ontology_nodes:
+  - LV-CUR-001
+  - LV-CUR-003
+  evidence_tier: 1
+  citations:
+  - "IBO (2013). IB Learner Profile."
+  tags:
+  - IB PYP
+  - learner profile
+  - balanced
+  - well-being
+  - Grade 3
+  verified: true
+- id: LV-KL-046
+  title: IB Learner Profile — Reflective
+  content: >
+    The IB Learner Profile describes Reflective learners as those who thoughtfully consider
+    the world and their own ideas and experience, and who work to understand their strengths
+    and weaknesses in order to support their learning and personal development. In a Grade 3
+    Italian immersion classroom this looks like: a student who can say one specific thing
+    that got easier for them in Italian this month ("prima non capivo le domande, adesso
+    sì"), who looks back at earlier work and names what they would change, or who chooses a
+    goal for the next piece of work based on feedback rather than picking one at random.
+  ontology_nodes:
+  - LV-CUR-001
+  - LV-CUR-003
+  evidence_tier: 1
+  citations:
+  - "IBO (2013). IB Learner Profile."
+  tags:
+  - IB PYP
+  - learner profile
+  - reflective
+  - Grade 3
+  verified: true

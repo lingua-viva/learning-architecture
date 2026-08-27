@@ -159,7 +159,7 @@ jobs:
       - name: Verify every release asset answers 200
         run: |
           tag="${{ needs.auto-release.outputs.tag }}"
-          for asset in LinguaViva.dmg LinguaViva-Setup.exe LinguaViva.AppImage; do
+          for asset in LinguaViva.dmg LinguaViva-Setup.exe LinguaViva.AppImage LinguaViva.deb; do
             code=$(curl -s -o /dev/null -w "%{http_code}" -L \
               "https://github.com/${{ github.repository }}/releases/download/$tag/$asset")
             if [ "$code" != "200" ]; then

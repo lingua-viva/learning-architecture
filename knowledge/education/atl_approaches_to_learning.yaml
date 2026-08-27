@@ -1,0 +1,139 @@
+domain: education
+version: '1.0'
+entries:
+- id: LV-KL-032
+  title: ATL Thinking Skills — Critical, Creative, Transfer, Metacognition
+  content: >
+    IB PYP Approaches to Learning name Thinking skills as one of five interrelated skill
+    categories developed across the programme. The category includes critical thinking
+    (analysing and evaluating issues and ideas, forming decisions and opinions), creative
+    thinking (generating novel ideas, considering new perspectives), information transfer
+    (applying skills and knowledge in unfamiliar situations and across subject areas), and
+    reflection/metacognition — (re)considering the process of learning itself. In the PYP,
+    thinking skills are taught explicitly through the units of inquiry, not assumed to develop
+    incidentally: teachers plan learning experiences where students analyse, synthesise, and
+    reflect on how they reached an answer, and the skills are revisited across grade levels
+    with increasing sophistication.
+  ontology_nodes:
+  - LV-CUR-001
+  - LV-CUR-002
+  - LV-CUR-004
+  evidence_tier: 1
+  citations:
+  - "IBO (2018). Primary Years Programme: From Principles into Practice — Approaches to Learning."
+  tags:
+  - IB PYP
+  - ATL
+  - thinking skills
+  - metacognition
+  - critical thinking
+  verified: true
+- id: LV-KL-033
+  title: ATL Research Skills — Information Literacy, Media Literacy, Ethical Use
+  content: >
+    Research skills in the IB PYP Approaches to Learning cover information literacy
+    (formulating and planning questions, gathering and recording data, synthesising and
+    interpreting, evaluating and communicating findings), media literacy (interacting with
+    media to use and create ideas and information), and the ethical use of media and
+    information (understanding and applying social and ethical technology use, including
+    crediting sources). In primary classrooms this is developed through age-appropriate
+    inquiry cycles: students pose researchable questions inside a unit of inquiry, use more
+    than one source, record what they find in their own words, and say where information
+    came from — practices that begin in the early years with picture sources and oral
+    reporting and grow toward independent source evaluation by the end of the PYP.
+  ontology_nodes:
+  - LV-CUR-001
+  - LV-CUR-002
+  - LV-CUR-004
+  evidence_tier: 1
+  citations:
+  - "IBO (2018). Primary Years Programme: From Principles into Practice — Approaches to Learning."
+  tags:
+  - IB PYP
+  - ATL
+  - research skills
+  - information literacy
+  - media literacy
+  verified: true
+- id: LV-KL-034
+  title: ATL Communication Skills — Listening, Speaking, Reading, Writing, Visual
+  content: >
+    Communication skills in the IB PYP Approaches to Learning span exchanging information
+    (listening to directions and others, speaking clearly and appropriately for the audience),
+    literacy (reading and writing for a range of purposes, taking notes, understanding and
+    using language conventions), and non-verbal/visual communication (interpreting and
+    creating visuals and multimedia, using gesture and symbol). For language-immersion
+    programmes this category is doubly load-bearing: the communication skills are practised
+    in the target language, so a single activity (e.g., retelling a story with picture
+    support) simultaneously develops the ATL skill and the language proficiency it runs on.
+    PYP guidance treats communication in any of a learner's languages as evidence of the
+    skill — the skill is not tied to English.
+  ontology_nodes:
+  - LV-CUR-001
+  - LV-CUR-002
+  - LV-CUR-004
+  evidence_tier: 1
+  citations:
+  - "IBO (2018). Primary Years Programme: From Principles into Practice — Approaches to Learning."
+  tags:
+  - IB PYP
+  - ATL
+  - communication skills
+  - language immersion
+  - multilingualism
+  verified: true
+- id: LV-KL-035
+  title: ATL Social Skills — Collaboration, Conflict Resolution, Group Decision-Making
+  content: >
+    Social skills in the IB PYP Approaches to Learning include developing positive
+    interpersonal relationships and collaboration (working cooperatively, taking on a fair
+    share of the work, respecting others' contributions), and developing social-emotional
+    intelligence in group settings — resolving conflict (listening to others' points of view,
+    negotiating, compromising), and group decision-making (agreeing on shared goals and
+    processes, building consensus). The PYP expects these to be explicitly taught and
+    practised inside academic work rather than in isolation: role assignment in group
+    inquiry, agreed class essential agreements, and structured peer feedback are the standard
+    vehicles. Social skills development is also the primary evidence base for SEL-adjacent
+    reporting in the PYP, keeping the framing skills-based rather than behavioural/clinical.
+  ontology_nodes:
+  - LV-CUR-001
+  - LV-CUR-002
+  - LV-CUR-004
+  evidence_tier: 1
+  citations:
+  - "IBO (2018). Primary Years Programme: From Principles into Practice — Approaches to Learning."
+  tags:
+  - IB PYP
+  - ATL
+  - social skills
+  - collaboration
+  - conflict resolution
+  verified: true
+- id: LV-KL-036
+  title: ATL Self-Management Skills — Organization, Time Management, Safety, Well-Being
+  content: >
+    Self-management skills in the IB PYP Approaches to Learning cover organization (managing
+    materials, planning and completing tasks, keeping an organized workspace), time management
+    (using time effectively, meeting deadlines appropriate to age), safety (making safe
+    choices, following routines that protect self and others), and states of mind/well-being
+    (mindfulness, perseverance, emotional management, self-motivation, resilience). In the
+    primary years these are built through visible routines: task boards, visual schedules,
+    materials checklists, and explicit transitions. PYP guidance links self-management
+    directly to learner agency — students who can organize their own materials and time are
+    the ones who can exercise genuine choice in an inquiry — so self-management scaffolds
+    are treated as a bridge to independence, faded as capability grows rather than held
+    constant all year.
+  ontology_nodes:
+  - LV-CUR-001
+  - LV-CUR-002
+  - LV-CUR-004
+  evidence_tier: 1
+  citations:
+  - "IBO (2018). Primary Years Programme: From Principles into Practice — Approaches to Learning."
+  tags:
+  - IB PYP
+  - ATL
+  - self-management
+  - organization
+  - well-being
+  verified: true

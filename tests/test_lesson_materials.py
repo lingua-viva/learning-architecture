@@ -617,6 +617,26 @@ def test_pull_local_file_and_upload_bytes_share_the_library(monkeypatch, tmp_pat
     assert {item["name"] for item in listed["files"]} == {"Poetry Lesson.md", "Uploaded Lesson.txt"}
 
 
+def test_changed_local_file_import_does_not_overwrite_previous_copy(monkeypatch, tmp_path):
+    monkeypatch.setenv("LV_COURSE_LIBRARY_DIR", str(tmp_path / "library"))
+    source = tmp_path / "Poetry Lesson.md"
+    source.write_text("first lesson version", encoding="utf-8")
+
+    first = pull_local_file(str(source), "MYP2", "english")["entry"]
+    first_path = Path(first["local_path"])
+    assert first_path.read_text(encoding="utf-8") == "first lesson version"
+
+    source.write_text("revised lesson version", encoding="utf-8")
+    second = pull_local_file(str(source), "MYP2", "english")["entry"]
+    second_path = Path(second["local_path"])
+
+    assert second_path != first_path
+    assert first_path.read_text(encoding="utf-8") == "first lesson version"
+    assert second_path.read_text(encoding="utf-8") == "revised lesson version"
+    listed = list_course_library("MYP2", "english")
+    assert listed["files"][0]["local_path"] == str(second_path)
+
+
 def test_pull_local_file_rejects_unsupported_extension(monkeypatch, tmp_path):
     monkeypatch.setenv("LV_COURSE_LIBRARY_DIR", str(tmp_path / "library"))
     source = tmp_path / "lesson.exe"

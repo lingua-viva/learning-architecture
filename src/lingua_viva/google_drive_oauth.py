@@ -64,7 +64,11 @@ def _client_config_candidates() -> list[Path]:
 
 def load_client_config() -> dict[str, str] | None:
     client_id = (os.environ.get("LV_GOOGLE_OAUTH_CLIENT_ID") or "").strip()
-    client_secret = (os.environ.get("LV_GOOGLE_OAUTH_CLIENT_SECRET") or "").strip()
+    client_secret = (
+        os.environ.get("LV_GOOGLE_OAUTH_CLIENT_SECRET")
+        or os.environ.get("LV_GOOGLE_OAUTH_SECRET")
+        or ""
+    ).strip()
     if client_id and client_secret:
         return {"client_id": client_id, "client_secret": client_secret}
     for path in _client_config_candidates():

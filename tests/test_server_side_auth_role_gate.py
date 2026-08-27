@@ -206,10 +206,19 @@ def test_parent_recommendation_forces_header_teacher_id(monkeypatch, tmp_path):
 
     def fake_generate(self, student_id, teacher_id, **kwargs):
         seen["teacher_id"] = teacher_id
+        # Mirrors ParentReportDraft, including the structured-section fields
+        # added in the P1-DOC-001 template build (all default-valued on the
+        # real dataclass).
         return SimpleNamespace(
             subject_line="Progress update",
             body="We noticed your child trying a new strategy.",
             home_activities=["Read together for ten minutes."],
+            intro="We noticed your child trying a new strategy.",
+            strengths=[],
+            growth_areas=[],
+            student_name="",
+            grade_level="",
+            reporting_period="",
         )
 
     monkeypatch.setattr(

@@ -150,6 +150,41 @@ def test_packet_preview_route_returns_both_print_variants(monkeypatch, tmp_path)
     assert "Zoe Rivera" not in packet["student_print_html"]
 
 
+def test_generated_materials_are_saved_as_immutable_snapshots(monkeypatch, tmp_path):
+    from src.lingua_viva.lesson_materials import (
+        LessonMaterialsResult,
+        load_generated_materials,
+        store_generated_materials,
+    )
+
+    monkeypatch.setenv("LV_GENERATED_MATERIALS_DIR", str(tmp_path / "generated"))
+    first = LessonMaterialsResult(
+        materials=_materials(),
+        lesson_summary="first version",
+        sync_status="not_requested",
+        individual_support=_support(),
+    )
+    second_materials = _materials()
+    second_materials[0].title = "Routine Match Revised"
+    second = LessonMaterialsResult(
+        materials=second_materials,
+        lesson_summary="second version",
+        sync_status="not_requested",
+        individual_support=_support(),
+    )
+
+    first_path = store_generated_materials(_lesson(), first, teacher_id="teacher-a")
+    second_path = store_generated_materials(_lesson(), second, teacher_id="teacher-a")
+
+    assert first_path != second_path
+    assert first_path.exists()
+    assert second_path.exists()
+    assert len(list((tmp_path / "generated").glob("*.json"))) == 2
+    latest = load_generated_materials(_lesson(), "teacher-a")
+    assert latest["lesson_summary"] == "second version"
+    assert latest["materials"][0]["title"] == "Routine Match Revised"
+
+
 def test_packet_preview_without_generation_is_refused(monkeypatch, tmp_path):
     # F3: never invent a packet the teacher hasn't reviewed.
     monkeypatch.setenv("LV_GENERATED_MATERIALS_DIR", str(tmp_path / "empty"))

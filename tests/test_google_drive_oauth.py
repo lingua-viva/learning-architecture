@@ -233,6 +233,16 @@ def test_client_config_env_beats_files(client_env):
     }
 
 
+def test_client_config_accepts_spec_secret_alias(monkeypatch):
+    monkeypatch.setenv("LV_GOOGLE_OAUTH_CLIENT_ID", "app-client-id")
+    monkeypatch.delenv("LV_GOOGLE_OAUTH_CLIENT_SECRET", raising=False)
+    monkeypatch.setenv("LV_GOOGLE_OAUTH_SECRET", "app-client-secret")
+    assert oauth.load_client_config() == {
+        "client_id": "app-client-id",
+        "client_secret": "app-client-secret",
+    }
+
+
 def test_client_config_falls_back_to_lv_home_file(monkeypatch, tmp_path):
     monkeypatch.setenv("LV_CONFIG_HOME", str(tmp_path / "lv-home"))
     config_dir = tmp_path / "lv-home" / "config"

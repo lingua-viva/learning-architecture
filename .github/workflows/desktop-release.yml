@@ -113,7 +113,7 @@ jobs:
             rename_from: "*.exe"
             rename_to: LinguaViva-Setup.exe
           - os: ubuntu-latest
-            dist_args: --linux AppImage
+            dist_args: --linux AppImage deb
             rename_from: "*.AppImage"
             rename_to: LinguaViva.AppImage
 
@@ -341,13 +341,25 @@ jobs:
             echo "ERROR: No file matching ${{ matrix.rename_from }} found"
             exit 1
           fi
+          if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
+            DEB=$(find . -maxdepth 4 -type f -name "*.deb" -not -path "*/node_modules/*" | head -1)
+            if [ -z "$DEB" ]; then
+              echo "ERROR: No .deb package found"
+              exit 1
+            fi
+            mv "$DEB" "release/LinguaViva.deb"
+            echo "Renamed $DEB → release/LinguaViva.deb"
+            ls -lh "release/LinguaViva.deb"
+          fi
           ls -lh "release/${{ matrix.rename_to }}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: desktop-${{ matrix.os }}
-          path: desktop/release/${{ matrix.rename_to }}
+          path: |
+            desktop/release/${{ matrix.rename_to }}
+            desktop/release/LinguaViva.deb
 
   # D1-P0-001 gate (2026-08-10): backend-smoke boots src/web.py from the
   # checkout with CI-installed deps — it can never catch a broken packaged
@@ -432,5 +444,6 @@ jobs:
             artifacts/LinguaViva.dmg
             artifacts/LinguaViva-Setup.exe
             artifacts/LinguaViva.AppImage
+            artifacts/LinguaViva.deb
           generate_release_notes: true
           prerelease: true  # MUST stay true — desktop releases steal the CLI's "latest" slot otherwise

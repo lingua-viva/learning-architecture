@@ -29,10 +29,23 @@ REPO = Path(__file__).resolve().parent.parent
 
 
 def _declared_routes() -> set[str]:
+    """Routes registered on the web surface: @app.* in src/web.py plus
+    @router.* in src/lingua_viva/routers/*.py (router plug-in pattern,
+    APIRouter prefix resolved) — students routes moved to a router in the
+    P1-ARCH-001 web.py split and are exactly as live as before."""
     web = (REPO / "src" / "web.py").read_text(encoding="utf-8")
     found = set()
     for method, path in re.findall(r'@app\.(get|post|put|delete)\(\s*"([^"]+)"', web):
         found.add(f"{method.upper()} {path}")
+    routers_dir = REPO / "src" / "lingua_viva" / "routers"
+    for router_file in sorted(routers_dir.glob("*.py")):
+        if router_file.name == "__init__.py":
+            continue
+        text = router_file.read_text(encoding="utf-8")
+        prefix_match = re.search(r'APIRouter\(\s*prefix\s*=\s*"([^"]*)"', text)
+        prefix = prefix_match.group(1) if prefix_match else ""
+        for method, path in re.findall(r'@router\.(get|post|put|delete)\(\s*"([^"]+)"', text):
+            found.add(f"{method.upper()} {prefix}{path}")
     return found
 
 
