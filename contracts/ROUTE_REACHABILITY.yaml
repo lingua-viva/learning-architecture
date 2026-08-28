@@ -116,6 +116,15 @@ reachable_from_ui:
     call_site: 'api("/api/students/ingest/class-folder"'
     note: "Google Drive panel: Build class lenses from the selected connected folder."
 
+  # Document-to-lens pipeline (SPEC_LV_DOCUMENT_TO_LENS_PIPELINE 2026-08-23):
+  # the "Update lenses from documents" panel added to the Students view.
+  - route: "POST /api/students/import-document"
+    call_site: '"/api/students/import-document"'
+    note: "Update lenses from documents panel: Upload and extract."
+  - route: "POST /api/students/apply-extractions"
+    call_site: '"/api/students/apply-extractions"'
+    note: "Update lenses from documents panel: applies reviewed extractions to lenses."
+
   # Student Lens Full Circle G4 — Settings sync controls.
   - route: "POST /api/drive/sync-now"
     call_site: 'api("/api/drive/sync-now"'
