@@ -16,6 +16,12 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v175 (2026-08-27): safeguarding honesty — Observe no longer tells a
+#     teacher her concern is "visible to coordinators only". No coordinator
+#     view exists (all three safeguarding routes are deferred_undecided) and
+#     safeguarding_config() defaults to no channel, so the notification
+#     reaches nobody. The badge now reads "Restricted record — not yet routed
+#     to a person" and the copy names the school's human process.
 #   v174 (2026-08-27): the Ask header no longer promises the web unconditionally.
 #     With Perplexity unconfigured it still read "answers come from the web"
 #     while the answer below it read "answered on this computer", model none,
@@ -803,7 +809,7 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 174
+version: 175
 # v122 (2026-08-06): Failure-mode hardening. src/web.py: voice-act observation
 #   dedup guard (same 60s window as observe/capture, prevents network-retry
 #   duplicates). src/education/parent_report.py: personal_context evidence

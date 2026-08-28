@@ -268,7 +268,9 @@ REPO = Path(__file__).resolve().parent.parent
 #     import copy, xlsx-specific not-found hint.
 #   v170 (2026-08-27): document-to-lens panel lock-in + extraction summary
 #     drops the raw confidence percentage (restores the v165 rule).
-EXPECTED_VERSION = 174
+#   v175 (2026-08-27): safeguarding copy no longer claims coordinator
+#     visibility that no UI provides.
+EXPECTED_VERSION = 175
 
 
 def _html() -> str:

@@ -2866,7 +2866,10 @@
         // ledger and never enter the student lens.  The response shape has
         // no "observation" key — show a calm, content-free confirmation.
         if (result.restricted) {
-          $("obs-result").innerHTML = `<h3>Noted</h3><div class="source-line"><span class="badge warn">Routed for coordinator review only.</span></div><p>${escapeHtml(result.note || "This item has been recorded securely and is visible to coordinators only.")}</p>`;
+          // The server's note states what actually happened, including whether
+          // any channel is configured. The fallback must not be more reassuring
+          // than the note it stands in for — there is no coordinator view.
+          $("obs-result").innerHTML = `<h3>Noted</h3><div class="source-line"><span class="badge warn">Restricted record — not yet routed to a person.</span></div><p>${escapeHtml(result.note || "This item has been recorded in the restricted safeguarding ledger on this computer and kept out of the student's regular record. Follow your school's safeguarding process now.")}</p>`;
           $("obs-result").scrollIntoView({ behavior: "smooth", block: "nearest" });
           showToast("Noted and routed for review.", "info");
           clearObserveForm();
