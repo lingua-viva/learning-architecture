@@ -105,9 +105,15 @@ def test_L3_PRIV_005_scan_excludes_student_dirs():
         entries = scan_directory(root, max_depth=4)
         paths_found = [e.path for e in entries]
 
+        # scan_directory normalizes its root with .resolve(), so the entries it
+        # returns are resolved absolute paths. On macOS the temp root arrives as
+        # /var/... and comes back as /private/var/..., so relative_to() must be
+        # taken against the same resolved form the API actually returned.
+        resolved_root = root.resolve()
+
         # Verify that is_student_data_zone correctly gates Student paths
         for p in paths_found:
-            rel = Path(p).relative_to(root)
+            rel = Path(p).relative_to(resolved_root)
             if "Students" in str(rel) or "students" in str(rel):
                 assert is_student_data_zone(rel), (
                     f"Student path {rel} not flagged as student_data_zone"

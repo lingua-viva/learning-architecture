@@ -25,7 +25,10 @@ KNOWLEDGE_DIR = REPO / "knowledge" / "education"
 # The library as it actually is on 2026-08-23: 8 domain files, 51 entries.
 # (The gauntlet prompt said "60+" — that number was never true; asserting
 # the real floor keeps this test honest and still catches deletions.)
-KNOWLEDGE_FILES = 6
+# Updated 2026-08-27: the reconciled merge added atl_approaches_to_learning,
+# italian_l2_pedagogy and learner_profile, taking the library to 8 — which is
+# what the comment above already claimed. The constant had been left at 6.
+KNOWLEDGE_FILES = 8
 KNOWLEDGE_ENTRIES_MIN = 38
 
 

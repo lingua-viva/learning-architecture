@@ -594,10 +594,27 @@ def capture_with_safeguarding(
                 "notification_id": notification["notification_id"],
                 "status": notification["status"],
             },
+            # Say what actually happened. "Visible to coordinators" was true of
+            # the ledger's permissions and false of the product: there is no
+            # coordinator view, and with no safeguarding_channel configured the
+            # notification sits at pending_config and reaches nobody. Telling a
+            # teacher her concern was seen when it was not is the one place a
+            # reassuring default is unsafe — so the unconfigured case says so
+            # plainly and points at the process that does carry it forward.
             "note": (
-                "This item was routed to the restricted safeguarding ledger. "
-                "It is visible to coordinators and above only, and follows "
-                "your school's human safeguarding process."
+                (
+                    "This item was routed to the restricted safeguarding ledger "
+                    "and kept out of the student's regular record. A content-free "
+                    "notification was queued for your safeguarding channel. "
+                    "It follows your school's human safeguarding process."
+                )
+                if safeguarding_config().get("safeguarding_channel")
+                else (
+                    "This item was recorded in the restricted safeguarding ledger "
+                    "on this computer and kept out of the student's regular record. "
+                    "No safeguarding channel is configured, so nobody has been "
+                    "notified — follow your school's safeguarding process now."
+                )
             ),
         }
 

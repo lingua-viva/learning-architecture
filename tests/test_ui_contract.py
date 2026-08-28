@@ -266,7 +266,11 @@ REPO = Path(__file__).resolve().parent.parent
 #     English attribution, never raw confidence numbers or method tokens.
 #   v166 (2026-08-19): demo-eve F4+F5 — version badge in topbar, preview-first
 #     import copy, xlsx-specific not-found hint.
-EXPECTED_VERSION = 169
+#   v170 (2026-08-27): document-to-lens panel lock-in + extraction summary
+#     drops the raw confidence percentage (restores the v165 rule).
+#   v175 (2026-08-27): safeguarding copy no longer claims coordinator
+#     visibility that no UI provides.
+EXPECTED_VERSION = 175
 
 
 def _html() -> str:

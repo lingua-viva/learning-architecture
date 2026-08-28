@@ -119,8 +119,10 @@ ACK_OBSERVATION_TOO_LONG = (
     "⚠️ This observation is too long to save safely as one note — split it into smaller notes."
 )
 ACK_RESTRICTED = (
-    "✓ Noted and routed for coordinator review only. It will not appear in "
-    "the student's regular record — follow your school's safeguarding process."
+    "✓ Noted and recorded in the restricted safeguarding ledger. It will not "
+    "appear in the student's regular record. There is no coordinator view yet, "
+    "so treat this as a private record — follow your school's safeguarding "
+    "process now."
 )
 
 

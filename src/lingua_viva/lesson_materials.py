@@ -41,6 +41,12 @@ from src.education.content_differentiator import (
 from src.education.help_artifacts import _validate_safe_text
 from src.lingua_viva.config import lv_home
 
+# The 10 official IB Learner Profile attributes — model output is validated
+# against this list so a hallucinated attribute never prints on a plan.
+# Single source of truth: a second, identical definition sat at module level
+# further down until 2026-08-27. It was a leftover from the ed20299 merge and
+# was removed — two copies of a validation allowlist is one edit away from
+# two different allowlists.
 IB_LEARNER_PROFILE_ATTRIBUTES: tuple[str, ...] = (
     "Inquirers", "Knowledgeable", "Thinkers", "Communicators", "Principled",
     "Open-minded", "Caring", "Risk-takers", "Balanced", "Reflective",
@@ -1848,12 +1854,6 @@ def _phase(value: object, fallback_activity: str, fallback_instructions: str, du
     }
 
 
-# The 10 official IB Learner Profile attributes — model output is validated
-# against this list so a hallucinated attribute never prints on a plan.
-IB_LEARNER_PROFILE_ATTRIBUTES = (
-    "Inquirers", "Knowledgeable", "Thinkers", "Communicators", "Principled",
-    "Open-minded", "Caring", "Risk-takers", "Balanced", "Reflective",
-)
 
 
 def _normalize_learner_profile(value: object) -> list[dict[str, str]]:
@@ -1924,11 +1924,6 @@ def _normalize_lesson_plan(plan: dict, lesson: LessonInput, entries: list[Curric
         },
         "assessment": str(plan.get("assessment") or "Use the wrap-up response and guided-practice notes to check understanding."),
         "teacher_notes": str(plan.get("teacher_notes") or "Record what to adjust after the lesson."),
-        "atl_skills": [str(s) for s in (plan.get("atl_skills") or getattr(lesson, "atl_skills", None) or [])],
-        "learner_profile_attributes": [
-            attr for attr in (plan.get("learner_profile_attributes") or [])
-            if isinstance(attr, dict) and attr.get("attribute") in IB_LEARNER_PROFILE_ATTRIBUTES
-        ],
     }
     if not normalized["learning_objectives"]:
         normalized["learning_objectives"] = [

@@ -3229,7 +3229,8 @@ async def voice_act(request: Request, payload: dict):
                 "intent": "observation",
                 "action_taken": "restricted",
                 "spoken_confirmation": (
-                    "Noted, and routed for coordinator review only."
+                    "Noted, and kept in the restricted safeguarding record. "
+                    "Follow your school's safeguarding process."
                 ),
                 "tone_prefix": "",
                 "result": result,

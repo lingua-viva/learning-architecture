@@ -71,9 +71,37 @@ def test_ask_answer_meta_carries_the_verdict():
 
 
 def test_every_answer_with_signal_shows_grounding_badge():
-    # Visible grounding state on every answer that has a GIR signal, even
-    # when no full grounding object is attached.
-    assert "safety.hasSignal ? safety.girBadgeHtml" in HTML
+    # Visible grounding state on every answer that has a GIR signal, even when
+    # no full grounding object is attached.
+    #
+    # Widened 2026-08-27. This previously asserted the literal gate
+    # "safety.hasSignal ? safety.girBadgeHtml", which suppressed the badge for
+    # exactly the case it most needed to show: a local answer about a child
+    # carrying NO signal at all. girBadgeHtml is "" when there is nothing to
+    # render, so it is consumed directly and the no-signal case now produces
+    # its own unverified badge.
+    assert ": safety.girBadgeHtml;" in HTML
+    assert "safety.hasSignal ? safety.girBadgeHtml" not in HTML
+
+
+def test_ungrounded_local_answer_is_never_rendered_as_grounded():
+    """An answer about a child with no GIR signal and no sources is unverified.
+
+    renderAnswerSafety defaults an absent score to 1, which lands in the
+    "plain" tier and renders no warning. For a local answer — one built from a
+    child's own lens and observations — arriving with no signal AND no sources,
+    that is a false green on the highest-stakes surface in the product: a
+    confident paragraph about a student with nothing to check it against.
+
+    Scoped deliberately to local answers with nothing to verify: an external
+    answer, or any answer carrying a real score or a source, is unaffected.
+    """
+    assert "const ungroundedLocalAnswer" in HTML
+    assert "!hasSignal && sourceCount === 0" in HTML
+    # It must feed the tier decision, not merely be computed.
+    assert "fabricated.length > 0 || ungroundedLocalAnswer" in HTML
+    # And it must surface its own badge, since there is no score to print.
+    assert "unverified · no grounding signal" in HTML
 
 
 # --- 3. Backend response carries the exact prefix ----------------------------
@@ -128,3 +156,104 @@ def test_grounded_answer_carries_no_prefix():
 def test_tts_defaults_to_english_not_italian():
     assert "const looksItalian" in HTML
     assert "const looksEnglish = !looksItalian" in HTML
+
+
+# --- 4. The gate is EXECUTED, not just grepped --------------------------------
+#
+# Everything above asserts that source strings exist. That catches deletion but
+# proves nothing about behaviour: a live browser run on 2026-08-27 confirmed
+# the unverified badge appeared, but via the GIR path (a real score of 0.00) —
+# the !hasSignal branch added the same day never actually ran. String
+# assertions cannot tell those two paths apart.
+#
+# These tests extract renderAnswerSafety from static/index.html and run it in
+# node across the cases that matter, so the no-signal branch is exercised for
+# real and the narrow scoping is enforced rather than assumed.
+
+import json
+import shutil
+import subprocess
+import tempfile
+
+
+def _extract_js_function(name: str) -> str:
+    """Pull one top-level function out of index.html by brace matching."""
+    start = HTML.index(f"function {name}(")
+    brace = HTML.index("{", start)
+    depth, i = 0, brace
+    while i < len(HTML):
+        if HTML[i] == "{":
+            depth += 1
+        elif HTML[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return HTML[start:i + 1]
+        i += 1
+    raise AssertionError(f"could not brace-match {name}")
+
+
+def _run_safety_cases(cases: list[dict]) -> list[dict]:
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is not available to execute the safety gate")
+    script = (
+        "const escapeHtml = v => String(v ?? '');\n"
+        + _extract_js_function("renderAnswerSafety")
+        + "\nconst out = "
+        + json.dumps(cases)
+        + ".map(m => { const r = renderAnswerSafety(m);"
+        " return {tier: r.tier, unsafe: r.unsafe, warns: Boolean(r.warningHtml),"
+        " badge: r.girBadgeHtml}; });\n"
+        "console.log(JSON.stringify(out));\n"
+    )
+    with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as handle:
+        handle.write(script)
+        path = handle.name
+    result = subprocess.run([node, path], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    return json.loads(result.stdout)
+
+
+def test_no_signal_branch_actually_fires_for_an_ungrounded_local_answer():
+    """The !hasSignal branch — the one the browser run never reached.
+
+    No gir field at all, no sources, local_only. Before the fix this scored a
+    default 1, landed in "plain", and rendered no warning whatsoever.
+    """
+    (result,) = _run_safety_cases([{"local_only": True, "sources": []}])
+    assert result["tier"] == "name_boundary", result
+    assert result["unsafe"] is True
+    assert result["warns"] is True, "an ungrounded answer about a child rendered no warning"
+    assert "no grounding signal" in result["badge"], result["badge"]
+
+
+def test_the_new_branch_is_narrow_and_adds_no_other_warnings():
+    """Conjunctive by construction — everything else must be untouched."""
+    cases = [
+        {"local_only": True, "sources": ["observation 2026-05-02"]},   # has a source
+        {"local_only": True, "sources": [], "gir": 0.91},              # has a score
+        {"local_only": False, "sources": []},                          # not local
+        {},                                                            # plain chat
+    ]
+    results = _run_safety_cases(cases)
+    for case, result in zip(cases, results):
+        assert result["tier"] == "plain", (case, result)
+        assert result["warns"] is False, (case, result)
+        # None of them may acquire the new no-signal badge. A real score still
+        # prints its own "grounded · GIR n" badge — that is pre-existing and
+        # correct, and must not be mistaken for the new branch firing.
+        assert "no grounding signal" not in result["badge"], (case, result)
+
+    by_case = dict(zip(range(len(cases)), results))
+    assert by_case[0]["badge"] == "", "a source alone carries no GIR badge"
+    assert "grounded · GIR 0.91" in by_case[1]["badge"], by_case[1]["badge"]
+    assert by_case[2]["badge"] == "", "external, no signal — no badge"
+    assert by_case[3]["badge"] == "", "plain chat — no badge"
+
+
+def test_a_real_low_score_still_warns_through_the_gir_path():
+    """The path the browser run did exercise — it must keep working."""
+    (result,) = _run_safety_cases([{"local_only": True, "sources": [], "gir": 0.0}])
+    assert result["tier"] == "name_boundary"
+    assert result["warns"] is True
+    assert "GIR 0.00" in result["badge"], result["badge"]
