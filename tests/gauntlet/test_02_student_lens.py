@@ -195,6 +195,19 @@ def test_unseeded_student_has_empty_history(gauntlet_env):
 
 # --- real_anon fixtures round-trip -------------------------------------------
 
+# tests/fixtures/docpipe/real_anon/ holds anonymized records derived from real
+# people and is gitignored (.gitignore:40) — deliberately never committed. It
+# is therefore absent in every clone and in CI, where these two tests can only
+# ever error on a missing file. Skipping when the directory is absent keeps the
+# coverage on machines that hold the fixtures while stopping the pair from
+# reporting as failures everywhere else: this is precisely the gap between the
+# "81/81" recorded on the authoring machine and the 78/81 a clean clone gets.
+_REAL_ANON_PRESENT = (REAL_ANON_DIR / "observation_aron.json").exists()
+requires_real_anon = pytest.mark.skipif(
+    not _REAL_ANON_PRESENT,
+    reason="real_anon fixtures are gitignored and absent in this clone",
+)
+
 
 def _real_anon_observations() -> list[dict]:
     return [
@@ -203,6 +216,7 @@ def _real_anon_observations() -> list[dict]:
     ]
 
 
+@requires_real_anon
 def test_real_anon_observation_fixtures_are_fully_anonymized():
     """The anonymization key (real_anon/README.md) maps real people to Aron
     Park / Jerry Park / Ponte Academy / Federica Baldi. The fixtures must
@@ -216,6 +230,7 @@ def test_real_anon_observation_fixtures_are_fully_anonymized():
         assert obs["student_id"].strip()
 
 
+@requires_real_anon
 def test_real_anon_observations_import_into_a_fresh_store(tmp_path):
     """Anonymized real observations must flow through the same capture path
     as live ones — same fields, same append semantics."""

@@ -301,3 +301,20 @@ def test_stop_and_more_intercepts_present():
 def test_ask_copy_no_longer_claims_local_governed_reasoning():
     assert "governed local app runtime" not in HTML
     assert "answers come from the web" in HTML
+
+
+def test_ask_header_route_claim_is_conditional_on_the_key():
+    """The header must not promise the web when nothing can reach it.
+
+    Found in a live browser run on 2026-08-27: with Perplexity unconfigured the
+    Ask header still read "answers come from the web" while the answer beneath
+    it reported "answered on this computer", model none, 0.0s, no sources. Two
+    badges contradicting each other on one screen, and the header was the one
+    lying. It now reads the real key state, and reports "route not confirmed"
+    when it cannot determine it — unknown being its own state rather than a
+    guess in either direction.
+    """
+    assert 'const provider = await api("/api/provider")' in HTML
+    assert "webConfigured === true" in HTML
+    assert "web search not configured" in HTML
+    assert "route not confirmed" in HTML
