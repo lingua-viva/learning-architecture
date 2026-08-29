@@ -552,6 +552,29 @@ def _research(args: argparse.Namespace) -> int:
     return 0
 
 
+def _improve(args: argparse.Namespace) -> int:
+    from src.lingua_viva.improve_surface import build_report, format_report
+
+    report = build_report(run_readiness=not args.no_readiness, live=args.live)
+    if args.json:
+        _print_json(report)
+    else:
+        print(format_report(report))
+    return 1 if report["verdict"] in {"BLOCKED", "NOT READY"} else 0
+
+
+def _closing(args: argparse.Namespace) -> int:
+    from src.lingua_viva.closing import format_report, run_closing
+
+    only = set(args.only or []) or None
+    report = run_closing(only=only)
+    if args.json:
+        _print_json(report)
+    else:
+        print(format_report(report))
+    return 0 if report["verdict"] == "PASS" else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="lv", description="Lingua Viva local runtime")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -664,6 +687,26 @@ def build_parser() -> argparse.ArgumentParser:
                           help="Sanitize + store a mock result without any network call")
     research.add_argument("--json", action="store_true")
 
+    improve = sub.add_parser(
+        "improve",
+        help="Teacher/admin improvement surface: readiness, routes, admin metrics, measurement value, and release reality",
+    )
+    improve.add_argument("--json", action="store_true")
+    improve.add_argument("--no-readiness", action="store_true", help="Skip the teacher-readiness harness")
+    improve.add_argument("--live", action="store_true", help="Check live site and release artifact URLs")
+
+    closing = sub.add_parser(
+        "closing",
+        help="Release gate for teacher/admin outcomes: gauntlet, pipeline, artifacts, and preflight",
+    )
+    closing.add_argument("--json", action="store_true")
+    closing.add_argument(
+        "--only",
+        action="append",
+        choices=("gauntlet", "pipeline", "artifacts", "preflight"),
+        help="Run one closing check; repeat for multiple checks",
+    )
+
     return parser
 
 
@@ -700,6 +743,10 @@ def main(argv: list[str] | None = None) -> int:
         return _library(args)
     if args.command == "research":
         return _research(args)
+    if args.command == "improve":
+        return _improve(args)
+    if args.command == "closing":
+        return _closing(args)
     return 1
 
 

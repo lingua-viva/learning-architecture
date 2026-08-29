@@ -341,6 +341,110 @@ def trust_status() -> dict:
     }
 
 
+def check_governance_honesty() -> dict:
+    """Cross-check administrator trust counters against the local ledgers.
+
+    A fresh install can honestly have no privacy log yet, so missing evidence
+    is reported as ``NO_ACTIVITY``. Once traces or privacy events exist, this
+    check fails if the governance surface under-reports external activity.
+    """
+    from src.lingua_viva.privacy_log import privacy_log_path, read_privacy_events
+    from src.lingua_viva.traces import read_traces, trace_path
+
+    privacy_path = privacy_log_path()
+    trace_path_value = trace_path()
+    events = read_privacy_events(limit=100_000)
+    traces = read_traces(limit=100_000)
+    status = trust_status()
+    counters = status.get("counters") or {}
+
+    external_trace_entries = sum(
+        1
+        for trace in traces
+        if int(getattr(trace, "external_calls", 0) or 0) > 0
+        or getattr(trace, "route", "") == "external"
+    )
+    external_privacy_events = sum(1 for event in events if event.event_type == "external_call_made")
+    local_trace_entries = sum(1 for trace in traces if getattr(trace, "route", "") != "external")
+    local_privacy_events = sum(1 for event in events if event.event_type == "query_processed_locally")
+
+    audit_body = {
+        "pack_type": "governance_honesty_check",
+        "trace_count": len(traces),
+        "privacy_event_count": len(events),
+        "external_trace_entries": external_trace_entries,
+        "external_privacy_events": external_privacy_events,
+    }
+    audit_pack = dict(audit_body)
+    audit_pack["seal"] = sign_payload(audit_body)
+    signed_pack_verifies = verify_pack(audit_pack)
+
+    findings: list[dict] = []
+    if privacy_path.exists() and privacy_path.stat().st_size == 0:
+        findings.append({"id": "privacy_log_empty", "severity": "P3"})
+    if events and not privacy_path.exists():
+        findings.append({"id": "privacy_events_without_log_file", "severity": "P1"})
+    if not signed_pack_verifies:
+        findings.append({"id": "signed_pack_does_not_verify", "severity": "P1"})
+    if int(counters.get("external_calls") or 0) != external_privacy_events:
+        findings.append(
+            {
+                "id": "external_counter_mismatch_privacy_log",
+                "severity": "P1",
+                "dashboard": counters.get("external_calls"),
+                "privacy_log": external_privacy_events,
+            }
+        )
+    if int(counters.get("external_calls") or 0) > external_trace_entries:
+        findings.append(
+            {
+                "id": "external_counter_exceeds_trace_evidence",
+                "severity": "P1",
+                "dashboard": counters.get("external_calls"),
+                "external_trace_entries": external_trace_entries,
+            }
+        )
+    if external_trace_entries > int(counters.get("external_calls") or 0):
+        findings.append(
+            {
+                "id": "external_trace_under_reported",
+                "severity": "P1",
+                "dashboard": counters.get("external_calls"),
+                "external_trace_entries": external_trace_entries,
+            }
+        )
+    if len(traces) and int(counters.get("local_queries") or 0) > local_trace_entries + local_privacy_events:
+        findings.append(
+            {
+                "id": "local_query_counter_exceeds_evidence",
+                "severity": "P2",
+                "dashboard": counters.get("local_queries"),
+                "local_trace_entries": local_trace_entries,
+                "local_privacy_events": local_privacy_events,
+            }
+        )
+
+    has_activity = bool(events or traces)
+    return {
+        "status": "PASS" if not findings else "FAIL",
+        "activity": "RECORDED" if has_activity else "NO_ACTIVITY",
+        "privacy_log_exists": privacy_path.exists(),
+        "privacy_log_non_empty": privacy_path.exists() and privacy_path.stat().st_size > 0,
+        "trace_log_exists": trace_path_value.exists(),
+        "trace_count": len(traces),
+        "privacy_event_count": len(events),
+        "signed_pack_verifies": signed_pack_verifies,
+        "dashboard_counters": counters,
+        "ledger_counts": {
+            "external_trace_entries": external_trace_entries,
+            "external_privacy_events": external_privacy_events,
+            "local_trace_entries": local_trace_entries,
+            "local_privacy_events": local_privacy_events,
+        },
+        "findings": findings,
+    }
+
+
 # --- publication safety ----------------------------------------------------
 
 

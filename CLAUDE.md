@@ -15,6 +15,7 @@ Lingua Viva helps Claudia:
 - **Prepare materials** — upload a PDF, get differentiated learning packets
 
 Everything stays on her computer. Student data never leaves her machine.
+Routing uses the current 111-node classification system before model reasoning.
 
 ## What Claudia Can Change (and how)
 

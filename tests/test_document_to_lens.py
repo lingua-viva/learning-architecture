@@ -169,7 +169,7 @@ def test_cefr_extraction_from_report_card():
     text = _read_fixture()
     matched = [{"student_id": "s-abigail", "display_name": "Abigail Chang"}]
 
-    results = asyncio.get_event_loop().run_until_complete(
+    results = asyncio.run(
         extract_for_lens_update(
             document_bytes=text.encode("utf-8"),
             document_type="student_report",
@@ -203,7 +203,7 @@ def test_extraction_saved_before_lens_write():
     text = _read_fixture()
     matched = [{"student_id": "s-abigail", "display_name": "Abigail Chang"}]
 
-    results = asyncio.get_event_loop().run_until_complete(
+    results = asyncio.run(
         extract_for_lens_update(
             document_bytes=text.encode("utf-8"),
             document_type="student_report",
@@ -243,7 +243,7 @@ def test_trauma_flag_never_auto_set():
     )
     matched = [{"student_id": "s-test", "display_name": "Test Child"}]
 
-    results = asyncio.get_event_loop().run_until_complete(
+    results = asyncio.run(
         extract_for_lens_update(
             document_bytes=text.encode("utf-8"),
             document_type="support_document",
@@ -282,7 +282,7 @@ def test_red_safeguarding_routed_to_restricted():
     )
     matched = [{"student_id": "s-safe", "display_name": "Safe Child"}]
 
-    results = asyncio.get_event_loop().run_until_complete(
+    results = asyncio.run(
         extract_for_lens_update(
             document_bytes=text.encode("utf-8"),
             document_type="support_document",
@@ -372,7 +372,7 @@ def test_multi_student_document_partitions_correctly():
         {"student_id": "s-nora", "display_name": "Nora Rossi"},
     ]
 
-    results = asyncio.get_event_loop().run_until_complete(
+    results = asyncio.run(
         extract_for_lens_update(
             document_bytes=text.encode("utf-8"),
             document_type="student_report",
@@ -406,7 +406,7 @@ def test_match_empty_roster():
 def test_extraction_with_no_content():
     from src.lingua_viva.docpipe.lens_extract import extract_for_lens_update
     matched = [{"student_id": "s-test", "display_name": "Test"}]
-    results = asyncio.get_event_loop().run_until_complete(
+    results = asyncio.run(
         extract_for_lens_update(b"", "student_report", matched)
     )
     assert "s-test" in results

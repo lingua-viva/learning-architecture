@@ -1709,8 +1709,36 @@
         ? `<h2>Good morning.</h2><p>Today: <strong>${escapeHtml(today.grade)} — ${escapeHtml(today.unit)}</strong></p><p>CEFR targets: ${escapeHtml((today.cefr_targets || []).join(", "))}</p><p>Source: ${escapeHtml(today.source || "")}</p>`
         : `<h2>Good morning.</h2><p>Set up your schedule in Settings → My Schedule to see today's plan.</p>`;
       const showSourcesNudge = !data.filemap && localStorage.getItem(SOURCES_SKIP_KEY) !== "1";
+      const unobserved = Number(data.attention.unobserved_count || 0);
+      const pending = Number(data.attention.rti_pending || 0);
+      const nextAction = unobserved
+        ? {
+          title: `${unobserved} observation${unobserved === 1 ? "" : "s"} to renew`,
+          detail: (data.attention.unobserved_students || []).join(", ") || "Start with the learner who has gone longest without a note.",
+          view: "observe",
+          button: "Capture observation"
+        }
+        : pending
+          ? {
+            title: `${pending} support decision${pending === 1 ? "" : "s"} to review`,
+            detail: (data.attention.rti_pending_names || []).join(", ") || "Review the suggested support tier before it affects planning.",
+            view: "students",
+            button: "Review students"
+          }
+          : {
+            title: "Ready to teach",
+            detail: "No urgent evidence gaps right now. Prepare materials or capture a fresh note when class starts.",
+            view: "prepare",
+            button: "Prepare materials"
+          };
       $("content").innerHTML = `
         <div class="view-head"><div>${planHtml}</div></div>
+        <div class="panel" id="home-next-action" style="margin-bottom:14px;">
+          <div class="view-head" style="margin-bottom:0;">
+            <div><h3 style="margin:0;">Start here: ${escapeHtml(nextAction.title)}</h3><p>${escapeHtml(nextAction.detail)}</p></div>
+            <button id="home-next-action-go" class="primary" type="button">${escapeHtml(nextAction.button)}</button>
+          </div>
+        </div>
         ${showSourcesNudge ? `
         <div class="panel" id="sources-nudge" style="margin-bottom:14px;">
           <h3>Connect your teaching folders</h3>
@@ -1742,6 +1770,7 @@
           if (nudge) nudge.remove();
         });
       }
+      $("home-next-action-go").addEventListener("click", () => { state.view = nextAction.view; renderShell(); renderView(); });
       $("home-observe").addEventListener("click", () => { state.view = "observe"; renderShell(); renderView(); });
       $("home-students").addEventListener("click", () => { state.view = "students"; renderShell(); renderView(); });
     }
@@ -1848,6 +1877,7 @@
 	            <button id="generate-lesson-plan" type="button">Create Lesson Plan</button>
 	            <button id="preview-lesson-plan" type="button">Preview Lesson Plan</button>
 	            <button id="preview-lesson-packet" type="button">Preview Printable Packet</button>
+              <span id="prepare-source-status" class="badge warn" aria-live="polite">choose a file or topic first</span>
 	          </div>
           <div id="prepare-privacy-preview" class="source-line" style="margin-top:10px;"></div>
 	        </div>
@@ -1867,6 +1897,7 @@
 	      $("generate-lesson-plan").addEventListener("click", generateLessonPlan);
 	      $("preview-lesson-plan").addEventListener("click", previewLessonPlan);
 	      $("preview-lesson-packet").addEventListener("click", previewLessonPacket);
+      $("prep-topic").addEventListener("input", updatePrepareActionState);
       $("pull-local-library").addEventListener("click", pullLocalLibrary);
       $("pull-course-library").addEventListener("click", pullCourseLibrary);
       $("select-todays-lesson").addEventListener("click", selectTodaysLesson);
@@ -1895,6 +1926,7 @@
         await importLessonFile(file);
       });
       renderSelectedLessonLine();
+      updatePrepareActionState();
       if (state.pendingOpenUnitEditor) {
         state.pendingOpenUnitEditor = false;
         openUnitEditor("add");
@@ -1902,6 +1934,26 @@
       await renderPrivacyPreview("generate_activity_pack", "prepare-privacy-preview");
       await refreshCourseLibrary();
       await renderDifferentiatedGroups();
+    }
+
+    function prepareHasTeachingSource() {
+      const topic = $("prep-topic") ? $("prep-topic").value.trim() : "";
+      return Boolean(state.selectedLessonFile || topic);
+    }
+
+    function updatePrepareActionState() {
+      const hasSource = prepareHasTeachingSource();
+      ["generate-activity", "generate-lesson-plan", "preview-lesson-plan", "preview-lesson-packet"].forEach(id => {
+        const button = $(id);
+        if (button) button.disabled = !hasSource;
+      });
+      const status = $("prepare-source-status");
+      if (status) {
+        status.textContent = hasSource
+          ? (state.selectedLessonFile ? "using selected coursework" : "using topic only")
+          : "choose a file or topic first";
+        status.className = `badge ${hasSource ? "ok" : "warn"}`;
+      }
     }
 
     // Governance preview for one action, rendered before the teacher runs it
@@ -2333,6 +2385,7 @@
       const selected = state.selectedLessonFile;
       if (!selected) {
         host.innerHTML = `<span class="badge">no coursework selected</span><span class="voice-hint">Generation will use the topic below only.</span>`;
+        updatePrepareActionState();
         return;
       }
       host.innerHTML = `<span class="badge ok">using: ${escapeHtml(selected.name || "")}</span>`
@@ -2341,7 +2394,9 @@
       $("clear-lesson-file").addEventListener("click", () => {
         state.selectedLessonFile = null;
         renderSelectedLessonLine();
+        updatePrepareActionState();
       });
+      updatePrepareActionState();
     }
 
     // Auto-fill Grade/Unit/Topic from what docpipe detected in the file.
@@ -2407,6 +2462,7 @@
         if (select && localPath) select.value = localPath;
         await applyLessonMetadata(data.metadata, file.name);
         renderSelectedLessonLine();
+        updatePrepareActionState();
         output.innerHTML = `<span class="badge ok">imported and selected</span><span class="voice-hint">${escapeHtml(file.name)}</span>`;
       } catch (error) {
         output.innerHTML = `<span>${escapeHtml(error.detail || error.message)}</span>`;
@@ -2438,6 +2494,7 @@
         };
         await applyLessonMetadata(data.metadata, name);
         renderSelectedLessonLine();
+        updatePrepareActionState();
         output.innerHTML = `<span class="badge ok">today&apos;s lesson selected</span><span class="voice-hint">${escapeHtml((data.lesson_excerpt || "").slice(0, 140))}</span>`;
       } catch (error) {
         output.innerHTML = `<span>${escapeHtml(error.detail || error.message)}</span>`;
@@ -2637,7 +2694,7 @@
         // BUG-4 (QA 2026-08-02): switching students must clear the form —
         // otherwise the previous student's note and tags silently save
         // under the newly selected student.
-        clearObserveForm();
+        clearObserveForm({preserveStudent: true});
         loadLens("obs-lens", false);
       });
       // Observation type is optional — no visual enforcement needed.
@@ -2648,17 +2705,20 @@
       await loadLens("obs-lens", false);
     }
 
-    function clearObserveForm() {
-      state.selectedStudent = "";
+    function clearObserveForm(options = {}) {
+      const keepStudent = Boolean(options.preserveStudent);
+      const selectedBeforeClear = keepStudent && $("obs-student") ? $("obs-student").value : "";
+      state.selectedStudent = selectedBeforeClear || "";
       ["obs-text", "obs-template", "obs-dim", "obs-level", "obs-direction", "obs-sel-domain", "obs-sel-valence", "obs-ethos-trait"].forEach(id => {
         if ($(id)) $(id).value = "";
       });
+      if ($("obs-template")) $("obs-template").value = "general";
+      if (keepStudent && $("obs-student")) $("obs-student").value = selectedBeforeClear;
       if ($("obs-urgency")) $("obs-urgency").checked = false;
       if ($("obs-urgency-suggestion")) {
         $("obs-urgency-suggestion").textContent = "teacher must affirm";
         $("obs-urgency-suggestion").className = "badge";
       }
-      if ($("obs-template")) $("obs-template").classList.add("needs-choice");
       renderSupportEntries([]);
     }
 
@@ -2845,7 +2905,7 @@
           $("obs-result").innerHTML = `<h3>Noted</h3><div class="source-line"><span class="badge warn">Routed for coordinator review only.</span></div><p>${escapeHtml(result.note || "This item has been recorded securely and is visible to coordinators only.")}</p>`;
           $("obs-result").scrollIntoView({ behavior: "smooth", block: "nearest" });
           showToast("Noted and routed for review.", "info");
-          clearObserveForm();
+          clearObserveForm({preserveStudent: true});
           return;
         }
         if (result.duplicate || (result.observation && result.observation.duplicate)) {
@@ -2870,7 +2930,7 @@
         // P2-1: the toast fires BEFORE the form clears so "form emptied"
         // can never be the only visible outcome of a save.
         showSaveToast(`observation for ${studentName}`);
-        clearObserveForm();
+        clearObserveForm({preserveStudent: true});
         await loadLens("obs-lens", false);
       } catch (error) {
         $("obs-result").innerHTML = `<h3>Not saved</h3><p>${escapeHtml(error.message || "The local save failed. Your text is still in the form.")}</p>`;
@@ -3637,7 +3697,7 @@
         const fieldCount = preview.field_count || 0;
         const fields = preview.fields || [];
         html += `<details style="margin-bottom:8px;">`;
-        html += `<summary style="cursor:pointer;"><strong>${escapeHtml(student.display_name)}</strong> — ${fieldCount} field(s) found (match: ${escapeHtml(student.match_source)}, ${Math.round((student.confidence || 0) * 100)}%)</summary>`;
+        html += `<summary style="cursor:pointer;"><strong>${escapeHtml(student.display_name)}</strong> — ${fieldCount} field(s) found (matched by ${escapeHtml(student.match_source || "student record")})</summary>`;
         if (fields.length > 0) {
           html += `<div style="padding:6px 12px;font-size:0.9em;">`;
           for (const f of fields) {
@@ -4932,11 +4992,14 @@
     async function renderParents() {
       setTitle("Student Summaries", "reviewed draft");
       await ensureStudents();
+      const emptyParentState = state.students.length
+        ? "Choose a student, draft the note, then complete the review checklist before copy or print."
+        : "Import or add students first. Summaries stay disabled until there is a learner to choose.";
       $("content").innerHTML = `
         <div class="view-head"><div><h2>Student Summary</h2><p>Draft a student-safe, family-safe summary for teacher review.</p></div><span class="badge warn">Review before sharing. No AI attribution in final message.</span></div>
         <div class="grid two">
-          <div class="panel"><label>Student<select id="parent-student">${parentStudentOptions()}</select></label><label style="display:block;margin-top:12px;">Summary focus<input id="parent-focus" value="creative quiet workspace"></label><label style="display:block;margin-top:12px;"><input type="checkbox" id="parent-include-evidence"> Include evidence summaries (teacher-confirmed only; same safety review as the rest of the draft)</label><button id="draft-parent" class="primary" type="button" style="margin-top:12px;">Draft Summary</button></div>
-          <div id="parent-output" class="panel"><p>Drafts appear here for editing before sending.</p></div>
+          <div class="panel"><label>Student<select id="parent-student">${parentStudentOptions()}</select></label><label style="display:block;margin-top:12px;">Summary focus<input id="parent-focus" value="creative quiet workspace"></label><label style="display:block;margin-top:12px;"><input type="checkbox" id="parent-include-evidence"> Include evidence summaries (teacher-confirmed only; same safety review as the rest of the draft)</label><button id="draft-parent" class="primary" type="button" style="margin-top:12px;" ${state.students.length ? "" : "disabled"}>Draft Summary</button></div>
+          <div id="parent-output" class="panel"><h3>Before sharing</h3><p>${escapeHtml(emptyParentState)}</p></div>
         </div>`;
       $("parent-student").addEventListener("change", e => { state.parentSelectedStudent = e.target.value; });
       $("draft-parent").addEventListener("click", draftParent);
@@ -4968,9 +5031,31 @@
              <p class="voice-hint" style="margin-top:8px;">Replace it with &ldquo;your child&rdquo;, then send. This draft was not sent anywhere.</p>
            </div>`
         : "";
-      $("parent-output").innerHTML = `${warnings}<h3 id="parent-summary-subject">${escapeHtml(data.subject_line)}</h3>${sourceLine(data.source_citation)}<textarea>${escapeHtml(data.body + "\n\n" + data.home_activities.join("\n"))}</textarea><div class="row" style="margin-top:10px;"><button id="parent-copy-final" type="button">Copy final text</button><button id="parent-print-final" type="button">Print</button><span class="voice-hint">${escapeHtml(data.review_label)}</span></div>`;
+      $("parent-output").innerHTML = `${warnings}<h3 id="parent-summary-subject">${escapeHtml(data.subject_line)}</h3>${sourceLine(data.source_citation)}<textarea>${escapeHtml(data.body + "\n\n" + data.home_activities.join("\n"))}</textarea>
+        <div class="item" style="margin-top:12px;">
+          <h3>Teacher review checklist</h3>
+          <label class="row" style="margin:8px 0;"><input type="checkbox" data-parent-review-check style="width:auto;"><span>Any student name or private detail that should not be shared has been removed.</span></label>
+          <label class="row" style="margin:8px 0;"><input type="checkbox" data-parent-review-check style="width:auto;"><span>Every claim is supported by observations I trust.</span></label>
+          <label class="row" style="margin:8px 0;"><input type="checkbox" data-parent-review-check style="width:auto;"><span>The tone sounds like me and is ready for this family.</span></label>
+        </div>
+        <div class="row" style="margin-top:10px;"><button id="parent-copy-final" type="button" disabled>Copy final text</button><button id="parent-print-final" type="button" disabled>Print</button><span id="parent-review-status" class="voice-hint">Complete the checklist to copy or print.</span></div>`;
       $("parent-copy-final").addEventListener("click", copyParentSummaryFinalText);
       $("parent-print-final").addEventListener("click", printParentSummaryFinalText);
+      document.querySelectorAll("[data-parent-review-check]").forEach(check => {
+        check.addEventListener("change", updateParentReviewActions);
+      });
+      updateParentReviewActions();
+    }
+
+    function updateParentReviewActions() {
+      const checks = Array.from(document.querySelectorAll("[data-parent-review-check]"));
+      const ready = checks.length > 0 && checks.every(check => check.checked);
+      ["parent-copy-final", "parent-print-final"].forEach(id => {
+        const button = $(id);
+        if (button) button.disabled = !ready;
+      });
+      const status = $("parent-review-status");
+      if (status) status.textContent = ready ? "Reviewed — ready to copy or print." : "Complete the checklist to copy or print.";
     }
 
     function parentSummaryFinalText() {
@@ -5498,8 +5583,16 @@
       let privacy = {total_queries_local: 0, student_blocks: 0, ai_attribution_stripped: 0, observations_saved_locally: 0, external_calls: 0, docx_modifications: 0, events: []};
       try { publication = await api("/api/publication/status"); } catch {}
       try { privacy = await api("/api/privacy"); } catch {}
+      const externalCalls = Number(privacy.external_calls || 0);
+      const privacyVerdict = externalCalls > 0
+        ? {badge: "warn", label: "student data local", detail: `${externalCalls} external Ask call${externalCalls === 1 ? "" : "s"} recorded for non-student questions.`}
+        : {badge: "ok", label: "all local", detail: "No external calls recorded."};
       $("content").innerHTML = `
-        <div class="view-head"><div><h2>Privacy</h2><p>Lingua Viva is built for local teacher work.</p></div><span class="badge ok">all local</span></div>
+        <div class="view-head"><div><h2>Privacy</h2><p>Lingua Viva is built for local teacher work. This verdict comes from the local log, not hardcoded reassurance.</p></div><span class="badge ${privacyVerdict.badge}">${escapeHtml(privacyVerdict.label)}</span></div>
+        <div class="panel" style="margin-bottom:14px;">
+          <h3>Privacy verdict</h3>
+          <p>${escapeHtml(privacyVerdict.detail)} Student observations, lenses, and names stay on this computer unless you explicitly sync approved records to your school's Drive folder.</p>
+        </div>
         <div class="grid three">
           <div class="panel"><h3>${privacy.total_queries_local}</h3><p>queries processed locally</p></div>
           <div class="panel"><h3>${privacy.student_blocks}</h3><p>student data blocks</p></div>

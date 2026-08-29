@@ -1,0 +1,57 @@
+# Lingua Viva measurement value manifest
+#
+# This is intentionally small. It maps checks/instruments to the teacher,
+# admin, safety, or release question they protect so measurement can be
+# retired when it no longer carries classroom or coordinator value.
+
+version: 1
+
+instruments:
+  - id: teacher_readiness
+    command: "python3 -m src.lv_cli eval teacher-readiness"
+    value_category: teacher_daily
+    lifecycle: teacher-facing
+    protects: "Can a teacher use Lingua Viva tomorrow?"
+
+  - id: route_reachability
+    command: "python3 scripts/check_route_reachability.py"
+    value_category: release_only
+    lifecycle: release-only
+    protects: "No shipped backend route is accidentally invisible or stale."
+
+  - id: admin_metrics
+    command: "GET /api/admin/{evidence,capacity,trends}"
+    value_category: admin_visibility
+    lifecycle: admin-only
+    protects: "Coordinator sees evidence gaps as unknown or actionable, never fake zeros."
+
+  - id: governance_honesty
+    command: "python3 -m src.lv_cli improve"
+    value_category: admin_visibility
+    lifecycle: admin-only
+    protects: "Governance counters match the local privacy and trace ledgers."
+
+  - id: privacy_safety_tests
+    command: "python3 -m pytest tests/test_student_data_stays_local.py tests/test_safeguarding.py"
+    value_category: privacy/safety
+    lifecycle: active
+    protects: "Student data stays local and RED safeguarding routes to restricted review."
+
+  - id: production_download_surface
+    command: "python3 -m src.lv_cli improve --live"
+    value_category: release_only
+    lifecycle: release-only
+    protects: "The public site points to downloadable release artifacts."
+
+  - id: closing_run
+    command: "python3 -m src.lv_cli closing"
+    value_category: release_only
+    lifecycle: release-only
+    protects: "Teacher/admin-facing release gates pass before shipping."
+
+  - id: measurement_distillation
+    command: "python3 -m src.lv_cli distill"
+    value_category: internal_only
+    lifecycle: active
+    review_note: "Keep only while it produces concrete teacher/admin/release fixes; otherwise retire."
+    protects: "Operator sees whether measurement stores are producing usable work."

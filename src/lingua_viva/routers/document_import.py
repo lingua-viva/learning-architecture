@@ -10,10 +10,6 @@ Two-step flow:
 
 from __future__ import annotations
 
-import asyncio
-from pathlib import Path
-from typing import Optional
-
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
@@ -159,6 +155,7 @@ async def apply_extractions(request: Request):
     from src.lingua_viva.docpipe.lens_extract import (
         apply_extractions_to_lenses,
         load_extraction_log,
+        resolve_import_log_path,
     )
     from src.education.student_lens import StudentLensStore
 
@@ -179,7 +176,13 @@ async def apply_extractions(request: Request):
             status_code=400,
         )
 
-    log_path = Path(log_path_str)
+    try:
+        log_path = resolve_import_log_path(log_path_str)
+    except ValueError:
+        return JSONResponse(
+            {"error": "Extraction log path is not valid. Please re-upload the document."},
+            status_code=400,
+        )
     if not log_path.exists():
         return JSONResponse(
             {"error": "Extraction log not found. Please re-upload the document."},

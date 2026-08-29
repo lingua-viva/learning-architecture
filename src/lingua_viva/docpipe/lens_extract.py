@@ -484,10 +484,24 @@ def _deduplicate_fields(fields: list[ExtractedField]) -> list[ExtractedField]:
 
 def _imports_dir(state_home: Optional[Path] = None) -> Path:
     if state_home is None:
-        state_home = Path.home() / ".lingua-viva"
+        from src.lingua_viva.config import lv_home
+        state_home = lv_home()
     imports = state_home / "imports"
     imports.mkdir(parents=True, exist_ok=True)
     return imports
+
+
+def resolve_import_log_path(log_path: str | Path, state_home: Optional[Path] = None) -> Path:
+    """Resolve an import log only if it lives under the app-owned imports dir."""
+    imports = _imports_dir(state_home).resolve(strict=False)
+    candidate = Path(log_path).expanduser().resolve(strict=False)
+    try:
+        candidate.relative_to(imports)
+    except ValueError as exc:
+        raise ValueError("extraction_log_path must be under the Lingua Viva imports directory") from exc
+    if candidate.suffix != ".ndjson":
+        raise ValueError("extraction_log_path must point to an NDJSON import log")
+    return candidate
 
 
 def save_extraction_log(

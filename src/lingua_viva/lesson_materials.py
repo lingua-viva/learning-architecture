@@ -1924,11 +1924,6 @@ def _normalize_lesson_plan(plan: dict, lesson: LessonInput, entries: list[Curric
         },
         "assessment": str(plan.get("assessment") or "Use the wrap-up response and guided-practice notes to check understanding."),
         "teacher_notes": str(plan.get("teacher_notes") or "Record what to adjust after the lesson."),
-        "atl_skills": [str(s) for s in (plan.get("atl_skills") or getattr(lesson, "atl_skills", None) or [])],
-        "learner_profile_attributes": [
-            attr for attr in (plan.get("learner_profile_attributes") or [])
-            if isinstance(attr, dict) and attr.get("attribute") in IB_LEARNER_PROFILE_ATTRIBUTES
-        ],
     }
     if not normalized["learning_objectives"]:
         normalized["learning_objectives"] = [

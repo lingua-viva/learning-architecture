@@ -116,6 +116,15 @@ reachable_from_ui:
     call_site: 'api("/api/students/ingest/class-folder"'
     note: "Google Drive panel: Build class lenses from the selected connected folder."
 
+  # Document-to-Lens import flow (R7): teacher uploads a student document,
+  # reviews extracted fields, then explicitly applies them to lenses.
+  - route: "POST /api/students/import-document"
+    call_site: 'fetch("/api/students/import-document"'
+    note: "Students document import panel: upload + preview only, no lens write."
+  - route: "POST /api/students/apply-extractions"
+    call_site: 'fetch("/api/students/apply-extractions"'
+    note: "Students document import panel: teacher-confirmed write step."
+
   # Student Lens Full Circle G4 — Settings sync controls.
   - route: "POST /api/drive/sync-now"
     call_site: 'api("/api/drive/sync-now"'

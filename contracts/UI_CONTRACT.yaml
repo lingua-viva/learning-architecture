@@ -16,6 +16,13 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v171 (2026-08-29): Claudia UX pass — Home gets a next-best-action strip,
+#     Prepare blocks empty-source generation, Observe preserves selected
+#     learner after save, parent summaries require a review checklist before
+#     copy/print, and Privacy shows a log-driven verdict when external Ask
+#     calls exist.
+#   v170 (2026-08-29): Teacher import preview hides raw match-confidence
+#     percentages and keeps the match explanation in plain classroom language.
 #   v169 (2026-08-22): qwen3:8b default-model release — src/web.py voice
 #     question fallback now uses ollama/qwen3:8b instead of qwen2.5:3b.
 #   v168 (2026-08-22): Stream 8 lesson-plan artifact loop — Prepare now has
@@ -767,7 +774,7 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 169
+version: 171
 # v122 (2026-08-06): Failure-mode hardening. src/web.py: voice-act observation
 #   dedup guard (same 60s window as observe/capture, prevents network-retry
 #   duplicates). src/education/parent_report.py: personal_context evidence
