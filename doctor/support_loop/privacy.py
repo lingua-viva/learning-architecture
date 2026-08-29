@@ -40,8 +40,23 @@ EXCLUDED_DIR_PARTS = {
 }
 
 
+# macOS resolves /tmp, /var and /etc to a SYSTEM directory literally named
+# "private". That prefix belongs to the OS, not the teacher, so it must not
+# trigger the "private*" rules below — otherwise every temp file the app
+# writes while processing an upload is refused as student data. The prefix is
+# stripped before matching; the remainder of the path and the filename are
+# still checked in full, so a real IEP_*.pdf sitting in a temp directory is
+# still caught. Same class of false positive that is_student_data_zone() in
+# src/lingua_viva/filemap.py already guards against.
+_MACOS_SYSTEM_PRIVATE_PREFIXES = ("/private/var", "/private/tmp", "/private/etc")
+
+
 def matches_private_path(path: Path | str) -> bool:
     normalized = str(path).replace("\\", "/")
+    for prefix in _MACOS_SYSTEM_PRIVATE_PREFIXES:
+        if normalized.startswith(prefix):
+            normalized = normalized[len("/private"):]
+            break
     # Never flag third-party/vendored directories — they contain files
     # named "private" that are not student data (e.g. numpy test_private.py).
     parts = set(Path(normalized).parts)

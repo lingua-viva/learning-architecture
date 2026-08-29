@@ -17,8 +17,10 @@ of accumulating silently.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
+import pytest
 import yaml
 
 from ontology.engine import OntologyEngine
@@ -46,8 +48,36 @@ def test_readme_ontology_count_matches_live_loader():
 
 
 def test_claude_md_ontology_count_matches_live_loader():
+    """Pin the count in CLAUDE.md *if* CLAUDE.md still quotes it.
+
+    The PC-0 reconcile merge (ed20299) replaced the 93-line developer-facing
+    CLAUDE.md with a 202-line guide written for Claudia, who is not a
+    developer. That guide quotes no node count, and it should not — forcing
+    "111-node classification system" into a teacher's manual to satisfy a
+    test would be the test dictating the documentation.
+
+    The guard's purpose is undamaged: README.md still carries the prose and
+    test_readme_ontology_count_matches_live_loader still pins it, and
+    test_manifest_ontology_counts_match_live_loader pins MANIFEST.yaml
+    against the live loader. So the count cannot drift silently.
+
+    This stays as a conditional rather than a deletion so that if developer
+    prose ever returns to CLAUDE.md, its number is checked from that moment.
+
+    Open and deliberately not settled here: where the developer guidance the
+    merge displaced should live (AGENTS.md quotes no count either). That is a
+    documentation-ownership call for a human, not something to infer.
+    """
     nodes, _domains = _live_counts()
     text = (REPO / "CLAUDE.md").read_text(encoding="utf-8")
+    # Sentinel must be the count-bearing phrase, not the bare words: the
+    # teacher guide says "Don't touch the governance or classification
+    # system", which is an instruction to Claudia, not a claim about a number.
+    if not re.search(r"\d+-node classification system", text):
+        pytest.skip(
+            "CLAUDE.md is the teacher-facing guide and quotes no ontology "
+            "count; README.md and MANIFEST.yaml carry the pinned count."
+        )
     assert f"{nodes}-node classification system" in text
 
 

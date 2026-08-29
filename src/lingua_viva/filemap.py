@@ -175,6 +175,25 @@ def is_student_data_zone(dir_path: str | Path) -> bool:
     return False
 
 
+def _matches_privacy_marker(dir_path: str | Path) -> bool:
+    # Same discipline as is_student_data_zone above: match markers as substrings
+    # within individual path COMPONENTS, never against the whole path string.
+    # macOS resolves /tmp and /var under a system directory named "private", so
+    # a whole-string match classified every scanned temp tree as a student zone
+    # — which excluded it from the map and made confirm_entry report "path is
+    # not an entry" for a directory the caller had just scanned.
+    _SYSTEM_COMPONENTS = {"private"}  # macOS /private/{tmp,var,etc}
+    parts = Path(dir_path).parts
+    for part in parts:
+        part_lower = part.lower()
+        if part_lower in _SYSTEM_COMPONENTS and str(dir_path).startswith(("/private", "/var/private")):
+            continue
+        for marker in PRIVACY_PATH_MARKERS:
+            if marker in part_lower:
+                return True
+    return False
+
+
 def _is_excluded(path: Path, exclusions: list[str]) -> bool:
     for exclusion in exclusions:
         try:
@@ -226,8 +245,7 @@ def _scan_directory(
         kept_dirs = []
         for name in dirs:
             child = current_path / name
-            child_text = str(child).lower()
-            if _is_excluded(child, exclusions) or is_student_data_zone(child) or any(marker in child_text for marker in PRIVACY_PATH_MARKERS):
+            if _is_excluded(child, exclusions) or is_student_data_zone(child) or _matches_privacy_marker(child):
                 student_zones.append(str(child))
                 continue
             kept_dirs.append(name)

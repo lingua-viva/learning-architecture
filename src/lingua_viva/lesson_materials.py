@@ -41,6 +41,12 @@ from src.education.content_differentiator import (
 from src.education.help_artifacts import _validate_safe_text
 from src.lingua_viva.config import lv_home
 
+# The 10 official IB Learner Profile attributes — model output is validated
+# against this list so a hallucinated attribute never prints on a plan.
+# Single source of truth: a second, identical definition sat at module level
+# further down until 2026-08-27. It was a leftover from the ed20299 merge and
+# was removed — two copies of a validation allowlist is one edit away from
+# two different allowlists.
 IB_LEARNER_PROFILE_ATTRIBUTES: tuple[str, ...] = (
     "Inquirers", "Knowledgeable", "Thinkers", "Communicators", "Principled",
     "Open-minded", "Caring", "Risk-takers", "Balanced", "Reflective",
@@ -1848,12 +1854,6 @@ def _phase(value: object, fallback_activity: str, fallback_instructions: str, du
     }
 
 
-# The 10 official IB Learner Profile attributes — model output is validated
-# against this list so a hallucinated attribute never prints on a plan.
-IB_LEARNER_PROFILE_ATTRIBUTES = (
-    "Inquirers", "Knowledgeable", "Thinkers", "Communicators", "Principled",
-    "Open-minded", "Caring", "Risk-takers", "Balanced", "Reflective",
-)
 
 
 def _normalize_learner_profile(value: object) -> list[dict[str, str]]:
