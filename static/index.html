@@ -1516,6 +1516,21 @@
     const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, ch => ({
       "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
     }[ch]));
+
+    // Count-aware noun. "219 observation to renew" and "0 decision to review"
+    // read as a broken string, and a teacher who sees the copy break wonders
+    // what else on the screen is not being computed.
+    const plural = (count, singular, pluralForm) =>
+      `${count} ${Number(count) === 1 ? singular : (pluralForm || singular + "s")}`;
+
+    // Greet by the actual hour. Boundaries chosen for a school day: morning
+    // until noon, afternoon until 17:00, evening after.
+    const lvGreeting = (now = new Date()) => {
+      const h = now.getHours();
+      if (h < 12) return "Good morning.";
+      if (h < 17) return "Good afternoon.";
+      return "Good evening.";
+    };
     const SUPPORT_CATEGORIES = [
       ["learning_and_cognition", "Learning and Cognition"],
       ["communication_and_language", "Communication and Language"],
@@ -1705,9 +1720,13 @@
       const schedule = localStorage.getItem("lvSchedule") || "{}";
       const data = await api(`/api/brief?schedule=${encodeURIComponent(schedule)}`);
       const today = data.today || {configured: false};
+      // Greet by the clock, not by assumption. "Good morning." rendered at
+      // 16:04 tells the teacher the screen is not reading anything real —
+      // a small untruth on the first screen she sees each day.
+      const greeting = lvGreeting();
       const planHtml = today.configured
-        ? `<h2>Good morning.</h2><p>Today: <strong>${escapeHtml(today.grade)} — ${escapeHtml(today.unit)}</strong></p><p>CEFR targets: ${escapeHtml((today.cefr_targets || []).join(", "))}</p><p>Source: ${escapeHtml(today.source || "")}</p>`
-        : `<h2>Good morning.</h2><p>Set up your schedule in Settings → My Schedule to see today's plan.</p>`;
+        ? `<h2>${greeting}</h2><p>Today: <strong>${escapeHtml(today.grade)} — ${escapeHtml(today.unit)}</strong></p><p>CEFR targets: ${escapeHtml((today.cefr_targets || []).join(", "))}</p><p>Source: ${escapeHtml(today.source || "")}</p>`
+        : `<h2>${greeting}</h2><p>Set up your schedule in Settings → My Schedule to see today's plan.</p>`;
       const showSourcesNudge = !data.filemap && localStorage.getItem(SOURCES_SKIP_KEY) !== "1";
       const unobserved = Number(data.attention.unobserved_count || 0);
       const pending = Number(data.attention.rti_pending || 0);
@@ -1750,12 +1769,12 @@
         </div>` : ""}
         <div class="grid two">
           <div class="panel">
-            <h3>⚠️ ${data.attention.unobserved_count} observation to renew</h3>
+            <h3>⚠️ ${plural(data.attention.unobserved_count, "observation")} to renew</h3>
             <p>${escapeHtml((data.attention.unobserved_students || []).join(", ") || "No observation reminders right now.")}</p>
             <button id="home-observe" class="primary" type="button">Go to Observe</button>
           </div>
           <div class="panel">
-            <h3>👤 ${data.attention.rti_pending} decision to review</h3>
+            <h3>👤 ${plural(data.attention.rti_pending, "decision")} to review</h3>
             <p>${escapeHtml((data.attention.rti_pending_names || []).join(", ") || "No pending RTI decisions.")}</p>
             <button id="home-students" type="button">Go to Students</button>
           </div>
@@ -2061,14 +2080,19 @@
       });
     }
 
+    // Returns how many units this grade has, so callers can offer a route to
+    // create one instead of leaving the teacher at a dead end. The empty
+    // option now names WHERE units are added (Plan) rather than telling her to
+    // "add one" on a screen that has no way to add one.
     async function populateUnitSelect(id) {
       const grade = await api(`/api/curriculum/grade/${state.grade}`);
       const select = $(id);
       select.innerHTML = grade.units.length
         ? grade.units.map(unit => `<option value="${unit.unit_id}" ${unit.unit_id === state.unitId ? "selected" : ""}>${escapeHtml(unit.title)}</option>`).join("")
-        : '<option value="">No units yet — add one to get started</option>';
+        : '<option value="">No units yet — add one in Plan</option>';
       state.unitId = select.value || (grade.units.length ? state.unitId : "");
       select.addEventListener("change", event => { state.unitId = event.target.value; });
+      return grade.units.length;
     }
 
     function unitEditorHtml(unit) {
@@ -2902,7 +2926,10 @@
         // ledger and never enter the student lens.  The response shape has
         // no "observation" key — show a calm, content-free confirmation.
         if (result.restricted) {
-          $("obs-result").innerHTML = `<h3>Noted</h3><div class="source-line"><span class="badge warn">Routed for coordinator review only.</span></div><p>${escapeHtml(result.note || "This item has been recorded securely and is visible to coordinators only.")}</p>`;
+          // The server's note states what actually happened, including whether
+          // any channel is configured. The fallback must not be more reassuring
+          // than the note it stands in for — there is no coordinator view.
+          $("obs-result").innerHTML = `<h3>Noted</h3><div class="source-line"><span class="badge warn">Restricted record — not yet routed to a person.</span></div><p>${escapeHtml(result.note || "This item has been recorded in the restricted safeguarding ledger on this computer and kept out of the student's regular record. Follow your school's safeguarding process now.")}</p>`;
           $("obs-result").scrollIntoView({ behavior: "smooth", block: "nearest" });
           showToast("Noted and routed for review.", "info");
           clearObserveForm({preserveStudent: true});
@@ -4396,17 +4423,44 @@
       await ensureOverview();
       $("content").innerHTML = `
         <div class="view-head"><div><h2>Rubric Template</h2><p>Build CEFR-informed assessment structures that keep evidence visible without reducing a learner to a score.</p></div></div>
-        <div class="panel"><div class="form-grid"><label>Grade<select id="assess-grade"></select></label><label>Unit<select id="assess-unit"></select></label></div><button id="load-rubric" class="primary" type="button">Show Rubric</button></div>
-        <div id="rubric-output" class="panel" style="margin-top:14px;"></div>`;
+        <div class="panel"><div class="form-grid"><label>Grade<select id="assess-grade"></select></label><label>Unit<select id="assess-unit"></select></label></div><button id="load-rubric" class="primary" type="button">Show Rubric</button><div id="assess-empty" class="row" hidden style="margin-top:10px;"></div></div>
+        <div id="rubric-output" class="panel" style="margin-top:14px;" hidden></div>`;
       $("assess-grade").innerHTML = state.overview.grade_bands.map(g => `<option ${g.grade === state.grade ? "selected" : ""}>${g.grade}</option>`).join("");
-      $("assess-grade").addEventListener("change", async event => { state.grade = event.target.value; await populateUnitSelect("assess-unit"); });
-      await populateUnitSelect("assess-unit");
+      $("assess-grade").addEventListener("change", async event => {
+        state.grade = event.target.value;
+        applyAssessUnitState(await populateUnitSelect("assess-unit"));
+      });
+      applyAssessUnitState(await populateUnitSelect("assess-unit"));
       $("load-rubric").addEventListener("click", loadRubric);
     }
 
+    // A grade with no units cannot produce a rubric. Rather than leaving an
+    // enabled button that fails and an empty card that never fills, say so and
+    // hand the teacher the screen where units are actually created.
+    function applyAssessUnitState(unitCount) {
+      const button = $("load-rubric");
+      const empty = $("assess-empty");
+      const output = $("rubric-output");
+      if (!button || !empty) return;
+      const hasUnits = Number(unitCount) > 0;
+      button.disabled = !hasUnits;
+      empty.hidden = hasUnits;
+      if (!hasUnits) {
+        if (output) { output.hidden = true; output.innerHTML = ""; }
+        empty.innerHTML = `<p class="voice-hint" style="flex:1;">No units for ${escapeHtml(state.grade)} yet — a rubric is built from a unit.</p><button type="button" id="assess-go-plan">Add a unit in Plan</button>`;
+        const go = $("assess-go-plan");
+        if (go) go.addEventListener("click", () => { state.view = "plan"; renderShell(); renderView(); });
+      }
+    }
+
     async function loadRubric() {
-      const data = await api(`/api/assess/rubric/${$("assess-unit").value}`);
+      const unitId = $("assess-unit").value;
+      // Guard the empty-state option: it carries value="" and would build a
+      // request for a unit that does not exist.
+      if (!unitId) { applyAssessUnitState(0); return; }
+      const data = await api(`/api/assess/rubric/${unitId}`);
       const assessment = data.assessment;
+      $("rubric-output").hidden = false;
       $("rubric-output").innerHTML = `
         <h3>${escapeHtml(data.unit.title)}</h3>
         ${sourceLine(assessment.source_citation)}
@@ -4427,8 +4481,29 @@
 
     async function renderAsk() {
       setTitle("Ask", "web research route");
+      // The header asserted "answers come from the web" unconditionally. With
+      // no Perplexity key configured nothing reaches the web, and the
+      // per-answer badge correctly read "answered on this computer" — two
+      // badges contradicting each other on one screen, with the header being
+      // the one that was wrong. Ask the app what it can actually do, and when
+      // that cannot be determined say THAT rather than guessing either way.
+      let webConfigured = null;
+      try {
+        const provider = await api("/api/provider");
+        webConfigured = Boolean(provider && provider.service_keys
+          && provider.service_keys.perplexity
+          && provider.service_keys.perplexity.configured);
+      } catch (_) { /* leave null — unknown is its own state */ }
+      const route = webConfigured === true
+        ? {badge: '<span class="badge warn">answers come from the web</span>',
+           lead: "Ask answers general teaching questions from the web."}
+        : webConfigured === false
+          ? {badge: '<span class="badge">web search not configured</span>',
+             lead: "Web search is not configured, so Ask answers on this computer only. Add a Perplexity key in Settings to search the web."}
+          : {badge: '<span class="badge">route not confirmed</span>',
+             lead: "Ask answers general teaching questions."};
       $("content").innerHTML = `
-        <div class="view-head"><div><h2>Ask</h2><p>Ask answers general teaching questions from the web. Nothing about your students is ever sent — questions that name a student are answered from their lens instead.</p></div><span class="badge warn">answers come from the web</span></div>
+        <div class="view-head"><div><h2>Ask</h2><p>${route.lead} Nothing about your students is ever sent — questions that name a student are answered from their lens instead.</p></div>${route.badge}</div>
         <div class="panel">
           <div id="chat-log" class="chat-log">${state.chat.map(renderMessage).join("")}</div>
           <div id="ask-voice-status" class="voice-hint" aria-live="polite" style="margin-top:12px;">Tap Ask to speak, or type below.</div>
@@ -4629,7 +4704,18 @@
         .find(value => value !== null && value !== undefined && !Number.isNaN(Number(value)));
       const hasSignal = rawScore !== undefined;
       const score = hasSignal ? Number(rawScore) : 1;
-      const tier = fabricated.length > 0 ? "name_boundary"
+      // Absent grounding is not evidence of grounding. A local answer is built
+      // from a child's own lens and observations; when it arrives with NO GIR
+      // signal AND NO sources there is nothing the teacher can check it
+      // against, and defaulting score to 1 rendered it as "grounded" with no
+      // warning at all. That is a false green on the highest-stakes surface in
+      // the product — 594 characters about a child, nothing cited, no caveat.
+      // Deliberately narrow: only local (student-record) answers that offer
+      // nothing to verify. An external answer, or any answer carrying a real
+      // score or a source, is unaffected.
+      const sourceCount = (meta && Array.isArray(meta.sources)) ? meta.sources.length : 0;
+      const ungroundedLocalAnswer = !hasSignal && sourceCount === 0 && Boolean(meta && meta.local_only);
+      const tier = (fabricated.length > 0 || ungroundedLocalAnswer) ? "name_boundary"
         : (score >= 0.8 ? "plain" : (score >= 0.4 ? "clarify" : "name_boundary"));
       // Backend tone_prefix is authoritative; fallbacks match voice_tone.py verbatim.
       const fallbackPrefix = tier === "clarify"
@@ -4652,7 +4738,11 @@
         girBadgeClass: unsafe ? "badge warn" : "badge",
         girBadgeHtml: hasSignal
           ? `<span class="${unsafe ? "badge warn" : "badge"}">${badgeLabel} · GIR ${score.toFixed(2)}</span>`
-          : "",
+          : (ungroundedLocalAnswer
+              // No score to print — say that, rather than printing a number
+              // the backend never produced.
+              ? '<span class="badge warn">unverified · no grounding signal</span>'
+              : ""),
         warningHtml: unsafe
           ? `<p class="answer-safety"><span class="badge warn">${badgeLabel}</span> ${escapeHtml(warningText + fabricatedText)}</p>`
           : "",
@@ -4684,7 +4774,10 @@
       // signal, whatever field shape the backend used — never silently plain.
       const grounding = message.meta && message.meta.grounding
         ? `<span class="badge">tier ${escapeHtml(message.meta.grounding.tier_used || "none")}</span><span class="${safety.girBadgeClass}">GIR ${Number(message.meta.grounding.gir?.score ?? 1).toFixed(2)}</span>`
-        : (safety.hasSignal ? safety.girBadgeHtml : "");
+        // girBadgeHtml is "" when there is nothing to show, so it can be used
+        // directly — gating on hasSignal here suppressed the unverified badge
+        // for exactly the ungrounded case it exists to flag.
+        : safety.girBadgeHtml;
       const meta = message.meta ? `<div class="source-line">${routeBadge}<span class="badge">${escapeHtml(message.meta.model_used || "model unavailable")}</span><span class="badge">${((message.meta.duration_ms || 0) / 1000).toFixed(1)}s</span>${grounding}${sourceBadges}<button type="button" data-why="${escapeHtml(message.meta.trace_id || "")}">Why?</button></div>` : "";
       const moreButton = message.askMore
         ? `<div class="row" style="margin-top:8px;"><button type="button" data-ask-more>Hear more</button></div>`

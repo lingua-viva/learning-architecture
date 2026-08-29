@@ -16,13 +16,65 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
-#   v171 (2026-08-29): Claudia UX pass — Home gets a next-best-action strip,
+#   v178 (2026-08-29): merge reconciliation — the 4d9299d merge of the local
+#     Claudia UX session onto origin desktop-v0.2.71 took static/index.html
+#     from the local side only, dropping origin's v172-v175 honesty fixes
+#     (ungrounded-answer badge, conditional Ask header, safeguarding process
+#     naming), and kept the local lock against origin's web.py. Both version
+#     lines had collided at v170/v171 (used for different changes on each
+#     side). This bump re-locks a true three-way merge of index.html carrying
+#     BOTH sides, renumbers the local entries as v176/v177 below, and keeps
+#     origin's v170-v175 log intact.
+#   v177 (2026-08-29): Claudia UX pass — Home gets a next-best-action strip,
 #     Prepare blocks empty-source generation, Observe preserves selected
 #     learner after save, parent summaries require a review checklist before
 #     copy/print, and Privacy shows a log-driven verdict when external Ask
-#     calls exist.
-#   v170 (2026-08-29): Teacher import preview hides raw match-confidence
+#     calls exist. (Originally logged as v171 in the local session.)
+#   v176 (2026-08-29): Teacher import preview hides raw match-confidence
 #     percentages and keeps the match explanation in plain classroom language.
+#     (Originally logged as v170 in the local session.)
+#   v175 (2026-08-27): safeguarding honesty — Observe no longer tells a
+#     teacher her concern is "visible to coordinators only". No coordinator
+#     view exists (all three safeguarding routes are deferred_undecided) and
+#     safeguarding_config() defaults to no channel, so the notification
+#     reaches nobody. The badge now reads "Restricted record — not yet routed
+#     to a person" and the copy names the school's human process.
+#   v174 (2026-08-27): the Ask header no longer promises the web unconditionally.
+#     With Perplexity unconfigured it still read "answers come from the web"
+#     while the answer below it read "answered on this computer", model none,
+#     0.0s, no sources — two badges contradicting each other, header wrong.
+#     renderAsk now reads /api/provider service_keys and states the real route:
+#     web, "web search not configured", or "route not confirmed" when it cannot
+#     tell. Same honesty class as v173; unknown is its own state, not a guess.
+#   v173 (2026-08-27): ungrounded local answers no longer render as grounded.
+#     renderAnswerSafety defaults an absent GIR score to 1, which lands in the
+#     "plain" tier and warns about nothing. A live test of a student-named
+#     question returned 594 characters with zero citations and no caveat — a
+#     confident paragraph about a child with nothing to check it against.
+#     A local answer with NO signal AND NO sources is now tier name_boundary
+#     and carries an "unverified · no grounding signal" badge. Narrow by
+#     construction: external answers, and any answer with a real score or a
+#     source, are unchanged. Fail-closed, per the same rule the rest of the
+#     codebase applies — an undecided state is denied, never permissive.
+#   v172 (2026-08-27): Assess dead-end, same walkthrough. The rubric panel was
+#     rendered empty on every visit (a blank white card below the form) and is
+#     now hidden until a rubric is loaded. A grade with no units left "Show
+#     Rubric" enabled against an option carrying value="" — it is now disabled,
+#     with a named route to Plan, which is where units are actually created.
+#     Empty-state copy no longer says "add one to get started" on a screen that
+#     cannot add one. Adds #assess-empty and #assess-go-plan.
+#   v171 (2026-08-27): runtime-truth fixes found by the first live walkthrough
+#     of the app, none of which any test could see. Home greeted "Good
+#     morning." at 16:04 — now lvGreeting() reads the clock. "219 observation
+#     to renew" / "0 decision to review" were unpluralised — now plural().
+#     Both are small, and both told the teacher the screen was printing
+#     strings rather than reading state. No layout or control changes.
+#   v170 (2026-08-27): document-to-lens panel lock-in — Students view gains
+#     the "Update lenses from documents" upload panel (109 lines, additive,
+#     from SPEC_LV_DOCUMENT_TO_LENS_PIPELINE 2026-08-23, shipped in d18b782
+#     without a bump). Re-locked here, plus its extraction summary now
+#     renders match_source alone: the raw confidence percentage it showed
+#     was a regression of the v165 rule (never raw confidence numbers).
 #   v169 (2026-08-22): qwen3:8b default-model release — src/web.py voice
 #     question fallback now uses ollama/qwen3:8b instead of qwen2.5:3b.
 #   v168 (2026-08-22): Stream 8 lesson-plan artifact loop — Prepare now has
@@ -774,7 +826,7 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 171
+version: 178
 # v122 (2026-08-06): Failure-mode hardening. src/web.py: voice-act observation
 #   dedup guard (same 60s window as observe/capture, prevents network-retry
 #   duplicates). src/education/parent_report.py: personal_context evidence
