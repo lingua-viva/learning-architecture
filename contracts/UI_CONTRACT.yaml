@@ -16,6 +16,12 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v179 (2026-08-29): Claudia full audit fixes — language_of_instruction
+#     changed to Italian, observation UUID removed from confirmation message,
+#     file upload shows visible progress badges, source truncation warning
+#     added to activity output, ARON confirmation items made clickable with
+#     navigation to Students view, "Source ledger" renamed to "Import history",
+#     Sources privacy note explains where imported data lands.
 #   v178 (2026-08-29): merge reconciliation — the 4d9299d merge of the local
 #     Claudia UX session onto origin desktop-v0.2.71 took static/index.html
 #     from the local side only, dropping origin's v172-v175 honesty fixes
@@ -826,7 +832,7 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 178
+version: 179
 # v122 (2026-08-06): Failure-mode hardening. src/web.py: voice-act observation
 #   dedup guard (same 60s window as observe/capture, prevents network-retry
 #   duplicates). src/education/parent_report.py: personal_context evidence

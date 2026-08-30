@@ -31,7 +31,7 @@ def _lesson() -> LessonInput:
         atl_skills=["communication"],
         cefr_target="A2",
         duration_minutes=45,
-        language_of_instruction="en",
+        language_of_instruction="it",
     )
 
 

@@ -3629,7 +3629,7 @@ async def prepare_differentiated_pdf(payload: dict):
         atl_skills=list(payload.get("atl_skills", ["Communication"])),
         cefr_target=str(payload.get("cefr_target", "B1")),
         duration_minutes=int(payload.get("duration_minutes", 50)),
-        language_of_instruction=str(payload.get("language", "en")),
+        language_of_instruction=str(payload.get("language", "it")),
         created_by=str(payload.get("created_by", "teacher")),
     )
 
@@ -4607,7 +4607,7 @@ def _cohort_lesson_from_payload(data: dict, teacher_id: str):
         atl_skills=[str(item) for item in lesson_payload.get("atl_skills") or []],
         cefr_target=str(lesson_payload.get("cefr_target") or "A2"),
         duration_minutes=int(lesson_payload.get("duration_minutes") or 45),
-        language_of_instruction=str(lesson_payload.get("language_of_instruction") or "en"),
+        language_of_instruction=str(lesson_payload.get("language_of_instruction") or "it"),
         created_by=teacher_id,
     )
     errors = lesson.validate()
@@ -4809,6 +4809,9 @@ async def lesson_materials_generate(request: Request, payload: dict):
     # regenerating replaces it, nothing else does.
     await asyncio.to_thread(store_generated_materials, lesson, result, teacher_id)
 
+    from src.lingua_viva.lesson_materials import _SOURCE_EXCERPT_CHARS
+
+    source_truncated = bool(source_text and len(source_text) > _SOURCE_EXCERPT_CHARS)
     return {
         "materials": materials_as_dicts(result),
         "individual_support": [item.__dict__ for item in result.individual_support],
@@ -4817,6 +4820,7 @@ async def lesson_materials_generate(request: Request, payload: dict):
         "sync_status": result.sync_status,
         "requires_teacher_approval": True,
         "writes": {"deliverables": 0, "audit_receipts": 0},
+        "source_truncated": source_truncated,
     }
 
 

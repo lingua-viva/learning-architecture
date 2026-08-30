@@ -147,6 +147,7 @@ def pending_items() -> list[dict[str, Any]]:
                     pending.append({
                         # Anonymous: this list is designed to be projectable.
                         "reference": aron_ref(lens["student_id"]),
+                        "student_id": lens["student_id"],
                         "label": "Suggestions awaiting your confirmation",
                         "count": count,
                         "detail": (

@@ -142,7 +142,7 @@ class LessonInput:
     atl_skills: list[str]
     cefr_target: str  # CEFRBand, e.g. "B1"
     duration_minutes: int
-    language_of_instruction: str = "en"
+    language_of_instruction: str = "it"
     created_by: str = ""
     created_at: str = field(default_factory=_now_iso)
 

@@ -1605,6 +1605,14 @@
       renderView();
     }
 
+    function navigateToStudent(studentId) {
+      state.view = "students";
+      state.selectedStudent = studentId;
+      voiceLastStudent = null;
+      renderShell();
+      return renderView();
+    }
+
     function switchView(view) {
       state.view = view;
       // Clear student selection on every tab switch so student identity
@@ -2204,7 +2212,10 @@
       const overrideRows = Object.keys(overrides).length
         ? `<div class="panel"><h3>Applied Overrides</h3><div class="source-line">${Object.entries(overrides).map(([studentId, tier]) => `<span class="badge warn">${escapeHtml((state.rosterSplit && state.rosterSplit.roster_names && state.rosterSplit.roster_names[studentId]) || studentId)} → ${escapeHtml(TIER_LABELS[tier] || tier)}</span>`).join("")}</div></div>`
         : "";
-	      output.innerHTML = tiers.map(tier => {
+      const truncNote = data.source_truncated
+        ? `<div class="panel"><p><span class="badge warn">Using the first portion of your file</span> Longer documents are summarised so the activity stays focused.</p></div>`
+        : "";
+	      output.innerHTML = truncNote + tiers.map(tier => {
         const item = byTier[tier] || {};
         // STEP 10 (C2): template fallback must be LOUD — the teacher sees
         // that AI generation did not run, never silently receives template
@@ -2465,9 +2476,10 @@
         output.innerHTML = `<span>Unsupported file type ${escapeHtml(ext || "(none)")} — use ${LESSON_FILE_EXTENSIONS.join(", ")}.</span>`;
         return;
       }
-      output.innerHTML = `<span>Importing ${escapeHtml(file.name)}...</span>`;
+      output.innerHTML = `<span class="badge warn">Uploading ${escapeHtml(file.name)}…</span>`;
       try {
         const contentBase64 = await fileToBase64(file);
+        output.innerHTML = `<span class="badge warn">Importing ${escapeHtml(file.name)}…</span>`;
         const data = await api("/api/lesson-materials/library/import-file", {
           method: "POST",
           body: JSON.stringify({
@@ -2543,7 +2555,7 @@
           atl_skills: ["communication"],
           cefr_target: "A2",
           duration_minutes: 45,
-          language_of_instruction: "en"
+          language_of_instruction: "it"
         }
       };
     }
@@ -2950,7 +2962,7 @@
         const typeLabel = $("obs-template").options[$("obs-template").selectedIndex]?.text || templateType;
         const cefrBits = templateType === "cefr" ? ` · ${$("obs-dim").value} · ${$("obs-level").value}` : "";
         const traitRows = (result.ethos_trait_suggestions || []).filter(t => t.trait_id).map(t => `<span class="badge ${t.confidence === "teacher_confirmed" ? "ok" : "warn"}">${escapeHtml(t.label || t.trait_id)} · ${escapeHtml(t.status || t.confidence || "suggested")}</span>`).join("");
-        $("obs-result").innerHTML = `<h3>Saved</h3><div class="source-line"><span class="badge ok">Saved locally. Not uploaded. Not shared.</span><span class="badge">Domain: observation</span>${traitRows}</div><p><strong>Recorded for ${escapeHtml(studentName)}</strong> — ${escapeHtml(typeLabel)}${escapeHtml(cefrBits)}</p><p>Observation ${escapeHtml(result.observation.observation_id)} is attached to the local lens.</p><p>${escapeHtml(feedback.message || "Observation saved.")}</p>${categories ? `<p>Updated: ${escapeHtml(categories)}</p>` : ""}<div class="output">${escapeHtml(result.observation.raw_transcript)}</div>`;
+        $("obs-result").innerHTML = `<h3>Saved</h3><div class="source-line"><span class="badge ok">Saved locally. Not uploaded. Not shared.</span><span class="badge">Domain: observation</span>${traitRows}</div><p><strong>Recorded for ${escapeHtml(studentName)}</strong> — ${escapeHtml(typeLabel)}${escapeHtml(cefrBits)}</p><p>${escapeHtml(feedback.message || "Observation saved. Attached to the local lens.")}</p>${categories ? `<p>Updated: ${escapeHtml(categories)}</p>` : ""}<div class="output">${escapeHtml(result.observation.raw_transcript)}</div>`;
         $("obs-result").scrollIntoView({ behavior: "smooth", block: "nearest" });
         $("obs-result").classList.add("flash-success");
         setTimeout(() => $("obs-result").classList.remove("flash-success"), 2000);
@@ -5228,12 +5240,12 @@
       }
 
       const pendingRows = (data.pending || []).map(item => `
-        <div class="item">
+        <div class="item"${item.student_id ? ` style="cursor:pointer" onclick="navigateToStudent('${escapeHtml(item.student_id)}')"` : ""}>
           <h3>${escapeHtml(item.label)}${item.reference ? ` &middot; <span title="${escapeHtml(ARON_TITLE)}">${escapeHtml(item.reference)}</span>` : ""}</h3>
           <div class="source-line">
             <span class="badge ${item.unknown ? "risk" : "warn"}">${item.count === null || item.count === undefined ? "unknown" : `${item.count} item${item.count === 1 ? "" : "s"}`}</span>
           </div>
-          <p>${escapeHtml(item.detail)}</p>
+          <p>${escapeHtml(item.detail)}${item.student_id ? " <em>Click to review.</em>" : ""}</p>
         </div>`).join("");
 
       const pendingPanel = (data.pending || []).length
@@ -6675,7 +6687,7 @@
         <div class="panel">
           <div class="view-head">
             <div><h3 style="margin:0;">What Lingua Viva can see</h3>
-            <p>Every source, whether it is set up, and how much is in it.</p></div>
+            <p>Every source, whether it is set up, and how much is in it. Imported files stay in a private folder on this computer — nothing is uploaded unless you choose to.</p></div>
             <span class="badge ${data.connected_count ? "ok" : ""}">${data.connected_count} of ${data.total_count} set up</span>
           </div>
           <div class="list" style="margin-top:12px;">${rows}</div>
@@ -6716,9 +6728,9 @@
           </details>`).join("");
         host.innerHTML = `
           <details>
-            <summary><strong>Source ledger</strong> <span class="badge">${data.count || 0} records</span></summary>
-            <div class="list" style="margin-top:10px;">${rows || `<p class="voice-hint">No durable source records yet.</p>`}</div>
-            ${(observations.observations || []).length ? `<p class="voice-hint">${observations.observations.length} recent ledger observation(s).</p>` : ""}
+            <summary><strong>Import history</strong> <span class="badge">${data.count || 0} files</span></summary>
+            <div class="list" style="margin-top:10px;">${rows || `<p class="voice-hint">No imported files yet.</p>`}</div>
+            ${(observations.observations || []).length ? `<p class="voice-hint">${observations.observations.length} recent update(s).</p>` : ""}
           </details>`;
         host.querySelectorAll("[data-add-evidence]").forEach(button => {
           button.addEventListener("click", async () => {
@@ -6743,7 +6755,7 @@
           });
         });
       } catch (error) {
-        host.innerHTML = `<p class="voice-hint">Could not read source ledger.</p>`;
+        host.innerHTML = `<p class="voice-hint">Could not read import history.</p>`;
       }
     }
 
@@ -7473,7 +7485,9 @@
         return;
       }
 
-      const widgets = (data.widgets || []).map(widget => `
+      const widgets = (data.widgets || []).map(widget => {
+        const isConfirmation = widget.id === "confirmations" && widget.count > 0;
+        return `
         <div class="item">
           <h3>${escapeHtml(widget.label)}</h3>
           <div class="source-line">
@@ -7481,8 +7495,9 @@
             ${(widget.students || []).slice(0, 6).map(ref => aronBadge(ref)).join("")}
             ${(widget.students || []).length > 6 ? `<span class="badge">+${widget.students.length - 6} more</span>` : ""}
           </div>
-          <p>${escapeHtml(widget.detail)}</p>
-        </div>`).join("");
+          <p>${escapeHtml(widget.detail)}${isConfirmation ? ` <a href="#" onclick="switchView('students'); return false;" style="color:var(--accent,#c45a20);">Review in Students →</a>` : ""}</p>
+        </div>`;
+      }).join("");
 
       host.innerHTML = `
         <div class="panel" style="margin-bottom:14px;">

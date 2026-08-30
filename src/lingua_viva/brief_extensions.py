@@ -47,7 +47,7 @@ def _library_widget() -> dict:
         "detail": (
             f"{doc_count} documents / {info.get('chunk_count', 0)} chunks indexed locally."
             if doc_count
-            else "Empty — add IB guides and support materials with `lv library add`."
+            else "Empty — upload IB guides and support materials in Sources or Prepare."
         ),
         "status": "ok",
     }
