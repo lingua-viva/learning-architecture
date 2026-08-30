@@ -49,11 +49,16 @@ async def import_document(request: Request):
     content = await upload.read()
     filename = upload.filename or "imported-file"
 
-    # Decode for text analysis
+    # Extract text from document (supports PDF, DOCX, XLSX, plain text)
+    ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     try:
-        text = content.decode("utf-8", errors="replace")
+        from src.lingua_viva.docpipe.extract import extract_plain_text
+        text = extract_plain_text(content, ext)
     except Exception:
-        text = ""
+        try:
+            text = content.decode("utf-8", errors="replace")
+        except Exception:
+            text = ""
 
     if not text.strip():
         return JSONResponse(
@@ -103,12 +108,19 @@ async def import_document(request: Request):
                 "extractions_preview": {},
             })
 
-        # R3+R4: Extract data
+        # R3+R4: Extract data — pass reasoning engine for LLM sentence classification
+        try:
+            from src.lingua_viva.reasoning import ReasoningEngine
+            reasoning_engine = ReasoningEngine()
+        except Exception:
+            reasoning_engine = None
+
         results = await extract_for_lens_update(
             document_bytes=content,
             document_type=doc_type,
             matched_students=matched,
             lens_store=store,
+            engine=reasoning_engine,
         )
 
         # R6: Persist extraction log BEFORE any lens write

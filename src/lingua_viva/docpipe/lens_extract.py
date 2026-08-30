@@ -237,6 +237,269 @@ def _is_red_safeguarding(text: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Section Splitter — isolate per-student text (cross-contamination guard)
+# ---------------------------------------------------------------------------
+
+# The 10 lens profile field IDs used by the LLM classifier.
+_LENS_FIELD_IDS = (
+    "learning_and_cognition",
+    "communication_and_language",
+    "executive_functioning",
+    "social_skills",
+    "emotional_regulation",
+    "physical_sensory_needs",
+    "attendance_and_engagement",
+    "strategies_trialed",
+    "academic_strengths",
+    "personal_strengths",
+)
+
+_FIELD_DESCRIPTIONS = {
+    "learning_and_cognition": "academic performance, learning style, cognitive needs, grades, test scores",
+    "communication_and_language": "reading, writing, speaking, listening skills, language proficiency, CEFR",
+    "executive_functioning": "organization, focus, planning, task completion, self-regulation, homework",
+    "social_skills": "collaboration, peer interaction, teamwork, group dynamics, friendship",
+    "emotional_regulation": "emotional awareness, coping, resilience, self-management, behavior",
+    "physical_sensory_needs": "motor skills, sensory processing, physical needs, handwriting",
+    "attendance_and_engagement": "participation, attendance, class engagement, motivation",
+    "strategies_trialed": "interventions, accommodations, approaches tried, support plans",
+    "academic_strengths": "subjects or areas where the student excels, talents",
+    "personal_strengths": "character traits, interests, curiosity, creativity, leadership",
+}
+
+
+def _split_into_student_sections(
+    text: str,
+    matched_students: list[dict[str, Any]],
+) -> dict[str, str]:
+    """Split a multi-student document into per-student text sections.
+
+    Strategy: find each student's name position in the text, assign text
+    from that position to the next student's name position. Students
+    whose names aren't found get empty string (no data to import).
+
+    For single-student documents, all text goes to that student.
+    """
+    if len(matched_students) <= 1:
+        student_id = matched_students[0]["student_id"] if matched_students else ""
+        return {student_id: text} if student_id else {}
+
+    # Find name positions (case-insensitive, full name match first)
+    positions: list[tuple[int, str, str]] = []  # (position, student_id, display_name)
+    text_lower = text.lower()
+
+    for student in matched_students:
+        student_id = student["student_id"]
+        display_name = student.get("display_name", "")
+        if not display_name:
+            continue
+
+        # Try full name first
+        name_lower = display_name.lower()
+        idx = text_lower.find(name_lower)
+        if idx == -1:
+            # Try reversed name order (surname first ↔ first last)
+            parts = display_name.split()
+            if len(parts) >= 2:
+                reversed_name = " ".join(parts[1:]) + " " + parts[0]
+                idx = text_lower.find(reversed_name.lower())
+        if idx == -1:
+            # Try first name only as last resort
+            first = display_name.split()[0].lower() if display_name else ""
+            if first and len(first) > 2:
+                idx = text_lower.find(first)
+
+        if idx >= 0:
+            positions.append((idx, student_id, display_name))
+
+    if not positions:
+        # No names found — can't split, return all text for all students
+        return {s["student_id"]: text for s in matched_students}
+
+    # Sort by position
+    positions.sort(key=lambda x: x[0])
+
+    # Assign text between consecutive names
+    sections: dict[str, str] = {}
+    for i, (pos, student_id, _name) in enumerate(positions):
+        end_pos = positions[i + 1][0] if i + 1 < len(positions) else len(text)
+        sections[student_id] = text[pos:end_pos].strip()
+
+    # Students not found in text get empty section
+    for student in matched_students:
+        if student["student_id"] not in sections:
+            sections[student["student_id"]] = ""
+
+    return sections
+
+
+# ---------------------------------------------------------------------------
+# LLM Sentence Classifier — route report card sentences to lens fields
+# ---------------------------------------------------------------------------
+
+def _split_into_sentences(text: str) -> list[str]:
+    """Split text into sentences. Simple but effective for report cards."""
+    # Split on period/exclamation/question followed by space or newline
+    raw = re.split(r'(?<=[.!?])\s+|\n+', text)
+    sentences = []
+    for s in raw:
+        s = s.strip()
+        # Skip very short fragments and pure numbers/labels
+        if len(s) > 15 and any(c.isalpha() for c in s):
+            sentences.append(s)
+    return sentences
+
+
+_CLASSIFY_SYSTEM_PROMPT = """You classify sentences from student report cards into profile categories.
+
+Given a sentence about a student, respond with ONLY a JSON object:
+{{"field_id": "FIELD", "phrase": "the exact key phrase from the sentence"}}
+
+Valid FIELD values (pick exactly one, or "none"):
+""" + "\n".join(f'- {fid}: {desc}' for fid, desc in _FIELD_DESCRIPTIONS.items()) + """
+- none: sentence has no relevant student assessment content (headers, dates, boilerplate)
+
+Rules:
+1. The "phrase" MUST be exact words from the input sentence — never invent text
+2. Keep the phrase short (5-15 words) — the core observation, not the whole sentence
+3. Pick the single BEST matching field — do not list multiple
+4. If genuinely uncertain, use "none"
+"""
+
+
+async def _classify_sentence_to_field(
+    sentence: str,
+    engine: Any,
+) -> list[ExtractedField]:
+    """Classify one sentence into a lens field using local LLM.
+
+    Returns list of ExtractedField (usually 0 or 1 items).
+    Phrase must be verified as a substring of the input sentence.
+    """
+    from src.lingua_viva.reasoning import ReasoningEngine
+
+    if not isinstance(engine, ReasoningEngine):
+        engine = ReasoningEngine()
+
+    try:
+        result = await engine.reason(
+            sentence,
+            system_prompt=_CLASSIFY_SYSTEM_PROMPT,
+            model="ollama/qwen3:8b",
+            local_only=True,
+            max_tokens=100,
+        )
+        if result.model_used == "none" or result.error:
+            return []
+
+        content = result.content.strip()
+        # Extract JSON from response (may have markdown fencing)
+        content = re.sub(r"^```(json)?|```$", "", content, flags=re.MULTILINE).strip()
+        match = re.search(r"\{.*\}", content, flags=re.DOTALL)
+        if not match:
+            return []
+
+        parsed = json.loads(match.group(0))
+        if not isinstance(parsed, dict):
+            return []
+
+        field_id = str(parsed.get("field_id", "none")).strip()
+        phrase = str(parsed.get("phrase", "")).strip()
+
+        if field_id == "none" or field_id not in _LENS_FIELD_IDS:
+            return []
+
+        # SAFETY: verify phrase is actually in the source sentence
+        if phrase and phrase.lower() not in sentence.lower():
+            # LLM invented text — use the full sentence instead but mark lower confidence
+            phrase = sentence[:80].strip()
+
+        if not phrase:
+            return []
+
+        # Map field_id to the field_path format used by the lens
+        field_path = f"support_profile.categories.{field_id}.evidence"
+        if field_id in ("academic_strengths", "personal_strengths"):
+            field_path = field_id
+
+        return [ExtractedField(
+            field_path=field_path,
+            value=phrase,
+            confidence=0.72,
+            supporting_chunk_ids=[],
+            status="needs_confirmation",
+        )]
+    except Exception:
+        return []
+
+
+# ---------------------------------------------------------------------------
+# Synthesis Repass — deduplicate and condense lens fields
+# ---------------------------------------------------------------------------
+
+_SYNTHESIS_SYSTEM_PROMPT = """You condense student profile entries. Remove duplicates, combine similar observations.
+
+Rules:
+1. NEVER add information not in the originals
+2. Preserve specific data (CEFR levels, grade descriptors, test scores, percentages)
+3. Combine similar observations into one clear sentence
+4. Output 1-3 short sentences maximum
+5. Use plain teacher language, not clinical jargon"""
+
+
+async def _synthesize_field_entries(
+    field_id: str,
+    entries: list[str],
+    engine: Any,
+) -> str | None:
+    """Synthesize multiple entries for one field into a concise summary.
+
+    Returns condensed text, or None if synthesis not needed/possible.
+    """
+    if len(entries) <= 1:
+        return None  # No synthesis needed
+
+    # Remove exact duplicates first
+    unique = list(dict.fromkeys(entries))
+    if len(unique) <= 1:
+        return unique[0] if unique else None
+
+    from src.lingua_viva.reasoning import ReasoningEngine
+
+    if not isinstance(engine, ReasoningEngine):
+        engine = ReasoningEngine()
+
+    field_label = _FIELD_DESCRIPTIONS.get(field_id, field_id)
+    prompt = (
+        f"Field: {field_label}\n\n"
+        f"Entries to condense:\n"
+        + "\n".join(f"- {entry}" for entry in unique)
+        + "\n\nWrite ONE condensed summary (1-3 sentences). Use only the information above."
+    )
+
+    try:
+        result = await engine.reason(
+            prompt,
+            system_prompt=_SYNTHESIS_SYSTEM_PROMPT,
+            model="ollama/qwen3:8b",
+            local_only=True,
+            max_tokens=150,
+        )
+        if result.model_used == "none" or result.error:
+            return None
+
+        condensed = result.content.strip()
+        # Strip markdown fencing if present
+        condensed = re.sub(r"^```\w*\s*|```$", "", condensed, flags=re.MULTILINE).strip()
+        # Basic sanity: if the synthesis is longer than the combined originals, skip it
+        if len(condensed) > sum(len(e) for e in unique) * 1.2:
+            return None
+        return condensed if condensed else None
+    except Exception:
+        return None
+
+
+# ---------------------------------------------------------------------------
 # Main Extraction Pipeline (R3)
 # ---------------------------------------------------------------------------
 
@@ -277,8 +540,11 @@ async def extract_for_lens_update(
             for student in matched_students
         }
 
-    # Split into chunks (paragraphs)
+    # Split into chunks (paragraphs) — used for chunk ID references
     chunks = _text_to_chunks(text)
+
+    # STEP 1: Split document into per-student sections (cross-contamination guard)
+    student_sections = _split_into_student_sections(text, matched_students)
 
     results: dict[str, ExtractionResult] = {}
 
@@ -286,10 +552,26 @@ async def extract_for_lens_update(
         student_id = student["student_id"]
         display_name = student.get("display_name", "")
 
-        # Find chunks relevant to this student
-        relevant_chunks = _find_student_chunks(chunks, display_name, text)
-        if not relevant_chunks or len(matched_students) == 1:
-            relevant_chunks = chunks  # Single-student doc: all chunks are relevant
+        # Get this student's isolated section
+        section_text = student_sections.get(student_id, "")
+        if not section_text.strip():
+            results[student_id] = ExtractionResult(
+                target_schema_id="student_lens",
+                fields=[],
+                unresolved_questions=[
+                    f"No content found for {display_name} in this document."
+                ],
+                source_files=[],
+                chunks_used=[],
+            )
+            continue
+
+        # Build chunks from this student's section only
+        relevant_chunks = _text_to_chunks(section_text)
+        if not relevant_chunks:
+            relevant_chunks = _find_student_chunks(chunks, display_name, text)
+        if not relevant_chunks:
+            relevant_chunks = chunks
 
         all_fields: list[ExtractedField] = []
         unresolved: list[str] = []
@@ -303,7 +585,7 @@ async def extract_for_lens_update(
                 red_detected = True
                 continue
 
-            # Heuristic extractors (no LLM)
+            # Heuristic extractors (no LLM) — fast, high confidence
             all_fields.extend(_extract_cefr(chunk_text))
             all_fields.extend(_extract_grade_scale(chunk_text))
             all_fields.extend(_extract_learner_profile(chunk_text))
@@ -316,6 +598,23 @@ async def extract_for_lens_update(
             # Route to ethos traits
             all_fields.extend(_route_to_ethos(chunk_text))
 
+        # STEP 2: LLM sentence-level classification (the core improvement)
+        # This is what previous attempts were missing — read each teacher-written
+        # sentence and route it to the correct lens field.
+        if engine is not None:
+            sentences = _split_into_sentences(section_text)
+            heuristic_paths = {f.field_path for f in all_fields}
+            for sentence in sentences:
+                # Skip sentences already covered by heuristics
+                if any(str(f.value) in sentence for f in all_fields if f.value):
+                    continue
+                # Skip safeguarding content
+                if _is_red_safeguarding(sentence):
+                    red_detected = True
+                    continue
+                llm_fields = await _classify_sentence_to_field(sentence, engine)
+                all_fields.extend(llm_fields)
+
         # Attach chunk IDs to fields
         for field in all_fields:
             if not field.supporting_chunk_ids:
@@ -327,8 +626,8 @@ async def extract_for_lens_update(
                     relevant_chunks[0].chunk_id
                 ] if relevant_chunks else []
 
-        # LLM fallback for ambiguous content (if engine available)
-        if engine is not None and relevant_chunks:
+        # Legacy LLM fallback (if sentence classifier didn't run or found little)
+        if engine is not None and len(all_fields) < 3 and relevant_chunks:
             llm_fields = await _llm_extract_fallback(
                 relevant_chunks, engine, all_fields
             )
@@ -336,6 +635,10 @@ async def extract_for_lens_update(
 
         # Deduplicate fields (keep highest confidence per field_path)
         all_fields = _deduplicate_fields(all_fields)
+
+        # STEP 3: Synthesis repass — condense duplicate entries per field
+        if engine is not None and len(all_fields) > 3:
+            all_fields = await _run_synthesis_repass(all_fields, engine)
 
         # Safety: ensure trauma_flag is NEVER auto-verified
         for field in all_fields:
@@ -356,6 +659,58 @@ async def extract_for_lens_update(
         )
 
     return results
+
+
+async def _run_synthesis_repass(
+    fields: list[ExtractedField],
+    engine: Any,
+) -> list[ExtractedField]:
+    """Group fields by category and synthesize entries with duplicates."""
+    from collections import defaultdict
+
+    # Group values by a normalized field category
+    groups: dict[str, list[tuple[int, ExtractedField]]] = defaultdict(list)
+    for i, field in enumerate(fields):
+        # Extract the category from field_path
+        # e.g. "support_profile.categories.learning_and_cognition.evidence" → "learning_and_cognition"
+        parts = field.field_path.split(".")
+        category = None
+        for part in parts:
+            if part in _LENS_FIELD_IDS:
+                category = part
+                break
+        if category is None:
+            category = field.field_path  # Use full path as key
+        groups[category].append((i, field))
+
+    synthesized: list[ExtractedField] = []
+    for category, indexed_fields in groups.items():
+        if len(indexed_fields) <= 1:
+            # No synthesis needed
+            synthesized.extend(f for _, f in indexed_fields)
+            continue
+
+        entries = [str(f.value) for _, f in indexed_fields if f.value]
+        condensed = await _synthesize_field_entries(category, entries, engine)
+
+        if condensed:
+            # Use the first field as template, replace value with synthesis
+            template = indexed_fields[0][1]
+            synthesized.append(ExtractedField(
+                field_path=template.field_path,
+                value=condensed,
+                confidence=max(f.confidence for _, f in indexed_fields),
+                supporting_chunk_ids=[
+                    cid for _, f in indexed_fields
+                    for cid in f.supporting_chunk_ids
+                ],
+                status="needs_confirmation",
+            ))
+        else:
+            # Synthesis failed — keep originals
+            synthesized.extend(f for _, f in indexed_fields)
+
+    return synthesized
 
 
 def _text_to_chunks(text: str) -> list[SourceChunk]:
