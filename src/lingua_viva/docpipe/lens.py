@@ -9,6 +9,7 @@ from typing import Any
 
 from . import vault
 from .contracts import ExtractionRecord, LensRecord, ObservationRecord
+from .identity import normalize_name
 
 
 PROFILE_FIELDS = (
@@ -225,12 +226,25 @@ def _empty_lens(student_id: str, display_name: str) -> dict[str, Any]:
     }
 
 
+def _name_forms(student_name: str) -> set[str]:
+    """Normalized spellings of a name in both orders ("chang abigail" and
+    "abigail chang") — the comparison class identity.resolve() uses, applied
+    here so span filtering can't regress to accent/case/order-sensitive
+    matching (the exact bug family fixed in 63d9631/972892c)."""
+    norm = normalize_name(student_name)
+    if not norm:
+        return set()
+    return {norm, " ".join(reversed(norm.split()))}
+
+
 def _span_ids_for_student(data: dict[str, Any], student_id: str, student_name: str) -> set[str]:
     ids: set[str] = set()
+    target_forms = _name_forms(student_name)
     for student in data.get("structure", {}).get("students_detected", []):
         if not isinstance(student, dict):
             continue
-        if student.get("student_id") == student_id or student.get("display_name") == student_name:
+        detected = normalize_name(str(student.get("display_name") or ""))
+        if student.get("student_id") == student_id or (detected and detected in target_forms):
             ids.update(str(span_id) for span_id in student.get("span_ids", []) if span_id)
     return ids
 
@@ -238,7 +252,8 @@ def _span_ids_for_student(data: dict[str, Any], student_id: str, student_name: s
 def _mentions_student(text: object, student_name: str) -> bool:
     if not isinstance(text, str) or not student_name:
         return False
-    return student_name.lower() in text.lower()
+    norm_text = normalize_name(text)
+    return any(form in norm_text for form in _name_forms(student_name))
 
 
 def _fields_for_span(text: str, span: dict | None = None) -> list[str]:

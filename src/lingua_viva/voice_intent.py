@@ -134,40 +134,87 @@ def detect_student_detailed(transcript: str, roster: list[dict]) -> StudentDetec
     guessing here — conversational context is the caller's concern.
     """
     transcript_lower = transcript.lower()
+    # Pass 1: full display name substring, EITHER order — rosters store
+    # surname-first ("Chang Abigail") while teachers speak first-last
+    # ("Abigail Chang"). Same fix family as 63d9631 in the doc pipeline.
+    # Exact strings, no folding (exact paths stay byte-identical).
     for student in roster:
         display_name = str(student.get("display_name") or "")
         if not display_name:
             continue
-        if display_name.lower() in transcript_lower:
+        name_lower = display_name.lower()
+        parts = display_name.split()
+        reversed_lower = (
+            (" ".join(parts[1:]) + " " + parts[0]).lower() if len(parts) >= 2 else ""
+        )
+        if name_lower in transcript_lower or (
+            reversed_lower and reversed_lower in transcript_lower
+        ):
             return StudentDetection(
                 student_id=student.get("student_id"),
                 display_name=display_name,
                 match_quality="exact",
-                matched_token=display_name.lower(),
-            )
-        first_name = display_name.split()[0].lower()
-        if len(first_name) > 2 and re.search(rf"\b{re.escape(first_name)}\b", transcript_lower):
-            return StudentDetection(
-                student_id=student.get("student_id"),
-                display_name=display_name,
-                match_quality="exact",
-                matched_token=first_name,
+                matched_token=name_lower,
             )
 
-    # Fuzzy pass. First-name lookup: short names are exact-only by design.
+    # Pass 2: a single name token as a whole word (>2 chars). Try BOTH the
+    # first and last tokens of the display name — with surname-first rosters
+    # the spoken given name is the LAST token. Two distinct students hitting
+    # (siblings share a surname) -> ambiguous, never a silent pick.
+    token_matches: list[tuple[dict, str]] = []
+    for student in roster:
+        display_name = str(student.get("display_name") or "")
+        if not display_name:
+            continue
+        parts = display_name.split()
+        name_tokens = {parts[0].lower()}
+        if len(parts) >= 2:
+            name_tokens.add(parts[-1].lower())
+        for token in sorted(name_tokens):
+            if len(token) > 2 and re.search(rf"\b{re.escape(token)}\b", transcript_lower):
+                token_matches.append((student, token))
+                break
+    if len(token_matches) == 1:
+        student, token = token_matches[0]
+        return StudentDetection(
+            student_id=student.get("student_id"),
+            display_name=str(student.get("display_name") or ""),
+            match_quality="exact",
+            matched_token=token,
+        )
+    if len(token_matches) > 1:
+        return StudentDetection(
+            match_quality="ambiguous",
+            matched_token=token_matches[0][1],
+            candidates=[
+                {
+                    "student_id": str(s.get("student_id") or ""),
+                    "display_name": str(s.get("display_name") or ""),
+                }
+                for s, _ in token_matches
+            ],
+        )
+
+    # Fuzzy pass. Name-token lookup: short names are exact-only by design.
     # Keys are accent-FOLDED ("josé" -> "jose") because Whisper routinely
     # drops accents on international rosters and difflib treats é != e —
     # folding is confined to this fuzzy pass; exact paths above are
-    # untouched. Two roster names folding to the same key ride the existing
-    # shared-first-name list -> ambiguous, never a silent pick.
+    # untouched. Both first and last display-name tokens are indexed
+    # (surname-first rosters). Two roster names folding to the same key ride
+    # the existing shared-name list -> ambiguous, never a silent pick.
     first_names: dict[str, list[dict]] = {}
     for student in roster:
         display_name = str(student.get("display_name") or "")
         if not display_name:
             continue
-        first_name = _fold_accents(display_name.split()[0].lower())
-        if len(first_name) >= FUZZY_MIN_NAME_LEN:
-            first_names.setdefault(first_name, []).append(student)
+        parts = display_name.split()
+        index_tokens = {parts[0].lower()}
+        if len(parts) >= 2:
+            index_tokens.add(parts[-1].lower())
+        for raw_token in index_tokens:
+            folded = _fold_accents(raw_token)
+            if len(folded) >= FUZZY_MIN_NAME_LEN:
+                first_names.setdefault(folded, []).append(student)
     if not first_names:
         return StudentDetection()
 
@@ -187,7 +234,15 @@ def detect_student_detailed(transcript: str, roster: list[dict]) -> StudentDetec
             cutoff=FUZZY_NAME_CUTOFF)
         if not hits:
             continue
-        matched_students = [s for name in hits for s in first_names[name]]
+        # Dedupe: one student can be indexed under both name tokens.
+        matched_students = []
+        seen_ids: set[str] = set()
+        for name in hits:
+            for s in first_names[name]:
+                sid = str(s.get("student_id") or "")
+                if sid not in seen_ids:
+                    seen_ids.add(sid)
+                    matched_students.append(s)
         if len(matched_students) == 1:
             student = matched_students[0]
             return StudentDetection(

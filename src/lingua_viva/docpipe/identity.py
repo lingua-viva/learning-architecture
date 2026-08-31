@@ -56,6 +56,21 @@ def normalize_name(name: str) -> str:
     return re.sub(r"\s+", " ", text).strip().casefold()
 
 
+def fold_text(text: str) -> str:
+    """Accent-fold + lowercase while PRESERVING length and character
+    positions — unlike normalize_name, which collapses whitespace. Use this
+    when the caller needs indices into the original text (e.g. splitting a
+    document at a name's position). Each input char maps to exactly one
+    output char."""
+    out = []
+    for ch in str(text or ""):
+        decomposed = unicodedata.normalize("NFKD", ch)
+        base = "".join(c for c in decomposed if unicodedata.category(c) != "Mn")
+        base = (base[0] if base else ch).lower()
+        out.append(base[0] if base else ch)
+    return "".join(out)
+
+
 def _levenshtein(s1: str, s2: str) -> int:
     """Pure-Python Levenshtein distance (no external dependency)."""
     if len(s1) < len(s2):

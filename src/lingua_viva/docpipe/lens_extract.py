@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from src.education.document_parser import DocumentParser
+from src.lingua_viva.docpipe.identity import fold_text
 from src.education.ethos import load_ethos, match_traits
 from src.education.observation_capture import suggest_support_categories
 from src.education.student_lens import StudentLensStore
@@ -284,9 +285,11 @@ def _split_into_student_sections(
         student_id = matched_students[0]["student_id"] if matched_students else ""
         return {student_id: text} if student_id else {}
 
-    # Find name positions (case-insensitive, full name match first)
+    # Find name positions (accent-folded + case-insensitive, full name match
+    # first). fold_text preserves character positions, so indices into the
+    # folded text are valid in the original.
     positions: list[tuple[int, str, str]] = []  # (position, student_id, display_name)
-    text_lower = text.lower()
+    text_lower = fold_text(text)
 
     for student in matched_students:
         student_id = student["student_id"]
@@ -295,17 +298,17 @@ def _split_into_student_sections(
             continue
 
         # Try full name first
-        name_lower = display_name.lower()
+        name_lower = fold_text(display_name)
         idx = text_lower.find(name_lower)
         if idx == -1:
             # Try reversed name order (surname first ↔ first last)
             parts = display_name.split()
             if len(parts) >= 2:
                 reversed_name = " ".join(parts[1:]) + " " + parts[0]
-                idx = text_lower.find(reversed_name.lower())
+                idx = text_lower.find(fold_text(reversed_name))
         if idx == -1:
             # Try first name only as last resort
-            first = display_name.split()[0].lower() if display_name else ""
+            first = fold_text(display_name.split()[0]) if display_name else ""
             if first and len(first) > 2:
                 idx = text_lower.find(first)
 
@@ -880,14 +883,14 @@ def _find_student_chunks(
     if not display_name:
         return []
     relevant = []
-    name_lower = display_name.lower()
+    name_lower = fold_text(display_name)
     # Also try reversed name order ("Chang Abigail" ↔ "Abigail Chang")
     parts = display_name.split()
-    reversed_lower = (" ".join(parts[1:]) + " " + parts[0]).lower() if len(parts) >= 2 else ""
-    first_name = parts[0].lower() if parts else ""
-    last_name = parts[-1].lower() if len(parts) >= 2 else ""
+    reversed_lower = fold_text(" ".join(parts[1:]) + " " + parts[0]) if len(parts) >= 2 else ""
+    first_name = fold_text(parts[0]) if parts else ""
+    last_name = fold_text(parts[-1]) if len(parts) >= 2 else ""
     for chunk in chunks:
-        chunk_lower = chunk.text.lower()
+        chunk_lower = fold_text(chunk.text)
         if (name_lower in chunk_lower
             or (reversed_lower and reversed_lower in chunk_lower)
             or (first_name and len(first_name) > 2 and re.search(
