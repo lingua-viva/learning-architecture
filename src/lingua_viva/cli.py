@@ -563,6 +563,57 @@ def _improve(args: argparse.Namespace) -> int:
     return 1 if report["verdict"] in {"BLOCKED", "NOT READY"} else 0
 
 
+def _fleet(args: argparse.Namespace) -> int:
+    from src.lingua_viva import fleet_query as fq
+
+    if args.fleet_command == "questions":
+        entries = [
+            {"id": q["id"], "question": q["q"], "query": q["query"], "params": q["params"]}
+            for q in fq.QUESTION_MAP
+        ]
+        if args.json:
+            _print_json(entries)
+        else:
+            for q in entries:
+                print(f"{q['id']:>4}  [{q['query']}]  {q['question']}")
+        return 0
+
+    fleet = fq.load_fleet(Path(args.config) if args.config else None)
+    if args.fleet_command == "ask":
+        overrides = {
+            key: value
+            for key, value in (
+                ("term", args.term),
+                ("student", args.student),
+                ("source_id", args.source_id),
+                ("days", args.days),
+                ("min_categories", args.min_categories),
+                ("low_confidence", args.low_confidence),
+            )
+            if value is not None
+        }
+        result = fq.run_question(fleet, args.question_id, names=args.names, **overrides)
+    else:
+        params: dict[str, object] = {}
+        if getattr(args, "term", None):
+            params["term"] = args.term
+        if getattr(args, "student", None):
+            params["student"] = args.student
+        if getattr(args, "source_id", None):
+            params["source_id"] = args.source_id
+        if getattr(args, "days", None) is not None and args.fleet_command == "staleness":
+            params["days"] = args.days
+        if getattr(args, "min_categories", None) is not None:
+            params["min_categories"] = args.min_categories
+        result = fq.run_query(fleet, args.fleet_command, names=args.names, **params)
+
+    if args.json:
+        _print_json(result)
+    else:
+        print(fq.format_result(result))
+    return fq.exit_code(result)
+
+
 def _closing(args: argparse.Namespace) -> int:
     from src.lingua_viva.closing import format_report, run_closing
 
@@ -707,6 +758,62 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run one closing check; repeat for multiple checks",
     )
 
+    fleet = sub.add_parser(
+        "fleet",
+        help="Administrator queries across student lens vaults (deterministic, no LLM). Exit 2 = NOT-ENOUGH-DATA.",
+    )
+    fleet_sub = fleet.add_subparsers(dest="fleet_command", required=True)
+
+    def _fleet_common(p: argparse.ArgumentParser) -> None:
+        p.add_argument("--json", action="store_true", help="Machine-readable output")
+        p.add_argument(
+            "--names",
+            action="store_true",
+            help="Show display names instead of ARON codes (admin eyes only)",
+        )
+        p.add_argument("--config", help="Fleet config path (default: $LV_FLEET_CONFIG or <lv_home>/fleet.json)")
+
+    for name, help_text in (
+        ("census", "Student/lens counts per school and country, empty lenses, unreadable files"),
+        ("coverage", "Profile-field coverage percentages per school"),
+        ("gap", "Students with documented needs but no strategies trialed; strengths/needs imbalance"),
+        ("strategies", "Fleet-wide ranking of trialed strategies"),
+        ("integrity", "Evidence grounding: document vs observation, confidence, sources, teachers"),
+        ("duplicates", "Near-duplicate student names within each school"),
+        ("hygiene", "Identity-queue and vault hygiene per school"),
+    ):
+        _fleet_common(fleet_sub.add_parser(name, help=help_text))
+
+    fneeds = fleet_sub.add_parser("needs", help="Documented needs per support category")
+    _fleet_common(fneeds)
+    fneeds.add_argument("--min-categories", type=int, default=None, help="Only students with evidence in N+ categories")
+
+    fsearch = fleet_sub.add_parser("search", help="Accent-folded term search over lens values, with citations")
+    _fleet_common(fsearch)
+    fsearch.add_argument("term", help="Term to search for (accent-insensitive)")
+
+    fstale = fleet_sub.add_parser("staleness", help="Lenses not updated within a window; recent arrivals")
+    _fleet_common(fstale)
+    fstale.add_argument("--days", type=int, default=60)
+
+    fdossier = fleet_sub.add_parser("dossier", help="Full evidence dossier for one student")
+    _fleet_common(fdossier)
+    fdossier.add_argument("student", help="Student id, ARON code, or display name")
+    fdossier.add_argument("--source-id", default="", help="Restrict to evidence from one source document")
+
+    fquestions = fleet_sub.add_parser("questions", help="List the 30 canned administrator questions")
+    _fleet_common(fquestions)
+
+    fask = fleet_sub.add_parser("ask", help="Run a canned question by id (Q1..Q30)")
+    _fleet_common(fask)
+    fask.add_argument("question_id", help="Question id, e.g. Q8")
+    fask.add_argument("--term", help="Override search term")
+    fask.add_argument("--student", help="Override dossier student")
+    fask.add_argument("--source-id", help="Override dossier source id")
+    fask.add_argument("--days", type=int, help="Override staleness window")
+    fask.add_argument("--min-categories", type=int, help="Override needs threshold")
+    fask.add_argument("--low-confidence", type=float, help="Override low-confidence threshold")
+
     return parser
 
 
@@ -747,6 +854,8 @@ def main(argv: list[str] | None = None) -> int:
         return _improve(args)
     if args.command == "closing":
         return _closing(args)
+    if args.command == "fleet":
+        return _fleet(args)
     return 1
 
 
