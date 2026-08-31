@@ -45,12 +45,70 @@ def _now_z() -> str:
 
 
 def normalize_name(name: str) -> str:
-    """One normal form for spelling comparison: NFKC, casefold, nickname
-    parentheses dropped ("Anna (Annie) Villa" == "Anna Villa"), whitespace
-    collapsed. Never used to REWRITE a display name — only to compare."""
-    text = unicodedata.normalize("NFKC", str(name or ""))
+    """One normal form for spelling comparison: NFKD + strip accents,
+    casefold, nickname parentheses dropped ("Anna (Annie) Villa" ==
+    "Anna Villa"), whitespace collapsed. Never used to REWRITE a display
+    name — only to compare."""
+    text = unicodedata.normalize("NFKD", str(name or ""))
+    # Strip combining marks (accents): è→e, ë→e, à→a, ù→u
+    text = "".join(c for c in text if unicodedata.category(c) != "Mn")
     text = re.sub(r"\([^)]*\)", " ", text)
     return re.sub(r"\s+", " ", text).strip().casefold()
+
+
+def _levenshtein(s1: str, s2: str) -> int:
+    """Pure-Python Levenshtein distance (no external dependency)."""
+    if len(s1) < len(s2):
+        return _levenshtein(s2, s1)
+    if len(s2) == 0:
+        return len(s1)
+    prev = list(range(len(s2) + 1))
+    for i, c1 in enumerate(s1):
+        curr = [i + 1]
+        for j, c2 in enumerate(s2):
+            curr.append(min(
+                prev[j + 1] + 1,
+                curr[j] + 1,
+                prev[j] + (c1 != c2),
+            ))
+        prev = curr
+    return prev[-1]
+
+
+# Common nickname → canonical name mappings for school context
+_NICKNAME_MAP: dict[str, list[str]] = {
+    "abby": ["abigail"],
+    "abi": ["abigail"],
+    "gail": ["abigail"],
+    "alex": ["alexander", "alexandra", "alessandra", "alessandro"],
+    "andy": ["andrew", "andrea"],
+    "ben": ["benjamin"],
+    "charlie": ["charles", "charlotte"],
+    "chris": ["christopher", "christine", "cristina"],
+    "dan": ["daniel", "daniele"],
+    "dave": ["david", "davide"],
+    "eli": ["elijah", "eliana", "elisabetta"],
+    "em": ["emily", "emma", "emilia"],
+    "frankie": ["francesco", "francesca", "frank"],
+    "gigi": ["luigi", "luisa"],
+    "jake": ["jacob"],
+    "jenny": ["jennifer", "ginevra"],
+    "joe": ["joseph", "giuseppe"],
+    "kate": ["katherine", "caterina"],
+    "leo": ["leonardo", "leon"],
+    "liz": ["elizabeth", "elisabetta"],
+    "matt": ["matthew", "matteo"],
+    "max": ["maximilian", "massimo", "massimiliano"],
+    "mike": ["michael", "michele"],
+    "nat": ["natalie", "natalia"],
+    "nick": ["nicholas", "nicola", "nicolò"],
+    "sam": ["samuel", "samantha"],
+    "seb": ["sebastian", "sebastiano"],
+    "tom": ["thomas", "tommaso"],
+    "tony": ["anthony", "antonio"],
+    "vic": ["victor", "vittoria", "vittorio"],
+    "will": ["william"],
+}
 
 
 def _name_tokens(name: str) -> list[str]:
@@ -74,8 +132,14 @@ def _compatible(detected_tokens: list[str], roster_tokens: list[str]) -> bool:
     and — one initial resolvable — "Marco B-R" ~ "Marco Bianchi")."""
     if not detected_tokens or not roster_tokens:
         return False
+    # First token must match exactly, OR be an abbreviation whose initial
+    # starts the roster's first token (handles "S." matching "Scala")
     if detected_tokens[0] != roster_tokens[0]:
-        return False
+        first_initials = _initials(detected_tokens[0])
+        if not first_initials or not any(
+            roster_tokens[0].startswith(initial) for initial in first_initials
+        ):
+            return False
     rest_roster = roster_tokens[1:]
     rest_detected = detected_tokens[1:]
     if not rest_detected or not rest_roster:
@@ -271,18 +335,91 @@ def resolve(
     # Also try reversed name order (handles "Abigail Chang" vs "Chang Abigail")
     reversed_spelling = " ".join(reversed(spelling.split()))
     reversed_tokens = list(reversed(detected_tokens))
+
+    # Expand nicknames: "Abby" → also try "Abigail"
+    expanded_first_names = set()
+    if detected_tokens:
+        first = detected_tokens[0]
+        expanded_first_names.add(first)
+        if first in _NICKNAME_MAP:
+            expanded_first_names.update(_NICKNAME_MAP[first])
+        # Reverse lookup: if first IS a canonical name, find its nicknames
+        for nick, canonicals in _NICKNAME_MAP.items():
+            if first in canonicals:
+                expanded_first_names.add(nick)
+
     candidates: list[dict[str, str]] = []
+    levenshtein_candidates: list[dict[str, str]] = []
+
     for entry in roster:
         roster_name = str(entry.get("display_name") or "")
         student_id = str(entry.get("student_id") or "")
         if not roster_name or not student_id:
             continue
         norm_roster = normalize_name(roster_name)
+        roster_tokens = _name_tokens(roster_name)
+
+        # Tier 1: Exact normalized match (both orders)
         if norm_roster == spelling or norm_roster == reversed_spelling:
             return {"status": "exact", "student_id": student_id}
-        roster_tokens = _name_tokens(roster_name)
+
+        # Tier 2: Token-compatible match (abbreviation-aware)
         if _compatible(detected_tokens, roster_tokens) or _compatible(reversed_tokens, roster_tokens):
             candidates.append({"student_id": student_id, "display_name": roster_name})
+            continue
+
+        # Tier 3: First-name-only match (single token input)
+        if len(detected_tokens) == 1 and roster_tokens:
+            roster_first = roster_tokens[0] if len(roster_tokens) == 1 else roster_tokens[-1]
+            roster_all = set(roster_tokens)
+            if detected_tokens[0] in roster_all:
+                candidates.append({"student_id": student_id, "display_name": roster_name})
+                continue
+            # Check nickname expansion
+            if expanded_first_names & roster_all:
+                candidates.append({"student_id": student_id, "display_name": roster_name})
+                continue
+
+        # Tier 4: Nickname match with surname (e.g. "Abby Chang" → "Chang Abigail")
+        if len(detected_tokens) >= 2 and roster_tokens:
+            det_surname_tokens = detected_tokens[1:]
+            roster_surname_tokens = roster_tokens[:-1] if len(roster_tokens) > 1 else []
+            roster_first_token = roster_tokens[-1] if len(roster_tokens) > 1 else roster_tokens[0]
+            # Check if detected first name (or its expansion) matches roster first name
+            if (expanded_first_names & {roster_first_token}
+                    and (set(det_surname_tokens) & set(roster_surname_tokens)
+                         or _levenshtein(" ".join(det_surname_tokens), " ".join(roster_surname_tokens)) <= 1)):
+                candidates.append({"student_id": student_id, "display_name": roster_name})
+                continue
+            # Also try reversed detected tokens for nickname matching
+            rev_first = reversed_tokens[0] if reversed_tokens else ""
+            rev_expanded = {rev_first}
+            if rev_first in _NICKNAME_MAP:
+                rev_expanded.update(_NICKNAME_MAP[rev_first])
+            for nick, canonicals in _NICKNAME_MAP.items():
+                if rev_first in canonicals:
+                    rev_expanded.add(nick)
+            if rev_expanded & {roster_first_token}:
+                candidates.append({"student_id": student_id, "display_name": roster_name})
+                continue
+
+        # Tier 5: Levenshtein fuzzy match (catches typos, accents)
+        # Only for 2+ token names to avoid false positives
+        if len(detected_tokens) >= 2:
+            dist_fwd = _levenshtein(spelling, norm_roster)
+            dist_rev = _levenshtein(reversed_spelling, norm_roster)
+            min_dist = min(dist_fwd, dist_rev)
+            # Threshold: max 2 edits for names ≤ 15 chars, max 3 for longer
+            threshold = 2 if len(spelling) <= 15 else 3
+            if min_dist <= threshold and min_dist > 0:
+                levenshtein_candidates.append({
+                    "student_id": student_id,
+                    "display_name": roster_name,
+                })
+
+    # Return results by confidence tier
     if candidates:
         return {"status": "queue", "candidates": candidates}
+    if levenshtein_candidates:
+        return {"status": "queue", "candidates": levenshtein_candidates}
     return {"status": "new"}

@@ -350,6 +350,115 @@ def _split_into_sentences(text: str) -> list[str]:
     return sentences
 
 
+# ---------------------------------------------------------------------------
+# Keyword pre-classifier — deterministic, fast, handles clear patterns
+# ---------------------------------------------------------------------------
+
+# Stop words to strip before LLM classification — removes generic filler,
+# preserves domain-specific content that signals the right field.
+_STOP_WORDS = frozenset({
+    "the", "a", "an", "is", "are", "was", "were", "has", "have", "had",
+    "be", "been", "being", "do", "does", "did", "will", "would", "could",
+    "should", "may", "might", "can", "shall", "to", "of", "in", "for",
+    "on", "with", "at", "by", "from", "as", "into", "through", "during",
+    "before", "after", "above", "below", "between", "under", "again",
+    "further", "then", "once", "here", "there", "when", "where", "why",
+    "how", "all", "each", "every", "both", "few", "more", "most", "other",
+    "some", "such", "no", "nor", "not", "only", "own", "same", "so",
+    "than", "too", "very", "just", "also", "and", "but", "or", "if",
+    "this", "that", "these", "those", "it", "its", "he", "she", "they",
+    "his", "her", "their", "him", "them", "we", "our", "us", "you",
+    "your", "i", "me", "my", "who", "whom", "which", "what",
+    # School boilerplate
+    "student", "child", "learner", "semester", "term", "quarter", "year",
+    "grade", "class", "teacher", "school",
+})
+
+
+def _strip_stop_words(text: str) -> str:
+    """Remove stop words to amplify domain-specific signal for the LLM.
+
+    Preserves the original text structure enough that the LLM can still
+    read it, but removes filler that dilutes classification signal.
+    """
+    words = text.split()
+    filtered = [w for w in words if w.lower().rstrip(".,;:!?") not in _STOP_WORDS]
+    result = " ".join(filtered)
+    return result if len(result) > 10 else text  # Fall back if too much was stripped
+
+
+# Each rule: (keywords_any, keywords_not, field_id)
+# Match if ANY keyword present AND NO exclusion keyword present.
+_KEYWORD_RULES: list[tuple[list[str], list[str], str]] = [
+    # communication_and_language — reading, writing, speaking, listening, vocabulary, spelling
+    (["reading comprehension", "written expression", "reads aloud", "spelling",
+      "vocabulary", "context clues", "decode", "decoding", "phonics",
+      "sentence structure", "writing skill", "oral presentation",
+      "listening comprehension", "fluency", "intonation", "grammar",
+      "sentence variety", "paragraphs", "word choice"],
+     [], "communication_and_language"),
+    # strategies_trialed — explicit interventions/tools/accommodations IN USE
+    (["receives support", "referral", "intervention plan",
+      "occupational therapy", "speech therapy", "behavior chart",
+      "positive reinforcement", "small-group support", "has been implemented",
+      "we have implemented", "noise-canceling", "fidget", "weighted",
+      "we have tried", "currently using", "accommodation"],
+     # Exclude: "benefits from" alone is too greedy — a learning preference
+     # is not a trialed strategy unless it names a specific tool/service
+     [], "strategies_trialed"),
+    # learning_and_cognition — math, number sense, problem-solving, analytical
+    (["number sense", "problem-solving", "mathematical", "math skills",
+      "analytical thinking", "conceptual understanding", "manipulatives",
+      "multi-digit", "multiplication", "division", "fractions", "algebra",
+      "geometry"],
+     [], "learning_and_cognition"),
+    # attendance_and_engagement — attendance, absent, present, engagement, motivation
+    (["attendance", "% present", "% absent", "days absent",
+      "absent this", "present this", "strong motivation",
+      "motivation and enthusiasm"],
+     [], "attendance_and_engagement"),
+    # personal_strengths — character traits, leadership, curiosity
+    (["natural leader", "leadership", "curiosity",
+      "persistence", "does not give up", "sense of humor", "brightens",
+      "creative spirit", "energy and enthusiasm", "kind and empathetic",
+      "empathetic classmate", "kind classmate"],
+     # "enthusiasm" alone is too broad — only match when paired with character signals
+     [], "personal_strengths"),
+    # physical_sensory_needs — motor, sensory, handwriting
+    (["fine motor", "gross motor", "handwriting", "letter formation",
+      "sensory processing", "sensory break", "motor coordination",
+      "motor skills"],
+     [], "physical_sensory_needs"),
+    # executive_functioning — organization, planning, focus, schedules
+    (["task organization", "time management",
+      "multi-step", "loses track", "stay on track",
+      "working memory", "self-regulation during transitions"],
+     # Exclude: "visual schedule" and "step-by-step" are strategies, not the
+     # student's executive functioning itself
+     [], "executive_functioning"),
+    # strategies_trialed — "visual schedule(s)" and "step-by-step" are tools
+    (["visual schedule", "visual schedules", "step-by-step"],
+     [], "strategies_trialed"),
+]
+
+
+def _keyword_classify(sentence: str) -> str | None:
+    """Fast deterministic classification for clear patterns.
+
+    Returns field_id if a keyword rule matches, None if ambiguous (→ send to LLM).
+    """
+    lower = sentence.lower()
+    for keywords_any, keywords_not, field_id in _KEYWORD_RULES:
+        if any(kw in lower for kw in keywords_any):
+            if not any(kw in lower for kw in keywords_not):
+                return field_id
+    return None
+
+
+# ---------------------------------------------------------------------------
+# LLM Sentence Classifier — handles ambiguous cases the keywords can't
+# ---------------------------------------------------------------------------
+
 _CLASSIFY_SYSTEM_PROMPT = """You classify sentences from student report cards into profile categories.
 
 Given a sentence about a student, respond with ONLY a JSON object:
@@ -359,11 +468,23 @@ Valid FIELD values (pick exactly one, or "none"):
 """ + "\n".join(f'- {fid}: {desc}' for fid, desc in _FIELD_DESCRIPTIONS.items()) + """
 - none: sentence has no relevant student assessment content (headers, dates, boilerplate)
 
+Examples:
+- "Strong number sense and problem-solving skills." → {{"field_id": "learning_and_cognition", "phrase": "Strong number sense and problem-solving skills"}}
+- "Consistently performs above grade level in reading." → {{"field_id": "academic_strengths", "phrase": "performs above grade level in reading"}}
+- "Benefits from a visual schedule posted on the desk." → {{"field_id": "strategies_trialed", "phrase": "Benefits from a visual schedule"}}
+- "Kind and empathetic classmate." → {{"field_id": "personal_strengths", "phrase": "Kind and empathetic"}}
+- "Self-regulation during transitions has improved." → {{"field_id": "executive_functioning", "phrase": "Self-regulation during transitions has improved"}}
+- "Shows persistence and does not give up easily." → {{"field_id": "personal_strengths", "phrase": "persistence and does not give up easily"}}
+
 Rules:
 1. The "phrase" MUST be exact words from the input sentence — never invent text
 2. Keep the phrase short (5-15 words) — the core observation, not the whole sentence
 3. Pick the single BEST matching field — do not list multiple
 4. If genuinely uncertain, use "none"
+5. "strategies_trialed" = interventions, tools, accommodations the school IS USING for the student
+6. "learning_and_cognition" = HOW the student thinks/learns, including math and science skills
+7. "academic_strengths" = subjects where the student EXCELS (above average, exemplary)
+8. "personal_strengths" = character traits, personality, leadership, kindness, persistence
 """
 
 
@@ -371,11 +492,30 @@ async def _classify_sentence_to_field(
     sentence: str,
     engine: Any,
 ) -> list[ExtractedField]:
-    """Classify one sentence into a lens field using local LLM.
+    """Classify one sentence into a lens field.
 
+    Uses keyword pre-classifier first (fast, deterministic).
+    Falls back to local LLM for ambiguous cases.
     Returns list of ExtractedField (usually 0 or 1 items).
-    Phrase must be verified as a substring of the input sentence.
     """
+    # Try keyword pre-classifier first
+    keyword_result = _keyword_classify(sentence)
+    if keyword_result:
+        field_path = f"support_profile.categories.{keyword_result}.evidence"
+        if keyword_result in ("academic_strengths", "personal_strengths"):
+            field_path = keyword_result
+        return [ExtractedField(
+            field_path=field_path,
+            value=sentence[:80].strip(),
+            confidence=0.85,
+            supporting_chunk_ids=[],
+            status="needs_confirmation",
+        )]
+
+    # Strip stop words before sending to LLM — keeps domain-specific signal
+    sentence = _strip_stop_words(sentence)
+
+    # Fall back to LLM
     from src.lingua_viva.reasoning import ReasoningEngine
 
     if not isinstance(engine, ReasoningEngine):
