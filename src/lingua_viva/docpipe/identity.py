@@ -268,15 +268,20 @@ def resolve(
     if spelling in forms:
         return {"status": "exact", "student_id": forms[spelling]}
     detected_tokens = _name_tokens(display_name)
+    # Also try reversed name order (handles "Abigail Chang" vs "Chang Abigail")
+    reversed_spelling = " ".join(reversed(spelling.split()))
+    reversed_tokens = list(reversed(detected_tokens))
     candidates: list[dict[str, str]] = []
     for entry in roster:
         roster_name = str(entry.get("display_name") or "")
         student_id = str(entry.get("student_id") or "")
         if not roster_name or not student_id:
             continue
-        if normalize_name(roster_name) == spelling:
+        norm_roster = normalize_name(roster_name)
+        if norm_roster == spelling or norm_roster == reversed_spelling:
             return {"status": "exact", "student_id": student_id}
-        if _compatible(detected_tokens, _name_tokens(roster_name)):
+        roster_tokens = _name_tokens(roster_name)
+        if _compatible(detected_tokens, roster_tokens) or _compatible(reversed_tokens, roster_tokens):
             candidates.append({"student_id": student_id, "display_name": roster_name})
     if candidates:
         return {"status": "queue", "candidates": candidates}

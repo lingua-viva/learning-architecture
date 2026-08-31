@@ -137,8 +137,11 @@ def match_document_to_students(
             display_name = entry.get("display_name", "")
             if not display_name:
                 continue
-            # Check if full name appears in document
-            if display_name in text:
+            # Also try reversed name order ("Chang Abigail" ↔ "Abigail Chang")
+            parts = display_name.split()
+            reversed_name = " ".join(parts[1:]) + " " + parts[0] if len(parts) >= 2 else ""
+            # Check if full name or reversed name appears in document
+            if display_name in text or (reversed_name and reversed_name in text):
                 matches.append({
                     "student_id": entry["student_id"],
                     "display_name": display_name,
@@ -147,9 +150,11 @@ def match_document_to_students(
                 })
                 seen_ids.add(entry["student_id"])
             else:
-                # Check normalized match
+                # Check normalized match (both orders)
                 norm = normalize_name(display_name)
-                if norm and norm in normalize_name(text):
+                norm_rev = normalize_name(reversed_name) if reversed_name else ""
+                norm_text = normalize_name(text)
+                if norm and (norm in norm_text or (norm_rev and norm_rev in norm_text)):
                     matches.append({
                         "student_id": entry["student_id"],
                         "display_name": display_name,

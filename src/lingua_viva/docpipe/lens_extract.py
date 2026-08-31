@@ -741,12 +741,19 @@ def _find_student_chunks(
         return []
     relevant = []
     name_lower = display_name.lower()
-    first_name = display_name.split()[0].lower() if display_name else ""
+    # Also try reversed name order ("Chang Abigail" ↔ "Abigail Chang")
+    parts = display_name.split()
+    reversed_lower = (" ".join(parts[1:]) + " " + parts[0]).lower() if len(parts) >= 2 else ""
+    first_name = parts[0].lower() if parts else ""
+    last_name = parts[-1].lower() if len(parts) >= 2 else ""
     for chunk in chunks:
         chunk_lower = chunk.text.lower()
-        if name_lower in chunk_lower or (first_name and re.search(
-            rf"\b{re.escape(first_name)}\b", chunk_lower
-        )):
+        if (name_lower in chunk_lower
+            or (reversed_lower and reversed_lower in chunk_lower)
+            or (first_name and len(first_name) > 2 and re.search(
+                rf"\b{re.escape(first_name)}\b", chunk_lower))
+            or (last_name and len(last_name) > 2 and re.search(
+                rf"\b{re.escape(last_name)}\b", chunk_lower))):
             relevant.append(chunk)
     return relevant
 
