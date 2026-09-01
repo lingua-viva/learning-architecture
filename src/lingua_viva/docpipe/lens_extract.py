@@ -398,7 +398,12 @@ _KEYWORD_RULES: list[tuple[list[str], list[str], str]] = [
       "vocabulary", "context clues", "decode", "decoding", "phonics",
       "sentence structure", "writing skill", "oral presentation",
       "listening comprehension", "fluency", "intonation", "grammar",
-      "sentence variety", "paragraphs", "word choice"],
+      "sentence variety", "paragraphs", "word choice",
+      # Italian
+      "comprensione del testo", "produzione scritta", "lettura", "scrittura",
+      "vocabolario", "espressione orale", "espressione scritta",
+      "comprensione orale", "ortografia", "grammatica", "frasi complete",
+      "paragrafi", "ascolto"],
      [], "communication_and_language"),
     # strategies_trialed — explicit interventions/tools/accommodations IN USE
     (["receives support", "referral", "intervention plan",
@@ -413,19 +418,27 @@ _KEYWORD_RULES: list[tuple[list[str], list[str], str]] = [
     (["number sense", "problem-solving", "mathematical", "math skills",
       "analytical thinking", "conceptual understanding", "manipulatives",
       "multi-digit", "multiplication", "division", "fractions", "algebra",
-      "geometry"],
+      "geometry",
+      # Italian
+      "problem-solving", "senso del numero", "moltiplicazione", "divisione",
+      "frazioni", "matematica", "ragionamento", "scienze", "capacita di analisi"],
      [], "learning_and_cognition"),
     # attendance_and_engagement — attendance, absent, present, engagement, motivation
     (["attendance", "% present", "% absent", "days absent",
       "absent this", "present this", "strong motivation",
-      "motivation and enthusiasm"],
+      "motivation and enthusiasm",
+      # Italian
+      "frequenza", "presente il", "assente", "partecipazione",
+      "% dei giorni"],
      [], "attendance_and_engagement"),
     # personal_strengths — character traits, leadership, curiosity
     (["natural leader", "leadership", "curiosity",
       "persistence", "does not give up", "sense of humor", "brightens",
       "creative spirit", "energy and enthusiasm", "kind and empathetic",
-      "empathetic classmate", "kind classmate"],
-     # "enthusiasm" alone is too broad — only match when paired with character signals
+      "empathetic classmate", "kind classmate",
+      # Italian
+      "leader naturale", "curiosita", "entusiasmo", "creativita",
+      "perseveranza", "spirito", "ispira"],
      [], "personal_strengths"),
     # physical_sensory_needs — motor, sensory, handwriting
     (["fine motor", "gross motor", "handwriting", "letter formation",
@@ -435,7 +448,10 @@ _KEYWORD_RULES: list[tuple[list[str], list[str], str]] = [
     # executive_functioning — organization, planning, focus, schedules
     (["task organization", "time management",
       "multi-step", "loses track", "stay on track",
-      "working memory", "self-regulation during transitions"],
+      "working memory", "self-regulation during transitions",
+      # Italian
+      "organizzazione", "gestione del tempo", "autonomia",
+      "pianificazione", "concentrazione"],
      # Exclude: "visual schedule" and "step-by-step" are strategies, not the
      # student's executive functioning itself
      [], "executive_functioning"),
@@ -489,6 +505,106 @@ Rules:
 7. "academic_strengths" = subjects where the student EXCELS (above average, exemplary)
 8. "personal_strengths" = character traits, personality, leadership, kindness, persistence
 """
+
+
+_BATCH_CLASSIFY_PROMPT = """Classify each numbered sentence from a student report card.
+
+For each sentence, decide which category it belongs to:
+- learning_and_cognition: academic performance, math, science, learning style
+- communication_and_language: reading, writing, speaking, listening, vocabulary
+- executive_functioning: organization, focus, planning, task completion
+- social_skills: collaboration, peer interaction, teamwork
+- emotional_regulation: emotional awareness, coping, resilience
+- physical_sensory_needs: motor skills, sensory processing
+- attendance_and_engagement: participation, attendance
+- strategies_trialed: interventions, accommodations, support tools
+- academic_strengths: subjects where student excels
+- personal_strengths: character traits, leadership, curiosity
+- none: boilerplate, headers, dates — no student content
+
+Respond with ONLY a JSON array. Each item: {"n": NUMBER, "f": "FIELD_ID", "p": "key phrase from the sentence"}
+If a sentence is "none", omit it from the array.
+Keep phrases short (5-15 words). Phrases must be exact words from the sentence."""
+
+
+async def _batch_classify_sentences(
+    sentences: list[str],
+    engine: Any,
+) -> list[ExtractedField]:
+    """Classify all sentences in ONE LLM call (not one per sentence).
+
+    This is the fix for the timeout bug: a 30-sentence report card now
+    takes ~10 seconds (one LLM call) instead of ~210 seconds (30 calls).
+    """
+    if not sentences:
+        return []
+
+    from src.lingua_viva.reasoning import ReasoningEngine
+
+    if not isinstance(engine, ReasoningEngine):
+        engine = ReasoningEngine()
+
+    # Build numbered list — cap at 40 sentences to stay within context
+    capped = sentences[:40]
+    numbered = "\n".join(f"{i+1}. {s}" for i, s in enumerate(capped))
+
+    try:
+        result = await engine.reason(
+            numbered,
+            system_prompt=_BATCH_CLASSIFY_PROMPT,
+            model="ollama/qwen3:8b",
+            local_only=True,
+            max_tokens=800,
+        )
+        if result.model_used == "none" or result.error:
+            return []
+
+        content = result.content.strip()
+        content = re.sub(r"^```(json)?|```$", "", content, flags=re.MULTILINE).strip()
+        # Find the JSON array
+        match = re.search(r"\[.*\]", content, flags=re.DOTALL)
+        if not match:
+            return []
+
+        parsed = json.loads(match.group(0))
+        if not isinstance(parsed, list):
+            return []
+
+        fields: list[ExtractedField] = []
+        for item in parsed:
+            if not isinstance(item, dict):
+                continue
+            field_id = str(item.get("f", "none")).strip()
+            phrase = str(item.get("p", "")).strip()
+            idx = int(item.get("n", 0)) - 1  # Convert 1-based to 0-based
+
+            if field_id == "none" or field_id not in _LENS_FIELD_IDS:
+                continue
+            if not phrase:
+                continue
+
+            # Safety: verify phrase is from the source sentence
+            if 0 <= idx < len(capped):
+                source = capped[idx]
+                if phrase.lower() not in source.lower():
+                    phrase = source[:80].strip()
+            else:
+                continue
+
+            field_path = f"support_profile.categories.{field_id}.evidence"
+            if field_id in ("academic_strengths", "personal_strengths"):
+                field_path = field_id
+
+            fields.append(ExtractedField(
+                field_path=field_path,
+                value=phrase,
+                confidence=0.72,
+                supporting_chunk_ids=[],
+                status="needs_confirmation",
+            ))
+        return fields
+    except Exception:
+        return []
 
 
 async def _classify_sentence_to_field(
@@ -744,19 +860,36 @@ async def extract_for_lens_update(
         # STEP 2: LLM sentence-level classification (the core improvement)
         # This is what previous attempts were missing — read each teacher-written
         # sentence and route it to the correct lens field.
-        if engine is not None:
-            sentences = _split_into_sentences(section_text)
-            heuristic_paths = {f.field_path for f in all_fields}
-            for sentence in sentences:
-                # Skip sentences already covered by heuristics
-                if any(str(f.value) in sentence for f in all_fields if f.value):
-                    continue
-                # Skip safeguarding content
-                if _is_red_safeguarding(sentence):
-                    red_detected = True
-                    continue
-                llm_fields = await _classify_sentence_to_field(sentence, engine)
-                all_fields.extend(llm_fields)
+        sentences = _split_into_sentences(section_text)
+
+        # 2a: Keyword pre-classify as many sentences as possible (fast, no LLM)
+        llm_needed: list[str] = []
+        for sentence in sentences:
+            # Skip sentences already covered by heuristics
+            if any(str(f.value) in sentence for f in all_fields if f.value):
+                continue
+            if _is_red_safeguarding(sentence):
+                red_detected = True
+                continue
+            kw_result = _keyword_classify(sentence)
+            if kw_result:
+                field_path = f"support_profile.categories.{kw_result}.evidence"
+                if kw_result in ("academic_strengths", "personal_strengths"):
+                    field_path = kw_result
+                all_fields.append(ExtractedField(
+                    field_path=field_path,
+                    value=sentence[:80].strip(),
+                    confidence=0.85,
+                    supporting_chunk_ids=[],
+                    status="needs_confirmation",
+                ))
+            else:
+                llm_needed.append(sentence)
+
+        # 2b: Batch-classify remaining sentences in ONE LLM call (not one per sentence)
+        if engine is not None and llm_needed:
+            batch_fields = await _batch_classify_sentences(llm_needed, engine)
+            all_fields.extend(batch_fields)
 
         # Attach chunk IDs to fields
         for field in all_fields:
