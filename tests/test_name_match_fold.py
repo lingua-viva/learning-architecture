@@ -176,3 +176,53 @@ def test_voice_siblings_sharing_surname_are_ambiguous_never_silent():
     assert detection.student_id is None
     assert detection.match_quality == "ambiguous"
     assert {c["student_id"] for c in detection.candidates} == {"stu-abigail", "stu-marco"}
+
+
+# ---------------------------------------------------------------------------
+# extract.py — roster detection (same class, 6th surface: BUG-T1.1,
+# Claudia QA v0.2.78). A capitalized header word ending one line ("Note\n")
+# matched the next line's first name as a bigram, got blocklisted, and the
+# already-consumed first name orphaned its surname — dropping the student
+# silently. Two-part fix: bigrams never span line breaks; rejected
+# candidates never consume the following token.
+# ---------------------------------------------------------------------------
+
+
+def _detect_names(text: str) -> list[str]:
+    from src.lingua_viva.docpipe.extract import _build_spans, _detect_students
+
+    return [d["display_name"] for d in _detect_students(_build_spans(text))]
+
+
+def test_roster_first_row_after_header_is_not_dropped():
+    # Claudia's exact fixture: "Note\nLucà Rossi" ate Lucà in v0.2.78.
+    csv_text = (
+        "Nome,Classe,Note\n"
+        "Lucà Rossi,3B,\n"
+        "Noëmi Villa,3B,\n"
+        "Chang Abigail,3B,\n"
+        "Chang Marco,3B,\n"
+        "Bianchi Sofia,3B,\n"
+        "Giuseppe Esposito,3B,\n"
+    )
+    assert _detect_names(csv_text) == [
+        "Lucà Rossi", "Noëmi Villa", "Chang Abigail",
+        "Chang Marco", "Bianchi Sofia", "Giuseppe Esposito",
+    ]
+
+
+def test_bigram_never_spans_line_breaks():
+    # A capitalized word ending a line must not pair with the name below it.
+    assert _detect_names("Progress Report\nLucà Rossi legge bene.") == ["Lucà Rossi"]
+
+
+def test_rejected_candidate_does_not_consume_next_name():
+    # "Note" (blocklisted) + name on the SAME line: rejection must rescan
+    # from the second token, not swallow it.
+    assert _detect_names("Note Lucà Rossi ha completato il tema.") == ["Lucà Rossi"]
+
+
+def test_accepted_pairs_stay_non_overlapping():
+    # Guard against over-detection: an accepted pair still consumes both
+    # tokens — no phantom "Chang Marco" carved from adjacent names.
+    assert _detect_names("Anna Chang Marco Bianchi") == ["Anna Chang", "Marco Bianchi"]

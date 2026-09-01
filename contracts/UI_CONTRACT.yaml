@@ -16,6 +16,11 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v180 (2026-09-01): BUG-T5.2 (Claudia QA v0.2.78) — Observe save student
+#     gate. web.py /api/observe/capture refuses to save when the transcript
+#     names a different student than selected or an ambiguous shared surname
+#     (two Changs); index.html renders a "Which student?" chooser that
+#     re-sends with student_confirmed after an explicit teacher tap.
 #   v179 (2026-08-29): Claudia full audit fixes — language_of_instruction
 #     changed to Italian, observation UUID removed from confirmation message,
 #     file upload shows visible progress badges, source truncation warning
@@ -832,7 +837,7 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 179
+version: 180
 # v122 (2026-08-06): Failure-mode hardening. src/web.py: voice-act observation
 #   dedup guard (same 60s window as observe/capture, prevents network-retry
 #   duplicates). src/education/parent_report.py: personal_context evidence

@@ -3822,6 +3822,54 @@ async def observe_capture(request: Request, payload: dict):
     if not transcript:
         return JSONResponse({"error": "Observation text is required."}, status_code=400)
 
+    # BUG-T5.2 (Claudia QA v0.2.78): a pre-selected student must not silently
+    # absorb an observation whose text names a different student — or a
+    # surname two siblings share ("Chang was very helpful" with two Changs
+    # on the roster). Run the same detection the voice surface uses; on
+    # ambiguity or mismatch save NOTHING and hand the choice back to the
+    # teacher. An explicit teacher confirmation (student_confirmed) proceeds.
+    if not bool(payload.get("student_confirmed", False)):
+        from src.lingua_viva.voice_intent import detect_student_detailed
+
+        def _roster(store):
+            return [
+                {
+                    "student_id": str(lens.get("student_id") or ""),
+                    "display_name": str(lens.get("display_name") or ""),
+                }
+                for lens in store.list_lenses()
+            ]
+
+        roster = await asyncio.to_thread(_with_student_store, _roster)
+        detection = detect_student_detailed(transcript, roster)
+        mismatch = (
+            detection.match_quality == "exact"
+            and detection.student_id
+            and detection.student_id != student_id
+        )
+        if detection.match_quality == "ambiguous" or mismatch:
+            selected = next(
+                (entry for entry in roster if entry["student_id"] == student_id),
+                None,
+            )
+            detected = (
+                {
+                    "student_id": detection.student_id,
+                    "display_name": detection.display_name,
+                }
+                if detection.student_id
+                else None
+            )
+            return {
+                "needs_student_confirmation": True,
+                "reason": "mismatch" if mismatch else "ambiguous",
+                "selected": selected,
+                "detected": detected,
+                "candidates": detection.candidates,
+                "local_only": True,
+                "note": "Nothing was saved. Confirm which student this observation is about.",
+            }
+
     # A4 (Claudia P1-2): template_type is optional. Teachers who know the
     # type can tag it; teachers who don't just save. "general" means
     # "unclassified" — the model can suggest a reclassification later.

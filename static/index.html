@@ -2735,7 +2735,9 @@
       });
       // Observation type is optional — no visual enforcement needed.
       $("obs-template").addEventListener("change", () => {});
-      $("save-observation").addEventListener("click", saveObservation);
+      // BUG-T5.2: wrapped so the click event never lands in saveObservation's
+      // overrides parameter.
+      $("save-observation").addEventListener("click", () => saveObservation());
       state.selectedStudent = $("obs-student").value;
       renderSupportEntries([]);
       await loadLens("obs-lens", false);
@@ -2896,7 +2898,7 @@
       });
     }
 
-    async function saveObservation() {
+    async function saveObservation(overrides = null) {
       const transcript = $("obs-text").value.trim();
       const templateType = $("obs-template").value;
       // F5: same refusal pattern as the observation-type requirement — a
@@ -2931,9 +2933,43 @@
             urgency_flag: $("obs-urgency").checked,
             source_type: "observation",
             support_entries: collectSupportEntries(true),
-            ethos_trait_id: $("obs-ethos-trait")?.value || null
+            ethos_trait_id: $("obs-ethos-trait")?.value || null,
+            ...(overrides || {})
           })
         });
+        // BUG-T5.2 (Claudia QA v0.2.78): the server refused to guess which
+        // student this note is about — either the text names a different
+        // student than the one selected, or a shared surname matches two
+        // siblings. Nothing was saved. Hand the choice back to the teacher;
+        // her explicit tap re-sends with student_confirmed.
+        if (result.needs_student_confirmation) {
+          const selected = result.selected || null;
+          const candidates = (result.candidates && result.candidates.length)
+            ? result.candidates
+            : (result.detected ? [result.detected] : []);
+          const message = result.reason === "mismatch"
+            ? `This note mentions <strong>${escapeHtml(result.detected?.display_name || "another student")}</strong>, but <strong>${escapeHtml(selected?.display_name || "a different student")}</strong> is selected.`
+            : "This note could be about more than one student.";
+          const candidateButtons = candidates
+            .filter(c => c && c.student_id && c.student_id !== (selected ? selected.student_id : ""))
+            .map(c => `<button type="button" class="confirm-student-btn" data-confirm-student="${escapeHtml(c.student_id)}">Save for ${escapeHtml(c.display_name)}</button>`)
+            .join(" ");
+          const keepButton = selected
+            ? `<button type="button" class="confirm-student-btn" data-confirm-student="${escapeHtml(selected.student_id)}">Keep ${escapeHtml(selected.display_name)}</button>`
+            : "";
+          $("obs-result").innerHTML = `<h3>Which student?</h3><div class="source-line"><span class="badge warn">Nothing was saved.</span></div><p>${message}</p><p>${candidateButtons} ${keepButton}</p>`;
+          $("obs-result").querySelectorAll("[data-confirm-student]").forEach(btn => {
+            btn.addEventListener("click", () => {
+              // Set the select directly — NOT via a change event, which
+              // would clear the form (BUG-4 handler) and lose the note.
+              $("obs-student").value = btn.dataset.confirmStudent;
+              state.selectedStudent = btn.dataset.confirmStudent;
+              saveObservation({ student_confirmed: true });
+            });
+          });
+          $("obs-result").scrollIntoView({ behavior: "smooth", block: "nearest" });
+          return;
+        }
         // Safeguarding gate: RED observations are routed to the restricted
         // ledger and never enter the student lens.  The response shape has
         // no "observation" key — show a calm, content-free confirmation.

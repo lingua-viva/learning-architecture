@@ -193,7 +193,7 @@ def test_observation_double_save_surface_lock():
     assert "Already saved." in HTML
     assert "result.duplicate" in HTML
     assert "result.observation && result.observation.duplicate" in HTML
-    save_handler = HTML[HTML.index("async function saveObservation()") : HTML.index("const GROWTH_BADGE")]
+    save_handler = HTML[HTML.index("async function saveObservation(") : HTML.index("const GROWTH_BADGE")]
     duplicate_branch = save_handler.index("Already saved.")
     lens_refresh = save_handler.index('await loadLens("obs-lens", false)')
     assert duplicate_branch < lens_refresh

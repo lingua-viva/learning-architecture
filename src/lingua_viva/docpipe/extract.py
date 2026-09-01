@@ -787,7 +787,12 @@ def _slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", folded.lower()).strip("-")
 
 
-_NAME_BIGRAM = re.compile(r"\b([A-ZÀ-Þ][a-zà-ÿ]+)\s+([A-ZÀ-Þ][a-zà-ÿ]+)\b")
+# Names never span a line break: `[^\S\r\n]+` (horizontal whitespace only)
+# instead of `\s+`. With `\s+`, a capitalized header word ending one line
+# ("...Note\n") matched the first name starting the next line as a bigram
+# ("Note Lucà"), got blocklisted — and the consumed first name orphaned its
+# surname, silently dropping the student (Claudia QA v0.2.78, BUG-T1.1).
+_NAME_BIGRAM = re.compile(r"\b([A-ZÀ-Þ][a-zà-ÿ]+)[^\S\r\n]+([A-ZÀ-Þ][a-zà-ÿ]+)\b")
 
 # STEP 2 (SPEC_LV_UNIFIED_REAL_DATA_FIX_2026-08-19): detect from structure.
 # A student is a value in a column whose header IS a student-name label —
@@ -1276,10 +1281,17 @@ def _detect_students(spans: list[dict[str, Any]]) -> list[dict[str, Any]]:
     order: list[str] = []
     for span in spans:
         text = str(span["text"])
-        for match in _NAME_BIGRAM.finditer(text):
+        pos = 0
+        while (match := _NAME_BIGRAM.search(text, pos)) is not None:
             first, last = match.group(1), match.group(2)
             if first.lower() in _NAME_BLOCKLIST or last.lower() in _NAME_BLOCKLIST:
+                # A rejected candidate must not consume the second token —
+                # it may be the first name of a real student ("Compiti Lucà"
+                # rejected, then "Lucà Rossi" accepted). Same failure class
+                # as the newline fix on _NAME_BIGRAM (BUG-T1.1).
+                pos = match.start(2)
                 continue
+            pos = match.end()
             display_name = f"{first} {last}"
             student_id = f"student-{_slug(display_name)}"
             if student_id not in found:
