@@ -388,6 +388,39 @@ def test_multi_student_document_partitions_correctly():
             f"No fields extracted for {student_id}"
 
 
+def test_multi_student_without_name_positions_refuses_duplication():
+    """If a multi-student match cannot be located in the text, do not copy
+    the full document into every student's section."""
+    from src.lingua_viva.docpipe.lens_extract import (
+        _split_into_student_sections,
+        extract_for_lens_update,
+    )
+
+    text = (
+        "Classroom summary\n"
+        "Reading: A2. Writing: A1. Strong oral participation and thoughtful questions."
+    )
+    matched = [
+        {"student_id": "s-abigail", "display_name": "Abigail Chang"},
+        {"student_id": "s-marco", "display_name": "Marco Bianchi"},
+    ]
+
+    sections = _split_into_student_sections(text, matched)
+    assert sections == {"s-abigail": "", "s-marco": ""}
+
+    results = asyncio.run(
+        extract_for_lens_update(
+            document_bytes=text.encode("utf-8"),
+            document_type="student_report",
+            matched_students=matched,
+        )
+    )
+
+    for result in results.values():
+        assert result.fields == []
+        assert any("No content found" in q for q in result.unresolved_questions)
+
+
 # ---------------------------------------------------------------------------
 # Additional edge case tests
 # ---------------------------------------------------------------------------
