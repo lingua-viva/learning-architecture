@@ -135,6 +135,152 @@ RED_INDICATORS: list[tuple[str, str, str]] = [
      "teacher used explicit safeguarding vocabulary"),
     ("explicit", r"\b(abuse|abused|neglect(ed)?|domestic violence)\b",
      "explicit abuse/neglect vocabulary"),
+
+    # ------------------------------------------------------------------
+    # EN gap found by Claudia's QA, 2026-08-29 (BUG-3). She typed
+    # "Aiken said someone at home makes him feel scared." and it scored
+    # GREEN — "normal teaching observation".
+    #
+    # The emotional_abuse patterns above all missed it: they require
+    # "scared TO GO home", the literal "unsafe at home", or a NAMED
+    # relative. Hers is a causative with an UNNAMED adult — "someone at
+    # home MAKES him feel scared" — which is closer to how a young child
+    # actually discloses than any of the three. A six-year-old does not
+    # say "I feel unsafe at home".
+    #
+    # Every pattern requires a home/household anchor, so ordinary
+    # classroom fear ("scared of the dark", "afraid to read aloud")
+    # cannot reach RED.
+    ("emotional_abuse",
+     r"\b(someone|somebody|a (?:man|woman|adult|person)|people)\b[^.!?\n]{0,40}"
+     r"\b(?:at|back) home\b[^.!?\n]{0,40}"
+     r"\b(scares?|scared|scary|afraid|frightened|terrified|feel unsafe)\b",
+     "unnamed person at home causing fear"),
+    ("emotional_abuse",
+     r"\b(scared|afraid|frightened|terrified)\b[^.!?\n]{0,30}"
+     r"\bof (?:someone|somebody|a (?:man|woman|adult|person))\b[^.!?\n]{0,20}"
+     r"\bat home\b",
+     "child fears an unnamed person at home"),
+    ("emotional_abuse",
+     r"\b(?:at|back) home\b[^.!?\n]{0,30}\bmakes? (?:him|her|them|me)\b"
+     r"[^.!?\n]{0,20}\b(scared|afraid|frightened|feel unsafe)\b",
+     "home context named as the cause of fear"),
+
+    # ==================================================================
+    # ITALIAN — added 2026-09-02.
+    #
+    # WHY THIS BLOCK EXISTS. Every pattern above this line is English.
+    # Lingua Viva is an Italian classroom product: the teacher manual
+    # ships as Manuale_Italiano_Laboratorio_Linguistico_G1-G5.docx and
+    # `language_of_instruction` was corrected to "it" on 2026-08-29.
+    # Teachers write observations in Italian. Measured before this block
+    # was added, on v0.2.83:
+    #
+    #     "Ha detto che suo padre lo picchia"      -> GREEN
+    #     "He said his dad hits him"               -> RED
+    #
+    # The most explicit disclosure a teacher can record was invisible in
+    # the language they actually write in, and it failed OPEN — returning
+    # GREEN, "normal teaching observation" — which is the opposite of this
+    # module's stated fail-closed policy.
+    #
+    # AUDIT NOTE FOR CLAUDIA. These are written by a non-native speaker
+    # and need a native Italian educator's review, which is exactly why
+    # they live here as a reviewable constant. Two questions worth your
+    # eye: (1) does any pattern here catch something innocent a teacher
+    # would plausibly write, and (2) what phrasing would a child in YOUR
+    # classroom actually use that is missing? The second is the dangerous
+    # direction.
+    #
+    # Accent-less spellings are included deliberately ("papa" as well as
+    # "papà"): teachers type quickly and this module does not fold
+    # diacritics before matching.
+    # ==================================================================
+
+    # -- Disclosure / secrecy (IT).
+    ("disclosure",
+     r"\bmi ha (?:detto|chiesto|pregato) di non (?:dir|racconta)\w*\b",
+     "IT: secrecy request around a concern"),
+    ("disclosure",
+     r"\bnon (?:dir|dirlo|dirglielo|raccontarlo) a nessuno\b",
+     "IT: secrecy request around a concern"),
+    ("disclosure",
+     r"\b(?:è|e'|resta|deve restare|rimane) un segreto\b",
+     "IT: secrecy framing by the child"),
+    ("disclosure",
+     r"\bmi ha detto che\b[^.!?\n]{0,40}\b(?:gli|le|mi)\s+fa(?:nno)? male\b",
+     "IT: child disclosed being hurt"),
+
+    # -- Physical abuse (IT). A household adult, or an object pronoun, is
+    #    required: "picchiare alla porta" (to knock at the door) must not
+    #    reach RED.
+    ("physical_abuse",
+     r"\b(?:pap[àa]|padre|mamm[àa]|madre|zio|zia|nonno|nonna|patrigno|matrigna|"
+     r"compagno della madre|convivente)\b[^.!?\n]{0,30}"
+     r"\b(?:picchi\w*|men\w*|colpisc\w*|colpit\w*|schiaffegg\w*|maltratt\w*)\b",
+     "IT: named household adult physically harming the child"),
+    ("physical_abuse",
+     r"\b(?:lo|la|mi|ti|gli|le)\s+(?:picchia\w*|mena\w*|maltratta\w*)\b",
+     "IT: reported physical harm with an explicit object"),
+    ("physical_abuse",
+     r"\b(?:le\s+)?botte\b|\bbruciatur\w*\b|\bustion\w*\b",
+     "IT: beatings / burn marks"),
+
+    # -- Sexual abuse (IT).
+    ("sexual_abuse",
+     r"\b(?:toccat\w*|toccare)\b[^.!?\n]{0,30}"
+     r"\b(?:dove non|parti intime|in modo strano|nelle parti)\b",
+     "IT: disclosure of inappropriate touch"),
+    ("sexual_abuse",
+     r"\bcomportament\w*\s+sessualizzat\w*\b|\blinguaggio sessualizzato\b",
+     "IT: sexualized behaviour/knowledge beyond age expectation"),
+
+    # -- Emotional abuse (IT). "paura" alone is ordinary classroom
+    #    vocabulary, so every pattern requires a home/household anchor.
+    ("emotional_abuse",
+     r"\bpaura di (?:tornare|andare|rientrare) a casa\b",
+     "IT: fear of going home"),
+    ("emotional_abuse",
+     r"\bnon si sente (?:al )?sicur\w*\s+a casa\b",
+     "IT: explicit statement of feeling unsafe at home"),
+    ("emotional_abuse",
+     r"\b(?:qualcuno|una persona|un adulto)\b[^.!?\n]{0,30}\ba casa\b"
+     r"[^.!?\n]{0,30}\b(?:gli|le|mi)\s+fa paura\b",
+     "IT: unnamed person at home causing fear"),
+    ("emotional_abuse",
+     r"\ba casa\b[^.!?\n]{0,30}\b(?:gli|le|mi)\s+fa(?:nno)? paura\b",
+     "IT: home context named as the cause of fear"),
+
+    # -- Neglect (IT).
+    ("neglect",
+     r"\bnon c'?[eè]\s+(?:da mangiare|cibo|niente da mangiare)\s+a casa\b",
+     "IT: reported lack of food at home"),
+    ("neglect",
+     r"\b(?:lasciat\w*|rimane|resta|sta)\s+(?:da )?sol\w*\b[^.!?\n]{0,30}"
+     r"\b(?:la notte|tutta la notte|per giorni|di notte)\b",
+     "IT: unsupervised for extended periods"),
+
+    # -- Explicit safeguarding vocabulary (IT).
+    #
+    # Deliberately narrower than it first looks. The first draft of this
+    # pattern accepted bare "segnalazione" and bare "abuso", and scored
+    # RED on "Ho fatto una segnalazione per il proiettore rotto" (I filed
+    # a report about the broken projector) and on "abuso di sostanze"
+    # discussed in a science lesson. A safeguarding flag is not free: it
+    # puts a child under a restricted record and it teaches the teacher to
+    # distrust the flag. Both terms now require a safeguarding object.
+    ("explicit",
+     r"\bmaltrattament\w*\b|\bviolenza domestica\b|\btutela dei minori\b|"
+     r"\bservizi sociali\b",
+     "IT: explicit abuse/neglect vocabulary"),
+    ("explicit",
+     r"\babus\w*\s+(?:su|sul|sui|sulla|di)\s+(?:un\s+|una\s+)?"
+     r"(?:minor\w*|bambin\w*|minorenne)\b",
+     "IT: explicit child-abuse vocabulary"),
+    ("explicit",
+     r"\bsegnalazione\b[^.!?\n]{0,30}"
+     r"\b(?:servizi sociali|tribunale|minor\w*|maltrattament\w*|abus\w*)\b",
+     "IT: safeguarding referral named"),
 ]
 
 # AMBIGUOUS: could be innocent, could be an indicator. Fail closed: any
