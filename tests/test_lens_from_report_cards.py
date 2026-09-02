@@ -144,6 +144,30 @@ def test_section_split_missing_student_gets_empty():
     assert sections.get("s-unknown", "") == "" or "Unknown Student" not in MULTI_STUDENT_REPORT
 
 
+def test_section_split_no_positions_refuses_rather_than_duplicates():
+    """Locking test: when multiple students match but NONE of their names appear
+    in the text, every student must get an empty section — never the full text.
+    Prior behavior duplicated the entire document for every student, which is
+    cross-contamination."""
+    text = "This report discusses academic progress in Term 2. Reading is strong."
+    students = [
+        {"student_id": "s-alpha", "display_name": "Alpha Nowhere"},
+        {"student_id": "s-beta", "display_name": "Beta Nowhere"},
+        {"student_id": "s-gamma", "display_name": "Gamma Nowhere"},
+    ]
+    sections = _split_into_student_sections(text, students)
+
+    # All three students must be present
+    assert len(sections) == 3
+
+    # No student may receive the full document text
+    for sid in ["s-alpha", "s-beta", "s-gamma"]:
+        assert sections[sid] == "", (
+            f"{sid} received non-empty section when no name positions were found — "
+            f"this is the cross-contamination fallback that must stay closed"
+        )
+
+
 # ---------------------------------------------------------------------------
 # Sentence splitting tests
 # ---------------------------------------------------------------------------

@@ -319,8 +319,10 @@ def _split_into_student_sections(
             positions.append((idx, student_id, display_name))
 
     if not positions:
-        # No names found — can't split, return all text for all students
-        return {s["student_id"]: text for s in matched_students}
+        # No names found — cannot split. Return empty sections so the caller
+        # surfaces "no content found" rather than cross-contaminating every
+        # student with the entire document.
+        return {s["student_id"]: "" for s in matched_students}
 
     # Sort by position
     positions.sort(key=lambda x: x[0])

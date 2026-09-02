@@ -27,6 +27,7 @@ from src.lingua_viva.docpipe.lens_extract import (
     _BATCH_SIZE,
     _MAX_BATCHES,
     _batch_classify_sentences,
+    _classify_one_batch,
     extract_for_lens_update,
 )
 
@@ -309,6 +310,43 @@ def test_classify_failed_never_written_to_lens(tmp_path):
         notes = write_res["unresolved_questions"]
         assert any("could not be classified" in n for n in notes), notes
         assert all("raw sentence" not in n for n in notes)
+
+
+# ---------------------------------------------------------------------------
+# Invariant 1 — model routes, never authors (phrase substring lock)
+# ---------------------------------------------------------------------------
+
+
+def test_fabricated_phrase_replaced_by_source_sentence():
+    """Locking test: if the LLM returns a phrase that is NOT a substring of the
+    source sentence, the pipeline replaces it with the source sentence's own text
+    (truncated to 80 chars). The model never authors — it can only point."""
+
+    class _FabricatingEngine:
+        async def reason(self, prompt, **kwargs):
+            # Return a fabricated phrase that is NOT in the source sentence
+            return SimpleNamespace(
+                model_used="stub", error=None,
+                content=json.dumps([
+                    {"n": 1, "f": "learning_and_cognition", "p": "INVENTED PHRASE NOT IN SOURCE"},
+                ]),
+            )
+
+    source_sentence = "Maria shows strong reading comprehension and analytical thinking."
+    batch = [source_sentence]
+    engine = _FabricatingEngine()
+
+    fields = asyncio.run(_classify_one_batch(batch, engine, offset=0, sentence_chunk_ids=None))
+    assert fields is not None
+    assert len(fields) == 1
+
+    # The fabricated phrase must NOT survive — it should be replaced
+    assert fields[0].value != "INVENTED PHRASE NOT IN SOURCE", (
+        "Fabricated LLM phrase was accepted without substring verification — "
+        "invariant 1 (model routes, never authors) is broken"
+    )
+    # Instead, it should contain text from the actual source sentence
+    assert fields[0].value in source_sentence or source_sentence.startswith(fields[0].value)
 
 
 # ---------------------------------------------------------------------------
