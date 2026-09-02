@@ -626,6 +626,275 @@ def _closing(args: argparse.Namespace) -> int:
     return 0 if report["verdict"] == "PASS" else 1
 
 
+def _student_name(roster: list[dict], student_id: str) -> str:
+    return next(
+        (str(s.get("display_name") or student_id) for s in roster if s.get("student_id") == student_id),
+        student_id,
+    )
+
+
+def _field_to_dict(field: object) -> dict:
+    return {
+        "field_path": getattr(field, "field_path", ""),
+        "value": getattr(field, "value", ""),
+        "confidence": getattr(field, "confidence", 0.0),
+        "status": getattr(field, "status", ""),
+        "supporting_chunk_ids": list(getattr(field, "supporting_chunk_ids", []) or []),
+    }
+
+
+def _merge_extraction_result(existing: object, incoming: object) -> object:
+    existing.fields.extend(incoming.fields)
+    existing.unresolved_questions.extend(incoming.unresolved_questions)
+    existing.source_files.extend(incoming.source_files)
+    existing.chunks_used.extend(incoming.chunks_used)
+    return existing
+
+
+async def _lens_update(args: argparse.Namespace) -> int:
+    """Update student lenses from local documents using the existing docpipe."""
+    from src.education.student_lens import StudentLensStore
+    from src.lingua_viva.docpipe.extract import classify_document_type, extract_plain_text
+    from src.lingua_viva.docpipe.lens_extract import (
+        apply_extractions_to_lenses,
+        extract_for_lens_update,
+        save_extraction_log,
+    )
+    from src.lingua_viva.docpipe.lens_match import match_document_to_students
+
+    paths: list[Path] = []
+    for file_arg in args.files:
+        path = Path(file_arg).expanduser().resolve()
+        if not path.is_file():
+            if args.json:
+                _print_json({"error": f"{file_arg} does not exist or is not a file"})
+            else:
+                print(f"Error: {file_arg} does not exist or is not a file.")
+            return 1
+        paths.append(path)
+
+    store = StudentLensStore()
+    try:
+        lenses = store.list_lenses()
+        roster = [
+            {"student_id": lens["student_id"], "display_name": lens["display_name"]}
+            for lens in lenses
+        ]
+    except Exception as exc:
+        store.close()
+        if args.json:
+            _print_json({"error": f"could not load student roster: {exc}"})
+        else:
+            print(f"Error loading student roster: {exc}")
+        return 1
+
+    engine = None
+    try:
+        engine = ReasoningEngine()
+    except Exception:
+        engine = None
+
+    all_results: dict[str, object] = {}
+    all_logs: list[str] = []
+    output: list[dict] = []
+
+    try:
+        for path in paths:
+            filename = path.name
+            content = path.read_bytes()
+            try:
+                text = extract_plain_text(content, path.suffix.lower())
+            except Exception as exc:
+                file_result = {
+                    "file": filename,
+                    "document_type": None,
+                    "students": [],
+                    "skipped": True,
+                    "reason": f"unreadable or unsupported file: {exc}",
+                }
+                output.append(file_result)
+                if not args.json:
+                    print(f"  {filename}: unreadable or unsupported file - skipped")
+                continue
+
+            if not text.strip():
+                output.append({
+                    "file": filename,
+                    "document_type": None,
+                    "students": [],
+                    "skipped": True,
+                    "reason": "empty or unreadable",
+                })
+                if not args.json:
+                    print(f"  {filename}: empty or unreadable - skipped")
+                continue
+
+            doc_type = classify_document_type(text, filename)
+            if doc_type == "class_list":
+                output.append({
+                    "file": filename,
+                    "document_type": doc_type,
+                    "students": [],
+                    "skipped": True,
+                    "reason": "class list - use roster import instead",
+                })
+                if not args.json:
+                    print(f"  {filename}: class list - use roster import instead")
+                continue
+            if doc_type in ("curriculum", "other"):
+                output.append({
+                    "file": filename,
+                    "document_type": doc_type,
+                    "students": [],
+                    "skipped": True,
+                    "reason": f"{doc_type} document - not a student file",
+                })
+                if not args.json:
+                    print(f"  {filename}: {doc_type} document - not a student file, skipped")
+                continue
+
+            if args.student:
+                matched = [student for student in roster if student["student_id"] == args.student]
+                if not matched:
+                    output.append({
+                        "file": filename,
+                        "document_type": doc_type,
+                        "students": [],
+                        "skipped": True,
+                        "reason": f"student {args.student} not found in roster",
+                    })
+                    if not args.json:
+                        print(f"  Student {args.student} not found in roster.")
+                    continue
+            else:
+                matched = match_document_to_students(text, filename, roster)
+
+            if not matched:
+                output.append({
+                    "file": filename,
+                    "document_type": doc_type,
+                    "students": [],
+                    "skipped": True,
+                    "reason": "no matching students found",
+                })
+                if not args.json:
+                    print("  No matching students found.")
+                continue
+
+            if not args.json:
+                print(f"\nlens-update: {filename}")
+                print(f"  Type: {doc_type}")
+                print(f"  Students matched: {len(matched)}")
+
+            results = await extract_for_lens_update(
+                document_bytes=content,
+                document_type=doc_type,
+                matched_students=matched,
+                lens_store=store,
+                engine=engine,
+            )
+            log_path = save_extraction_log(results, filename)
+            all_logs.append(str(log_path))
+
+            file_result = {
+                "file": filename,
+                "document_type": doc_type,
+                "students": [],
+                "extraction_log": str(log_path),
+            }
+
+            for student_id, result in results.items():
+                active_fields = [
+                    field for field in result.fields
+                    if getattr(field, "status", "") != "classify_failed"
+                ]
+                verified = [f for f in active_fields if getattr(f, "status", "") == "verified"]
+                needs_confirmation = [
+                    f for f in active_fields if getattr(f, "status", "") == "needs_confirmation"
+                ]
+                student_result = {
+                    "student_id": student_id,
+                    "display_name": _student_name(roster, student_id),
+                    "field_count": len(active_fields),
+                    "verified": len(verified),
+                    "needs_confirmation": len(needs_confirmation),
+                    "fields": [_field_to_dict(field) for field in active_fields],
+                    "unresolved_questions": list(result.unresolved_questions),
+                }
+                file_result["students"].append(student_result)
+
+                if not args.json:
+                    print(f"\n  {_student_name(roster, student_id)} ({student_id})")
+                    print(
+                        f"    Fields: {len(active_fields)} "
+                        f"({len(verified)} verified, {len(needs_confirmation)} need review)"
+                    )
+                    for field in active_fields[:10]:
+                        value = str(getattr(field, "value", ""))[:60]
+                        print(
+                            f"    - {getattr(field, 'field_path', '')}: \"{value}\" "
+                            f"({getattr(field, 'status', '')}, {getattr(field, 'confidence', 0.0):.2f})"
+                        )
+                    if len(active_fields) > 10:
+                        print(f"    ... and {len(active_fields) - 10} more")
+                    for question in result.unresolved_questions:
+                        print(f"    ! {question}")
+
+                if student_id in all_results:
+                    all_results[student_id] = _merge_extraction_result(all_results[student_id], result)
+                else:
+                    all_results[student_id] = result
+
+            output.append(file_result)
+
+        if args.preview_only:
+            if args.json:
+                _print_json(output)
+            return 0
+
+        if not all_results:
+            if args.json:
+                _print_json(output)
+            else:
+                print("\nNo student data extracted from any file.")
+            return 0
+
+        if not args.json:
+            try:
+                answer = input(f"\nUpdate {len(all_results)} student lens(es)? [y/N] ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                print("\nCancelled.")
+                return 0
+            if answer not in ("y", "yes"):
+                print("Cancelled.")
+                return 0
+
+        summaries = await apply_extractions_to_lenses(
+            results=all_results,
+            lens_store=store,
+            confirmed_students=list(all_results),
+        )
+
+        if args.json:
+            for file_result in output:
+                for student in file_result.get("students", []):
+                    summary = summaries.get(student["student_id"], {})
+                    student["written_count"] = len(summary.get("written_fields", []))
+                    student["review_required"] = len(summary.get("review_required", []))
+            _print_json(output)
+        else:
+            print(f"\nUpdated {len(summaries)} student lens(es):")
+            for student_id, summary in summaries.items():
+                written = len(summary.get("written_fields", []))
+                review = len(summary.get("review_required", []))
+                print(f"  {_student_name(roster, student_id)}: {written} fields written, {review} need review")
+            if all_logs:
+                print(f"\nExtraction log(s): {', '.join(all_logs)}")
+        return 0
+    finally:
+        store.close()
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="lv", description="Lingua Viva local runtime")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -758,6 +1027,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run one closing check; repeat for multiple checks",
     )
 
+    lens = sub.add_parser("lens-update", help="Update student lenses from local documents")
+    lens.add_argument("files", nargs="+", metavar="FILE", help="Document paths (PDF, DOCX, XLSX, CSV, TXT)")
+    lens.add_argument("--preview-only", action="store_true", help="Show preview without writing")
+    lens.add_argument("--student", default=None, help="Target student ID (skip auto-matching)")
+    lens.add_argument("--json", action="store_true")
+
     fleet = sub.add_parser(
         "fleet",
         help="Administrator queries across student lens vaults (deterministic, no LLM). Exit 2 = NOT-ENOUGH-DATA.",
@@ -854,6 +1129,8 @@ def main(argv: list[str] | None = None) -> int:
         return _improve(args)
     if args.command == "closing":
         return _closing(args)
+    if args.command == "lens-update":
+        return asyncio.run(_lens_update(args))
     if args.command == "fleet":
         return _fleet(args)
     return 1
