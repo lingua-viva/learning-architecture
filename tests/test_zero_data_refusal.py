@@ -64,7 +64,7 @@ def captured_calls(monkeypatch):
     """Capture would-be model calls without any network."""
     calls: list[dict] = []
 
-    async def fake_call_model(self, query, system_prompt, model, max_tokens=2000):
+    async def fake_call_model(self, query, system_prompt, model, max_tokens=2000, **kwargs):
         calls.append({"model": model, "query": query})
         return ReasonResult(
             content=f"{STUDENT_NAME} has been making good progress with basic sentences.",

@@ -133,7 +133,7 @@ def test_reasoning_provider_config_precedes_default_model(monkeypatch, tmp_path)
 
     used = {}
 
-    async def fake_call(query, system_prompt, model, max_tokens=2000):
+    async def fake_call(query, system_prompt, model, max_tokens=2000, **kwargs):
         used["model"] = model
         return None
 
@@ -192,7 +192,7 @@ def test_fresh_reasoning_engine_does_not_inherit_stale_ollama_breaker(monkeypatc
     ReasoningEngine._ollama_failures = 3
     ReasoningEngine._ollama_breaker_open_until = 9999999999.0
 
-    async def ok_call(self, query, system_prompt, model, max_tokens=2000):
+    async def ok_call(self, query, system_prompt, model, max_tokens=2000, **kwargs):
         return ReasonResult(content="Use a counting game.", confidence=0.75, model_used=model, tokens_used=3)
 
     monkeypatch.setattr(ReasoningEngine, "_call_model", ok_call)
@@ -211,7 +211,7 @@ def test_open_breaker_rechecks_ollama_before_refusing(monkeypatch, tmp_path):
     engine._ollama_failures = 3
     engine._ollama_breaker_open_until = 9999999999.0
 
-    async def ok_call(query, system_prompt, model, max_tokens=2000):
+    async def ok_call(query, system_prompt, model, max_tokens=2000, **kwargs):
         return ReasonResult(content="Ollama recovered.", confidence=0.75, model_used=model, tokens_used=3)
 
     monkeypatch.setattr(engine, "_call_model", ok_call)

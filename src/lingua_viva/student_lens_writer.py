@@ -125,6 +125,16 @@ def write_student_lens(
                     review_required.append(path)
                 continue
 
+            if status == "classify_failed":
+                # P0-3: sentences whose classification batch failed are
+                # visible in the import result but NEVER written to the
+                # lens — no data beats fake data. Content-free note only.
+                unresolved_questions.append(
+                    "A sentence could not be classified (model call failed) "
+                    "and was not imported — review the source document."
+                )
+                continue
+
             if status == "unsupported" and path not in confirmed_set:
                 unresolved_questions.append(f"Field '{path}' was unsupported by source references.")
                 continue

@@ -19,7 +19,7 @@ def _trace_store(monkeypatch, tmp_path):
 def test_trace_appended_after_reasoning(monkeypatch, tmp_path):
     path = _trace_store(monkeypatch, tmp_path)
 
-    async def fake_call(query, system_prompt, model, max_tokens=2000):
+    async def fake_call(query, system_prompt, model, max_tokens=2000, **kwargs):
         return ReasonResult(content="ok", confidence=0.8, model_used=model, tokens_used=5)
 
     engine = ReasoningEngine()
@@ -38,7 +38,7 @@ def test_trace_never_contains_raw_query(monkeypatch, tmp_path):
     path = _trace_store(monkeypatch, tmp_path)
     raw = "What CEFR targets for Grade 3 La Famiglia?"
 
-    async def fake_call(query, system_prompt, model, max_tokens=2000):
+    async def fake_call(query, system_prompt, model, max_tokens=2000, **kwargs):
         return ReasonResult(content="ok", confidence=0.8, model_used=model)
 
     engine = ReasoningEngine()

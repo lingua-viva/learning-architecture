@@ -42,7 +42,7 @@ def test_model_unreachable_message_does_not_claim_install_missing():
 
 @pytest.mark.asyncio
 async def test_engine_no_model_fallback_uses_shared_message(monkeypatch):
-    async def no_result(self, query, prompt, model, max_tokens=None):
+    async def no_result(self, query, prompt, model, max_tokens=None, **kwargs):
         return None
 
     monkeypatch.setattr(ReasoningEngine, "_call_model", no_result)
@@ -64,7 +64,7 @@ async def test_engine_no_model_fallback_uses_shared_message(monkeypatch):
 async def test_pipeline_engine_no_model_fallback_uses_shared_message(monkeypatch):
     from src.pipeline import ReasoningEngine as PipelineEngine
 
-    async def no_result(self, query, prompt, model, max_tokens=None):
+    async def no_result(self, query, prompt, model, max_tokens=None, **kwargs):
         return None
 
     monkeypatch.setattr(PipelineEngine, "_call_model", no_result)

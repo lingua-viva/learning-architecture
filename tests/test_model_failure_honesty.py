@@ -19,7 +19,7 @@ def test_local_only_local_looking_unreachable_model_refuses(monkeypatch, tmp_pat
 
     calls = []
 
-    async def fake_call_model(self, query, system_prompt, model, max_tokens=2000):
+    async def fake_call_model(self, query, system_prompt, model, max_tokens=2000, **kwargs):
         calls.append(model)
         return ReasonResult(content="ok", confidence=0.8, model_used=model)
 
@@ -109,7 +109,7 @@ def test_native_engine_blocks_unsupported_provider_before_model_call(monkeypatch
 
     calls = []
 
-    async def fake_call_model(self, query, system_prompt, model, max_tokens=2000):
+    async def fake_call_model(self, query, system_prompt, model, max_tokens=2000, **kwargs):
         calls.append(model)
         return None
 
@@ -137,7 +137,7 @@ def test_pipeline_engine_blocks_unsupported_provider_before_model_call(monkeypat
 
     calls = []
 
-    async def fake_call_model(self, query, system_prompt, model, max_tokens=2000):
+    async def fake_call_model(self, query, system_prompt, model, max_tokens=2000, **kwargs):
         calls.append(model)
         return None
 

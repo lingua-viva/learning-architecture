@@ -17,6 +17,7 @@ Heuristics first, LLM second. Two-step flow: extract+preview, then confirm+write
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from datetime import datetime, timezone
@@ -45,6 +46,8 @@ from src.lingua_viva.extraction_engine import (
     chunk_file,
 )
 from src.lingua_viva.student_lens_writer import write_student_lens
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -527,26 +530,99 @@ If a sentence is "none", omit it from the array.
 Keep phrases short (5-15 words). Phrases must be exact words from the sentence."""
 
 
+# One LLM call classifies up to this many sentences (context budget).
+_BATCH_SIZE = 40
+# Latency budget: at most this many LLM calls per student section. Sentences
+# beyond _BATCH_SIZE * _MAX_BATCHES are SKIPPED — but visibly (the caller
+# surfaces the count in unresolved_questions), never silently (P0-1,
+# SPEC_ENTITY_LENS_DOCPIPE_RECIPE_2026-09-01).
+_MAX_BATCHES = 5
+# Per-call budget for one classify batch. A worst-case dense batch
+# (40/40 sentences classifiable) measured 75s at 800 output tokens on
+# CPU-class hardware (09-01); 1600 tokens can legitimately need ~2.5min.
+# The interactive 60s default (LV_REASON_TIMEOUT_SECONDS) is for chat,
+# not imports — a slow visible import beats a fast silent one.
+_BATCH_TIMEOUT_SECONDS = 180.0
+
+
 async def _batch_classify_sentences(
     sentences: list[str],
     engine: Any,
-) -> list[ExtractedField]:
-    """Classify all sentences in ONE LLM call (not one per sentence).
+    sentence_chunk_ids: list[list[str]] | None = None,
+) -> tuple[list[ExtractedField], int]:
+    """Classify sentences in batched LLM calls (never one per sentence).
 
-    This is the fix for the timeout bug: a 30-sentence report card now
-    takes ~10 seconds (one LLM call) instead of ~210 seconds (30 calls).
+    This is the fix for the timeout bug: a 30-sentence report card takes
+    ~10 seconds (one LLM call) instead of ~210 seconds (30 calls). Longer
+    documents page in _BATCH_SIZE batches up to _MAX_BATCHES calls —
+    beyond the original single-batch cap, sentence 41+ was silently
+    dropped (P0-1).
+
+    sentence_chunk_ids[i] = chunk ids whose text contains sentences[i],
+    computed deterministically by the caller so every classified field
+    cites the chunk its sentence actually came from (P0-2 — previously
+    batched fields carried no provenance and a post-hoc fallback could
+    attribute them to the wrong chunk).
+
+    Returns (fields, skipped_count) where skipped_count is the number of
+    sentences beyond the classification budget.
     """
     if not sentences:
-        return []
+        return [], 0
 
     from src.lingua_viva.reasoning import ReasoningEngine
 
     if not isinstance(engine, ReasoningEngine):
         engine = ReasoningEngine()
 
-    # Build numbered list — cap at 40 sentences to stay within context
-    capped = sentences[:40]
-    numbered = "\n".join(f"{i+1}. {s}" for i, s in enumerate(capped))
+    budget = _BATCH_SIZE * _MAX_BATCHES
+    in_budget = sentences[:budget]
+    skipped = len(sentences) - len(in_budget)
+
+    fields: list[ExtractedField] = []
+    for start in range(0, len(in_budget), _BATCH_SIZE):
+        batch = in_budget[start : start + _BATCH_SIZE]
+        batch_fields = await _classify_one_batch(
+            batch, engine, start, sentence_chunk_ids
+        )
+        if batch_fields is None:
+            # P0-3: a failed batch loses its sentences VISIBLY, never
+            # silently — each becomes a classify_failed field the teacher
+            # can see in the import log/preview. Guards downstream keep
+            # these out of lenses, dedup, and synthesis. The next batch
+            # still runs; one bad call must not sink the document.
+            for i, sentence in enumerate(batch):
+                global_idx = start + i
+                chunk_ids: list[str] = []
+                if sentence_chunk_ids is not None and global_idx < len(sentence_chunk_ids):
+                    chunk_ids = list(sentence_chunk_ids[global_idx])
+                fields.append(ExtractedField(
+                    field_path="unclassified",
+                    value=sentence[:120].strip(),
+                    confidence=0.0,
+                    supporting_chunk_ids=chunk_ids,
+                    status="classify_failed",
+                ))
+            continue
+        fields.extend(batch_fields)
+    return fields, skipped
+
+
+async def _classify_one_batch(
+    batch: list[str],
+    engine: Any,
+    offset: int,
+    sentence_chunk_ids: list[list[str]] | None,
+) -> list[ExtractedField] | None:
+    """One LLM call over one numbered batch.
+
+    Returns None when the batch FAILED (model unreachable, error, or
+    unparseable output) so the caller can mark its sentences
+    classify_failed (P0-3). Returns [] only when the call genuinely
+    succeeded and found no classifiable content.
+    """
+    numbered = "\n".join(f"{i+1}. {s}" for i, s in enumerate(batch))
+    batch_no = offset // _BATCH_SIZE + 1
 
     try:
         result = await engine.reason(
@@ -554,29 +630,55 @@ async def _batch_classify_sentences(
             system_prompt=_BATCH_CLASSIFY_PROMPT,
             model="ollama/qwen3:8b",
             local_only=True,
-            max_tokens=800,
+            # A worst-case batch (every sentence classifiable) is ~30
+            # output tokens per item; 800 truncated dense batches
+            # mid-array (measured live 09-01: 40 dense sentences need
+            # ~1200 tokens and ~75s on CPU-class hardware).
+            max_tokens=1600,
+            timeout_seconds=_BATCH_TIMEOUT_SECONDS,
         )
         if result.model_used == "none" or result.error:
-            return []
+            logger.warning(
+                "sentence classify batch %d failed: model=%s error=%s",
+                batch_no, result.model_used, result.error,
+            )
+            return None
 
         content = result.content.strip()
         content = re.sub(r"^```(json)?|```$", "", content, flags=re.MULTILINE).strip()
-        # Find the JSON array
-        match = re.search(r"\[.*\]", content, flags=re.DOTALL)
-        if not match:
-            return []
 
-        parsed = json.loads(match.group(0))
-        if not isinstance(parsed, list):
-            return []
+        # Parse item-by-item, not whole-array: local models occasionally
+        # glitch ONE item (raw control char, truncated string, missing
+        # comma — all observed live 09-01) and strict whole-array parsing
+        # turned one bad item into 40 lost sentences. Each {n,f,p} object
+        # is independently verifiable; a malformed item loses only its
+        # own sentence, exactly as if the model had omitted it.
+        items: list[dict] = []
+        for candidate in re.findall(r"\{[^{}]*\}", content):
+            try:
+                obj = json.loads(candidate, strict=False)
+            except Exception:
+                continue
+            if isinstance(obj, dict):
+                items.append(obj)
+
+        if not items:
+            if re.search(r"\[\s*\]", content):
+                return []  # genuine "no classifiable content"
+            logger.warning(
+                "sentence classify batch %d failed: no parseable items in model output",
+                batch_no,
+            )
+            return None
 
         fields: list[ExtractedField] = []
-        for item in parsed:
-            if not isinstance(item, dict):
-                continue
+        for item in items:
             field_id = str(item.get("f", "none")).strip()
             phrase = str(item.get("p", "")).strip()
-            idx = int(item.get("n", 0)) - 1  # Convert 1-based to 0-based
+            try:
+                idx = int(item.get("n", 0)) - 1  # Convert 1-based to 0-based
+            except (TypeError, ValueError):
+                continue  # one garbled item loses one item, not the batch
 
             if field_id == "none" or field_id not in _LENS_FIELD_IDS:
                 continue
@@ -584,8 +686,8 @@ async def _batch_classify_sentences(
                 continue
 
             # Safety: verify phrase is from the source sentence
-            if 0 <= idx < len(capped):
-                source = capped[idx]
+            if 0 <= idx < len(batch):
+                source = batch[idx]
                 if phrase.lower() not in source.lower():
                     phrase = source[:80].strip()
             else:
@@ -595,16 +697,22 @@ async def _batch_classify_sentences(
             if field_id in ("academic_strengths", "personal_strengths"):
                 field_path = field_id
 
+            global_idx = offset + idx
+            chunk_ids: list[str] = []
+            if sentence_chunk_ids is not None and 0 <= global_idx < len(sentence_chunk_ids):
+                chunk_ids = list(sentence_chunk_ids[global_idx])
+
             fields.append(ExtractedField(
                 field_path=field_path,
                 value=phrase,
                 confidence=0.72,
-                supporting_chunk_ids=[],
+                supporting_chunk_ids=chunk_ids,
                 status="needs_confirmation",
             ))
         return fields
-    except Exception:
-        return []
+    except Exception as exc:
+        logger.warning("sentence classify batch %d failed: %s", batch_no, exc)
+        return None
 
 
 async def _classify_sentence_to_field(
@@ -864,6 +972,7 @@ async def extract_for_lens_update(
 
         # 2a: Keyword pre-classify as many sentences as possible (fast, no LLM)
         llm_needed: list[str] = []
+        llm_chunk_ids: list[list[str]] = []
         for sentence in sentences:
             # Skip sentences already covered by heuristics
             if any(str(f.value) in sentence for f in all_fields if f.value):
@@ -885,11 +994,30 @@ async def extract_for_lens_update(
                 ))
             else:
                 llm_needed.append(sentence)
+                # P0-2: sentences never cross paragraph boundaries (the
+                # splitter breaks on newlines, chunks are paragraphs), so
+                # substring membership finds the chunk each sentence came
+                # from — deterministic provenance for the batched fields.
+                llm_chunk_ids.append(
+                    [c.chunk_id for c in relevant_chunks if sentence in c.text]
+                )
 
-        # 2b: Batch-classify remaining sentences in ONE LLM call (not one per sentence)
+        # 2b: Batch-classify remaining sentences in batched LLM calls
+        # (never one per sentence)
         if engine is not None and llm_needed:
-            batch_fields = await _batch_classify_sentences(llm_needed, engine)
+            batch_fields, batch_skipped = await _batch_classify_sentences(
+                llm_needed, engine, llm_chunk_ids
+            )
             all_fields.extend(batch_fields)
+            if batch_skipped:
+                # P0-1: a document larger than the classification budget
+                # loses sentences VISIBLY, never silently.
+                unresolved.append(
+                    f"{batch_skipped} sentence(s) were beyond the "
+                    f"{_BATCH_SIZE * _MAX_BATCHES}-sentence classification "
+                    "budget and were not classified — review the source "
+                    "document for anything missed."
+                )
 
         # Attach chunk IDs to fields
         for field in all_fields:
@@ -941,8 +1069,18 @@ async def _run_synthesis_repass(
     fields: list[ExtractedField],
     engine: Any,
 ) -> list[ExtractedField]:
-    """Group fields by category and synthesize entries with duplicates."""
+    """Group fields by category and synthesize entries with duplicates.
+
+    classify_failed fields are excluded from synthesis and re-appended
+    unchanged: their values are raw unclassified sentence text, and
+    running an LLM over them would author content from sentences the
+    classifier never verified (P0-3 + invariant 1: the model routes,
+    it never authors).
+    """
     from collections import defaultdict
+
+    failed = [f for f in fields if f.status == "classify_failed"]
+    fields = [f for f in fields if f.status != "classify_failed"]
 
     # Group values by a normalized field category
     groups: dict[str, list[tuple[int, ExtractedField]]] = defaultdict(list)
@@ -986,7 +1124,7 @@ async def _run_synthesis_repass(
             # Synthesis failed — keep originals
             synthesized.extend(f for _, f in indexed_fields)
 
-    return synthesized
+    return synthesized + failed
 
 
 def _text_to_chunks(text: str) -> list[SourceChunk]:
@@ -1107,13 +1245,23 @@ async def _llm_extract_fallback(
 
 
 def _deduplicate_fields(fields: list[ExtractedField]) -> list[ExtractedField]:
-    """Keep highest-confidence field per field_path."""
+    """Keep highest-confidence field per field_path.
+
+    classify_failed fields pass through untouched: they all share
+    field_path="unclassified" and confidence 0.0, so best-per-path
+    dedup would silently collapse a whole failed batch into one row
+    (P0-3 — every failed sentence must stay individually visible).
+    """
     best: dict[str, ExtractedField] = {}
+    failed: list[ExtractedField] = []
     for field in fields:
+        if field.status == "classify_failed":
+            failed.append(field)
+            continue
         existing = best.get(field.field_path)
         if existing is None or field.confidence > existing.confidence:
             best[field.field_path] = field
-    return list(best.values())
+    return list(best.values()) + failed
 
 
 # ---------------------------------------------------------------------------
