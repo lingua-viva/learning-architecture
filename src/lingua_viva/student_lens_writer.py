@@ -13,7 +13,14 @@ StudentLensStore. Enforces:
 from __future__ import annotations
 
 from typing import Any, Optional
-from src.education.student_lens import StudentLensStore, SUPPORT_CATEGORY_IDS
+from src.education.student_lens import (
+    StudentLensStore,
+    SUPPORT_CATEGORY_IDS,
+    Observation,
+    ObservationValidationError,
+    VALID_CEFR_DIMENSIONS,
+    VALID_CEFR_LEVELS,
+)
 from src.lingua_viva.data_in_contracts import ExtractedField, ExtractionResult
 
 
@@ -191,6 +198,64 @@ def write_student_lens(
                         written_count += 1
                 continue
 
+            # CEFR levels extracted from a document (2026-09-03).
+            #
+            # These were previously DROPPED IN SILENCE. The extractor emits
+            # cefr_snapshot.{reading,writing,speaking,listening} at status
+            # "verified", confidence 0.95; the preview showed them; this
+            # function had no branch for the path, so they fell off the end of
+            # the loop. A teacher saw four CEFR levels in the import preview,
+            # clicked "Update lenses", got a success message naming four other
+            # fields, and the lens still read null on all four dimensions.
+            #
+            # The write goes through append_observation, NOT a direct column
+            # write. set_initial_cefr's docstring carries the law: cefr_snapshot
+            # must stay DERIVED from the append-only observation log so
+            # get_lens_as_of() reconstruction holds — the same rule that keeps
+            # rti_current_tier out of update_profile(). set_initial_cefr itself
+            # cannot be reused here because it applies one level to all four
+            # dimensions, and a report card carries a different level per
+            # dimension (reading A2, writing A1, ...).
+            if path.startswith("cefr_snapshot."):
+                dimension = path.split(".", 1)[1].strip()
+                level = str(value or "").strip()
+                if dimension not in VALID_CEFR_DIMENSIONS:
+                    unresolved_questions.append(
+                        f"Refused '{path}': '{dimension}' is not a CEFR dimension."
+                    )
+                    continue
+                if level not in VALID_CEFR_LEVELS:
+                    unresolved_questions.append(
+                        f"Refused '{path}': '{level}' is not a recognised CEFR level."
+                    )
+                    continue
+                if not field.supporting_chunk_ids:
+                    unresolved_questions.append(
+                        f"Refused CEFR level for '{path}': missing source references."
+                    )
+                    continue
+                try:
+                    store.append_observation(
+                        Observation(
+                            student_id=student_id,
+                            teacher_id=teacher_id,
+                            template_type="cefr",
+                            raw_transcript=(
+                                f"CEFR {dimension} level {level} imported from a "
+                                f"source document."
+                            ),
+                            cefr_dimension=dimension,
+                            cefr_level_observed=level,
+                            source_type="local_file",
+                        )
+                    )
+                except ObservationValidationError as exc:
+                    unresolved_questions.append(f"Refused '{path}': {exc}")
+                    continue
+                written_fields.append(path)
+                written_count += 1
+                continue
+
             # Handle ordinary fields (grade_level, campus, home_languages, learning_differences, etc.)
             if path == "grade_level" and value:
                 store._conn.execute(
@@ -200,7 +265,8 @@ def write_student_lens(
                 store._conn.commit()
                 written_fields.append(path)
                 written_count += 1
-            elif path == "campus" and value:
+                continue
+            if path == "campus" and value:
                 store._conn.execute(
                     "UPDATE students SET campus = ? WHERE student_id = ?",
                     (str(value), student_id),
@@ -208,6 +274,26 @@ def write_student_lens(
                 store._conn.commit()
                 written_fields.append(path)
                 written_count += 1
+                continue
+
+            # REFUSE ON UNKNOWN FIELD PATH (2026-09-03).
+            #
+            # Every branch above either writes the field or says why it did
+            # not. Before this, anything the chain did not recognise fell off
+            # the end of the loop in silence: not written, not reviewed, not
+            # reported, and absent from written_fields — so the caller returned
+            # a success payload that simply did not mention it.
+            #
+            # That is how the CEFR defect above survived a week of work on this
+            # exact feature. A field path this writer cannot handle is now a
+            # visible refusal, and the same rule protects Observe and Assess
+            # before either is wired: any new extractor that invents a field
+            # path this writer does not implement will SAY SO instead of
+            # quietly discarding a teacher's input.
+            unresolved_questions.append(
+                f"'{path}' was extracted but this version cannot write it to the "
+                f"lens, so it was not imported. Nothing was changed for that field."
+            )
 
         message = (
             f"{written_count} fields were written with source references."
