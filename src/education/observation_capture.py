@@ -112,6 +112,23 @@ CATEGORY_SIGNALS: dict[str, list[tuple[str, float]]] = {
         (r"\b(home situation|family situation|living situation|housing|shelter)\b", 0.5),
         (r"\b(abuse|neglect|domestic violence|unsafe at home)\b", 0.6),
         (r"\b(bereavement|grief|family emergency|caregiver)\b", 0.5),
+        # Italian equivalents, added 2026-09-03. These signals are consumed by
+        # safeguarding.classify_severity as a SECONDARY signal that rounds
+        # GREEN up to AMBER. Being English-only meant that round-up could never
+        # fire for an Italian classroom — the product's actual language.
+        # This suggester is advisory and weighted; it is deliberately NOT
+        # rewired to the shared RED taxonomy, which gates rather than scores.
+        # NOTE: "segnalazione" and "abuso" are BOTH deliberately narrowed, for
+        # the reason written into safeguarding_indicators.py: a bare match fires
+        # on "segnalazione per il proiettore rotto" (a maintenance report) and
+        # on "abuso di sostanze" in a science lesson. A first draft of these
+        # very lines used the bare terms and turned three control cases AMBER.
+        (r"\b(tutela dei minori|protezione dell'infanzia)\b", 0.6),
+        (r"\bsegnalazione\b[^.!?\n]{0,30}\b(servizi sociali|tribunale|minor\w*|maltrattament\w*|abus\w*)\b", 0.6),
+        (r"\b(situazione (familiare|abitativa|a casa)|contesto familiare|alloggio)\b", 0.5),
+        (r"\b(maltrattament\w*|trascuratezz\w*|violenza domestica|non al sicuro a casa)\b", 0.6),
+        (r"\b(?:ha|hanno) subit[oa]\s+(?:degli\s+|dei\s+)?abus\w*\b|\bvittima di abus\w*\b", 0.6),
+        (r"\b(lutto|dolore familiare|emergenza familiare|caregiver|chi se ne prende cura)\b", 0.5),
     ],
 }
 

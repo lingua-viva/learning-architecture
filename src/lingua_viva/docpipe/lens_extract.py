@@ -28,6 +28,7 @@ from src.education.document_parser import DocumentParser
 from src.lingua_viva.docpipe.identity import fold_text
 from src.education.ethos import load_ethos, match_traits
 from src.education.observation_capture import suggest_support_categories
+from src.lingua_viva.safeguarding_indicators import is_red as _shared_is_red
 from src.education.student_lens import StudentLensStore
 from src.lingua_viva.data_in_contracts import (
     ExtractedField,
@@ -78,10 +79,19 @@ _CEFR_RE = re.compile(
     re.IGNORECASE,
 )
 
-# RED safeguarding signals — route to restricted, never to lens
+# RED safeguarding signals — route to restricted, never to lens.
+# LEGACY, and English-only. Kept because unioning it with the shared taxonomy
+# guarantees this gate cannot detect less than it did before 2026-09-03.
+# The reviewed, bilingual source of truth is safeguarding_indicators.py.
 _RED_SIGNALS = re.compile(
-    r"\b(abuse|neglect|sexual|domestic violence|trafficking|self[- ]harm|"
-    r"suicide|mandated report|child protection|safeguarding concern)\b",
+    # "abuse" carries the same substance/drug/alcohol exclusion the reviewed
+    # taxonomy uses. Without it, "we discussed substance abuse in the science
+    # lesson" routes a curriculum note into the restricted safeguarding log.
+    # That judgement is not new here — it was made and written down for the
+    # Italian patterns on 2026-09-02; this applies it consistently.
+    r"\b(?<!substance )(?<!drug )(?<!alcohol )abuse\b|"
+    r"\b(neglect|sexual|domestic violence|trafficking|self[- ]?harm(s|ed|ing)?|"
+    r"suicide|suicidal|mandated report|child protection|safeguarding concern)\b",
     re.IGNORECASE,
 )
 
@@ -236,8 +246,24 @@ def _condense_to_keywords(text: str, max_len: int = 80) -> str:
 
 
 def _is_red_safeguarding(text: str) -> bool:
-    """Check if text contains RED safeguarding content."""
-    return bool(_RED_SIGNALS.search(text))
+    """Check if text contains RED safeguarding content.
+
+    This is the gate that decides whether extracted content is routed to the
+    restricted safeguarding log or written into the student's ORDINARY lens.
+    Getting it wrong in the permissive direction puts a disclosure into a
+    child's normal record.
+
+    Until 2026-09-03 it consulted only `_RED_SIGNALS` below — a ten-word
+    English regex, entirely separate from the reviewed taxonomy that
+    `safeguarding.classify_severity` uses. Measured consequence: "il bambino ha
+    subito abusi in casa" passed this gate and was written to the ordinary
+    lens, while its English twin was correctly routed to restricted.
+
+    It now consults the shared taxonomy as well. The two are UNIONED rather
+    than swapped, so this gate is provably a superset of what it caught before
+    — no detection it already had can be lost by the consolidation.
+    """
+    return bool(_RED_SIGNALS.search(text)) or _shared_is_red(text)
 
 
 # ---------------------------------------------------------------------------
