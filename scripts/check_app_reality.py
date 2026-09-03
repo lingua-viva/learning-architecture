@@ -28,6 +28,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 INDEX = REPO / "static" / "index.html"
 WEB = REPO / "src" / "web.py"
+ROUTERS = REPO / "src" / "lingua_viva" / "routers"
 
 SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2}
 
@@ -39,13 +40,27 @@ def _read(path: Path) -> str:
         return ""
 
 
+def _routes_from_source(source: str) -> set[str]:
+    prefix_match = re.search(r'APIRouter\(\s*prefix\s*=\s*"([^"]+)"', source)
+    prefix = prefix_match.group(1).rstrip("/") if prefix_match else ""
+    decorator = re.compile(
+        r'@(app|router)\.(get|post|put|patch|delete|websocket)\(\s*"([^"]+)"'
+    )
+    routes = set()
+    for target, _method, path in decorator.findall(source):
+        if target == "router" and prefix and not path.startswith(prefix + "/"):
+            routes.add(f"{prefix}{path}")
+        else:
+            routes.add(path)
+    return routes
+
+
 def _declared_routes(web: str) -> set[str]:
-    """Every path registered in web.py, with {param} placeholders kept."""
-    return {
-        path for _method, path in re.findall(
-            r'@app\.(get|post|put|delete|websocket)\(\s*"([^"]+)"', web
-        )
-    }
+    """Every path registered by the app, with {param} placeholders kept."""
+    routes = _routes_from_source(web)
+    for router_file in sorted(ROUTERS.glob("*.py")):
+        routes.update(_routes_from_source(_read(router_file)))
+    return routes
 
 
 def _route_matches(called: str, declared: set[str]) -> bool:
@@ -95,7 +110,7 @@ def check_ui_calls_real_routes(index: str, web: str) -> list[dict]:
         findings.append({
             "check": "ui_calls_missing_route",
             "severity": "critical",
-            "detail": f"static/index.html calls {raw} — no matching route in src/web.py",
+            "detail": f"static/index.html calls {raw} — no matching app route",
         })
     return findings
 
