@@ -601,9 +601,43 @@ class ContentDifferentiator:
         RTI tier is the primary signal per rti-tiers.md (RTI tiers are
         the intervention-intensity axis; CEFR is the parallel language
         spine that can pull a student up/down within that).
+
+        Reads its fields through the lens field contract's OUT filter
+        (2026-09-03): `requires("prepare")` declares rti_current_tier as
+        essential and cefr_snapshot as enriching. A lens without a tier
+        raises MissingEssentialFieldError rather than guessing tier 1.
+        Callers that want to know what the tiering did NOT have use
+        assign_tier_with_provenance().
         """
-        rti_tier = student_lens.get("rti_current_tier", 1)
-        cefr_snapshot = student_lens.get("cefr_snapshot", {})
+        return self.assign_tier_with_provenance(student_lens)["tier"]
+
+    def assign_tier_with_provenance(self, student_lens: dict) -> dict:
+        """assign_tier_for_student, plus what it used and what it lacked:
+        {"tier", "fields_used", "fields_missing", "fields_enriching_missing",
+        "note"}. This is the OUT filter's honesty rule — an output must be
+        able to say what it did not have."""
+        from src.lingua_viva.lens_field_contract import read_for
+
+        reading = read_for("prepare", student_lens)
+        rti_tier = reading["fields_used"]["rti_current_tier"]
+        cefr_snapshot = reading["fields_used"].get("cefr_snapshot") or {}
+        tier = self._tier_from(rti_tier, cefr_snapshot)
+        note = ""
+        if "cefr_snapshot" in reading["fields_enriching_missing"]:
+            note = (
+                "no CEFR evidence on the lens; tier decided from RTI alone "
+                "(foundational by default, operator decision 2026-07-22)"
+            )
+        return {
+            "tier": tier,
+            "fields_used": sorted(reading["fields_used"]),
+            "fields_missing": reading["fields_missing"],
+            "fields_enriching_missing": reading["fields_enriching_missing"],
+            "note": note,
+        }
+
+    @staticmethod
+    def _tier_from(rti_tier, cefr_snapshot: dict) -> str:
         levels = [v for v in cefr_snapshot.values() if v]
         weakest = min(
             levels, key=lambda lvl: CEFR_ORDER.index(lvl) if lvl in CEFR_ORDER else 0

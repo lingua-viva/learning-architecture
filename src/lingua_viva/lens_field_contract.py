@@ -385,9 +385,14 @@ class FieldRequirement:
 # Deliverable ids follow deliverables/schema.py DELIVERABLE_TYPES where one
 # exists; `prepare` is content_differentiator's tiering step (UX U9).
 OUTPUT_REQUIREMENTS: dict[str, tuple[FieldRequirement, ...]] = {
+    # Prepare (content_differentiator.assign_tier_for_student): the RTI tier
+    # is the primary signal and without it the tier is a guess — essential.
+    # CEFR pulls a student up/down within the tier; its absence has a ruled
+    # default (foundational, operator decision 2026-07-22) — enriching, and
+    # the output SAYS it was missing.
     "prepare": (
         FieldRequirement("rti_current_tier", "essential"),
-        FieldRequirement("cefr_snapshot", "essential"),
+        FieldRequirement("cefr_snapshot", "enriching"),
     ),
     "parent_report": (
         FieldRequirement("display_name", "essential"),

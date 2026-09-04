@@ -39,6 +39,13 @@ from src.lingua_viva.lens_field_contract import ResolvedField, resolve
 # evidence). The dedupe key is the transcript, which names the source file.
 _CEFR_DUPLICATE_WINDOW_SECONDS = 400 * 24 * 3600
 
+# source_kind -> (support evidence_type, observation source_type); both
+# vocabularies are the store's (VALID_EVIDENCE_TYPES / VALID_SOURCE_TYPES).
+_SOURCE_KINDS = {
+    "report": ("report", "local_file"),
+    "teacher_note": ("teacher_note", "teacher_note"),
+}
+
 _CLASSIFY_FAILED_NOTE = (
     "Field 'unclassified': a sentence could not be classified (model call "
     "failed) and was not imported — review the source document."
@@ -58,7 +65,14 @@ def write_student_lens(
     rejected_fields: Optional[list[Any]] = None,
     hint: Optional[dict] = None,
     store: Optional[StudentLensStore] = None,
+    source_kind: str = "report",
 ) -> dict:
+    """`source_kind` names where the fields came from so provenance survives
+    into the lens: "report" (a document; the default and the pre-2026-09-03
+    behaviour) or "teacher_note" (an Observe comment). It maps onto the
+    store's evidence_type / observation source_type vocabularies."""
+    if source_kind not in _SOURCE_KINDS:
+        raise ValueError(f"source_kind must be one of {tuple(_SOURCE_KINDS)}")
     # Teacher-identity seam (P1, 2026-08-02): callers that don't pass a
     # teacher_id (e.g. the Drive auto-import extraction path) inherit the
     # machine's configured identity instead of re-creating sentinel-attributed
@@ -200,7 +214,8 @@ def write_student_lens(
             # -- dispatch on KIND ------------------------------------------------
             try:
                 note = _dispatch(
-                    store, resolved, field, student_id, teacher_id, confidence, source_file
+                    store, resolved, field, student_id, teacher_id, confidence, source_file,
+                    _SOURCE_KINDS[source_kind],
                 )
             except (ValueError, ObservationValidationError) as exc:
                 # A store-level rejection refuses THIS field; it never voids the import.
@@ -288,6 +303,7 @@ def _dispatch(
     teacher_id: str,
     confidence: str,
     source_file: str,
+    source_types: tuple[str, str] = ("report", "local_file"),
 ) -> str:
     """Persist one resolved field through its declared store operation.
     Returns a short note for the accounting ledger. Raises ValueError /
@@ -296,6 +312,7 @@ def _dispatch(
     path = resolved.path
     value = field.value
     refs = list(field.supporting_chunk_ids or [])
+    evidence_type, observation_source_type = source_types
 
     if spec.kind == "cefr":
         dimension = resolved.bound["dimension"]
@@ -311,7 +328,7 @@ def _dispatch(
                 ),
                 cefr_dimension=dimension,
                 cefr_level_observed=level,
-                source_type="local_file",
+                source_type=observation_source_type,
             ),
             duplicate_window_seconds=_CEFR_DUPLICATE_WINDOW_SECONDS,
         )
@@ -337,7 +354,7 @@ def _dispatch(
                     continue
                 store.add_support_evidence(
                     student_id=student_id, category_id=category, summary=txt,
-                    created_by=teacher_id, evidence_type="report", source_ref_ids=refs,
+                    created_by=teacher_id, evidence_type=evidence_type, source_ref_ids=refs,
                 )
             else:
                 if _already_present(existing, txt, "text", refs):

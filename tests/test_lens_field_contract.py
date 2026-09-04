@@ -330,21 +330,48 @@ def test_every_output_requirement_resolves():
             assert resolve(req.path) is not None, (output_id, req.path)
 
 
-def test_prepare_refuses_to_render_without_its_essential_fields(store):
-    lens = store.get_lens("student-test")   # cefr_snapshot all null
+def test_prepare_refuses_to_render_without_its_essential_field(store):
+    lens = dict(store.get_lens("student-test"))
+    lens.pop("rti_current_tier")
     with pytest.raises(MissingEssentialFieldError) as exc:
         read_for("prepare", lens)
-    assert "cefr_snapshot" in exc.value.missing
-    report = read_for("prepare", lens, strict=False)
-    assert report["fields_missing"] == ["cefr_snapshot"]
-    assert "rti_current_tier" in report["fields_used"]
+    assert exc.value.missing == ["rti_current_tier"]
+
+
+def test_prepare_says_what_it_did_not_have(store):
+    """An output must be able to say what it did not have (spec §2.8.2)."""
+    from src.education.content_differentiator import ContentDifferentiator
+
+    lens = store.get_lens("student-test")   # cefr_snapshot all null
+    report = read_for("prepare", lens)
+    assert report["fields_missing"] == []
+    assert report["fields_enriching_missing"] == ["cefr_snapshot"]
+    assert list(report["fields_used"]) == ["rti_current_tier"]
+
+    tiered = ContentDifferentiator().assign_tier_with_provenance(lens)
+    assert tiered["tier"] == "foundational"           # the ruled default, and it is named
+    assert tiered["fields_enriching_missing"] == ["cefr_snapshot"]
+    assert ContentDifferentiator().assign_tier_for_student(lens) == "foundational"
 
 
 def test_prepare_reports_fields_used_once_the_lens_has_them(store):
+    from src.education.content_differentiator import ContentDifferentiator
+
     _write(store, [_field(f"cefr_snapshot.{d}", "A2") for d in VALID_CEFR_DIMENSIONS])
-    report = read_for("prepare", store.get_lens("student-test"))
-    assert report["fields_missing"] == []
+    lens = store.get_lens("student-test")
+    report = read_for("prepare", lens)
+    assert report["fields_enriching_missing"] == []
     assert set(report["fields_used"]) == {"rti_current_tier", "cefr_snapshot"}
+    tiered = ContentDifferentiator().assign_tier_with_provenance(lens)
+    assert tiered["tier"] == "on_track"
+    assert set(tiered["fields_used"]) == {"rti_current_tier", "cefr_snapshot"}
+
+
+def test_prepare_refuses_a_lens_shaped_dict_without_a_tier():
+    from src.education.content_differentiator import ContentDifferentiator
+
+    with pytest.raises(MissingEssentialFieldError):
+        ContentDifferentiator().assign_tier_for_student({"cefr_snapshot": {"reading": "B2"}})
 
 
 def test_unknown_output_is_an_error_not_silence():
