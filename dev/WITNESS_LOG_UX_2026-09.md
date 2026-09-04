@@ -14,8 +14,10 @@ Rule (plan §0): a Mical PASS = "ready for teacher witness", not green. Green ne
 **Fix:** `fix/ui-contract-v181-lens-routes` = `604a823` (bump-log v181, `EXPECTED_VERSION = 181`) + `f22e7a6` (lock re-taken by `check_ui_contract.py --bump` on the Linux LF checkout; every hash equals the git blob's sha256; contract tests 8 passed / 1 skipped on Linux).
 **Re-push:** `f22e7a6` -> `main` at 2026-09-04 after a second window check (0 in flight). Full suite on Linux/3.11 in WSL at `f22e7a6`: **3,035 passed / 5 failed / 34 skipped / 32 xfailed in 1m45s**; the same 5 fail identically at `71b069d` (the last green CI commit) in that environment — repo dir name (`lv-ci-full` != `learning-architecture`), root user (read-only file test), and a `pytest` NameError in `test_ask_grounding_surface.py` — so 0 new failures on Linux against the last green commit.
 
-**Release tag:** _(filled in when the chain completes)_
-**Live download contains `30f5e03`:** _(verified before "ready" is said)_
+**Release tag:** `desktop-v0.2.85` — auto-release run 33910405182 on `7fa7c9a` (main = `f22e7a6` + the U1 Rung 1 docs + the C8 durability test), every job success, published 2026-09-04T19:27:04Z; `https://linguaviva.art/` pins `desktop-v0.2.85`; Setup.exe / .dmg / .AppImage all HTTP 302.
+**Live download contains `30f5e03`:** YES — the tag's commit `ee6805c` descends from `7fa7c9a` → `f22e7a6` → `30f5e03` (`git merge-base --is-ancestor`, PC-23, 2026-09-04).
+
+**→ v0.2.85 ready — test U-1** (the click path below, plus the chain A–E). Note for step 4: the Doctor fix (`sys.executable`) is in this build.
 
 ### Mical — U1 click path (prompt §6) on the live download
 
@@ -40,3 +42,35 @@ Rule (plan §0): a Mical PASS = "ready for teacher witness", not green. Green ne
 | E Student Summary → Draft | the note mentions the listening progress AND a strength from the report card; nothing invented | | |
 
 _(FAIL → verbatim error back to PC-23. PASS → tracker row to "Mical-passed, awaiting teacher witness".)_
+
+---
+
+## Cycle 1 — 2026-09-04 — main ← `ux/u13-safeguarding` (= v0.2.85 + U2 + U13 + UI contract v182)
+
+**What is in it:** U2 roster honesty (`90d9c88`: a CSV roster is read as a table — names carry column evidence and are never flagged "low confidence", the Classe column becomes the lens's grade, nothing invented when the column is absent, a re-import never overwrites a teacher-set grade; 6 tests, 4 red first). U13 safeguarding P0 through the routes (`bac8112`: the three RED rows of the 2 September retest and the five innocent rows posted to `/api/observe/capture`; RED responses no longer carry the matched indicator regexes; every normal surface read back empty; `GET /api/safeguarding/pending`; the coordinator's Safeguarding panel in Governance; 15 tests, 6 red first). Lock v182 (`0f6f792`, taken on Linux). Full suite on Linux/3.11 (WSL) at `0f6f792`: **3,064 passed / 5 failed / 34 skipped / 32 xfailed in 1m46s** — the same 5 environment-only rows as at `71b069d` (last green CI) and at every head today; Windows targeted suites 139 passed.
+
+**Release tag:** _(filled in when the chain completes)_
+**Live download contains `0f6f792`:** _(verified before "ready" is said)_
+
+### Mical — U2 click path on the live download
+
+| step | expected | verdict | wording seen |
+|---|---|---|---|
+| 1 Students → import `demo-data/classe-3B.csv` | preview lists 6 names, accents intact; **no** "low confidence" mark on any of them; the class picker shows `3B` | | |
+| 2 approve | "6 students added from classe-3B.csv."; no "Check these names" warning | | |
+| 3 Roster rows | each row shows `3B` after the support tier | | |
+| 4 import the same file again | still 6 students; nothing doubled; a grade you edited by hand is untouched | | |
+
+### Mical — U13 click path on the live download (two roles)
+
+| step | expected | verdict | wording seen |
+|---|---|---|---|
+| 1 as coordinator: Governance | a **Safeguarding** panel at the top: "No safeguarding items are waiting." badge `0` | | |
+| 2 as teacher: Observe, pick a student, type `Qualcuno a casa gli fa paura.` and save | badge **Restricted record — not yet routed to a person.**; NOT "Saved locally" | | |
+| 3 Students → that student → observations / lens | the sentence is nowhere; no observation was added | | |
+| 4 Student Summary → Draft for that student | no word of it | | |
+| 5 as teacher: Observe, type `Ha paura del buio durante la lettura` and save | an ordinary saved note (no restricted badge) | | |
+| 6 as coordinator: Governance | "1 safeguarding item is waiting. No notification channel is configured — set one in Settings, or review them here." badge `1`; no student name, no words of the sentence anywhere on that panel | | |
+| 7 as teacher: Governance | no Safeguarding panel at all | | |
+
+_(FAIL → verbatim error back to PC-23. PASS → tracker rows U2 / U13 to "Mical-passed, awaiting teacher witness". Claudia typing step 2 in her own app is level 4 for U13 — the spec's R4.)_
