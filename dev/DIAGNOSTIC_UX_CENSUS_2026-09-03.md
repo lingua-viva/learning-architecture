@@ -82,7 +82,7 @@ Each verified by grep: **no production reference anywhere in `src/`**.
 
 | symbol | UX | why it matters | disposition |
 |---|---|---|---|
-| `injection_guard.detect_injection` | U11 U13 | **an unarmed guard.** A prompt-injection detector exists, is tested, and nothing in the query path calls it. Complete-mediation failure (the class the trash-collector spec names). | **MOUNT** in the Ask path, after confirming no other guard covers it |
+| `injection_guard.detect_injection` | U11 U13 | **CORRECTED 2026-09-04:** the guard IS armed — its redaction half (`redact_injection`) runs at three seams: `document_parser.py:111` (parse time), `extraction_engine.py:107` (file text), `pipeline.py:210` (external egress). Only the detect-only twin is unreached, and the module's docstring rules that the teacher's own Ask queries are trusted input in a local-only app. First draft called this "an unarmed guard, complete-mediation failure" — wrong; the mechanism is in force. | **DELETE** `detect_injection` (retarget its tests at `redact_injection`'s list) or declare it a test seam. Do NOT arm it on the teacher's question. Open: verify the knowledge-library ingest path also parses through `document_parser` (CANNOT-TELL). |
 | `safeguarding.pending_notifications`, `docpipe/sync.drain`/`loop`, `slack_socket.drain` | U13 U4 | queued safeguarding notifications and docpipe sync have drains that **nothing in product starts** (only the Drive drain is registered at startup, `web.py:1647-1681`). If a RED observation queues a notification, who delivers it? | **MOUNT** or state where they run — CANNOT-TELL tonight whether the desktop wrapper or a CLI starts them |
 | `pdf_generator.render_parent_report_pdf` | U10 | the parent-report PDF renderer is never called; the differentiated-materials PDF is | **MOUNT** behind the parent-report approve flow, or DELETE if print-HTML is the product |
 | `parent_report.approve`, `to_print_html`, `to_printable_text` | U10 | the approve/print half of Summaries is not on any route (`students.py:1886/1945` closures do something else) | **MOUNT** — U10 is on the SIR list |
@@ -131,7 +131,7 @@ Reached by nothing, tested by nothing. This is plain dead code — a different c
 
 ## 7. What to do with this
 
-1. Arm `detect_injection` or delete it — a guard that exists and is never invoked is worse than none, because it reads as covered.
+1. ~~Arm `detect_injection`~~ — corrected 2026-09-04: the redaction guard is armed at three seams; delete the detect-only twin or mark it a test seam (§4.2). The open question is whether every retrieved-text path into Ask goes through `document_parser`.
 2. Answer who drains safeguarding notifications. If nothing does, RED observations are being queued and never delivered.
 3. U8's two store ops need endpoints; U10's approve/print half needs a route. Both are on the SIR list.
 4. Re-run `python scripts/trash-collector.py` after every wiring change; the delta is the proof.
