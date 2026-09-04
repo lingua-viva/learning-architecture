@@ -307,3 +307,126 @@ PYTHONPATH=. python3 src/lv_cli.py lens-update <report-card> --preview-only
 
 CLI previews and app does not  ->  missing API endpoint, two days.
 CLI also fails                 ->  extraction logic, and a different plan.
+
+---
+
+## 7. CUSTOMER SYNC, 2026-09-03 — corrections to this plan
+
+Source: Still I Rise x Mission Canvas bi-weekly sync, 2026-09-03, with **Olga
+Giovani** (Still I Rise). Recap + full transcript. Read after §1-§6 were written;
+these supersede the plan where they disagree.
+
+### C1 — ASSESS DOES NOT GRADE. This plan was wrong.
+
+§3.3 said "Output -- grade plus generated assessment", from the operator's
+instruction that Assess should be "also placing a grade". The customer agreed
+the opposite, in terms, and it was put to her as a direct question:
+
+> **Mical:** "what would help you the most is just to have that kind of like
+> **automatically not graded**, but like all of the problems to just kind of
+> come out, okay?"
+> **Olga:** "Correct."
+
+**Assess produces a diagnostic, not a mark.** §3.3 is struck. Automatic grading
+is removed from scope until an operator ruling reverses the customer agreement.
+
+This matters beyond scope: an auto-grade is a decision about a child. Shipping
+one the customer explicitly declined would be the product deciding rather than
+informing -- the same line the Lens Engine analysis says never to cross
+("never ship scoring: ranking/deciding flips every liability shield").
+
+### C2 — the oral output has a named shape, and it is not free text
+
+> "it could still tell me you know whether it's the **flow**, whether it's the
+> **syntax** that is very problematic, whether it's the **grammar**, whether
+> it's the **vocabulary** that needs further support."
+
+Four dimensions -- fluency/flow, syntax, grammar, vocabulary -- each carrying
+"is this the problem area / does this need support". That is the Assess output
+contract, and it maps onto lens fields rather than onto a score.
+
+### C3 — three minutes, not "three to four"
+
+> "if it was like a 30 minute oral exam ... it's usually **maximum three
+> minutes**"
+
+The duration gate in §3.1 is 3 minutes maximum. The recap's "three- to
+four-minute" is looser than what was actually said.
+
+### C4 — HIDE, do not delete
+
+The operator's instruction was "remove". The sync was explicit that this is
+reversible and expected to be reversed:
+
+> "I can take away home daily and plan ... it's just a little bit like hide,
+> hide ... **I can always throw it back in later**"
+
+§1.A2 already recommended deleting the nav entry and leaving the render
+handlers. That is now the requirement, not a recommendation. The Daily view in
+particular was described as valuable-but-unbuilt ("taking whatever information
+from Slack ... and just bring it into their space"), so its code must survive.
+
+### C5 — Whisper is the named transcription engine, and it already runs
+
+> "the technology underneath it called **Whisper** ... works in many different
+> languages"
+> "I already have it installed and and working"
+
+§3.1 said "transcription" generically. It is Whisper, multilingual, present.
+Italian is explicitly in scope and explicitly weaker than English -- which is
+the same asymmetry the safeguarding detector had. **The oral path needs the
+Italian-vs-English parity discipline from day one**, not as a later fix.
+
+### C6 — the out-of-box failure is REAL and was witnessed
+
+Olga hit repeated errors installing, live on the call:
+
+> "there are some errors popping up"
+> "another error popped up but **I accidentally closed it**"
+
+One of those errors has no record anywhere. That is §1.A1 (Ask/install must
+work out of the box) with a named user and a witnessed failure, and it raises
+its priority: it is the only item on this plan that has already cost a customer
+her time.
+
+The model download was correctly identified as normal first-run behaviour
+(the "Quinn" model = qwen3:8b, ruling R2). Worth noting R2 is now
+customer-visible: **the thing Olga is waiting on is the Qwen download.**
+
+### C7 — a promise was made about images that the tree has not earned
+
+> "You can even Read pictures. **I haven't tested on that.** If you want me to,
+> I can."
+
+§3.2 already named handwritten/photo input as the item most likely to miss two
+weeks. It is now also the item a customer has been told "should work". Under R4
+(unattended use) an untested "should work" on a child's assessment is the
+sharpest risk on this plan.
+
+### C8 — a durability promise now exists about local lenses
+
+> "as you create these things, these lenses, it'd just be saved on your laptop
+> and that **should never be overridden**"
+
+Plus a Windows upgrade wrinkle told to the customer: "if you're on a Windows,
+sometimes it likes it if you get rid of the old version first."
+
+**This needs a test.** "Never overridden" is a data-durability guarantee about a
+teacher's accumulated work, made verbally, currently pinned by nothing. An
+install-over-install that wipes a lens store would be unrecoverable and would
+end the pilot.
+
+### C9 — confirmations, no change needed
+
+- Observe routed through the document logic is confirmed as the intent, and was
+  correctly described to the customer as **not yet built**: "I have an automated
+  process that ... tries to guess where to put it. And so I'm going to try and
+  make that work for the observer too ... it's not there yet." (= §2, PROJECT 1)
+- Same logic for document and oral input: proposed and **approved by Olga**.
+- Dropdowns stay: "I'll leave them in case ... the teacher wants to hard code
+  these." (= §2.2)
+- Editable lens after routing: "once it's there you can modify it and you can
+  change it if you want." (= §2.3)
+- Oral assessment lives **under Assess**.
+- Two weeks, "maybe one".
+- La Scuola and Still I Rise work separated (= R1).
