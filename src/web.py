@@ -4348,7 +4348,7 @@ async def update_school_profile(payload: dict):
 
     if not isinstance(payload, dict) or not payload:
         return JSONResponse({"error": "At least one field is required"}, status_code=400)
-    unknown = set(payload) - {"own_teacher_id", "teacher_display_names"}
+    unknown = set(payload) - {"own_teacher_id", "teacher_display_names", "deployment_profile"}
     if unknown:
         return JSONResponse(
             {"error": f"Unknown fields: {sorted(unknown)}"}, status_code=400
@@ -4399,6 +4399,19 @@ async def update_school_profile(payload: dict):
     # The previous effective identity — what existing local rows are
     # attributed as — must be captured BEFORE the config write, because it
     # is the rename source for the backfill below.
+    deployment_profile: Optional[str] = None
+    if "deployment_profile" in payload:
+        from src.lingua_viva.config import DEPLOYMENT_PROFILES
+
+        raw_profile = payload["deployment_profile"]
+        candidate = raw_profile.strip().lower() if isinstance(raw_profile, str) else ""
+        if candidate not in DEPLOYMENT_PROFILES:
+            return JSONResponse(
+                {"error": f"Unknown deployment_profile {raw_profile!r}. One of: {', '.join(DEPLOYMENT_PROFILES)}."},
+                status_code=400,
+            )
+        deployment_profile = candidate
+
     previous_id = own_teacher_id() or UNPROVISIONED_TEACHER_ID
 
     path = school_profile_path()
@@ -4412,6 +4425,8 @@ async def update_school_profile(payload: dict):
         existing["own_teacher_id"] = new_id
     if display_names is not None:
         existing["teacher_display_names"] = display_names
+    if deployment_profile is not None:
+        existing["deployment_profile"] = deployment_profile
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = path.with_suffix(".json.tmp")
     tmp_path.write_text(

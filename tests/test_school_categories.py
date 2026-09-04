@@ -569,6 +569,7 @@ def test_school_profile_endpoint(monkeypatch, tmp_path):
             "hidden_categories",
             "teacher_display_names",
             "own_teacher_id",
+            "deployment_profile",  # plan #6 (2026-09-04): SIR deployment profile, additive
         }
 
 

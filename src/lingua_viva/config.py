@@ -255,7 +255,15 @@ DEFAULT_SCHOOL_PROFILE = {
     # to or imported from the shared folder, so two fresh installs can never
     # silently overwrite or misattribute each other's observations.
     "own_teacher_id": "",
+    "deployment_profile": "la_scuola",
 }
+
+# Plan #6 (2026-09-04, Olga's C4/SIR ruling): a deployment profile hides the
+# surfaces that confused the 29 August walkthrough (Home / Daily / Plan /
+# Slack) and boots to Students. Code is kept; only the nav is filtered.
+# LV_DEPLOYMENT_PROFILE wins over the file when it names a known profile,
+# so an install can be cut for a school without touching config.
+DEPLOYMENT_PROFILES = ("la_scuola", "sir")
 
 # Reserved sentinel for a machine that has not set its teacher identity.
 # Pre-dates the identity config (every web.py write path defaulted to it),
@@ -281,13 +289,22 @@ def read_school_profile() -> dict:
         "hidden_categories": list(DEFAULT_SCHOOL_PROFILE["hidden_categories"]),
         "teacher_display_names": dict(DEFAULT_SCHOOL_PROFILE["teacher_display_names"]),
         "own_teacher_id": str(DEFAULT_SCHOOL_PROFILE["own_teacher_id"]),
+        "deployment_profile": str(DEFAULT_SCHOOL_PROFILE["deployment_profile"]),
     }
+    env_profile = (os.environ.get("LV_DEPLOYMENT_PROFILE") or "").strip().lower()
     try:
         with school_profile_path().open(encoding="utf-8") as handle:
             data = json.load(handle)
     except (FileNotFoundError, json.JSONDecodeError, OSError):
-        return default
+        data = {}
     if not isinstance(data, dict):
+        data = {}
+    file_profile = data.get("deployment_profile")
+    if isinstance(file_profile, str) and file_profile.strip().lower() in DEPLOYMENT_PROFILES:
+        default["deployment_profile"] = file_profile.strip().lower()
+    if env_profile in DEPLOYMENT_PROFILES:
+        default["deployment_profile"] = env_profile
+    if not data:
         return default
     labels = data.get("category_labels")
     if isinstance(labels, dict):

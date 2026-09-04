@@ -16,6 +16,12 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v184 (2026-09-04): plan #6 SIR deployment profile (Olga's C4/SIR ruling).
+#     src/web.py: POST /api/school-profile accepts deployment_profile
+#     (la_scuola | sir; unknown -> named 400). static/index.html: under
+#     "sir" the nav hides Home / Daily / Plan / Slack and teachers boot to
+#     Students; the shell paints only after the profile is known. Code
+#     kept, nav filtered. Lock re-taken on Linux (LF bytes).
 #   v183 (2026-09-04): U8 editable lens (plan #5). static/index.html: every
 #     support entry in the Students view carries a remove control (POST
 #     /support-entry/dismiss; deactivates, never deletes; dismissed entries

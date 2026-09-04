@@ -1512,6 +1512,21 @@
       ["reflect", "Reflect", "💭"]
     ];
 
+    // Plan #6 (2026-09-04, Olga's C4/SIR ruling): the SIR deployment profile hides
+    // Home / Daily / Plan / Slack and boots teachers to Students. Code is kept;
+    // only the nav is filtered. The profile comes from /api/school-profile.
+    function deploymentProfile() {
+      return ((state.schoolProfile || {}).deployment_profile || "la_scuola");
+    }
+    const SIR_HIDDEN_VIEWS = ["home", "daily", "plan", "slack"];
+    function visibleNav(items) {
+      return deploymentProfile() === "sir" ? items.filter(([id]) => !SIR_HIDDEN_VIEWS.includes(id)) : items;
+    }
+    function defaultViewFor(role) {
+      if (role === "coordinator") return "programme";
+      return deploymentProfile() === "sir" ? "students" : "home";
+    }
+
     const $ = id => document.getElementById(id);
     const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, ch => ({
       "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -1599,7 +1614,7 @@
     function setRole(role) {
       state.role = role;
       localStorage.setItem("lvRole", role);
-      state.view = role === "coordinator" ? "programme" : "home";
+      state.view = defaultViewFor(role);
       $("role-choice").classList.remove("visible");
       renderShell();
       renderView();
@@ -1631,11 +1646,11 @@
 
     function renderShell() {
       $("role-label").textContent = state.role === "coordinator" ? "Coordinator" : "Teacher";
-      const primary = state.role === "coordinator" ? adminNav : teacherNav;
+      const primary = visibleNav(state.role === "coordinator" ? adminNav : teacherNav);
       $("primary-nav").innerHTML = primary.map(item => navButton(item)).join("");
-      $("utility-nav").innerHTML = utilityNav.map(item => navButton(item)).join("");
+      $("utility-nav").innerHTML = visibleNav(utilityNav).map(item => navButton(item)).join("");
       $("brand-home").onclick = () => {
-        state.view = state.role === "coordinator" ? "programme" : "home";
+        state.view = defaultViewFor(state.role);
         renderShell();
         renderView();
       };
@@ -8708,7 +8723,14 @@
       $("role-choice").classList.add("visible");
       state.role = "teacher";
     }
-    renderShell();
+    // Plan #6: the shell is painted only once the deployment profile is known,
+    // otherwise the first paint under SIR would show the four hidden surfaces.
+    async function bootShell() {
+      await ensureSchoolProfile();
+      if (deploymentProfile() === "sir" && SIR_HIDDEN_VIEWS.includes(state.view)) state.view = defaultViewFor(state.role);
+      renderShell();
+      renderView();
+    }
     // F4 (SPEC_LV_DEMO_EVE_FIX_2026-08-19 §2): surface app version in the topbar.
     // Desktop: Electron preload exposes lvDesktop.getVersion().
     // Browser: fall back to /api/health which includes the backend version.
@@ -8725,7 +8747,7 @@
       } catch (_) { /* non-critical — badge stays empty */ }
     })();
     initVoiceCompanion();
-    renderView();
+    bootShell();
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
   </script>
 </body>
