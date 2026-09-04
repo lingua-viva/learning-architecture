@@ -16,6 +16,15 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v181 (2026-09-04): lens field contract on the wire (cycle 0, 30f5e03).
+#     src/web.py: /api/voice/act observation branch and /api/observe/capture
+#     (after the restricted/duplicate returns) route the saved comment
+#     through observe_to_lens -> write_student_lens(source_kind="teacher_note")
+#     and return additive lens_update {written_fields, review_required,
+#     unresolved_questions, accounting}; /api/parents/recommendation gains
+#     additive fields_used, fields_enriching_missing, source_entry_ids from
+#     read_for("parent_report"). No change to static/index.html or sw.js.
+#     Lock re-taken on Linux (LF bytes) - never --bump from a CRLF checkout.
 #   v180 (2026-09-01): BUG-T5.2 (Claudia QA v0.2.78) — Observe save student
 #     gate. web.py /api/observe/capture refuses to save when the transcript
 #     names a different student than selected or an ambiguous shared surname

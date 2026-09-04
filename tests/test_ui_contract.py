@@ -266,9 +266,11 @@ REPO = Path(__file__).resolve().parent.parent
 #     English attribution, never raw confidence numbers or method tokens.
 #   v166 (2026-08-19): demo-eve F4+F5 — version badge in topbar, preview-first
 #     import copy, xlsx-specific not-found hint.
+# v181 (2026-09-04): lens field contract on the wire — Observe -> lens on
+#   both routes, parent recommendation provenance fields (web.py only).
 # v180 (2026-09-01): BUG-T5.2 — Observe save student gate (ambiguous
 #   surname / mismatched name refuses to save; "Which student?" chooser).
-EXPECTED_VERSION = 180
+EXPECTED_VERSION = 181
 
 
 def _html() -> str:
