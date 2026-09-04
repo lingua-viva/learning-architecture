@@ -43,6 +43,9 @@ roots:
   - symbol: "src/lingua_viva/routers/artifacts.py::__main__"
     kind: product
     why: "same: router mounted by name"
+  - symbol: "src/lingua_viva/routers/admin_query.py::__main__"
+    kind: product
+    why: "same: router mounted by name (U18 admin lens query, 2026-09-03)"
   - symbol: "src/lv_cli.py::__main__"
     kind: product
     why: "the `lv` CLI shim: the module body imports main from src.lingua_viva.cli and __main__ (:6) calls it; there is no def in this file, so the module body is the root"

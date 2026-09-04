@@ -563,6 +563,42 @@ def _improve(args: argparse.Namespace) -> int:
     return 1 if report["verdict"] in {"BLOCKED", "NOT READY"} else 0
 
 
+def _lens_query(args: argparse.Namespace) -> int:
+    """U18 over the STORE (lens_query), as opposed to `fleet` over the
+    docpipe vault (fleet_query). Same result discipline: absence is a
+    verdict, exit 2 = NOT-ENOUGH-DATA."""
+    import json as _json
+
+    from src.education.student_lens import StudentLensStore
+    from src.lingua_viva import lens_query as lq
+
+    if not args.question_id:
+        for q in lq.QUESTIONS:
+            print(f"{q['id']:4s} {q['q']}")
+        return 0
+    overrides = {k: v for k, v in dict(days=args.days, min_categories=args.min_categories,
+                                       term=args.term, student=args.student).items() if v is not None}
+    store = StudentLensStore()
+    try:
+        result = lq.run_question(store, args.question_id, names=bool(args.names), **overrides)
+    except ValueError as exc:
+        print(str(exc))
+        return 2
+    finally:
+        store.close()
+    if args.json:
+        print(_json.dumps(result, indent=2, ensure_ascii=False, default=str))
+    else:
+        print(f"{result['question_id']}: {result['question']}")
+        print("verdict: SCORED" if result.get("scored") else "verdict: NOT-ENOUGH-DATA")
+        if result.get("empty_reason"):
+            print(f"empty_reason: {result['empty_reason']}")
+        payload = {k: v for k, v in result.items()
+                   if k not in {"question_id", "question", "query", "scored", "empty_reason"}}
+        print(_json.dumps(payload, indent=2, ensure_ascii=False, default=str))
+    return lq.exit_code(result)
+
+
 def _fleet(args: argparse.Namespace) -> int:
     from src.lingua_viva import fleet_query as fq
 
@@ -1033,6 +1069,19 @@ def build_parser() -> argparse.ArgumentParser:
     lens.add_argument("--student", default=None, help="Target student ID (skip auto-matching)")
     lens.add_argument("--json", action="store_true")
 
+    lens_query = sub.add_parser(
+        "lens-query",
+        help="Administrator questions over the student lens STORE, through the lens field contract "
+             "(deterministic, no LLM; ARON codes by default). Exit 2 = NOT-ENOUGH-DATA.",
+    )
+    lens_query.add_argument("question_id", nargs="?", default="", help="L1..L12, or omit to list the questions")
+    lens_query.add_argument("--json", action="store_true", help="Machine-readable output")
+    lens_query.add_argument("--names", action="store_true", help="Show display names instead of ARON codes (admin eyes only)")
+    lens_query.add_argument("--days", type=int, default=None)
+    lens_query.add_argument("--min-categories", type=int, default=None)
+    lens_query.add_argument("--term", default=None)
+    lens_query.add_argument("--student", default=None)
+
     fleet = sub.add_parser(
         "fleet",
         help="Administrator queries across student lens vaults (deterministic, no LLM). Exit 2 = NOT-ENOUGH-DATA.",
@@ -1133,6 +1182,8 @@ def main(argv: list[str] | None = None) -> int:
         return asyncio.run(_lens_update(args))
     if args.command == "fleet":
         return _fleet(args)
+    if args.command == "lens-query":
+        return _lens_query(args)
     return 1
 
 

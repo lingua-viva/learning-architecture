@@ -955,3 +955,19 @@ intentionally_backend_only:
       Appends one PoI activity iteration (routers/artifacts.py, W3). The
       UI reads progression (GET has a call site) but has no record
       control; writes are programmatic/test-driven today.
+
+  - route: "GET /api/admin/lens-query/questions"
+    status: deferred_undecided
+    reason: >-
+      U18 admin query across lenses (routers/admin_query.py, 2026-09-03):
+      the declared question list. Backend built behind the /api/admin role
+      gate; the admin UI (adminNav exists in static/index.html) has no
+      query panel yet — UX_MATRIX item 13. `lv lens-query` is the CLI door.
+
+  - route: "GET /api/admin/lens-query/{question_id}"
+    status: deferred_undecided
+    reason: >-
+      U18: runs one question (L1..L12) over the student lens STORE through
+      the lens field contract — deterministic, ARON codes by default, every
+      result carries scored/targets/cannot_tell. No UI call site yet; same
+      missing admin panel as the questions route.

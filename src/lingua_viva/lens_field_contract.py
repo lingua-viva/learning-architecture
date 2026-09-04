@@ -246,6 +246,10 @@ REGISTRY: tuple[FieldSpec, ...] = (
     FieldSpec("sel_summary", "blob", "derived", "read_only",
               note="rolling counts over observations (LENS_SHAPES); read by no consumer in src/"),
     FieldSpec("profile_version", "scalar", "projection", "read_only", note="write counter"),
+    FieldSpec("created_at", "scalar", "projection", "read_only", note="system timestamp, set by create_lens"),
+    FieldSpec("updated_at", "scalar", "projection", "read_only", note="system timestamp, bumped by every write; staleness reads it"),
+    FieldSpec("deleted", "scalar", "authored", "read_only", writer="store:delete_lens", note="soft tombstone (delete_lens)"),
+    FieldSpec("deleted_at", "scalar", "projection", "read_only", note="set with the tombstone"),
 
     # -- support profile -----------------------------------------------------
     FieldSpec("support_profile", "blob", "authored", "read_only",

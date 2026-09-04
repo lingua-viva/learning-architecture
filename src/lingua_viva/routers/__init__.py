@@ -17,4 +17,5 @@ ROUTER_MODULES: list[str] = [
     "artifacts",
     "document_import",
     "students",
+    "admin_query",
 ]

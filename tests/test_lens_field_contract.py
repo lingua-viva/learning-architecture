@@ -78,8 +78,7 @@ def test_every_students_column_is_declared_and_matches_the_schema(tmp_path):
         s.close()
     assert live == contract.STUDENT_COLUMNS, "students schema drifted from the contract's column pin"
     registry_paths = {spec.path for spec in contract.REGISTRY}
-    undeclared = [c for c in live if c not in registry_paths
-                  and c not in ("created_at", "updated_at", "deleted", "deleted_at")]
+    undeclared = [c for c in live if c not in registry_paths]
     assert undeclared == [], f"students columns with no registry entry: {undeclared}"
 
 
