@@ -5711,6 +5711,38 @@ async def assess_rubric_pdf(unit_id: str):
     }
 
 
+# U10 (readiness day 7, 2026-09-04): the minimum-evidence gate. A parent note
+# may only be approved when at least PARENT_NOTE_MIN_EVIDENCE of its sentences
+# resolve to an observation trend or a lens entry. The intro is a template
+# and the "still collecting observations" line is an absence, so neither
+# counts. Threshold is the operator's number; 1 is the floor below which the
+# note says nothing about this child (BUG-6, 29 August).
+def _student_name_tokens(display_name: str) -> list[str]:
+    """U10 (2026-09-04): the publication gate matched the FULL display name
+    only, so "amina's" survived a note about "Amina Rossi". Match the full
+    name and each token of three letters or more; the gate lowercases."""
+    full = str(display_name or "").strip()
+    tokens = [part for part in full.replace("-", " ").split() if len(part) >= 3]
+    return [n for n in [full, *tokens] if n]
+
+
+PARENT_NOTE_MIN_EVIDENCE = 1
+
+
+def _parent_note_minimum_evidence(draft) -> dict:
+    backed = [s for s in list(draft.strengths or []) + list(draft.growth_areas or []) if str(s).strip()]
+    count = len(backed)
+    met = count >= PARENT_NOTE_MIN_EVIDENCE
+    reason = (
+        f"{count} sentence(s) resolve to an observation or a lens entry."
+        if met else
+        "No sentence in this note resolves to an observation or a lens entry — there is "
+        "nothing about this child to send yet. Record an observation or import a report "
+        "card first."
+    )
+    return {"met": met, "count": count, "threshold": PARENT_NOTE_MIN_EVIDENCE, "reason": reason}
+
+
 @app.post("/api/parents/recommendation")
 async def parent_recommendation(request: Request, payload: dict):
     from src.education.parent_report import ParentReportGenerator
@@ -5773,6 +5805,7 @@ async def parent_recommendation(request: Request, payload: dict):
             "fields_used": list(getattr(draft, "fields_used", []) or []),
             "fields_enriching_missing": list(getattr(draft, "fields_enriching_missing", []) or []),
             "source_entry_ids": list(getattr(draft, "source_entry_ids", []) or []),
+            "minimum_evidence": _parent_note_minimum_evidence(draft),
         }
 
         # Gap 1 (SPEC_LV_REMAINING_GAPS_2026-07-29): the same gate the
@@ -5851,6 +5884,119 @@ async def parent_recommendation(request: Request, payload: dict):
         return JSONResponse({"error": result["__error__"]}, status_code=result["__status__"])
     return result
 
+
+
+@app.post("/api/parents/approve")
+async def parent_approve(request: Request, payload: dict):
+    """U10 (2026-09-04): the teacher's approval - Stage 8 of the parent report,
+    on a route at last. Regenerates the deterministic draft, applies the
+    minimum-evidence gate, runs parent_report.approve() on the teacher's
+    edited body (which re-checks trauma safety), strips names, runs the
+    publication-safety gate, and returns the parent artifact with its print
+    HTML and printable text plus the evidence ids behind it. Logs a
+    content-free parent_report_approved event. Nothing is sent anywhere."""
+    from src.education.content_differentiator import TraumaSafetyError
+    from src.education.parent_report import ParentReportGenerator, render_parent_report_html
+    from src.lingua_viva.access_roles import effective_teacher_id
+    from src.lingua_viva.config import read_school_profile
+    from src.lingua_viva.governance import check_publication_safety
+    from src.lingua_viva.privacy_log import log_event
+
+    student_id = str(payload.get("student_id") or "").strip()
+    if not student_id:
+        return JSONResponse({"error": "student_id_required"}, status_code=400)
+    teacher_id = effective_teacher_id(request, str(payload.get("teacher_id") or "local-teacher"))
+    display_name = str(payload.get("teacher_display_name") or "").strip()
+    if not display_name:
+        profile = read_school_profile()
+        display_name = (profile.get("teacher_display_names") or {}).get(teacher_id) or teacher_id
+    edited_body = payload.get("body")
+    edited_body = str(edited_body).strip() if isinstance(edited_body, str) and edited_body.strip() else None
+
+    def approve(store):
+        generator = ParentReportGenerator(store)
+        try:
+            lens = store.export_lens(student_id)
+        except Exception:
+            return {"__error__": "unknown_student", "__status__": 404}
+        draft = generator.generate_draft(
+            student_id, teacher_id,
+            include_evidence_summaries=bool(payload.get("include_evidence_summaries")),
+        )
+        gate = _parent_note_minimum_evidence(draft)
+        if not gate["met"]:
+            return {
+                "__error__": "not_enough_evidence", "__status__": 409,
+                "message": gate["reason"], "minimum_evidence": gate,
+            }
+        try:
+            artifact = generator.approve(draft, display_name, teacher_edited_body=edited_body)
+        except TraumaSafetyError as exc:
+            return {"__error__": "unsafe_label", "__status__": 400, "message": str(exc)}
+        names = _student_name_tokens(lens.get("display_name") or "")
+        fields = {
+            "subject_line": _strip_parent_output(artifact.subject_line, names),
+            "body": _strip_parent_output(artifact.body, names),
+            "home_activities": [_strip_parent_output(item, names) for item in artifact.home_activities],
+            "strengths": [_strip_parent_output(item, names) for item in artifact.strengths],
+            "growth_areas": [_strip_parent_output(item, names) for item in artifact.growth_areas],
+        }
+        safety = check_publication_safety(fields, student_names=names)
+        if safety["blocked"]:
+            return {
+                "__error__": "publication_safety", "__status__": 409,
+                "message": "The child's name or a private detail is still in the note. Replace it with 'your child' and approve again.",
+                "violations": safety["violations"],
+            }
+        intro = _strip_parent_output(artifact.intro, names)
+        out_artifact = {
+            **fields,
+            "from_label": artifact.from_label,
+            "language": artifact.language,
+            "grade_level": artifact.grade_level,
+            "reporting_period": artifact.reporting_period,
+            "intro": intro,
+        }
+        print_html = render_parent_report_html({
+            "subject_line": fields["subject_line"],
+            "student_name": "",
+            "grade_level": artifact.grade_level,
+            "reporting_period": artifact.reporting_period,
+            "intro": intro if edited_body is None else fields["body"],
+            "strengths": fields["strengths"] if edited_body is None else [],
+            "growth_areas": fields["growth_areas"] if edited_body is None else [],
+            "home_activities": fields["home_activities"],
+            "from_label": artifact.from_label,
+        })
+        lines = [fields["subject_line"], "", fields["body"], ""]
+        if fields["home_activities"]:
+            lines.append("A few things you could try at home:")
+            lines.extend(f"- {item}" for item in fields["home_activities"])
+            lines.append("")
+        lines.append(f"— {artifact.from_label}")
+        observations = lens.get("observations") or []
+        return {
+            "approved": True,
+            "artifact": out_artifact,
+            "print_html": print_html,
+            "printable_text": "\n".join(lines),
+            "evidence": {
+                "count": gate["count"],
+                "threshold": gate["threshold"],
+                "source_entry_ids": list(getattr(draft, "source_entry_ids", []) or []),
+                "source_observation_ids": [str(o["observation_id"]) for o in observations if o.get("observation_id")],
+                "fields_used": list(getattr(draft, "fields_used", []) or []),
+            },
+            "publication_safety": safety,
+        }
+
+    result = await asyncio.to_thread(_with_student_store, approve)
+    if "__error__" in result:
+        status = int(result.pop("__status__", 400))
+        error = result.pop("__error__")
+        return JSONResponse({"error": error, **result}, status_code=status)
+    await asyncio.to_thread(log_event, "parent_report_approved", query_text=student_id)
+    return result
 
 @app.post("/api/reflect/note")
 async def reflect_note(payload: dict):

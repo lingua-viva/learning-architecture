@@ -5229,13 +5229,24 @@
       // border, not as a dismissible toast. The draft is still shown — a
       // teacher cannot fix a name they are not allowed to see, and nothing
       // reaches a parent until they press send themselves.
-      const warnings = (data.safety_warnings || []).length
+      // U10 (2026-09-04): the minimum-evidence gate. A note with nothing behind
+      // it is shown (the teacher can see why) but cannot be approved or printed.
+      state.parentDraft = data;
+      state.parentApproved = null;
+      const gate = data.minimum_evidence || {met: true};
+      const evidenceBox = gate.met
+        ? ""
+        : `<div style="border:2px solid var(--risk);border-radius:8px;padding:12px;margin-bottom:12px;">
+             <div class="source-line"><span class="badge risk">Not enough evidence to send</span></div>
+             <p style="margin:8px 0 0;">${escapeHtml(gate.reason || "No sentence in this note resolves to an observation or a lens entry.")}</p>
+           </div>`;
+      const warnings = evidenceBox + ((data.safety_warnings || []).length
         ? `<div style="border:2px solid var(--risk);border-radius:8px;padding:12px;margin-bottom:12px;">
              <div class="source-line"><span class="badge risk">Check this before sending</span></div>
              ${data.safety_warnings.map(item => `<p style="margin:8px 0 0;">${escapeHtml(item.message)}</p>`).join("")}
              <p class="voice-hint" style="margin-top:8px;">Replace it with &ldquo;your child&rdquo;, then send. This draft was not sent anywhere.</p>
            </div>`
-        : "";
+        : "");
       $("parent-output").innerHTML = `${warnings}<h3 id="parent-summary-subject">${escapeHtml(data.subject_line)}</h3>${sourceLine(data.source_citation)}<textarea>${escapeHtml(data.body + "\n\n" + data.home_activities.join("\n"))}</textarea>
         <div class="item" style="margin-top:12px;">
           <h3>Teacher review checklist</h3>
@@ -5243,9 +5254,10 @@
           <label class="row" style="margin:8px 0;"><input type="checkbox" data-parent-review-check style="width:auto;"><span>Every claim is supported by observations I trust.</span></label>
           <label class="row" style="margin:8px 0;"><input type="checkbox" data-parent-review-check style="width:auto;"><span>The tone sounds like me and is ready for this family.</span></label>
         </div>
-        <div class="row" style="margin-top:10px;"><button id="parent-copy-final" type="button" disabled>Copy final text</button><button id="parent-print-final" type="button" disabled>Print</button><span id="parent-review-status" class="voice-hint">Complete the checklist to copy or print.</span></div>`;
+        <div class="row" style="margin-top:10px;"><button id="parent-approve" class="primary" type="button" disabled>Approve</button><button id="parent-copy-final" type="button" disabled hidden>Copy final text</button><button id="parent-print-final" type="button" disabled hidden>Print</button><span id="parent-review-status" class="voice-hint">Complete the checklist to copy or print.</span></div>`;
       $("parent-copy-final").addEventListener("click", copyParentSummaryFinalText);
       $("parent-print-final").addEventListener("click", printParentSummaryFinalText);
+      $("parent-approve").addEventListener("click", approveParentSummary);
       document.querySelectorAll("[data-parent-review-check]").forEach(check => {
         check.addEventListener("change", updateParentReviewActions);
       });
@@ -5254,16 +5266,52 @@
 
     function updateParentReviewActions() {
       const checks = Array.from(document.querySelectorAll("[data-parent-review-check]"));
-      const ready = checks.length > 0 && checks.every(check => check.checked);
+      const reviewed = checks.length > 0 && checks.every(check => check.checked);
+      const gate = ((state.parentDraft || {}).minimum_evidence) || {met: true};
+      const approve = $("parent-approve");
+      if (approve) approve.disabled = !(reviewed && gate.met) || Boolean(state.parentApproved);
+      const approved = Boolean(state.parentApproved);
       ["parent-copy-final", "parent-print-final"].forEach(id => {
         const button = $(id);
-        if (button) button.disabled = !ready;
+        if (button) { button.disabled = !approved; button.hidden = !approved; }
       });
       const status = $("parent-review-status");
-      if (status) status.textContent = ready ? "Reviewed — ready to copy or print." : "Complete the checklist to copy or print.";
+      if (!status) return;
+      if (!gate.met) status.textContent = "Not enough evidence to send — nothing here can be approved.";
+      else if (approved) status.textContent = `Approved — ${plural(state.parentApproved.evidence.count, "piece")} of evidence behind this note, signed ${state.parentApproved.artifact.from_label}.`;
+      else status.textContent = reviewed ? "Reviewed — approve to copy or print." : "Complete the checklist, then approve.";
+    }
+
+    // U10 (2026-09-04): approval goes through the route - the server re-checks
+    // trauma safety on the edited body, strips names, runs the publication gate,
+    // and hands back the artifact that is printed. Nothing is sent anywhere.
+    async function approveParentSummary() {
+      const button = $("parent-approve");
+      const textarea = $("parent-output") ? $("parent-output").querySelector("textarea") : null;
+      const body = textarea ? textarea.value.trim() : "";
+      if (!body || !$("parent-student")) return;
+      button.disabled = true;
+      try {
+        const data = await api("/api/parents/approve", {
+          method: "POST",
+          body: JSON.stringify({
+            student_id: $("parent-student").value,
+            body,
+            include_evidence_summaries: $("parent-include-evidence") ? $("parent-include-evidence").checked : false,
+            teacher_display_name: (state.profile && (state.profile.display_name || state.profile.teacher_display_name)) || ""
+          })
+        });
+        state.parentApproved = data;
+        showSaveToast("summary approved");
+      } catch (error) {
+        button.disabled = false;
+        showToast(error.message || "Approval was refused.", "error");
+      }
+      updateParentReviewActions();
     }
 
     function parentSummaryFinalText() {
+      if (state.parentApproved && state.parentApproved.printable_text) return state.parentApproved.printable_text;
       const subject = $("parent-summary-subject") ? $("parent-summary-subject").textContent.trim() : "";
       const textarea = $("parent-output") ? $("parent-output").querySelector("textarea") : null;
       const body = textarea ? textarea.value.trim() : "";
@@ -5271,6 +5319,7 @@
     }
 
     async function copyParentSummaryFinalText() {
+      if (!state.parentApproved) { showToast("Approve the summary first.", "error"); return; }
       const text = parentSummaryFinalText();
       if (!text) {
         showToast("No summary text to copy.", "error");
@@ -5285,16 +5334,8 @@
     }
 
     function printParentSummaryFinalText() {
-      const subject = $("parent-summary-subject") ? $("parent-summary-subject").textContent.trim() : "Student Summary";
-      const textarea = $("parent-output") ? $("parent-output").querySelector("textarea") : null;
-      const body = textarea ? textarea.value : "";
-      if (!body.trim()) {
-        showToast("No summary text to print.", "error");
-        return;
-      }
-      const paragraphs = body.split(/\n{2,}/).map(part => `<p>${escapeHtml(part).replace(/\n/g, "<br>")}</p>`).join("");
-      const doc = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(subject)}</title><style>body{font-family:Georgia,'Times New Roman',serif;color:#1f2933;line-height:1.45;margin:18mm;}h1{font-size:24px;margin:0 0 18px;}p{margin:0 0 12px;}</style></head><body><h1>${escapeHtml(subject)}</h1>${paragraphs}</body></html>`;
-      printPacketHtml(doc, "Student summary");
+      if (!state.parentApproved || !state.parentApproved.print_html) { showToast("Approve the summary first.", "error"); return; }
+      printPacketHtml(state.parentApproved.print_html, "Student summary");
     }
 
     function healthBadgeClass(status) {

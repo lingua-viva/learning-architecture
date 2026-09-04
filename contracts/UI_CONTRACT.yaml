@@ -16,6 +16,14 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v185 (2026-09-04): U10 Summaries approve/print (readiness day 7).
+#     src/web.py: minimum_evidence on /api/parents/recommendation; POST
+#     /api/parents/approve (not_enough_evidence 409, unsafe_label 400,
+#     publication_safety 409; returns artifact + print_html +
+#     printable_text + evidence ids; logs parent_report_approved).
+#     static/index.html: "Not enough evidence to send" box; Approve button
+#     after the checklist; Copy/Print use the approved artifact. Lock
+#     re-taken on Linux (LF bytes).
 #   v184 (2026-09-04): plan #6 SIR deployment profile (Olga's C4/SIR ruling).
 #     src/web.py: POST /api/school-profile accepts deployment_profile
 #     (la_scuola | sir; unknown -> named 400). static/index.html: under
