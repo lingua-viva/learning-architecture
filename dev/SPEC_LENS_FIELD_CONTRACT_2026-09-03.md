@@ -300,6 +300,88 @@ report**. Do not "fix" the bridge tonight. Reconciling two lens structures is th
 operator ruling this spec exists to inform, and it is exactly the decision the
 convergence brief reserved to him.
 
+### 2.8 TWO FILTERS, NOT ONE — the contract serves OUT as well as IN
+
+**Operator framing, 2026-09-03:** *"multi-input → lens → multi-output ... we just
+need to wire them all into the same filter-to-lens-in and filter-from-lens-out
+logic."*
+
+§2.1–§2.7 specify the **IN** filter. That was half the job. The OUT filter is a
+peer, not an appendix, and measurement says it is the **larger** surface:
+
+```
+IN   writers        student_lens_writer.write_student_lens()  — one choke point
+                    (plus docpipe/lens.py's own path, §2.7.4)
+
+OUT  readers        13 modules, FOUR entry points, no declared contract:
+       get_lens · export_lens · export_lens_view · export_ethos_report
+
+       content_differentiator.py   Prepare — differentiated materials
+       parent_report.py            Summaries
+       help_artifacts.py           help artifacts
+       cohort_planning.py          grouping
+       trend_analysis.py           Trends (admin)
+       access_control.py           authorization  <- the PERSPECTIVE class, already real
+       drive_sync.py               export
+       governance.py / activity.py ethos reports
+       pipeline_execute.py         the action loop
+```
+
+Four read entry points with no declared contract is the same defect as four
+field lists — multiple doors into one structure, none of them authoritative.
+
+#### 2.8.1 The OUT filter, stated
+
+```python
+requires(output_id) -> tuple[FieldRequirement, ...]
+```
+
+Every output **declares the lens fields it consumes**, resolved through the same
+registry the writer uses. One registry, two directions.
+
+Each requirement carries whether the field is `essential` (the output is not
+honest without it) or `enriching` (it improves the output and its absence is
+survivable).
+
+#### 2.8.2 The honesty rule — glass-box, pointed outward
+
+The IN filter's law is: *a field that enters is written, queued, or refused by
+name — never silently dropped* (§2.4).
+
+The OUT filter's law is its mirror, and it is the one that makes agentic output
+trustworthy:
+
+> **An output must be able to say what it did not have.**
+
+A parent report generated from a lens with 3 of 10 fields populated must not
+read as though it had 10. Concretely, every output carries:
+
+- `fields_used` — resolved, with their evidence chains;
+- `fields_missing` — declared `essential`, absent from this lens;
+- and it **refuses to render** if an `essential` field is missing, naming it,
+  rather than producing a confident document with a hole in it.
+
+This is GIR applied to outputs. It is the same rule as the input side, and the
+project already has the language for it: *a CANNOT-TELL must never share a
+channel with a clean verdict.*
+
+**Why it matters more here than on the input side:** a dropped input field costs
+a teacher a re-import. A silently-thin output is a document about a child that
+reads as complete and is not — and under R4 it is going out unattended.
+
+#### 2.8.3 What this does NOT authorize tonight
+
+Do not convert 13 modules. **Declare the OUT filter and prove it on ONE
+consumer** (Rung 3, §6.2). The sweep of the rest is Rung 4's enumeration and, if
+it is large, its own build. The operator's read holds — *"we have the verbs"* —
+the verbs exist and are unwired; this is wiring, not authoring. But wiring 13
+consumers in one night is how a night is lost.
+
+**Rung 1 gains B9:** enumerate every OUT consumer and which read entry point it
+uses, and for each, which lens fields it actually reads. Read the code; do not
+infer from the function name. That table is the OUT filter's denominator and
+nothing can be reported as a fraction without it.
+
 ### 2.5 What the contract is NOT
 
 - Not a schema migration. No stored lens changes shape.
@@ -346,6 +428,7 @@ Measure and record, each with its command:
 | B6 | Bounded test baseline, full failure list preserved (see §7 for the command) |
 | B7 | Every `students` column classified `authored`/`derived`/`projection`/`UNCLASSIFIED` (§2.6) |
 | B8 | What `sync_to_student_lens_store()` carries and what it drops, field by field (§2.7.4) |
+| B9 | Every OUT consumer, its read entry point, and the lens fields it actually reads (§2.8.3) |
 
 **Do not fix anything in Rung 1.** Mixing fixes into the baseline destroys the
 comparison. Every failure found here is written down and left alone.
