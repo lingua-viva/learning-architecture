@@ -5752,6 +5752,12 @@ async def parent_recommendation(request: Request, payload: dict):
             "review_label": "Review before sending. No AI attribution in final message.",
             "source_citation": "Source: Manuale v1 and local teacher observations.",
             "source_observation_ids": source_obs_ids,
+            # Lens field contract OUT filter (2026-09-04): what the draft read
+            # from the lens, what it lacked, and the support-profile /
+            # strengths entry ids behind its sentences.
+            "fields_used": list(getattr(draft, "fields_used", []) or []),
+            "fields_enriching_missing": list(getattr(draft, "fields_enriching_missing", []) or []),
+            "source_entry_ids": list(getattr(draft, "source_entry_ids", []) or []),
         }
 
         # Gap 1 (SPEC_LV_REMAINING_GAPS_2026-07-29): the same gate the

@@ -69,7 +69,11 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from src.education.content_differentiator import CEFR_ORDER, _check_trauma_safety
-from src.education.student_lens import REPORT_GRADE_CONFIDENCE, StudentLensStore
+from src.education.student_lens import (
+    REPORT_GRADE_CONFIDENCE,
+    StudentLensStore,
+    support_profile_for_audience,
+)
 from src.education.trend_analysis import TrendAnalyzer
 
 VALID_TEMPLATES = ("progress", "concern", "activity_ideas")
@@ -109,6 +113,13 @@ class ParentReportDraft:
     student_name: str = ""
     grade_level: str = ""
     reporting_period: str = ""
+    # Lens field contract OUT filter (2026-09-04): what this draft read from
+    # the lens, what it lacked, and the ids of the support-profile /
+    # strengths entries behind its sentences (traceability, like
+    # source_observation_ids at the endpoint).
+    fields_used: list = field(default_factory=list)
+    fields_enriching_missing: list = field(default_factory=list)
+    source_entry_ids: list = field(default_factory=list)
 
 
 @dataclass
@@ -162,6 +173,11 @@ class ParentReportGenerator:
             raise ValueError(f"template_type must be one of {VALID_TEMPLATES}")
 
         lens = self.store.get_lens(student_id)
+        # OUT filter (lens_field_contract.requires("parent_report")): read the
+        # declared fields, and know what was missing. display_name is essential.
+        from src.lingua_viva.lens_field_contract import read_for
+
+        reading = read_for("parent_report", lens)
         trend = self.analyzer.analyze_student(student_id)
         name = lens.get("display_name") or "your child"
 
@@ -204,6 +220,45 @@ class ParentReportGenerator:
             sentence = f"{name} has brought care and attention to class moments this month."
             body_parts.append(sentence)
             strengths.append(sentence)
+
+        # The support profile and profile-level strengths (2026-09-04): what a
+        # report card and the teacher's own Observe notes put on the lens.
+        # Family audience: personal_context is excluded and only report-grade
+        # entries (teacher_confirmed / imported_verified) survive —
+        # support_profile_for_audience already enforces both. Only the
+        # STRENGTHS and STRATEGIES_WORKED buckets are read: needs, open
+        # questions and raw evidence are teacher-facing and would put deficit
+        # or clinical framing in front of a parent. Sentences join body_parts
+        # here so the trauma-safety and publication gates below cover them.
+        source_entry_ids: list = []
+        family_profile = support_profile_for_audience(lens.get("support_profile") or {}, "family")
+        strength_items: list = []
+        strategy_items: list = []
+        for cat_data in (family_profile.get("categories") or {}).values():
+            strength_items.extend(cat_data.get("strengths") or [])
+            strategy_items.extend(cat_data.get("strategies_worked") or [])
+        for kind in ("academic_strengths", "personal_strengths"):
+            for item in (lens.get("strengths_profile") or {}).get(kind) or []:
+                if not isinstance(item, dict) or item.get("active", True) is False:
+                    continue
+                if item.get("confidence", "teacher_confirmed") not in REPORT_GRADE_CONFIDENCE:
+                    continue
+                if str(item.get("text") or "").strip():
+                    strength_items.append(item)
+        for item in strength_items[:3]:
+            text = str(item.get("text") or "").strip().rstrip(".")
+            sentence = f"At school, {name} shows strength in {text}."
+            body_parts.append(sentence)
+            strengths.append(sentence)
+            if item.get("id"):
+                source_entry_ids.append(str(item["id"]))
+        for item in strategy_items[:2]:
+            text = str(item.get("text") or "").strip().rstrip(".")
+            sentence = f"Something that has helped {name} in class: {text}."
+            body_parts.append(sentence)
+            strengths.append(sentence)
+            if item.get("id"):
+                source_entry_ids.append(str(item["id"]))
 
         # Evidence summaries (SPEC_LV_EVIDENCE_ETHOS_TRAITS_2026-08-01):
         # report-grade ledger evidence only (teacher_confirmed /
@@ -269,6 +324,9 @@ class ParentReportGenerator:
             # Honest label: this is when the note was written, not a school
             # term boundary the system has no data for.
             reporting_period=datetime.now(timezone.utc).strftime("%B %Y"),
+            fields_used=sorted(reading["fields_used"]),
+            fields_enriching_missing=list(reading["fields_enriching_missing"]),
+            source_entry_ids=source_entry_ids,
         )
 
     def approve(

@@ -398,10 +398,16 @@ OUTPUT_REQUIREMENTS: dict[str, tuple[FieldRequirement, ...]] = {
         FieldRequirement("rti_current_tier", "essential"),
         FieldRequirement("cefr_snapshot", "enriching"),
     ),
+    # Summaries (parent_report.generate_draft): the name is essential; the
+    # rest enrich. support_profile and strengths_profile were NOT read before
+    # 2026-09-04 — a report card's strengths and an Observe note never reached
+    # the parent note (found by running the chain end to end).
     "parent_report": (
         FieldRequirement("display_name", "essential"),
         FieldRequirement("grade_level", "enriching"),
         FieldRequirement("home_languages", "enriching"),
+        FieldRequirement("support_profile", "enriching"),
+        FieldRequirement("strengths_profile", "enriching"),
     ),
 }
 
