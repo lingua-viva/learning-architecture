@@ -1,0 +1,75 @@
+# Reachability roots for Lingua Viva — declared, never inferred.
+#
+# `scripts/trash-collector.py` (ported from Mission Canvas, 2026-09-03; spec
+# mc:dev/SPEC_TRASH_COLLECTOR_2026-09-01.md) walks the call graph from these
+# and only these. It is ADVISORY: never blocks, never deletes. A finding means
+# "tested, and never reached from a declared root" — usually a test pitched at
+# the wrong level, sometimes scaffolding waiting on a path not yet built
+# (PENDING), sometimes genuinely unnecessary (DELETE). Three dispositions,
+# never two: MOUNT / DELETE / PENDING.
+#
+# KINDS: product = the running app a teacher or admin touches; script =
+# operator tooling run by hand; eval = instruments (none live under src/ here;
+# LV's evals live under tests/evals and are tests).
+#
+# UNDECLARED ENTRY POINTS ARE A FINDING. Every `__main__` block under src/ must
+# appear below, as a root or in not_roots with a reason. Read from the tree
+# 2026-09-03: eight modules carry one.
+#
+# KNOWN BLIND SPOT, stated: the analyser sees `src/` only. `doctor/`,
+# `ontology/`, `governance/` and `deliverables/` are separate packages and are
+# reached as libraries; symbols they define are not in this graph.
+
+schema: lv.reachability_roots.v1
+updated: "2026-09-03"
+
+roots:
+  # ── product ────────────────────────────────────────────────────────
+  - symbol: "src/web.py::__main__"
+    kind: product
+    why: "the FastAPI app is built at import; every @app.* route is registered by decorator from the module body; __main__ (:6918) calls start_web_server. The desktop wrapper spawns `python src/web.py <port>`."
+  - symbol: "src/lingua_viva/routers/students.py::__main__"
+    kind: product
+    why: "APIRouter included by web.py via importlib from ROUTER_MODULES — a string import the static graph cannot see, so the module body is declared a root directly"
+  - symbol: "src/lingua_viva/routers/document_import.py::__main__"
+    kind: product
+    why: "same: router mounted by name (import-document / apply-extractions — UX U3)"
+  - symbol: "src/lingua_viva/routers/safeguarding.py::__main__"
+    kind: product
+    why: "same: router mounted by name"
+  - symbol: "src/lingua_viva/routers/sources.py::__main__"
+    kind: product
+    why: "same: router mounted by name (UX U12)"
+  - symbol: "src/lingua_viva/routers/artifacts.py::__main__"
+    kind: product
+    why: "same: router mounted by name"
+  - symbol: "src/lv_cli.py::__main__"
+    kind: product
+    why: "the `lv` CLI shim: the module body imports main from src.lingua_viva.cli and __main__ (:6) calls it; there is no def in this file, so the module body is the root"
+  - symbol: "src/lingua_viva/cli.py::main"
+    kind: product
+    why: "teacher/operator CLI including `doctor`; __main__ (:1139) calls main()"
+
+  # ── script ─────────────────────────────────────────────────────────
+  - symbol: "src/lingua_viva/docpipe/corpus_scorer.py::main"
+    kind: script
+    why: "synthetic-corpus scorer, run by hand (scripts/build_synthetic_corpus.py companion)"
+  - symbol: "src/lingua_viva/docpipe/validate.py::main"
+    kind: script
+    why: "docpipe artifact validator, run by hand"
+  - symbol: "src/lingua_viva/improvement.py::main"
+    kind: script
+    why: "improvement loop runner, run by hand; also reachable as a library"
+  - symbol: "src/lingua_viva/spec_status.py::_main"
+    kind: script
+    why: "spec status report, run by hand"
+  - symbol: "src/lingua_viva/defect_triage.py::_main"
+    kind: script
+    why: "defect triage report, run by hand"
+
+allow:
+  - category: declared_test_seam
+    docstring_markers: ["test seam", "tests only", "(tests;", "for tests"]
+    why: "a seam that exists for tests declares itself in its own docstring; undeclared seams stay findings"
+
+not_roots: []

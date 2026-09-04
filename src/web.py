@@ -3289,6 +3289,41 @@ async def voice_act(request: Request, payload: dict):
 
         trigger_sync(student_id)
 
+        # Lens field contract (2026-09-03, U4): the comment's CONTENT reaches
+        # the lens's fields through the same logic a report card uses
+        # (observe_to_lens -> extract_for_lens_update -> write_student_lens),
+        # every candidate resolved through the registry, every one accounted
+        # for. The raw observation above is already saved; this step never
+        # fails it — a routing failure is REPORTED in lens_update, never
+        # swallowed and never a 500. Measured without a local model only:
+        # with one, the sentence classifier adds its batch latency here.
+        try:
+            from src.lingua_viva.observe_to_lens import observe_comment_to_lens_sync
+
+            def _route_to_lens(store):
+                return observe_comment_to_lens_sync(
+                    transcript,
+                    student_id=student_id,
+                    display_name=student_name or "",
+                    teacher_id=teacher_id,
+                    store=store,
+                )
+
+            lens_update = await asyncio.to_thread(_with_student_store, _route_to_lens)
+        except Exception as exc:  # noqa: BLE001 — glass-box: name it, do not hide it
+            lens_update = {
+                "student_id": student_id,
+                "written_fields": [],
+                "review_required": [],
+                "unresolved_questions": [
+                    "The observation was saved, but its content could not be routed "
+                    f"to lens fields ({type(exc).__name__}). Nothing was changed on the lens."
+                ],
+                "accounting": [],
+                "candidate_fields": [],
+                "error": type(exc).__name__,
+            }
+
         # First name only in spoken text (privacy rule: never speak a full
         # student name — /api/voice/tts enforces this too, belt and braces).
         # Every non-exact resolution names the student so a misresolution
@@ -3309,6 +3344,10 @@ async def voice_act(request: Request, payload: dict):
             # ethos traits the transcript matched and on what term —
             # teacher-reviewable suggestion only, degrades to [].
             "ethos_suggestions": _ethos_suggestions_for(transcript),
+            # Additive (lens field contract, 2026-09-03): what the comment's
+            # content did to the lens — written / review_required /
+            # unresolved_questions / accounting / candidate_fields.
+            "lens_update": lens_update,
             "spoken_confirmation": spoken_confirmation,
             "tone_prefix": "Confirmed. ",
             "gir_score": 1.0,
