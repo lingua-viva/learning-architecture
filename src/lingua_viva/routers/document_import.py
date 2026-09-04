@@ -224,7 +224,14 @@ async def apply_extractions(request: Request):
                 "student_id": student_id,
                 "fields_written": summary.get("written_fields", []),
                 "review_required": summary.get("review_required", []),
+                # Glass-box at the boundary the teacher actually uses
+                # (2026-09-03, baseline B5): the writer's refusals used to be
+                # dropped here, so a teacher saw "8 written, 5 to review" and
+                # nothing about the 38 sentences that were not imported.
+                "unresolved_questions": summary.get("unresolved_questions", []),
+                "accounting": summary.get("accounting", []),
                 "written_count": summary.get("feedback", {}).get("written_count", 0),
+                "refused_count": summary.get("feedback", {}).get("refused_count", 0),
             })
 
         return JSONResponse({
