@@ -266,6 +266,7 @@ REPO = Path(__file__).resolve().parent.parent
 #     English attribution, never raw confidence numbers or method tokens.
 #   v166 (2026-08-19): demo-eve F4+F5 — version badge in topbar, preview-first
 #     import copy, xlsx-specific not-found hint.
+# v186 (2026-09-04): School profile select + Apply in Settings (index.html only).
 # v185 (2026-09-04): U10 — Approve through /api/parents/approve, evidence gate box,
 #   print of the approved artifact (index.html + web.py).
 # v184 (2026-09-04): SIR deployment profile — nav filter + boot to Students
@@ -278,7 +279,7 @@ REPO = Path(__file__).resolve().parent.parent
 #   both routes, parent recommendation provenance fields (web.py only).
 # v180 (2026-09-01): BUG-T5.2 — Observe save student gate (ambiguous
 #   surname / mismatched name refuses to save; "Which student?" chooser).
-EXPECTED_VERSION = 185
+EXPECTED_VERSION = 186
 
 
 def _html() -> str:

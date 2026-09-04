@@ -6072,6 +6072,15 @@
               <textarea id="teacher-display-names" rows="3" placeholder='{"marco-r": "Marco Rossi"}'></textarea>
               <span class="voice-hint">Which colleague ID shows as which name, as JSON. Stays on this machine — never in shared files.</span>
             </label>
+            <div style="display:flex;flex-direction:column;gap:4px;">
+              <span>School profile</span>
+              <select id="school-profile-select">
+                <option value="la_scuola">La Scuola — everything (Home, Daily, Plan, Slack included)</option>
+                <option value="sir">Still I Rise — Prepare, Observe, Students, Assess, Ask, Summaries; opens on Students</option>
+              </select>
+              <span class="voice-hint">Which surfaces this school's teachers see. Nothing is deleted — hidden views come back when you switch profile.</span>
+              <div class="row" style="margin-top:6px;"><button id="school-profile-save" type="button">Apply profile</button><span id="school-profile-status" class="voice-hint"></span></div>
+            </div>
           </div>
           <div class="row" style="margin-top:12px;">
             <button id="teacher-identity-save" class="primary" type="button">Save identity</button>
@@ -6190,6 +6199,7 @@
       renderProviderControls();
       renderServiceKeyControls(status.service_keys || {});
       await renderTeacherIdentityControls();
+      await renderSchoolProfileControls();
       await renderIntegrationsControls();
       await renderExtractionControls();
       await renderUpdateControls();
@@ -6293,6 +6303,45 @@
         badge.classList.add("warn");
         badge.textContent = "not set — observations stay on this machine";
       }
+    }
+
+    // Plan #6 follow-up (2026-09-04, operator): the deployment profile is set from
+    // Settings, not only by POST or env. Applying it re-reads the profile and
+    // repaints the shell, so hidden surfaces disappear at once.
+    async function renderSchoolProfileControls() {
+      const select = $("school-profile-select");
+      const button = $("school-profile-save");
+      const status = $("school-profile-status");
+      if (!select || !button) return;
+      try {
+        const profile = await api("/api/school-profile");
+        select.value = profile.deployment_profile || "la_scuola";
+      } catch {}
+      button.addEventListener("click", async () => {
+        button.disabled = true;
+        if (status) status.textContent = "Applying\u2026";
+        try {
+          const res = await fetch("/api/school-profile", {
+            method: "POST", headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({deployment_profile: select.value})
+          });
+          const data = await res.json();
+          if (res.ok) {
+            state.schoolProfile = null;
+            await ensureSchoolProfile();
+            if (deploymentProfile() === "sir" && SIR_HIDDEN_VIEWS.includes(state.view)) state.view = defaultViewFor(state.role);
+            renderShell();
+            if (status) status.textContent = deploymentProfile() === "sir"
+              ? "Applied. Still I Rise profile: Home, Daily, Plan and Slack are hidden; the app opens on Students."
+              : "Applied. La Scuola profile: every surface is shown.";
+          } else if (status) {
+            status.textContent = data.error || "Could not apply the profile.";
+          }
+        } catch (error) {
+          if (status) status.textContent = "Could not reach the app to apply the profile.";
+        }
+        button.disabled = false;
+      });
     }
 
     async function renderTeacherIdentityControls() {

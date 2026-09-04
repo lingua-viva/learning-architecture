@@ -16,6 +16,11 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v186 (2026-09-04): School profile control in Settings (operator, same
+#     day): a select (La Scuola / Still I Rise) + Apply that POSTs
+#     deployment_profile, re-reads the profile and repaints the shell so
+#     hidden surfaces disappear at once. index.html only. Lock re-taken
+#     on Linux (LF bytes).
 #   v185 (2026-09-04): U10 Summaries approve/print (readiness day 7).
 #     src/web.py: minimum_evidence on /api/parents/recommendation; POST
 #     /api/parents/approve (not_enough_evidence 409, unsafe_label 400,

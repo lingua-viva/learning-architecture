@@ -73,6 +73,31 @@ def test_a_malformed_profile_file_still_boots_with_the_default(client, tmp_path)
     assert client.get("/").status_code == 200
 
 
+def test_settings_can_apply_the_profile_and_repaint_the_shell():
+    """Operator, 2026-09-04: the profile must be one click in Settings, not a POST."""
+    html = (REPO / "static" / "index.html").read_text(encoding="utf-8")
+    assert 'id="school-profile-select"' in html and 'id="school-profile-save"' in html
+    assert 'value="sir"' in html and 'value="la_scuola"' in html
+    fn = html[html.index("async function renderSchoolProfileControls()"): html.index("async function renderTeacherIdentityControls()")]
+    assert "deployment_profile: select.value" in fn, "the control does not POST the chosen profile"
+    assert "renderShell()" in fn, "applying the profile does not repaint the shell"
+    assert "await renderSchoolProfileControls()" in html, "the control is never rendered in Settings"
+
+
+def test_the_live_site_offers_a_still_i_rise_download_on_the_same_build():
+    """The site carries a Still I Rise section: the same three installers (pinned
+    to the same tag as the main buttons by pin-site) plus the one-click instruction."""
+    import re
+
+    site = (REPO / "docs" / "index.html").read_text(encoding="utf-8")
+    assert 'id="still-i-rise"' in site
+    tags = set(re.findall(r"desktop-v[0-9]+\.[0-9]+\.[0-9]+", site))
+    assert len(tags) == 1, f"the site pins more than one tag: {tags}"
+    for asset in ("LinguaViva-Setup.exe", "LinguaViva.dmg", "LinguaViva.AppImage"):
+        assert site.count(f"/{asset}") >= 2, f"{asset} missing from the Still I Rise section"
+    assert "School profile" in site and "Still I Rise" in site and "Apply profile" in site
+
+
 def test_ui_hides_the_four_surfaces_and_boots_to_students_under_sir():
     html = (REPO / "static" / "index.html").read_text(encoding="utf-8")
     assert "deployment_profile" in html, "the UI never reads the profile"
