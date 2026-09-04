@@ -151,6 +151,61 @@ That last line is the testable form of the glass-box invariant and is the single
 most important assertion in this spec. It is what makes "silently dropped"
 structurally impossible rather than currently-absent.
 
+### 2.6 THE DEFINITIVE LENS STRUCTURE — declared here, or the contract is half-built
+
+**Operator finding, 2026-09-03: "the lens is the linchpin... I don't see us choose
+a data structure for the definitive lens structure."** Correct, and §2.1-§2.5
+above did not close it. A registry of writable *paths* floating above an
+undeclared *shape* is half a contract. The registry must declare the shape too.
+
+What a lens actually is today, read from the store:
+
+```
+students          22 columns. SIX are JSON blobs with no declared internal shape:
+                  cefr_snapshot · support_profile · strengths_profile
+                  ethos_profile · sel_summary · rti_tier_history
+observations      30 columns, APPEND-ONLY. The source of truth for derived fields
+evidence_records  provenance: kind, target_type, target_id, source_ref, confidence
+```
+
+**`strengths_profile` appears in none of the four lists in §1.1.** Neither do
+`sel_summary`, `background_notes`, or `avoid_pairing_with`. So the count of
+undeclared namespaces is not one (`ethos_profile`) but at least four.
+
+The registry therefore declares, per field, one more attribute — **`origin`**:
+
+| origin | meaning | write rule |
+|---|---|---|
+| `authored` | a teacher or an import sets it directly | writable through its declared store operation |
+| `derived` | computed from the append-only observation log | **NEVER written directly.** The writer appends an observation; the projection updates |
+| `projection` | a read-only view over other fields | not writable at all; consumers may read it |
+
+`cefr_snapshot` is `derived`. This is not a style preference — `set_initial_cefr`'s
+docstring carries the law: *"cefr_snapshot must stay derived from the
+append-only observation log so get_lens_as_of reconstruction holds — the same
+law that keeps rti_current_tier out of update_profile()."* A contract that lets
+an importer write `cefr_snapshot` directly would pass its own tests and silently
+destroy point-in-time reconstruction, which is the property the whole evidence
+model rests on.
+
+`rti_current_tier` is `derived` for the same reason. `rti_tier_history` is its log.
+
+**For each of the six JSON blobs the registry declares its internal shape** — the
+keys a consumer may rely on. Undeclared keys inside a blob are the same defect as
+undeclared paths outside it, one level down, and are exactly where the next CEFR
+will hide.
+
+**Rung 1 gains a measurement, B7:** every column of `students`, classified
+`authored` / `derived` / `projection` / **`UNCLASSIFIED`**. `UNCLASSIFIED` is an
+honest verdict and is expected to be non-zero on the first pass. Report the count;
+do not guess a classification to drive it to zero. A wrong `authored` on a
+derived field is worse than an honest `UNCLASSIFIED`.
+
+**Kill gate K7:** if a field cannot be classified without an operator ruling —
+in particular if a blob's internal shape is genuinely undecided rather than merely
+unwritten — record it `UNCLASSIFIED`, leave it unwritable, and report it. Choosing
+the shape of a student's record is an operator decision, not a builder's.
+
 ### 2.5 What the contract is NOT
 
 - Not a schema migration. No stored lens changes shape.
@@ -195,6 +250,7 @@ Measure and record, each with its command:
 | B4 | `B2 − B3` — emitted but unwritable. §1.2 says this is at least the ethos namespace |
 | B5 | End-to-end report-card import on the Abigail fixture: `written_fields`, `review_required`, `unresolved_questions`, and the resulting lens |
 | B6 | Bounded test baseline, full failure list preserved (see §7 for the command) |
+| B7 | Every `students` column classified `authored`/`derived`/`projection`/`UNCLASSIFIED` (§2.6) |
 
 **Do not fix anything in Rung 1.** Mixing fixes into the baseline destroys the
 comparison. Every failure found here is written down and left alone.
@@ -352,6 +408,7 @@ observed failing and restored.
   "writable" without a store operation behind it, to reduce the refusal count.
 - **K5** — HEAD moves between writes (another window on this shared tree).
 - **K6** — any measurement requires the operator's real `~/.lingua-viva`.
+- **K7** — a field's origin or a blob's shape cannot be classified without an operator ruling (§2.6). Record `UNCLASSIFIED`, leave it unwritable, report it.
 
 ---
 
