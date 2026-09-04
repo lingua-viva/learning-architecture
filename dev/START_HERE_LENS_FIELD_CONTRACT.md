@@ -8,6 +8,19 @@ gets decided — record it and move on.
 
 ---
 
+## The framing, from the operator
+
+**This system is OVER-built, not under-built.** Two months of pieces exist and
+work. Ten deliverable types, eight action verbs, thirteen modules that read a
+lens, a full extraction pipeline, an evidence-chained lens implementation, a
+SQLite lens store. **Nothing here needs authoring. It needs wiring.**
+
+Your job is not to add capability. It is to make one declared contract that all
+three sides can live with — the producers that put information in, the lens that
+holds it, and the consumers that turn it into something for a teacher. Every
+time you feel the pull to build a new feature tonight, that is the wrong
+instinct. Wire what is there.
+
 ## What you are building, in one paragraph
 
 Lingua Viva stores a "lens" per student — the accumulating record a teacher
@@ -51,11 +64,17 @@ Follow `PROMPT_LENS_FIELD_CONTRACT_4RUNG_2026-09-03.md` rung by rung.
 
 ```
 RUNG 0   back everything up          exit: clean tree, HEAD recorded
-RUNG 1   the honest baseline         exit: baseline committed, NOTHING fixed
+RUNG 1   the honest baseline B1-B9   exit: baseline committed, NOTHING fixed
 RUNG 2   build it + report cards     exit: report card -> lens works end to end
-RUNG 3   sabotage it + Observe       exit: every guard watched failing
+RUNG 3   sabotage it + THREE SIDES   exit: every guard watched failing, and
+                                           one producer + the store's laws +
+                                           one consumer all satisfied
 RUNG 4   sweep, reconcile, report    exit: report written, branch pushed
 ```
+
+**Nine baselines (B1-B9) and eight kill gates (K1-K8).** Read spec §4 and §9 for
+both lists. Three of them exist because a contract drafted from one side only
+is the defect that produced four disagreeing field lists in the first place.
 
 Do not start a rung before the previous rung's exit gate.
 
