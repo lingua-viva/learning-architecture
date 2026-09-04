@@ -36,7 +36,7 @@ The plan's queue is U1 → U13 → C8 → U2 → U8 → SIR profile. Four of tho
 | 1 one release at a time (`gh run list`) | `gh` 2.99 is installed but **not logged in**; the public API answers without auth and shows **0 runs in flight** as of this document. Either `gh auth login` on this box, or the seat checks the window through the API and says which it used. |
 | 2 branch per UX | will do: `ux/u1-install` next; the 27-commit branch is the foundation, not a UX |
 | 3 class fix + red-first locking test | the branch's fixes carry 111 new tests across seven files; every guard was watched failing (sabotage tables in the reports) |
-| 4 full suite green before a main push | **running now** on the rebased tree (`scratch/full_suite_20260904.txt`); the bounded suites read 843 passed / 10 failed this morning, all 10 Windows artifacts (sqlite_vec, CRLF sha256, CRLF ui-contract). The plan's "zero failures" invariant is measured on PC-0/CI; this box reports its delta against the Windows baseline and names every failure |
+| 4 full suite green before a main push | **Measured on the rebased tree, 15 min 14 s: 2,987 passed / 34 failed / 21 skipped** (two files excluded at collection — they cannot import on Windows: `os.geteuid`, `sqlite_vec`). **All 34 fail identically on untouched `origin/main` in a throwaway worktree: 0 new failures from the 28 commits.** Classes: POSIX file-mode `0600` asserts (7), `sqlite_vec` missing (5), CRLF sha256 (5), `python3`-class `WinError 2` (4, in launcher/preflight/drive tests — U1's hunt), CRLF ui-contract (2), a repo-dir-name assert (`'lv-work' == 'learning-architecture'`), and a handful of Windows path/permission asserts. Kept as `scratch/windows_baseline_34_2026-09-04.txt`. The plan's zero-failure invariant is PC-0/CI's measurement; this box's invariant is **no new failure against that 34**. |
 | 5 verify live, then "vX ready — test U-n" | understood; never before the download resolves and contains the commit |
 | 6 PASS / FAIL / CANNOT-TELL only | as in every report this week |
 | 7 no API key, no real child data | no key on this box; the fixture students were removed from the real store on 09-04 morning on Mical's word; `demo-data/` is the fixture set from here |
@@ -51,7 +51,7 @@ The plan's queue is U1 → U13 → C8 → U2 → U8 → SIR profile. Four of tho
 
 ## 5. CANNOT-TELL, right now
 
-- Full-suite result on this tree (running).
+- ~~Full-suite result on this tree~~ — measured (rule 4 row above): 0 new failures.
 - Whether Claudia ran the 09-02 safeguarding retest; her Part 3 answers.
 - The Mac install state (the U1 prompt ends that; not started).
 - Whether the live tracker's current ordering matches the plan's queue (the tracker is not visible from this box; the plan is the authority I have).
