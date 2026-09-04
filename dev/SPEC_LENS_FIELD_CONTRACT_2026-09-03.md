@@ -206,6 +206,100 @@ in particular if a blob's internal shape is genuinely undecided rather than mere
 unwritten — record it `UNCLASSIFIED`, leave it unwritable, and report it. Choosing
 the shape of a student's record is an operator decision, not a builder's.
 
+### 2.7 ALIGNMENT WITH THE 2026-08-10 LENS CONVERGENCE BRIEF
+
+`mc-a0-mutant-20260828/dev/CONVERGENCE_BRIEF_LENS_SYSTEM_2026-08-10.md`, with the
+operator's inline rulings. Read before building. Three things in it change this
+spec, and one changes what the spec is FOR.
+
+#### 2.7.1 What it changes about the stakes
+
+The operator's own annotation:
+
+> *"We would need the YAML structures defined somewhere where there is only ADD
+> to fields, never overlap by design ... Look at the Lingua Viva JSON structure
+> as a good example. That is just the student lens [subject]."*
+
+**The LV student lens is the reference structure for Mission Canvas's entire lens
+system.** What this contract declares is not an LV repair; it is the shape MC
+inherits. The brief also records the cost of getting it wrong: three divergent
+Claudia lenses already exist across palette / LV / MC.
+
+#### 2.7.2 Composition is additive by construction — a design law
+
+Operator ruling, verbatim:
+
+> *"ONE LENS PER SLOT. ALWAYS ADDING FIELDS FOR STACKED LENSES, NEVER HAVE THE
+> SAME FIELD SAY TWO THINGS EXCEPT FOR ID — WHICH WILL CONTAIN ALL IDS OF THE
+> LENSES USED."*
+
+The registry must therefore make same-field collision **structurally impossible**,
+not merely resolved-by-precedence. Two lenses composing may only ever ADD fields.
+The one field that carries plurality is the ID, which holds every constituent ID.
+
+This spec's §2.1–§2.6 declares fields for **one** lens (the subject class). It
+must not bake in anything that prevents the other three classes — **perspective**
+(scopes access), **institution** (vocabulary), **jurisdiction** (egress) — from
+composing additively later. Concretely: **`kind` in §2.1 is a STORAGE taxonomy,
+not the governance taxonomy.** Do not conflate them. A field's governance class
+is a separate attribute; the student lens is entirely `subject`.
+
+#### 2.7.3 Evidence chain — already shipped, and stronger than this spec's rule
+
+The brief names `docpipe.lens.v1` as the precedent MC should inherit wholesale:
+
+> *"every value carries an evidence chain (source_ref/span_id/confidence/added_by)
+> → merge_observation() appends, never replaces → _assert_grounded() (no value
+> without evidence) → merge_events[] audit trail ... **This is GIR applied to
+> identity**: the lens never claims anything about the person without a source."*
+
+`§2.1 requires_sources` is a weaker restatement of `_assert_grounded()`. **Adopt
+the stronger form**: for a subject-class field, a value without an evidence chain
+is not a low-confidence value, it is not a value at all.
+
+#### 2.7.4 THE UNRESOLVED ONE — there are two lens structures, and a bridge
+
+Measured 2026-09-03:
+
+```
+src/lingua_viva/docpipe/lens.py     schema_version "docpipe.lens.v1"  (492 lines)
+    profile: {field_id: {value, evidence: []}}   evidence-chained JSON
+    PROFILE_FIELDS = 10   <- a FIFTH field list
+    _assert_grounded() · merge_observation() appends · merge_events[] audit
+    live in production at class_folder_ingest.py:157
+
+src/education/student_lens.py       the SQLite store  (22 columns)
+    six undeclared JSON blobs (§2.6)
+    what the report-card path actually writes
+
+bridged by  docpipe/lens.py::sync_to_student_lens_store()
+```
+
+The lists line up like this:
+
+```
+PROFILE_FIELDS (10)  ==  _LENS_FIELD_IDS (10)     identical — the docpipe world agrees with itself
+SUPPORT_CATEGORY_IDS (9)                          overlaps the above by only 7 of 10
+```
+
+So the disagreement in §1.1 is not four arbitrary lists. It is **two coherent
+worlds that disagree with each other across a bridge**: the docpipe/extraction
+world (evidence-chained, 10 fields) and the store world (SQLite, 9 categories).
+
+**Which is the definitive lens structure is an OPERATOR RULING, not a builder's
+choice.** The convergence brief blesses the *shape* of `docpipe.lens.v1`; the
+product *writes* to the store. Both are true today.
+
+**Rung 1 gains B8:** what does `sync_to_student_lens_store()` actually carry
+across, and what does it drop? Enumerate field by field. **Read the bridge before
+declaring the contract** — a contract declared over one side of an undocumented
+bridge is a contract over half the system.
+
+**Kill gate K8:** if B8 shows the bridge drops or renames fields, **stop and
+report**. Do not "fix" the bridge tonight. Reconciling two lens structures is the
+operator ruling this spec exists to inform, and it is exactly the decision the
+convergence brief reserved to him.
+
 ### 2.5 What the contract is NOT
 
 - Not a schema migration. No stored lens changes shape.
@@ -251,6 +345,7 @@ Measure and record, each with its command:
 | B5 | End-to-end report-card import on the Abigail fixture: `written_fields`, `review_required`, `unresolved_questions`, and the resulting lens |
 | B6 | Bounded test baseline, full failure list preserved (see §7 for the command) |
 | B7 | Every `students` column classified `authored`/`derived`/`projection`/`UNCLASSIFIED` (§2.6) |
+| B8 | What `sync_to_student_lens_store()` carries and what it drops, field by field (§2.7.4) |
 
 **Do not fix anything in Rung 1.** Mixing fixes into the baseline destroys the
 comparison. Every failure found here is written down and left alone.
@@ -409,6 +504,7 @@ observed failing and restored.
 - **K5** — HEAD moves between writes (another window on this shared tree).
 - **K6** — any measurement requires the operator's real `~/.lingua-viva`.
 - **K7** — a field's origin or a blob's shape cannot be classified without an operator ruling (§2.6). Record `UNCLASSIFIED`, leave it unwritable, report it.
+- **K8** — the docpipe/store bridge drops or renames fields (§2.7.4). Stop and report. Reconciling the two lens structures is the operator's ruling, not tonight's build.
 
 ---
 
