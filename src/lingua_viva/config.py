@@ -214,6 +214,15 @@ def config_home() -> Path:
 
 # Canonical home-resolution seam (MC-lessons §1): every module that stores
 # local-first state under ~/.lingua-viva/ resolves its *default* location
+# through this function. C8 durability (install-over-install keeps every
+# lens) rests on this default sitting under the USER's home, never inside
+# the app tree an installer replaces — pinned by
+# tests/test_c8_install_over_install.py together with the additive-only
+# store migration and the no-delete rule for install.sh / the desktop
+# bootstrap. Change the default here and that promise moves with it.
+#
+# Every module that stores
+# local-first state under ~/.lingua-viva/ resolves its *default* location
 # through this function, so one env var (LV_CONFIG_HOME) — or one monkeypatch
 # in tests/conftest.py — redirects all of it. Callers still expose their own
 # more specific override (LV_TRACE_PATH, LV_PRIVACY_LOG_PATH, ...) which is
