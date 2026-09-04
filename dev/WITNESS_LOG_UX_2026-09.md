@@ -106,8 +106,12 @@ _(FAIL → verbatim error back to PC-23. PASS → tracker row U8 to "Mical-passe
 
 **What is in it:** the SIR deployment profile (`7a09884`: `deployment_profile` in the school profile, `la_scuola` default or `sir`; `LV_DEPLOYMENT_PROFILE` env wins for an install; under `sir` the nav hides Home / Daily / Plan / Slack and teachers boot to Students; the shell paints only after the profile is known; unknown values are a named 400; a malformed file boots with the default; 6 tests, all red first). Lock v184 (`0302414`, taken on Linux). Full suite on Linux/3.11 (WSL) at `0302414`: **3,073 passed / 7 failed** — the five environment rows plus two `test_home_view.py` pins on the literal default-view strings the profile replaced; fixed in `8e37fd9` (the intent is asserted against `defaultViewFor()`), and home-view + SIR + contract + school-profile suites 53 passed / 1 skipped on Linux at that head.
 
-**Release tag:** _(filled in when the chain completes)_
-**Live download contains `0302414`:** _(verified before "ready" is said)_
+**Release tag:** `desktop-v0.2.88` — auto-release run 33914464568 on `dd89712`, every job success, published 2026-09-04T20:13:46Z; `https://linguaviva.art/` pins `desktop-v0.2.88`; Setup.exe / .dmg / .AppImage all HTTP 302.
+**Live download contains `0302414` / `dd89712`:** YES — the tag commit `938f82c` descends from `dd89712` (`git merge-base --is-ancestor`, PC-23, 2026-09-04).
+
+**→ v0.2.88 ready — test the SIR profile** (click path below). This build contains every cycle of the day (U1 install foundation + C8, U2, U13, U8, SIR), so all five click paths can be run on it.
+
+**Lane state at 20:15Z:** plan #1–#6 built and shipped; the plan's STOP line applies — U10 is not started until Mical says so. Open verdicts: every row above. Open decisions for Mical: sticky remove (U8), a Settings control for the deployment profile, `gh auth login` on PC-23.
 
 ### Mical — SIR profile click path on the live download
 
