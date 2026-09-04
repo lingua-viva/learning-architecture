@@ -9,6 +9,11 @@ Rule (plan §0): a Mical PASS = "ready for teacher witness", not green. Green ne
 
 **What is in it:** the 29 commits of `fix/cefr-write-and-unknown-field-refusal-2026-09-03` (lens field contract; report card → lens with every field accounted for and idempotent re-apply; Observe → lens, typed and voice; Prepare and the parent note reading the lens; CEFR plus levels; Doctor `python3` fix; `lv lens-query`; the readiness path, the UX set, three specs, one prompt). Full suite on PC-23: 2,987 passed / 34 failed, all 34 identical on untouched main.
 
+**Outcome of run 33908229547 (`30f5e03`): FAILED at "Test gate"** — Health, Backend smoke, desktop-release and pin-site skipped; nothing shipped; v0.2.84 stayed live.
+**Cause, proven on Linux/Python 3.11 (WSL clone at `30f5e03`, LF bytes):** `src/web.py` is a contract-protected file (`contracts/UI_CONTRACT.yaml`, v180) and cycle 0 changed it without a bump — `test_ui_contract_check_passes` and `test_ui_contract_lock_matches_live_files` fail (`locked f9d50f5c… / actual 2dc3cb74…`). On PC-23 those two tests already fail for CRLF reasons (Windows baseline rows 32–33), which is why the Windows "0 new failures" could not see it. Class: **a Windows-baselined test can mask a real Linux failure** — the CI replica in WSL now exists so this class is measurable here.
+**Fix:** `fix/ui-contract-v181-lens-routes` = `604a823` (bump-log v181, `EXPECTED_VERSION = 181`) + `f22e7a6` (lock re-taken by `check_ui_contract.py --bump` on the Linux LF checkout; every hash equals the git blob's sha256; contract tests 8 passed / 1 skipped on Linux).
+**Re-push:** `f22e7a6` -> `main` at 2026-09-04 after a second window check (0 in flight). Full suite on Linux/3.11 in WSL at `f22e7a6`: **3,035 passed / 5 failed / 34 skipped / 32 xfailed in 1m45s**; the same 5 fail identically at `71b069d` (the last green CI commit) in that environment — repo dir name (`lv-ci-full` != `learning-architecture`), root user (read-only file test), and a `pytest` NameError in `test_ask_grounding_surface.py` — so 0 new failures on Linux against the last green commit.
+
 **Release tag:** _(filled in when the chain completes)_
 **Live download contains `30f5e03`:** _(verified before "ready" is said)_
 
