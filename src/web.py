@@ -3994,6 +3994,40 @@ async def observe_capture(request: Request, payload: dict):
     if result.get("duplicate"):
         return result
 
+    # Lens field contract (2026-09-04, U4 — the TYPED Observe view): the
+    # comment's content reaches the lens's fields through the same logic a
+    # report card uses (observe_to_lens -> extract_for_lens_update ->
+    # write_student_lens), every candidate resolved through the registry and
+    # accounted for. Same block as /api/voice/act; the raw observation above
+    # is already saved and a routing failure is REPORTED, never a 500.
+    try:
+        from src.lingua_viva.observe_to_lens import observe_comment_to_lens_sync
+
+        def _route_to_lens(store):
+            display_name = str(store.get_lens(student_id).get("display_name") or "")
+            return observe_comment_to_lens_sync(
+                transcript,
+                student_id=student_id,
+                display_name=display_name,
+                teacher_id=teacher_id,
+                store=store,
+            )
+
+        result["lens_update"] = await asyncio.to_thread(_with_student_store, _route_to_lens)
+    except Exception as exc:  # noqa: BLE001 — glass-box: name it, do not hide it
+        result["lens_update"] = {
+            "student_id": student_id,
+            "written_fields": [],
+            "review_required": [],
+            "unresolved_questions": [
+                "The observation was saved, but its content could not be routed "
+                f"to lens fields ({type(exc).__name__}). Nothing was changed on the lens."
+            ],
+            "accounting": [],
+            "candidate_fields": [],
+            "error": type(exc).__name__,
+        }
+
     # Routing memory (SPEC_LV_ROUTING_MEMORY_LOOP_2026-08-01): record the
     # category-suggestion decision for this saved observation — one row per
     # suggestion set (top suggestion + confidence), ids only, fire-and-forget.

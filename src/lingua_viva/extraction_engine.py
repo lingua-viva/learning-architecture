@@ -215,10 +215,13 @@ def _deterministic_cefr(text: str) -> dict[str, str]:
         for dim in dims:
             if dim in found:
                 continue
+            # (?!\w) not \b after the level: "+" is a non-word char, so
+            # `a2\+\b` never matches "a2+." and the plus levels were silently
+            # downgraded to their base level (2026-09-04, chain run).
             patterns = [
-                rf"{dim}\s*[:\-]?\s*{level_l}\b",
-                rf"\b{level_l}\b[^.\n]{{0,25}}\b{dim}\b",
-                rf"\b{dim}\b[^.\n]{{0,25}}\b{level_l}\b",
+                rf"{dim}\s*[:\-]?\s*{level_l}(?!\w)",
+                rf"\b{level_l}(?!\w)[^.\n]{{0,25}}\b{dim}\b",
+                rf"\b{dim}\b[^.\n]{{0,25}}\b{level_l}(?!\w)",
             ]
             if any(re.search(pat, lower) for pat in patterns):
                 found[dim] = level

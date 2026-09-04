@@ -73,9 +73,13 @@ GRADE_SCALE = {
 }
 
 # CEFR regex — captures level with optional dimension context
+# (?!\w) instead of \b after the level: "+" is a non-word character, so
+# `A2\+?\b` can never match "A2+." — the optional plus backtracks away and
+# "Listening: A2+" was silently stored as A2 (found 2026-09-04 by running the
+# chain end to end; the same defect sat in extraction_engine._deterministic_cefr).
 _CEFR_RE = re.compile(
-    r"\b(reading|writing|speaking|listening)\s*[:\-–]?\s*(A1\+?|A2\+?|B1\+?|B2|C1|C2)\b"
-    r"|\b(A1\+?|A2\+?|B1\+?|B2|C1|C2)\b[^.\n]{0,30}\b(reading|writing|speaking|listening)\b",
+    r"\b(reading|writing|speaking|listening)\s*[:\-–]?\s*(A1\+?|A2\+?|B1\+?|B2|C1|C2)(?!\w)"
+    r"|\b(A1\+?|A2\+?|B1\+?|B2|C1|C2)(?!\w)[^.\n]{0,30}\b(reading|writing|speaking|listening)\b",
     re.IGNORECASE,
 )
 
@@ -1380,7 +1384,13 @@ def load_extraction_log(log_path: Path) -> dict[str, ExtractionResult]:
             continue
         student_id = entry.get("student_id", "")
         if student_id not in by_student:
-            by_student[student_id] = {"fields": [], "unresolved": []}
+            by_student[student_id] = {"fields": [], "unresolved": [], "sources": []}
+        # Restore the source filename the log already carries per entry
+        # (2026-09-04): without it every applied import said "file.txt" and
+        # the writer's CEFR dedupe key could not tell two documents apart.
+        source_name = str(entry.get("source_filename") or "").strip()
+        if source_name and source_name not in by_student[student_id]["sources"]:
+            by_student[student_id]["sources"].append(source_name)
         if entry.get("type") == "unresolved_question":
             by_student[student_id]["unresolved"].append(entry.get("question", ""))
         elif "field_path" in entry:
@@ -1400,7 +1410,7 @@ def load_extraction_log(log_path: Path) -> dict[str, ExtractionResult]:
             target_schema_id="student_lens",
             fields=data["fields"],
             unresolved_questions=data["unresolved"],
-            source_files=[],
+            source_files=list(data["sources"]),
             chunks_used=[],
         )
     return results

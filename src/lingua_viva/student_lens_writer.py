@@ -323,8 +323,9 @@ def _dispatch(
                 teacher_id=teacher_id,
                 template_type="cefr",
                 raw_transcript=(
-                    f"CEFR {dimension} level {level} imported from a source document "
-                    f"({source_file})."
+                    f"CEFR {dimension} level {level} from a teacher's observation ({source_file})."
+                    if observation_source_type == "teacher_note"
+                    else f"CEFR {dimension} level {level} imported from a source document ({source_file})."
                 ),
                 cefr_dimension=dimension,
                 cefr_level_observed=level,

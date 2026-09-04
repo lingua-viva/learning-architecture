@@ -40,7 +40,7 @@ Everything below is read from the tree or from a command run tonight. Denominato
 ## 3. What is now wired that was not
 
 - **Report card → lens (U3):** every field accounted for, refusals named, on the wire, idempotent.
-- **Observe → lens (U4):** a comment's content reaches lens fields through the same logic as a document, live on `/api/query`, `lens_update` returned; RED/duplicate paths untouched.
+- **Observe → lens (U4):** a comment's content reaches lens fields through the same logic as a document, `lens_update` returned; RED/duplicate paths untouched. **Correction 2026-09-04:** the night wiring was on `/api/voice/act` (voice), not on `/api/observe/capture`, which is what the typed Observe view posts to. Both are wired now (chain commit). Running the chain also found that plus levels (A2+) were being stored as A2 by both CEFR extractors, and that applied imports lost their source filename — both fixed in the same commit.
 - **Prepare (U9):** tiering reads through the OUT filter; a lens with no tier refuses instead of guessing; missing CEFR is *named*. `/api/lesson-materials/roster-split` and `/api/prepare/activity` run without a model; `generate` returns three tier cards without a model **but the response does not say it ran without one** — CANNOT-TELL from the payload whether content is template or model. That is the OUT-filter honesty rule not yet applied to materials. Next window.
 - **Admin query (U18):** `lv lens-query L1..L12` and `/api/admin/lens-query/{id}` over the store. **Finding:** the existing `fleet` engine reads the docpipe vault, which the product's write paths never touch.
 - **Doctor** runs on Windows.
