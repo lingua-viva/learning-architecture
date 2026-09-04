@@ -97,3 +97,26 @@ _(FAIL → verbatim error back to PC-23. PASS → tracker rows U2 / U13 to "Mica
 | 5 Student Summary → Draft for that student | the removed entry's text is not in the note | | |
 
 _(FAIL → verbatim error back to PC-23. PASS → tracker row U8 to "Mical-passed, awaiting teacher witness". Known edge, recorded in the commit: re-applying the same source after a remove brings the entry back as a fresh suggestion — a sticky remove is your ruling.)_
+
+---
+
+## Cycle 3 — 2026-09-04 — main ← `ux/sir-profile` (= cycle 2 + plan #6 SIR profile + UI contract v184)
+
+**What is in it:** the SIR deployment profile (`7a09884`: `deployment_profile` in the school profile, `la_scuola` default or `sir`; `LV_DEPLOYMENT_PROFILE` env wins for an install; under `sir` the nav hides Home / Daily / Plan / Slack and teachers boot to Students; the shell paints only after the profile is known; unknown values are a named 400; a malformed file boots with the default; 6 tests, all red first). Lock v184 (`0302414`, taken on Linux). Full suite on Linux/3.11 (WSL) at `0302414`: **3,073 passed / 7 failed** — the five environment rows plus two `test_home_view.py` pins on the literal default-view strings the profile replaced; fixed in `8e37fd9` (the intent is asserted against `defaultViewFor()`), and home-view + SIR + contract + school-profile suites 53 passed / 1 skipped on Linux at that head.
+
+**Release tag:** _(filled in when the chain completes)_
+**Live download contains `0302414`:** _(verified before "ready" is said)_
+
+### Mical — SIR profile click path on the live download
+
+| step | expected | verdict | wording seen |
+|---|---|---|---|
+| 1 fresh launch (La Scuola default) | teacher nav shows Home · Daily · Plan · Prepare · Observe · Students · Assess · Ask · Summaries; utility nav shows Slack | | |
+| 2 `curl -X POST localhost:8787/api/school-profile -H "Content-Type: application/json" -d '{"deployment_profile":"sir"}'` (or set `LV_DEPLOYMENT_PROFILE=sir` before launch) | `200`; `GET /api/school-profile` shows `"deployment_profile": "sir"` | | |
+| 3 reload as teacher | nav shows Prepare · Observe · Students · Assess · Ask · Summaries only; no Slack; the app opens on **Students** | | |
+| 4 brand/home click | goes to Students, not Home | | |
+| 5 as coordinator | Programme view as before; Governance still there | | |
+| 6 POST `{"deployment_profile":"hogwarts"}` | `400` naming the choices; nothing changes | | |
+| 7 back to `la_scuola` | Home returns | | |
+
+_(Plan #6 "Done means": SIR profile boots to Students with the four surfaces hidden; test green — the test half is done, the boot half is this table. No Settings control yet; the flag is POST or env.)_
