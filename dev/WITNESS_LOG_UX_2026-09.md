@@ -132,8 +132,12 @@ _(FAIL → verbatim error back to PC-23. PASS → tracker row U8 to "Mical-passe
 
 **What is in it:** the operator's 21:00Z ask ("push all the way to app/prod in the app store under Still I Rise"): there is no app store in this tree, so the live download surface got a **Still I Rise schools** section on linguaviva.art (same three installers, tracked by pin-site, plus the one-click instruction) and Settings got a **School profile** select + Apply that POSTs the deployment profile and repaints the shell at once (`e14a18d`; 2 tests, red first). Lock v186 (`446dd51`, taken on Linux). The live test harness: `dev/HARNESS_LIVE_TEST_2026-09-04.md` and the interactive page https://claude.ai/code/artifact/4acfefa3-151d-4f15-822c-639b2dedfeef. Full suite on Linux/3.11 (WSL) at `446dd51`: **3,086 passed / 5 failed** — the five environment rows only.
 
-**Release tag:** _(filled in when the chain completes)_
-**Live download contains the cycle 5 head:** _(verified before "ready" is said)_
+**Release tag:** `desktop-v0.2.90` — auto-release run 33920915583 on `36c38a0`, every job success, published 2026-09-04T21:32:33Z; `https://linguaviva.art/` pins `desktop-v0.2.90` and carries the **Still I Rise schools** section (three installers, all HTTP 302).
+**Live download contains the cycle 5 head (`36c38a0`):** YES — the tag commit `a3a09df` descends from it (`git merge-base --is-ancestor`, PC-23, 2026-09-04).
+
+**→ v0.2.90 ready — this is the build for the whole harness** (`dev/HARNESS_LIVE_TEST_2026-09-04.md`; interactive: https://claude.ai/code/artifact/4acfefa3-151d-4f15-822c-639b2dedfeef). It contains every cycle of the day: U1 foundation + C8, U2, U13, U8 + sticky remove, SIR profile with the Settings control, U10.
+
+**Lane state at 21:35Z:** plan #1–#6 and U10 built and live. Open: every verdict; a preset Still I Rise installer (a desktop/ bootstrap marker + second channel — a ruling); the PDF renderer left unmounted; `gh auth login` on PC-23.
 
 _(The SIR click path in cycle 3 now starts from Settings → School profile; the harness has the updated steps.)_
 
