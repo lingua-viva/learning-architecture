@@ -1,6 +1,6 @@
 {
   "name": "lingua-viva-desktop",
-  "version": "0.2.84",
+  "version": "0.2.85",
   "private": true,
   "description": "Lingua Viva teacher desktop shell",
   "homepage": "https://linguaviva.art",
@@ -67,7 +67,7 @@
           "oauth_client.json",
           "!Manuale_Italiano_Laboratorio_Linguistico_G1-G5.docx",
           "!sanitizer/data/**",
-        "!archive/**",
+          "!archive/**",
           "!.git/**",
           "!memory/data/**",
           "!ontology/learned_weights.yaml",
