@@ -49,8 +49,10 @@ _(FAIL → verbatim error back to PC-23. PASS → tracker row to "Mical-passed, 
 
 **What is in it:** U2 roster honesty (`90d9c88`: a CSV roster is read as a table — names carry column evidence and are never flagged "low confidence", the Classe column becomes the lens's grade, nothing invented when the column is absent, a re-import never overwrites a teacher-set grade; 6 tests, 4 red first). U13 safeguarding P0 through the routes (`bac8112`: the three RED rows of the 2 September retest and the five innocent rows posted to `/api/observe/capture`; RED responses no longer carry the matched indicator regexes; every normal surface read back empty; `GET /api/safeguarding/pending`; the coordinator's Safeguarding panel in Governance; 15 tests, 6 red first). Lock v182 (`0f6f792`, taken on Linux). Full suite on Linux/3.11 (WSL) at `0f6f792`: **3,064 passed / 5 failed / 34 skipped / 32 xfailed in 1m46s** — the same 5 environment-only rows as at `71b069d` (last green CI) and at every head today; Windows targeted suites 139 passed.
 
-**Release tag:** _(filled in when the chain completes)_
-**Live download contains `0f6f792`:** _(verified before "ready" is said)_
+**Release tag:** `desktop-v0.2.86` — auto-release run 33911993275 on `eacc3c5` (= `0f6f792` rebased onto the v0.2.85 site pin), every job success, published 2026-09-04T19:44:06Z; `https://linguaviva.art/` pins `desktop-v0.2.86`; Setup.exe / .dmg / .AppImage all HTTP 302.
+**Live download contains `0f6f792` / `eacc3c5`:** YES — the tag commit `0b3ac28` descends from `eacc3c5` (`git merge-base --is-ancestor`, PC-23, 2026-09-04).
+
+**→ v0.2.86 ready — test U-2 and U-13** (click paths below). It also contains everything v0.2.85 had, so U-1 can be run on this build instead.
 
 ### Mical — U2 click path on the live download
 
