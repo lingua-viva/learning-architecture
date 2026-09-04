@@ -377,3 +377,84 @@ def test_prepare_refuses_a_lens_shaped_dict_without_a_tier():
 def test_unknown_output_is_an_error_not_silence():
     with pytest.raises(LensContractError):
         requires("no_such_output")
+
+
+# ---------------------------------------------------------------------------
+# 6. Producers and the bridge — drift fails a test (Rung 4 sweep)
+# ---------------------------------------------------------------------------
+
+def _producer_paths() -> dict[str, set[str]]:
+    """Every path each producer in src/ can build, from the constants the
+    producers read (baseline B2, scratch/b2_b3_count.py)."""
+    from src.education.ethos import load_ethos
+    from src.education.observation_capture import CATEGORY_SIGNALS
+
+    out: dict[str, set[str]] = {}
+    out["lens_extract:_extract_cefr"] = {f"cefr_snapshot.{d}" for d in VALID_CEFR_DIMENSIONS}
+    out["lens_extract:heuristics"] = {
+        "support_profile.categories.learning_and_cognition.evidence",
+        "support_profile.categories.learning_and_cognition.strengths",
+        "support_profile.categories.attendance_and_engagement.evidence",
+    }
+    out["lens_extract:_route_to_support_category"] = {
+        f"support_profile.categories.{c}.evidence" for c in CATEGORY_SIGNALS
+    }
+    out["lens_extract:_route_to_ethos"] = {
+        f"ethos_profile.traits.{t['id']}.evidence" for t in load_ethos()["traits"]
+    }
+    out["lens_extract:classify_failed"] = {"unclassified"}
+    out["lens_extract:sentence_classify"] = {
+        fid if fid in ("academic_strengths", "personal_strengths")
+        else f"support_profile.categories.{fid}.evidence"
+        for fid in _LENS_FIELD_IDS
+    }
+    out["extraction_engine+whole_doc_llm"] = set(STUDENT_LENS_FIELDS)
+    return out
+
+
+def test_every_producer_path_is_declared_in_the_registry():
+    """A producer that can build a path the registry does not declare is the
+    CEFR defect waiting to happen again. This is the drift alarm."""
+    undeclared = {
+        producer: sorted(p for p in paths if resolve(p) is None)
+        for producer, paths in _producer_paths().items()
+    }
+    undeclared = {k: v for k, v in undeclared.items() if v}
+    assert undeclared == {}, f"producers emit undeclared paths: {undeclared}"
+
+
+def test_every_producer_path_has_a_named_home_or_a_named_refusal(store):
+    """Feed every producer path through the writer once; none may be absent
+    from all three lists (the accounting invariant over the producer set)."""
+    all_paths = sorted(set().union(*_producer_paths().values()))
+    fields = []
+    for p in all_paths:
+        if p.startswith("cefr_snapshot."):
+            fields.append(_field(p, "A2"))
+        elif p in ("home_languages", "learning_differences"):
+            fields.append(_field(p, ["x"]))
+        elif p == "trauma_flag":
+            fields.append(_field(p, True, status="needs_confirmation"))
+        elif p == "unclassified":
+            fields.append(_field(p, "sentence", status="classify_failed"))
+        else:
+            fields.append(_field(p, f"probe {p}"))
+    out = _write(store, fields)
+    _entered_and_accounted(out, fields)
+
+
+def test_bridge_targets_resolve_in_the_registry():
+    """Ruling A: the docpipe->store bridge's mapping is declared as-is. Every
+    store path the bridge writes must resolve, and strategies_trialed must
+    resolve to the same re-home the bridge applies (docpipe/lens.py:434-446)."""
+    from src.lingua_viva.docpipe.lens import SUPPORT_CATEGORY_FIELDS
+
+    for fid in SUPPORT_CATEGORY_FIELDS:
+        assert resolve(f"support_profile.categories.{fid}.evidence") is not None, fid
+    for fid in ("academic_strengths", "personal_strengths"):
+        r = resolve(fid)
+        assert r is not None and r.spec.docpipe_field_id == fid
+    r = resolve("support_profile.categories.strategies_trialed.open_questions")
+    assert r is not None and r.spec.rehome["category"] == "learning_and_cognition"
+    for bucket in ("strategies_worked", "strategies_not_worked", "open_questions"):
+        assert resolve(f"support_profile.categories.learning_and_cognition.{bucket}") is not None

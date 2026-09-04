@@ -1367,6 +1367,20 @@ async def add_support_entry_endpoint(request: Request, student_id: str, payload:
     teacher_id = effective_teacher_id(
         request, str(payload.get("teacher_id") or "local-teacher")
     )
+    # Lens field contract (2026-09-03): the path a teacher is typing into
+    # must be one the registry declares. Resolution is the only way in; an
+    # unknown category or bucket is a NAMED refusal before the store is
+    # touched, not a ValueError surfaced from inside it.
+    from src.lingua_viva.lens_field_contract import resolve
+
+    field_path = f"support_profile.categories.{category_id}.{bucket}"
+    resolved = resolve(field_path)
+    if resolved is None or not resolved.writable:
+        return JSONResponse(
+            {"error": f"'{field_path}' is not a declared lens field; nothing was recorded.",
+             "field_path": field_path},
+            status_code=400,
+        )
 
     def do_add(store):
         return store.add_support_entry(
