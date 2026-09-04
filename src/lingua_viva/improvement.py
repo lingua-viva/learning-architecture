@@ -19,6 +19,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -128,7 +129,7 @@ def _parse_pytest_output(output: str) -> dict:
 
 def _run_pytest(args: list[str]) -> dict:
     """Run pytest with given args, return parsed results."""
-    cmd = ["python3", "-m", "pytest", *args, "-q", "--tb=line", "--no-header"]
+    cmd = [sys.executable, "-m", "pytest", *args, "-q", "--tb=line", "--no-header"]  # not "python3": absent on Windows
     try:
         proc = subprocess.run(
             cmd,

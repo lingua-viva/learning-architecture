@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -29,7 +30,7 @@ class SupportBundleService:
         bundle_dir.mkdir(parents=True, exist_ok=False)
 
         doctor_result = self._redact_obj(run_doctor(write_log=False))
-        gauntlet_output, gauntlet_code = self._run_command(["python3", "doctor/lv_artifact_gauntlet.py"])
+        gauntlet_output, gauntlet_code = self._run_command([sys.executable, "doctor/lv_artifact_gauntlet.py"])  # not "python3": absent on Windows
         git_status = self._run_git_status()
         excluded = self._scan_exclusions()
         included: list[dict[str, str]] = []

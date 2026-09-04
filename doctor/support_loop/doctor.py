@@ -4,6 +4,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -251,7 +252,10 @@ def check_artifact_gauntlet() -> CheckResult:
         # that intentionally ships none of those files.
         return _check("pass", "lv_artifact_gauntlet", "Publication gauntlet is an authoring-repo check; skipped in desktop build.", "recommended")
     script = LV_ROOT / "doctor/lv_artifact_gauntlet.py"
-    completed = subprocess.run(["python3", str(script)], cwd=REPO_ROOT, text=True, capture_output=True, check=False)
+    # sys.executable, never a bare "python3": Windows installs have no python3
+    # alias, so this line crashed Doctor and left /api/health permanently
+    # "degraded" for every Windows teacher (found 2026-09-03, PC-23).
+    completed = subprocess.run([sys.executable, str(script)], cwd=REPO_ROOT, text=True, capture_output=True, check=False)
     output = redact_text("\n".join(part for part in (completed.stdout, completed.stderr) if part).strip())
     if completed.returncode == 0:
         return _check("pass", "lv_artifact_gauntlet", "Lingua Viva artifact gauntlet passed.", detail=output)

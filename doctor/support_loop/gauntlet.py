@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 
 import yaml
 
@@ -14,7 +15,7 @@ def run_artifact_gauntlet() -> CheckResult:
     script = LV_ROOT / "doctor/lv_artifact_gauntlet.py"
     if not script.exists():
         return CheckResult("artifact_gauntlet", "FIXABLE", "Lingua Viva artifact gauntlet is missing.", str(script), "create_required_dirs")
-    completed = subprocess.run(["python3", str(script)], cwd=LV_ROOT, text=True, capture_output=True, check=False)
+    completed = subprocess.run([sys.executable, str(script)], cwd=LV_ROOT, text=True, capture_output=True, check=False)  # not "python3": absent on Windows
     output = "\n".join(part for part in (completed.stdout, completed.stderr) if part).strip()
     if completed.returncode == 0:
         return CheckResult("artifact_gauntlet", "OK", "Lingua Viva artifact gauntlet passed.", output)
