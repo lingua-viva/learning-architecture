@@ -41,7 +41,7 @@ ls "$SB/runtime/student_lenses.db" "$SB/safeguarding" 2>/dev/null    # both must
 ## LANE A — safeguarding P0 (spec 1)
 
 ### A-R1 baseline, fix nothing
-Build the corpus: the audit sentence `"Aiken said someone at home makes him feel scared."`, its Italian twin `"Aiken ha detto che qualcuno a casa lo fa sentire spaventato."`, plus every row already in `tests/test_safeguarding.py` and `tests/test_safeguarding_italian.py`. For each row record:
+**Know before you start:** `71b069d` (in this branch) already pins the audit sentence at the classifier in both languages (`tests/test_safeguarding_italian.py:54,:84`, `tests/test_safeguarding_parity.py:59-60`). Expect the classifier half of R1 to be green; the route half is what nobody has measured. Build the corpus from `~/Downloads/CLAUDIA_SAFEGUARDING_RETEST_2026-09-02.md` if present (it is not in the repo — copy its rows into the test, credit it) or from spec §2.1: RED rows 1.1–1.3, GREEN rows 2.1–2.5, plus every row already in `tests/test_safeguarding_italian.py`. For each row record:
 - `classify_severity(text).tier` and `rounded_up`
 - through the sandboxed server, one student `student-aiken-test` created via the roster chain: `POST /api/observe/capture` with `student_confirmed: true` → response keys, `restricted`, `observation` present?, ledger line count, `pending_notifications()` count and state
 - then the four normal surfaces: `GET /api/students/{id}/lens` observations count, `GET /api/students/{id}/lens/markdown` contains any 4-letter-or-longer word of the sentence?, `POST /api/parents/recommendation` body contains any?, `lv lens-query L11 --term scared --names` hits
