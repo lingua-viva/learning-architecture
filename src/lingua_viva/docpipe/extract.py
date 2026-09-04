@@ -134,6 +134,12 @@ async def extract_document(
             # STEP 1 (SPEC_LV_UNIFIED_REAL_DATA_FIX_2026-08-19): structure
             # survives extraction — one span per row, column identity kept.
             row_extract = _xlsx_row_spans(content)
+    elif mime == "text/csv" or ext == ".csv":
+        # U2 roster honesty (2026-09-04): a CSV is a table. Read it the way
+        # xlsx sheets are read so header roles (Nome / Classe) apply, names
+        # carry student_column evidence instead of the bigram fallback, and
+        # the class column reaches the lens. None -> flat-text path as before.
+        row_extract = _csv_row_spans(content)
     if support is not None:
         text = support["text"]
         spans = support["spans"]
@@ -263,6 +269,53 @@ def _xlsx_text(content: bytes) -> str:
     if not text.strip():
         raise ValueError("no extractable text found in this Excel file")
     return text
+
+
+def _csv_row_spans(content: bytes) -> Optional[tuple[str, list[dict[str, Any]]]]:
+    """U2 (2026-09-04): structured extraction for CSV rosters — the exact
+    shape _xlsx_row_spans produces (one span per non-empty row carrying
+    {"sheet", "row_index", "cells"}), so the STEP 2/4 header-role reading
+    applies unchanged. The delimiter is sniffed among , ; and tab because
+    Italian Excel exports CSV with ";". Returns None when the file is not a
+    table (fewer than two filled header cells) — the caller keeps the
+    flat-text path, which is what every CSV got before this function.
+    """
+    import csv
+    import io
+
+    raw = content.decode("utf-8-sig", errors="replace")
+    try:
+        dialect = csv.Sniffer().sniff(raw[:4096], delimiters=",;\t")
+    except csv.Error:
+        dialect = csv.excel
+    try:
+        table = list(csv.reader(io.StringIO(raw), dialect))
+    except csv.Error:
+        return None
+    header = next((row for row in table if any(cell.strip() for cell in row)), None)
+    if header is None or len([cell for cell in header if cell.strip()]) < 2:
+        return None
+    blocks: list[str] = []
+    metas: list[dict[str, Any]] = []
+    for row_index, row in enumerate(table, start=1):
+        cells = [
+            {"column": _column_letter(col_index), "text": re.sub(r"\s+", " ", cell.strip())}
+            for col_index, cell in enumerate(row, start=1)
+            if cell and cell.strip()
+        ]
+        if not cells:
+            continue
+        blocks.append(" ".join(cell["text"] for cell in cells))
+        metas.append({"sheet": "csv", "row_index": row_index, "cells": cells})
+    if not blocks:
+        return None
+    text = _normalize_text("\n\n".join(blocks))
+    spans = _build_spans(text)
+    if len(spans) != len(blocks):
+        return None
+    for span, meta in zip(spans, metas):
+        span.update(meta)
+    return text, spans
 
 
 def _xlsx_row_spans(content: bytes) -> Optional[tuple[str, list[dict[str, Any]]]]:
