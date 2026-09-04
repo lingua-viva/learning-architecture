@@ -38,7 +38,11 @@ def test_logo_click_returns_to_home():
     html = (ROOT / "static" / "index.html").read_text()
 
     assert 'id="brand-home"' in html
-    assert 'state.view = state.role === "coordinator" ? "programme" : "home"' in html
+    # plan #6 (2026-09-04): the default view is profile-aware; under La Scuola
+    # (the default) a teacher's home is still Home, a coordinator's is Programme.
+    assert 'state.view = defaultViewFor(state.role)' in html
+    assert 'if (role === "coordinator") return "programme";' in html
+    assert 'return deploymentProfile() === "sir" ? "students" : "home";' in html
 
 
 def test_still_i_rise_photo_is_mounted_in_topbar():
@@ -64,4 +68,7 @@ def test_first_launch_welcome_explains_privacy_and_lands_on_home():
     assert "World-class tools for world-class schools." in html
     assert "Everything stays on your machine. No student data leaves. Ever." in html
     assert "I am a:" in html
-    assert 'state.view = role === "coordinator" ? "programme" : "home"' in html
+    # plan #6 (2026-09-04): setRole lands on the profile-aware default — Home for a
+    # La Scuola teacher, Students under the SIR profile, Programme for a coordinator.
+    assert 'state.view = defaultViewFor(role)' in html
+    assert 'return deploymentProfile() === "sir" ? "students" : "home";' in html
