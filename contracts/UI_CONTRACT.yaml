@@ -16,6 +16,13 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v183 (2026-09-04): U8 editable lens (plan #5). static/index.html: every
+#     support entry in the Students view carries a remove control (POST
+#     /support-entry/dismiss; deactivates, never deletes; dismissed entries
+#     hidden); the Observe result shows what the note did to the lens
+#     (written / waiting for confirmation / unresolved / refused counts)
+#     with a "not this — remove" undo on each written entry. No web.py
+#     change. Lock re-taken on Linux (LF bytes).
 #   v182 (2026-09-04): U13 safeguarding P0 seen by the coordinator
 #     (SPEC_SAFEGUARDING_P0_END_TO_END_2026-09-04 §2.3). static/index.html:
 #     Governance view gains a Safeguarding panel for the coordinator role

@@ -1490,6 +1490,37 @@ async def confirm_support_entry(student_id: str, payload: dict):
     }
 
 
+@router.post("/api/students/{student_id}/support-entry/dismiss")
+async def dismiss_support_entry_endpoint(student_id: str, payload: dict):
+    """U8 (2026-09-04): the two-second undo. Deactivates one support-profile
+    entry (never deletes); every reader honours `active`. Counts and ids in
+    the response - never the entry text."""
+    from src.education.student_lens import LensNotFoundError
+    from src.lingua_viva.privacy_log import log_event
+
+    category_id = str(payload.get("category_id") or "").strip()
+    bucket = str(payload.get("bucket") or "").strip()
+    entry_id = str(payload.get("entry_id") or "").strip()
+    dismissed_by = str(payload.get("teacher_id") or "local-teacher").strip() or "local-teacher"
+    if not (category_id and bucket and entry_id):
+        return JSONResponse(
+            {"error": "category_id, bucket, and entry_id are required"},
+            status_code=400,
+        )
+
+    def do_dismiss(store):
+        return store.dismiss_support_entry(student_id, category_id, bucket, entry_id, dismissed_by)
+
+    try:
+        await asyncio.to_thread(_with_student_store, do_dismiss)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    except LensNotFoundError:
+        return JSONResponse({"error": f"Student '{student_id}' not found."}, status_code=404)
+    await asyncio.to_thread(log_event, "support_entry_dismissed", query_text=student_id)
+    return {"dismissed": True, "entry_id": entry_id, "category_id": category_id, "bucket": bucket}
+
+
 @router.get("/api/students/{student_id}/evidence/pending")
 async def pending_student_evidence(student_id: str):
     """Teacher review queue for model/import-suggested strengths and ethos evidence."""

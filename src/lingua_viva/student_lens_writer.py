@@ -110,6 +110,7 @@ def write_student_lens(
                     student_id = store.create_lens(display_name="Imported Student")
 
         written_fields: list[str] = []
+        written_entries: list[dict] = []  # U8: ids the UI needs to undo exactly this write
         review_required: list[str] = []
         unresolved_questions: list[str] = list(result.unresolved_questions or [])
         accounting: list[dict] = []
@@ -215,7 +216,7 @@ def write_student_lens(
             try:
                 note = _dispatch(
                     store, resolved, field, student_id, teacher_id, confidence, source_file,
-                    _SOURCE_KINDS[source_kind],
+                    _SOURCE_KINDS[source_kind], written_entries,
                 )
             except (ValueError, ObservationValidationError) as exc:
                 # A store-level rejection refuses THIS field; it never voids the import.
@@ -248,6 +249,7 @@ def write_student_lens(
         return {
             "student_id": student_id,
             "written_fields": written_fields,
+            "written_entries": written_entries,
             "review_required": review_required,
             "unresolved_questions": unresolved_questions,
             "accounting": accounting,
@@ -304,6 +306,7 @@ def _dispatch(
     confidence: str,
     source_file: str,
     source_types: tuple[str, str] = ("report", "local_file"),
+    written_entries: Optional[list[dict]] = None,
 ) -> str:
     """Persist one resolved field through its declared store operation.
     Returns a short note for the accounting ledger. Raises ValueError /
@@ -357,6 +360,12 @@ def _dispatch(
                     student_id=student_id, category_id=category, summary=txt,
                     created_by=teacher_id, evidence_type=evidence_type, source_ref_ids=refs,
                 )
+                if written_entries is not None:
+                    written_entries.append({
+                        "path": path, "category_id": category, "bucket": bucket,
+                        "entry_id": store.get_support_profile(student_id)["categories"][category][bucket][-1]["id"],
+                        "text": txt,
+                    })
             else:
                 if _already_present(existing, txt, "text", refs):
                     skipped += 1
@@ -365,6 +374,12 @@ def _dispatch(
                     student_id=student_id, category_id=category, bucket=bucket, text=txt,
                     created_by=teacher_id, confidence=confidence, source_ref_ids=refs,
                 )
+                if written_entries is not None:
+                    written_entries.append({
+                        "path": path, "category_id": category, "bucket": bucket,
+                        "entry_id": store.get_support_profile(student_id)["categories"][category][bucket][-1]["id"],
+                        "text": txt,
+                    })
             wrote += 1
         return note + (f"{wrote} entries written" + (f", {skipped} already present" if skipped else ""))
 

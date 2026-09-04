@@ -266,13 +266,15 @@ REPO = Path(__file__).resolve().parent.parent
 #     English attribution, never raw confidence numbers or method tokens.
 #   v166 (2026-08-19): demo-eve F4+F5 — version badge in topbar, preview-first
 #     import copy, xlsx-specific not-found hint.
+# v183 (2026-09-04): U8 — remove control on support entries + Observe result shows
+#   what the note did with an undo (index.html only).
 # v182 (2026-09-04): U13 — coordinator Safeguarding panel in Governance (pending
 #   count, pending_config sentence, drain button). index.html only.
 # v181 (2026-09-04): lens field contract on the wire — Observe -> lens on
 #   both routes, parent recommendation provenance fields (web.py only).
 # v180 (2026-09-01): BUG-T5.2 — Observe save student gate (ambiguous
 #   surname / mismatched name refuses to save; "Which student?" chooser).
-EXPECTED_VERSION = 182
+EXPECTED_VERSION = 183
 
 
 def _html() -> str:

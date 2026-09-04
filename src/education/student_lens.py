@@ -1290,6 +1290,48 @@ class StudentLensStore:
         self._conn.commit()
         return sp
 
+    def dismiss_support_entry(
+        self, student_id: str, category_id: str, bucket: str, entry_id: str,
+        dismissed_by: str = "local-teacher",
+    ) -> dict:
+        """U8 (2026-09-04): the two-second undo for an automatic write. Marks
+        one support-profile entry inactive (never deletes - the record stays
+        auditable, and every reader already honours `active`). Idempotent.
+        Unknown category / bucket / entry are named ValueErrors."""
+        if category_id not in SUPPORT_CATEGORY_IDS:
+            raise ValueError(
+                f"Unknown category ID '{category_id}'. Allowed: {SUPPORT_CATEGORY_IDS}"
+            )
+        row = self._get_student_row(student_id, include_deleted=False)
+        if row is None:
+            raise LensNotFoundError(student_id)
+        sp = self._row_to_lens_dict(row)["support_profile"]
+        buckets = sp["categories"].get(category_id) or {}
+        if bucket not in buckets or not isinstance(buckets.get(bucket), list):
+            raise ValueError(
+                f"Unknown bucket '{bucket}' in {category_id}. Allowed: {sorted(k for k, v in buckets.items() if isinstance(v, list))}"
+            )
+        target = next((e for e in buckets[bucket] if isinstance(e, dict) and e.get("id") == entry_id), None)
+        if target is None:
+            raise ValueError(f"No support entry '{entry_id}' in {category_id}/{bucket} for this student")
+        if target.get("active", True) is not False:
+            target["active"] = False
+            target["dismissed_at"] = _now_iso()
+            target["dismissed_by"] = _validate_non_empty_string(dismissed_by, "dismissed_by")
+            now = _now_iso()
+            self._conn.execute(
+                """
+                UPDATE students SET
+                    support_profile = ?,
+                    profile_version = profile_version + 1,
+                    updated_at = ?
+                WHERE student_id = ?
+                """,
+                (json.dumps(sp), now, student_id),
+            )
+            self._conn.commit()
+        return sp
+
     def set_routing_decision_ids(self, observation_id: str, ids: dict) -> None:
         """Persist routing-memory decision ids on an observation row
         (SPEC_LV_ROUTING_MEMORY_LOOP_2026-08-01). Ids only — keys are

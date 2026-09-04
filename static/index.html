@@ -2997,8 +2997,40 @@
         const studentName = studentSelect.options[studentSelect.selectedIndex]?.text || studentSelect.value;
         const typeLabel = $("obs-template").options[$("obs-template").selectedIndex]?.text || templateType;
         const cefrBits = templateType === "cefr" ? ` · ${$("obs-dim").value} · ${$("obs-level").value}` : "";
+        // U8 (2026-09-04): show what this note did to the lens (the contract's
+        // written / review_required / unresolved ledger) and offer the two-second
+        // undo on exactly the entries it wrote. Counts and plain words; the
+        // teacher's own text is the only content shown.
+        const lensUpdate = result.lens_update || null;
+        let lensUpdateHtml = "";
+        if (lensUpdate && !lensUpdate.error) {
+          const written = (lensUpdate.written_fields || []).length;
+          const review = (lensUpdate.review_required || []).length;
+          const open = (lensUpdate.unresolved_questions || []).length;
+          const refused = (lensUpdate.feedback || {}).refused_count || 0;
+          const parts = [`${plural(written, "lens field")} updated`];
+          if (review) parts.push(`${review} waiting for your confirmation`);
+          if (open) parts.push(`${plural(open, "question")} not resolved`);
+          if (refused) parts.push(`${refused} refused (named in the lens)`);
+          const undoRows = (lensUpdate.written_entries || []).map(item => `<div class="source-line" style="margin-top:4px;"><span class="badge">${escapeHtml(item.category_id.replace(/_/g, " "))} · ${escapeHtml(item.bucket.replace(/_/g, " "))}</span> ${escapeHtml(item.text || "")} <button type="button" class="badge" style="cursor:pointer;" data-undo-entry data-cat="${escapeHtml(item.category_id)}" data-bucket="${escapeHtml(item.bucket)}" data-entry="${escapeHtml(item.entry_id)}" title="Not this. Remove it from the lens; the note is kept.">not this — remove</button></div>`).join("");
+          lensUpdateHtml = `<p><strong>What this note did to the lens:</strong> ${escapeHtml(parts.join(" · "))}.</p>${undoRows}`;
+        } else if (lensUpdate && lensUpdate.error) {
+          lensUpdateHtml = `<p><span class="badge warn">Lens not updated</span> ${escapeHtml(lensUpdate.error)}</p>`;
+        }
         const traitRows = (result.ethos_trait_suggestions || []).filter(t => t.trait_id).map(t => `<span class="badge ${t.confidence === "teacher_confirmed" ? "ok" : "warn"}">${escapeHtml(t.label || t.trait_id)} · ${escapeHtml(t.status || t.confidence || "suggested")}</span>`).join("");
-        $("obs-result").innerHTML = `<h3>Saved</h3><div class="source-line"><span class="badge ok">Saved locally. Not uploaded. Not shared.</span><span class="badge">Domain: observation</span>${traitRows}</div><p><strong>Recorded for ${escapeHtml(studentName)}</strong> — ${escapeHtml(typeLabel)}${escapeHtml(cefrBits)}</p><p>${escapeHtml(feedback.message || "Observation saved. Attached to the local lens.")}</p>${categories ? `<p>Updated: ${escapeHtml(categories)}</p>` : ""}<div class="output">${escapeHtml(result.observation.raw_transcript)}</div>`;
+        $("obs-result").innerHTML = `<h3>Saved</h3><div class="source-line"><span class="badge ok">Saved locally. Not uploaded. Not shared.</span><span class="badge">Domain: observation</span>${traitRows}</div><p><strong>Recorded for ${escapeHtml(studentName)}</strong> — ${escapeHtml(typeLabel)}${escapeHtml(cefrBits)}</p><p>${escapeHtml(feedback.message || "Observation saved. Attached to the local lens.")}</p>${categories ? `<p>Updated: ${escapeHtml(categories)}</p>` : ""}${lensUpdateHtml}<div class="output">${escapeHtml(result.observation.raw_transcript)}</div>`;
+        $("obs-result").querySelectorAll("[data-undo-entry]").forEach(button => button.addEventListener("click", async () => {
+          button.disabled = true;
+          const sid = (result.observation && result.observation.student_id) || state.selectedStudent;
+          try {
+            const res = await fetch(`/api/students/${sid}/support-entry/dismiss`, {
+              method: "POST", headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({category_id: button.dataset.cat, bucket: button.dataset.bucket, entry_id: button.dataset.entry})
+            });
+            if (res.ok) { button.textContent = "removed"; button.classList.add("ok"); }
+            else { button.disabled = false; button.textContent = "remove failed — retry"; }
+          } catch { button.disabled = false; button.textContent = "network error — retry"; }
+        }));
         $("obs-result").scrollIntoView({ behavior: "smooth", block: "nearest" });
         $("obs-result").classList.add("flash-success");
         setTimeout(() => $("obs-result").classList.remove("flash-success"), 2000);
@@ -4126,8 +4158,14 @@
       return `<span class="badge ok">${escapeHtml(labels[confidence] || confidence)}</span>`;
     }
 
+    // U8 (2026-09-04): dismissed entries are inactive, not deleted — hide them; every
+    // entry carries a two-second remove control (the undo that makes automatic routing acceptable).
+    function removeEntryControl(entry, catId, bucket) {
+      return `<button type="button" class="badge" style="cursor:pointer;" data-dismiss-entry data-cat="${escapeHtml(catId)}" data-bucket="${escapeHtml(bucket)}" data-entry="${escapeHtml(entry.id || "")}" title="Not right? Remove this from the lens. The note it came from is kept.">remove</button>`;
+    }
+
     function categoryEntryList(entries, catId, bucket, prefix = "") {
-      return (entries || []).map(entry => `<div class="source-line" style="margin-top:4px;">${prefix}${escapeHtml(entry.text || "")} ${confidenceBadge(entry, catId, bucket)}${authorBadge(entry)}</div>`).join("");
+      return (entries || []).filter(entry => entry.active !== false).map(entry => `<div class="source-line" style="margin-top:4px;">${prefix}${escapeHtml(entry.text || "")} ${confidenceBadge(entry, catId, bucket)}${authorBadge(entry)} ${removeEntryControl(entry, catId, bucket)}</div>`).join("");
     }
 
     function renderCategorySection(catId, category) {
@@ -4382,6 +4420,17 @@
           });
           if (res.ok) { await loadLens(targetId, true); }
           else { button.disabled = false; button.textContent = "confirm failed — retry"; }
+        } catch { button.disabled = false; button.textContent = "network error — retry"; }
+      }));
+      container.querySelectorAll("[data-dismiss-entry]").forEach(button => button.addEventListener("click", async () => {
+        button.disabled = true;
+        try {
+          const res = await fetch(`/api/students/${state.selectedStudent}/support-entry/dismiss`, {
+            method: "POST", headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({category_id: button.dataset.cat, bucket: button.dataset.bucket, entry_id: button.dataset.entry})
+          });
+          if (res.ok) { showToast("Removed from the lens. The note it came from is kept.", "success"); await loadLens(targetId, true); }
+          else { button.disabled = false; button.textContent = "remove failed — retry"; }
         } catch { button.disabled = false; button.textContent = "network error — retry"; }
       }));
       container.querySelectorAll("[data-add-entry]").forEach(button => button.addEventListener("click", async () => {

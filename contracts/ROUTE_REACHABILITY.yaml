@@ -630,6 +630,13 @@ reachable_from_ui:
       Safeguarding panel. A human presses it; it never runs in the
       background (the W2 ruling stands).
 
+  - route: "POST /api/students/{student_id}/support-entry/dismiss"
+    call_site: '/support-entry/dismiss'
+    note: >-
+      U8 (2026-09-04): the two-second undo — the remove control on every
+      support entry in the Students view and the "not this — remove" button
+      on what an Observe note just wrote. Deactivates, never deletes.
+
 intentionally_backend_only:
   - route: "POST /api/students/{student_id}/lens/pdf"
     status: permanent
