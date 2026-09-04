@@ -16,6 +16,15 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v182 (2026-09-04): U13 safeguarding P0 seen by the coordinator
+#     (SPEC_SAFEGUARDING_P0_END_TO_END_2026-09-04 §2.3). static/index.html:
+#     Governance view gains a Safeguarding panel for the coordinator role
+#     only — pending count from GET /api/safeguarding/pending, the plain
+#     sentence for the pending_config state ("No notification channel is
+#     configured — set one in Settings, or review them here."), and a
+#     "Deliver queued notifications" button that POSTs /api/safeguarding/drain
+#     (a human presses it; nothing runs in the background). Teachers see
+#     nothing. No web.py change. Lock re-taken on Linux (LF bytes).
 #   v181 (2026-09-04): lens field contract on the wire (cycle 0, 30f5e03).
 #     src/web.py: /api/voice/act observation branch and /api/observe/capture
 #     (after the restricted/duplicate returns) route the saved comment

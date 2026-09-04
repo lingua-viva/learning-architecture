@@ -5467,11 +5467,39 @@
           <p>${escapeHtml(item.detail)}</p>
         </div>`).join("");
 
+      // U13 (SPEC_SAFEGUARDING_P0_END_TO_END_2026-09-04 §2.3): the coordinator
+      // can SEE that a restricted item is waiting. Counts only — never a name,
+      // never a word of a transcript. Teachers see nothing (role gate as today).
+      // The drain stays a button a human presses; nothing runs in the background.
+      let safeguardingPanel = "";
+      if (state.role === "coordinator") {
+        try {
+          const pending = await api("/api/safeguarding/pending");
+          const n = Number(pending.count || 0);
+          const waiting = n === 0
+            ? "No safeguarding items are waiting."
+            : (Number(pending.pending_config || 0) > 0
+              ? `${plural(n, "safeguarding item")} ${n === 1 ? "is" : "are"} waiting. No notification channel is configured — set one in Settings, or review them here.`
+              : `${plural(n, "safeguarding item")} ${n === 1 ? "is" : "are"} waiting for delivery.`);
+          const since = pending.oldest_at ? ` Oldest: ${escapeHtml(String(pending.oldest_at).slice(0, 16).replace("T", " "))} UTC.` : "";
+          safeguardingPanel = `
+        <div class="panel" id="safeguarding-pending" style="margin-bottom:14px;">
+          <div class="view-head"><div><h3 style="margin:0;">Safeguarding</h3></div>
+            <span class="${n === 0 ? "badge ok" : "badge warn"}" id="safeguarding-pending-count">${n}</span></div>
+          <p>${waiting}${since}</p>
+          ${Number(pending.queued || 0) > 0 ? `<button type="button" id="safeguarding-drain">Deliver queued notifications</button>` : ""}
+        </div>`;
+        } catch (error) {
+          safeguardingPanel = `<div class="panel" id="safeguarding-pending" style="margin-bottom:14px;"><h3>Safeguarding</h3><p>Could not read the pending count: ${escapeHtml(error.message || "unknown error")}</p></div>`;
+        }
+      }
+
       $("content").innerHTML = `
         <div class="view-head">
           <div><h2>Governance</h2><p>What Lingua Viva did with student information on this computer.</p></div>
           ${headline}
         </div>
+        ${safeguardingPanel}
         <div class="panel">
           <h3>Trust Status</h3>
           <p class="voice-hint">Counted from the files on this computer at ${escapeHtml((trust.generated_at || "").slice(0, 19).replace("T", " "))} UTC.</p>
@@ -5514,6 +5542,7 @@
           <div id="gov-evidence" style="margin-top:12px;"><p class="voice-hint">Choose a record above.</p></div>
         </div>`;
 
+      wireSafeguardingDrain();
       await renderGovernanceExportControls();
       await renderDeliverableReceipts();
       wireGovernanceEvidenceTabs();
@@ -5551,6 +5580,21 @@
       } catch {
         host.innerHTML = `<p class="voice-hint">Could not read deliverables.</p>`;
       }
+    }
+
+    function wireSafeguardingDrain() {
+      const button = $("safeguarding-drain");
+      if (!button) return;
+      button.addEventListener("click", async () => {
+        button.disabled = true;
+        try {
+          await api("/api/safeguarding/drain", { method: "POST" });
+          await renderGovernance();
+        } catch (error) {
+          button.disabled = false;
+          button.textContent = `Delivery failed: ${error.message || "unknown error"}`;
+        }
+      });
     }
 
     async function renderGovernanceExportControls() {

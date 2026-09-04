@@ -507,7 +507,11 @@ def capture_with_safeguarding(
             "observation_stored": False,
             "stored_in": "safeguarding/restricted.ndjson",
             "entry_id": entry["entry_id"],
-            "safeguarding": severity.to_dict(),
+            # U13 (2026-09-04): content-free on the wire - tier, rounded_up and
+            # rationale only. The matched indicator patterns stay in the ledger;
+            # a route response gets screenshotted, and a regex that spells the
+            # disclosure is a word of the transcript by another route (K2).
+            "safeguarding": {k: v for k, v in severity.to_dict().items() if k != "matched"},
             "notification": {
                 "notification_id": notification["notification_id"],
                 "status": notification["status"],

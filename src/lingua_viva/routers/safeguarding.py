@@ -66,6 +66,29 @@ async def restricted_items(request: Request):
     return {"items": items, "count": len(items), "restricted": True}
 
 
+@router.get("/safeguarding/pending")
+async def pending_notifications_route(request: Request):
+    """U13 (SPEC_SAFEGUARDING_P0_END_TO_END_2026-09-04 §2.3): what is waiting —
+    coordinator+. Counts and one timestamp only, never a summary, an id, a
+    name or a word of any transcript: this feeds a badge, and badges get
+    screenshotted. Nothing here delivers anything; /drain stays the button.
+    """
+    from src.lingua_viva.safeguarding import pending_notifications
+
+    denied = _coordinator_gate(request)
+    if denied is not None:
+        return denied
+    entries = pending_notifications()
+    created = sorted(str(e.get("created_at") or "") for e in entries if e.get("created_at"))
+    return {
+        "count": len(entries),
+        "queued": sum(1 for e in entries if e.get("status") == "queued"),
+        "pending_config": sum(1 for e in entries if e.get("status") == "pending_config"),
+        "oldest_at": created[0] if created else None,
+        "restricted": True,
+    }
+
+
 @router.post("/safeguarding/drain")
 async def drain_notifications_route(request: Request):
     """Explicitly deliver queued (content-free) notifications — coordinator+.

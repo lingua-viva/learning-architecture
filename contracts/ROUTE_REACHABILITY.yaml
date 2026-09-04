@@ -616,6 +616,20 @@ reachable_from_ui:
       (routers/artifacts.py) — first classified when the reachability
       scanner was extended to cover routers (P1-ARCH-001 web.py split).
 
+  - route: "GET /api/safeguarding/pending"
+    call_site: 'api("/api/safeguarding/pending")'
+    note: >-
+      U13 (SPEC_SAFEGUARDING_P0_END_TO_END_2026-09-04 §2.3): the Governance
+      view's Safeguarding panel, coordinator role only. Counts and one
+      timestamp — content-free by construction.
+
+  - route: "POST /api/safeguarding/drain"
+    call_site: 'api("/api/safeguarding/drain"'
+    note: >-
+      U13: the "Deliver queued notifications" button in the Governance
+      Safeguarding panel. A human presses it; it never runs in the
+      background (the W2 ruling stands).
+
 intentionally_backend_only:
   - route: "POST /api/students/{student_id}/lens/pdf"
     status: permanent
@@ -891,12 +905,6 @@ intentionally_backend_only:
       Restricted safeguarding ledger read (routers/safeguarding.py, W2).
       Coordinator-gated under LV_AUTH_MODE=local_header; no UI call site
       in index.html — safeguarding review surface not built yet.
-
-  - route: "POST /api/safeguarding/drain"
-    status: deferred_undecided
-    reason: >-
-      Safeguarding queue drain (routers/safeguarding.py, W2). Role-gated
-      operational endpoint; no UI call site — invoked programmatically.
 
   - route: "POST /api/safeguarding/restricted/{entry_id}/status"
     status: deferred_undecided
