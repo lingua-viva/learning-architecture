@@ -105,7 +105,9 @@ def test_parent_summary_exit_surface_stays_mounted():
     assert "navigator.clipboard.writeText(text)" in html
     assert "printParentSummaryFinalText" in html
     assert "printPacketHtml" in html
-    assert "printPacketHtml(doc, \"Student summary\")" in html
+    # U10 (2026-09-04): Print now hands the APPROVED artifact's print_html to the same
+    # exit surface — the server-rendered page, not a client-built doc.
+    assert "printPacketHtml(state.parentApproved.print_html, \"Student summary\")" in html
     assert "textarea.value" in html
     assert "Select who this note is about before drafting." in html
     assert "window.print" not in html
