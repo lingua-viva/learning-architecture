@@ -76,3 +76,24 @@ _(FAIL → verbatim error back to PC-23. PASS → tracker row to "Mical-passed, 
 | 7 as teacher: Governance | no Safeguarding panel at all | | |
 
 _(FAIL → verbatim error back to PC-23. PASS → tracker rows U2 / U13 to "Mical-passed, awaiting teacher witness". Claudia typing step 2 in her own app is level 4 for U13 — the spec's R4.)_
+
+---
+
+## Cycle 2 — 2026-09-04 — main ← `ux/u8-editable-lens` (= v0.2.86 + U8 + UI contract v183)
+
+**What is in it:** U8 edit a lens by hand (`2f82915`: `POST /api/students/{id}/support-entry/dismiss` deactivates one entry — never deletes — and every reader drops it; the writer returns `written_entries` with ids; the Students view carries a *remove* control on every support entry and hides dismissed ones; the Observe result shows "What this note did to the lens" with a *not this — remove* undo per written entry; 5 tests, all red first). Lock v183 (`9be3888`, taken on Linux). Full suite on Linux/3.11 (WSL) at `9be3888`: run 1 **3,068 passed / 6 failed** — the five environment rows plus `test_teacher_identity::test_sync_never_exports_unprovisioned_ledger` (Drive sync returned False); run 2 **3,069 passed / 5 failed** (the five rows only). That test passes alone, as its whole file (×3), and with each new test file run ahead of it — an order/timing flake in the full run, not a U8 regression; recorded here, not baselined. Windows: U8 + contract + Observe + parent-report + reachability + U13 suites 74 passed.
+
+**Release tag:** _(filled in when the chain completes)_
+**Live download contains `9be3888`:** _(verified before "ready" is said)_
+
+### Mical — U8 click path on the live download (plan #5 "Done means": mis-route a note on purpose, see what it did, correct it in two clicks)
+
+| step | expected | verdict | wording seen |
+|---|---|---|---|
+| 1 Observe, pick a student, type `Finished early again and could benefit from extension activities.` save | "Saved" + a line **What this note did to the lens: 1 lens field updated.** and one row `advanced enrichment · evidence` with the sentence and a *not this — remove* button | | |
+| 2 click *not this — remove* | button turns to **removed**; no error | | |
+| 3 Students → that student → lens | the enrichment entry is not shown | | |
+| 4 Students → any student with support entries → click *remove* on one | toast "Removed from the lens. The note it came from is kept."; the entry disappears; the observation it came from is still in the history | | |
+| 5 Student Summary → Draft for that student | the removed entry's text is not in the note | | |
+
+_(FAIL → verbatim error back to PC-23. PASS → tracker row U8 to "Mical-passed, awaiting teacher witness". Known edge, recorded in the commit: re-applying the same source after a remove brings the entry back as a fresh suggestion — a sticky remove is your ruling.)_
