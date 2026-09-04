@@ -121,8 +121,21 @@ _(FAIL → verbatim error back to PC-23. PASS → tracker row U8 to "Mical-passe
 
 **What is in it:** sticky remove (`e3e2adb`: a dismissed entry counts as present for the writer's dedupe, so re-applying the same note or report card never brings it back; the ledger says "0 entries written, 1 already present"; 1 test, red first). U10 approve/print (`POST /api/parents/approve` behind a minimum-evidence gate of 1 evidence-backed sentence; trauma-safety re-check on the teacher's edit; name strip on full name **and** name tokens — the full-name-only gate let "amina's" through, found and fixed; publication gate; signed artifact with `print_html` / `printable_text` and the evidence ids; content-free `parent_report_approved` log line; the UI shows "Not enough evidence to send", approves through the route, prints the returned artifact; 8 tests, all red first). Lock v185 (`c281172`, taken on Linux). Full suite on Linux/3.11 (WSL) at `c281172`: **3,083 passed / 6 failed** — the five environment rows plus one `test_parent_summary_finish` pin on the old client-built print doc, updated in `feeac60` (Print now hands the approved artifact to the same exit surface); those files 27 passed / 1 skipped on Linux at `feeac60`. Windows: the day's twelve suites 125 passed.
 
+**Release tag:** `desktop-v0.2.89` — auto-release run 33919984498 on `382beb6`, every job success, published 2026-09-04T21:21:48Z; `https://linguaviva.art/` pins `desktop-v0.2.89`; Setup.exe / .dmg / .AppImage all HTTP 302.
+**Live download contains the U10 head (`382beb6`):** YES — the tag commit `65d9c4a` descends from it (`git merge-base --is-ancestor`, PC-23, 2026-09-04).
+
+**→ v0.2.89 ready — test U-10 and the sticky remove** (click paths above). Every earlier cycle is in it.
+
+---
+
+## Cycle 5 — 2026-09-04 — main ← `ux/sir-download-surface` (= cycle 4 + School profile in Settings + Still I Rise download section + UI contract v186)
+
+**What is in it:** the operator's 21:00Z ask ("push all the way to app/prod in the app store under Still I Rise"): there is no app store in this tree, so the live download surface got a **Still I Rise schools** section on linguaviva.art (same three installers, tracked by pin-site, plus the one-click instruction) and Settings got a **School profile** select + Apply that POSTs the deployment profile and repaints the shell at once (`e14a18d`; 2 tests, red first). Lock v186 (`446dd51`, taken on Linux). The live test harness: `dev/HARNESS_LIVE_TEST_2026-09-04.md` and the interactive page https://claude.ai/code/artifact/4acfefa3-151d-4f15-822c-639b2dedfeef. Full suite on Linux/3.11 (WSL) at `446dd51`: **3,086 passed / 5 failed** — the five environment rows only.
+
 **Release tag:** _(filled in when the chain completes)_
-**Live download contains the U10 head:** _(verified before "ready" is said)_
+**Live download contains the cycle 5 head:** _(verified before "ready" is said)_
+
+_(The SIR click path in cycle 3 now starts from Settings → School profile; the harness has the updated steps.)_
 
 ### Mical — U10 click path on the live download
 
