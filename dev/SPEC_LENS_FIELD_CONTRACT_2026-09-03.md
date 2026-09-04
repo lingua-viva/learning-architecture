@@ -369,6 +369,57 @@ channel with a clean verdict.*
 a teacher a re-import. A silently-thin output is a document about a child that
 reads as complete and is not — and under R4 it is going out unattended.
 
+#### 2.8.2b The out side is BUILT. The in side is the gap.
+
+**Operator correction, 2026-09-03:** *"We have also worked extensively on the
+output... The input is the part that was more unbuilt. It's really about wiring
+and creating a wire contract that all sides are happy with."*
+
+Measured, and the tree agrees:
+
+```
+OUT — built
+  DELIVERABLE_TYPES (deliverables/schema.py)          10 real types
+      assessment · cohort_lesson_plan · daily_file · drive_export
+      help_artifact · lesson_material_packet · observation_export
+      parent_report · portfolio_entry · student_lens
+  actions.py ACTIONS                                   8 verbs
+  reader modules                                      13
+  read entry points                                    4  <- the actual defect
+
+IN — thinner
+  one writer choke point, one dispatch chain, and until 2026-09-03 a chain
+  that could receive a field it did not implement and say nothing
+```
+
+**Re-read §2.8 with that emphasis.** The OUT surface is not unbuilt work; it is
+built work behind four undeclared doors. The contract's job on that side is to
+give the ten deliverable types one declared way to ask the lens for what they
+need — **not to author outputs.** On the IN side the contract has more to do,
+because there is genuinely less there.
+
+*(`CANNOT-TELL`: the operator recalls ~17 MC verbs ported at some point. I could
+not confirm that number — MC carries 87 actions across 15 files with only 4 in
+`actions/education.yaml`, and no port-list document was found. The count is
+unverified; the claim that the output side is substantially built is verified.)*
+
+#### 2.8.2c "A wire contract all sides are happy with" — three constituencies
+
+The contract has **three** constituencies, and this spec was drafted from only
+one of them (the writer's). It must be validated against all three before it is
+declared, or it will be correct and unusable:
+
+| constituency | what it needs from the contract | what breaks it |
+|---|---|---|
+| **producers** (extractors, Observe, oral, written) | a declared place to put every value they can produce | a field they can extract with nowhere legal to put it |
+| **the lens** (the store) | every write to reach a real store operation, evidence attached, derived fields never punched | a contract that lets an importer write `cefr_snapshot` directly and destroy `get_lens_as_of()` |
+| **consumers** (the 10 deliverable types) | to ask for what they need and be told honestly what is missing | a "complete" parent report built from three populated fields |
+
+**Rung 3's acceptance is therefore three-sided**: one producer wired (Observe),
+the store's laws intact (§2.6 `origin`), and one consumer resolving through
+`requires()` and reporting `fields_missing`. A contract that satisfies two of
+three is not a wire contract; it is one side's convenience imposed on the others.
+
 #### 2.8.3 What this does NOT authorize tonight
 
 Do not convert 13 modules. **Declare the OUT filter and prove it on ONE
