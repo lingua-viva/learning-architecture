@@ -113,6 +113,37 @@ _(FAIL → verbatim error back to PC-23. PASS → tracker row U8 to "Mical-passe
 
 **Lane state at 20:15Z:** plan #1–#6 built and shipped; the plan's STOP line applies — U10 is not started until Mical says so. Open verdicts: every row above. Open decisions for Mical: sticky remove (U8), a Settings control for the deployment profile, `gh auth login` on PC-23.
 
+**Rulings received 20:30Z:** *"Sticky remove yes -- go ahead with U10."*
+
+---
+
+## Cycle 4 — 2026-09-04 — main ← `ux/u10-approve-print` (= cycle 3 + sticky remove + U10 + UI contract v185)
+
+**What is in it:** sticky remove (`e3e2adb`: a dismissed entry counts as present for the writer's dedupe, so re-applying the same note or report card never brings it back; the ledger says "0 entries written, 1 already present"; 1 test, red first). U10 approve/print (`POST /api/parents/approve` behind a minimum-evidence gate of 1 evidence-backed sentence; trauma-safety re-check on the teacher's edit; name strip on full name **and** name tokens — the full-name-only gate let "amina's" through, found and fixed; publication gate; signed artifact with `print_html` / `printable_text` and the evidence ids; content-free `parent_report_approved` log line; the UI shows "Not enough evidence to send", approves through the route, prints the returned artifact; 8 tests, all red first). Lock v185 (taken on Linux). Full suite on Linux/3.11: _(filled when measured)_.
+
+**Release tag:** _(filled in when the chain completes)_
+**Live download contains the U10 head:** _(verified before "ready" is said)_
+
+### Mical — U10 click path on the live download
+
+| step | expected | verdict | wording seen |
+|---|---|---|---|
+| 1 Summaries → pick a student who has **no** observations and no report card → Draft Summary | draft appears with a red box **Not enough evidence to send** and its reason; the Approve button stays disabled even after ticking the checklist; status "Not enough evidence to send — nothing here can be approved." | | |
+| 2 pick Abigail (report card applied earlier) → Draft Summary | no red box; a sentence with a strength from the report card; checklist → tick all three → **Approve** enabled | | |
+| 3 edit the textarea (add one warm sentence) → Approve | toast "summary approved"; status "Approved — N piece(s) of evidence behind this note, signed <you> (Class Teacher)."; **Copy final text** and **Print** appear | | |
+| 4 Print | the printed page has the subject, your edited text, "A few things you could try at home", the signature line "— <you> (Class Teacher)"; no student name, no ids, no AI wording | | |
+| 5 edit the textarea to include the child's first name → Approve | refused: "The child's name or a private detail is still in the note. Replace it with 'your child' and approve again." | | |
+| 6 edit to include "refugee student" → Approve | refused with the unsafe label named | | |
+
+### Mical — sticky remove (U8 ruling) on the live download
+
+| step | expected | verdict | wording seen |
+|---|---|---|---|
+| 1 Observe → the extension-activities note → *not this — remove* | removed | | |
+| 2 Observe → the **same** note again → save | "What this note did to the lens: 0 lens fields updated" or the field named with "already present"; **no** new remove row; Students → lens shows no such entry | | |
+
+_(FAIL → verbatim error back to PC-23. PASS → tracker row U10 to "Mical-passed, awaiting teacher witness" — Claudia sending one real note is level 4.)_
+
 ### Mical — SIR profile click path on the live download
 
 | step | expected | verdict | wording seen |
