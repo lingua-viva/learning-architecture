@@ -19,9 +19,16 @@ import pytest
 
 from src.lingua_viva.injection_guard import (
     REDACTION_TOKEN,
-    detect_injection,
     redact_injection,
 )
+
+
+def detected(text: str) -> list[str]:
+    """The pattern names redact_injection found — the detection result IS the
+    redaction list (detect_injection was removed 2026-09-04; it was a
+    detect-only twin nothing in production called)."""
+    _, redactions = redact_injection(text)
+    return [r["type"] for r in redactions]
 
 
 # ── 1. Detection of real injection phrasing ─────────────────────────────────
@@ -41,7 +48,7 @@ INJECTION_SAMPLES = [
 
 @pytest.mark.parametrize("text", INJECTION_SAMPLES)
 def test_detects_injection_phrasing(text):
-    assert detect_injection(text), f"should detect: {text!r}"
+    assert detected(text), f"should detect: {text!r}"
 
 
 @pytest.mark.parametrize("text", INJECTION_SAMPLES)
@@ -74,14 +81,14 @@ CLASSROOM_SAMPLES = [
 
 @pytest.mark.parametrize("text", CLASSROOM_SAMPLES)
 def test_never_flags_classroom_language(text):
-    assert detect_injection(text) == [], f"false positive on classroom text: {text!r}"
+    assert detected(text) == [], f"false positive on classroom text: {text!r}"
     sanitized, redactions = redact_injection(text)
     assert sanitized == text
     assert redactions == []
 
 
 def test_empty_and_none_safe():
-    assert detect_injection("") == []
+    assert detected("") == []
     sanitized, redactions = redact_injection("")
     assert sanitized == "" and redactions == []
 

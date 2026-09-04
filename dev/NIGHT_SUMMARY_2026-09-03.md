@@ -56,7 +56,7 @@ Everything below is read from the tree or from a command run tonight. Denominato
 - **Ethos writes**: refused on purpose until you rule review semantics (9 refusals per report card).
 - **Assess storage shape** (`dev/ASSESS_CHANGES_NEEDED` §2): new `assessment_profile` blob (recommended) vs support entries.
 - **Who drains safeguarding notifications?** `pending_notifications` / the sync drains are started by nothing in `src/` (census §4.2). If nothing outside does either, RED items queue and never deliver.
-- **`detect_injection` is an unarmed guard** — arm it in the Ask path or delete it.
+- ~~`detect_injection` is an unarmed guard~~ — corrected 2026-09-04: the redaction guard is armed at three seams; the detect-only twin was DELETED on the operator's ruling and its tests retargeted at `redact_injection`'s list.
 - The 34 (now 36) `deferred_undecided` routes are still a to-do list.
 - The two fixture rows in your real store. Untouched. Gone on your word.
 

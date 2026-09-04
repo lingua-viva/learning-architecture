@@ -61,12 +61,11 @@ INJECTION_PATTERNS: dict[str, re.Pattern] = {
 
 REDACTION_TOKEN = "[REDACTED_INJECTION]"
 
-
-def detect_injection(text: str) -> list[str]:
-    """Return the names of injection patterns present in text (empty = clean)."""
-    if not text:
-        return []
-    return [name for name, pattern in INJECTION_PATTERNS.items() if pattern.search(text)]
+# detect_injection() was removed 2026-09-04 (operator ruling after the
+# reachability census): it was a detect-only twin of redact_injection that no
+# production path called — the three seams (document_parser, extraction_engine,
+# the egress sanitizer) all use redact_injection, whose returned redaction list
+# IS the detection result. One door, not two.
 
 
 def redact_injection(text: str) -> tuple[str, list[dict]]:
