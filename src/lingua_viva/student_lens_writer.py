@@ -289,8 +289,12 @@ def _texts(value: Any) -> list[str]:
 
 
 def _already_present(items: list[dict], text: str, key: str, refs: list[str]) -> bool:
+    """Idempotence for re-applied sources. Sticky remove (operator ruling
+    2026-09-04): an entry the teacher dismissed (active False) counts as
+    present too, so re-applying the same note or report card never brings
+    it back as a fresh suggestion. Her remove is final for that source."""
     for item in items:
-        if not isinstance(item, dict) or item.get("active", True) is False:
+        if not isinstance(item, dict):
             continue
         if item.get(key) == text and list(item.get("source_ref_ids") or []) == list(refs):
             return True

@@ -171,6 +171,41 @@ def test_teacher_note_routed_to_the_lens_returns_written_entries_with_ids(client
     assert r.status_code == 200, r.text
 
 
+# --- 3b. sticky remove (operator ruling 2026-09-04) -------------------------------------------
+
+def test_a_removed_entry_stays_removed_when_the_same_source_is_applied_again(client):
+    """Mical's ruling: a teacher's remove is final for that source. Re-applying the
+    same note (or re-importing the same report card) must not bring the entry back
+    as a fresh suggestion."""
+    from src.lingua_viva.observe_to_lens import observe_comment_to_lens_sync
+
+    note = "Amina finished early again and could benefit from extension activities."
+
+    def first(store):
+        store.create_lens(student_id=STUDENT, display_name=NAME)
+        return observe_comment_to_lens_sync(note, student_id=STUDENT, display_name=NAME, teacher_id="local-teacher", store=store)
+
+    result = _with_store(first)
+    entry = result["written_entries"][0]
+    r = client.post(
+        f"/api/students/{STUDENT}/support-entry/dismiss",
+        json={"category_id": entry["category_id"], "bucket": entry["bucket"], "entry_id": entry["entry_id"]},
+    )
+    assert r.status_code == 200, r.text
+
+    again = _with_store(lambda store: observe_comment_to_lens_sync(note, student_id=STUDENT, display_name=NAME, teacher_id="local-teacher", store=store))
+    assert again.get("written_entries", []) == [], f"the removed entry came back: {again.get('written_entries')}"
+
+    def active_matches(store):
+        bucket = store.export_lens(STUDENT)["support_profile"]["categories"][entry["category_id"]][entry["bucket"]]
+        return [e for e in bucket if e.get("active", True) is not False and (e.get("text") or e.get("summary")) == entry["text"]]
+
+    assert _with_store(active_matches) == [], "an active copy of the removed entry exists"
+    # the ledger still says why: the field was accounted, not silently dropped
+    ledger = [a for a in again["accounting"] if a.get("field_path") == entry["path"]]
+    assert ledger and "already present" in ledger[0].get("reason", ""), again["accounting"]
+
+
 # --- 4. the UI can see it and undo it ----------------------------------------------------
 
 def test_ui_shows_what_a_note_did_and_can_remove_an_entry():
