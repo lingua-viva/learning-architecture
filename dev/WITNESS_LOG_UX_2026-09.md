@@ -83,8 +83,10 @@ _(FAIL → verbatim error back to PC-23. PASS → tracker rows U2 / U13 to "Mica
 
 **What is in it:** U8 edit a lens by hand (`2f82915`: `POST /api/students/{id}/support-entry/dismiss` deactivates one entry — never deletes — and every reader drops it; the writer returns `written_entries` with ids; the Students view carries a *remove* control on every support entry and hides dismissed ones; the Observe result shows "What this note did to the lens" with a *not this — remove* undo per written entry; 5 tests, all red first). Lock v183 (`9be3888`, taken on Linux). Full suite on Linux/3.11 (WSL) at `9be3888`: run 1 **3,068 passed / 6 failed** — the five environment rows plus `test_teacher_identity::test_sync_never_exports_unprovisioned_ledger` (Drive sync returned False); run 2 **3,069 passed / 5 failed** (the five rows only). That test passes alone, as its whole file (×3), and with each new test file run ahead of it — an order/timing flake in the full run, not a U8 regression; recorded here, not baselined. Windows: U8 + contract + Observe + parent-report + reachability + U13 suites 74 passed.
 
-**Release tag:** _(filled in when the chain completes)_
-**Live download contains `9be3888`:** _(verified before "ready" is said)_
+**Release tag:** `desktop-v0.2.87` — auto-release run 33913640279 on `648c9ea`, every job success, published 2026-09-04T20:03:26Z; `https://linguaviva.art/` pins `desktop-v0.2.87`; Setup.exe / .dmg / .AppImage all HTTP 302.
+**Live download contains `9be3888` / `648c9ea`:** YES — the tag commit `aea93a7` descends from `648c9ea` (`git merge-base --is-ancestor`, PC-23, 2026-09-04).
+
+**→ v0.2.87 ready — test U-8** (click path below). It contains v0.2.85 and v0.2.86, so U-1 / U-2 / U-13 can all be run on this build.
 
 ### Mical — U8 click path on the live download (plan #5 "Done means": mis-route a note on purpose, see what it did, correct it in two clicks)
 
