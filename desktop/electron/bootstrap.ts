@@ -136,6 +136,40 @@ export async function detectPython(): Promise<{ ok: boolean; command: string; de
 
 // --- Ollama detection ---
 
+// U1 Rung 2 (2026-09-04, witnessed on PC-23 at desktop-v0.2.90): the binary a
+// consent-click install just wrote is NOT on this process's PATH — the
+// installer edits the user PATH, and only new processes read it. Resolve
+// `ollama` through one function that also looks where the installers put it,
+// so the same session can use what it just installed.
+export function ollamaDirCandidates(): string[] {
+  if (process.platform === "win32") {
+    const local = process.env.LOCALAPPDATA || "";
+    return local ? [path.join(local, "Programs", "Ollama")] : [];
+  }
+  if (process.platform === "darwin") {
+    return ["/opt/homebrew/bin", "/usr/local/bin"];
+  }
+  return ["/usr/local/bin", "/usr/bin"];
+}
+
+export function ollamaCommand(): string {
+  const exe = process.platform === "win32" ? "ollama.exe" : "ollama";
+  for (const dir of ollamaDirCandidates()) {
+    const candidate = path.join(dir, exe);
+    if (existsSync(candidate)) return candidate;
+  }
+  // PATH lookup — the ordinary case on a machine that had Ollama before we ran.
+  return "ollama";
+}
+
+export function addOllamaDirToPath(): void {
+  const sep = process.platform === "win32" ? ";" : ":";
+  const current = process.env.PATH || "";
+  for (const dir of ollamaDirCandidates()) {
+    if (!current.split(sep).includes(dir)) process.env.PATH = dir + sep + current;
+  }
+}
+
 export async function checkOllama(): Promise<BootstrapCheck> {
   // Check HTTP first (daemon may be running even if CLI isn't on PATH)
   try {
@@ -149,7 +183,7 @@ export async function checkOllama(): Promise<BootstrapCheck> {
   } catch { /* daemon not running, try CLI */ }
 
   // Fall back to CLI version check
-  return execFileText("ollama", ["--version"], 5000);
+  return execFileText(ollamaCommand(), ["--version"], 5000);
 }
 
 async function ollamaHasModel(model: string): Promise<boolean> {
@@ -194,7 +228,7 @@ export async function ensureOllamaModel(model?: string): Promise<BootstrapCheck>
     return { ok: true, detail: `Model ${model} already available.` };
   }
 
-  const cliResult = await execFileText("ollama", ["pull", model], 1800000); // 30 min
+  const cliResult = await execFileText(ollamaCommand(), ["pull", model], 1800000); // 30 min
   if (!cliResult.ok) {
     // CLI missing or failed — try the daemon's HTTP pull endpoint.
     try {
@@ -342,14 +376,25 @@ export async function installOllamaWindows(): Promise<void> {
     proc.on("close", (code) => {
       try { unlinkSync(installerPath); } catch { /* ignore */ }
       if (code === 0) {
-        // Try to start Ollama service — may not auto-start after silent install
+        // The install just wrote the binary; make it visible to THIS process,
+        // then start the service by resolved path. A spawn failure here is an
+        // async 'error' event, not a throw — without a listener Node turns it
+        // into an uncaught exception and Electron shows a modal traceback
+        // (witnessed 2026-09-04: "spawn ollama ENOENT"). Named, never fatal.
+        addOllamaDirToPath();
         try {
-          spawn("ollama", ["serve"], {
+          const service = spawn(ollamaCommand(), ["serve"], {
             detached: true,
             stdio: "ignore",
             windowsHide: true,
-          }).unref();
-        } catch { /* will start on next login if not now */ }
+          });
+          service.on("error", (err) => {
+            appendSetupLog(`Ollama installed, but its service could not be started now (${err.message}). It starts on next login; the app keeps going.\n`);
+          });
+          service.unref();
+        } catch (err) {
+          appendSetupLog(`Ollama installed; starting its service failed: ${(err as Error).message}\n`);
+        }
         resolve();
       } else {
         reject(new Error(`Ollama installer exited with code ${code}`));

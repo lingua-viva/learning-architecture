@@ -139,6 +139,20 @@ _(FAIL → verbatim error back to PC-23. PASS → tracker row U8 to "Mical-passe
 
 **Lane state at 21:35Z:** plan #1–#6 and U10 built and live. Open: every verdict; a preset Still I Rise installer (a desktop/ bootstrap marker + second channel — a ruling); the PDF renderer left unmounted; `gh auth login` on PC-23.
 
+---
+
+## Live install on PC-23 — 2026-09-04 21:45Z — desktop-v0.2.90, operator's word "launch the app" (witness: the PC-23 seat, not Mical)
+
+| step | expected | verdict | wording seen |
+|---|---|---|---|
+| U1-1 download from linguaviva.art | tag served | PASS | `desktop-v0.2.90/LinguaViva-Setup.exe`, 81,762,592 bytes, sha256 `27a04f8d…` |
+| U1-2 installer dialogs | none unexpected | PASS | silent NSIS per-user install to `%LOCALAPPDATA%\Programs\lingua-viva-desktop`; no dialog; the app launched itself |
+| U1-3 first launch, minute one | usable, no traceback | **FAIL** | the wizard's consent-click Ollama install ran (Ollama's own "Welcome to Ollama!" window appeared; `ollama app.exe` + `ollama.exe` running, models `[]`), then a modal titled **Error**: *"A JavaScript error occurred in the main process — Uncaught Exception: Error: spawn ollama ENOENT at ChildProcess._handle.onexit (node:internal/child_process:286:19)"*. No `~/.lingua-viva/logs/` was written. Backend never started. |
+| recovery | — | PASS | quit the four `Lingua Viva.exe` processes, relaunched from the install dir: window **"Still I Rise — Setup"**, no Error; `setup.log` shows the dependency install completing; backend listening on 8787 after ~3 min |
+
+**Cause (read in `desktop/electron/bootstrap.ts`):** after the silent Ollama installer exits 0, `installOllamaWindows()` spawned `ollama serve` by bare name — the new install is on the *user* PATH only, which the already-running Electron process never re-reads — and the detached child had no `error` listener, so Node turned the async ENOENT into an uncaught exception. This is Olga's 3 September class ("another error popped up"): a first-run failure path with a traceback instead of a named message.
+**Fix:** `fix/u1-ollama-spawn-enoent` — one resolver `ollamaCommand()` (PATH, then `%LOCALAPPDATA%\Programs\Ollama`, `/opt/homebrew/bin`, `/usr/local/bin`), `addOllamaDirToPath()` after a successful install, the serve spawn carries an `error` handler that writes a named line to `setup.log` and never throws; `tests/test_desktop_ollama_spawn.py` (4, red first). Not yet shipped — see the next cycle.
+
 _(The SIR click path in cycle 3 now starts from Settings → School profile; the harness has the updated steps.)_
 
 ### Mical — U10 click path on the live download
