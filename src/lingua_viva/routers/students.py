@@ -156,6 +156,16 @@ def _create_lens_for_detected(extraction, detected: dict, teacher_id: str = "tea
         )
 
     record = _with_student_store(bridge)
+    # U2 roster honesty (2026-09-04): the class / grade column the detector
+    # read travels to the lens as grade_level — only into an EMPTY grade, so a
+    # re-import never overwrites what the teacher typed.
+    grade_from_source = str(detected.get("grade") or detected.get("class") or "").strip()
+    if grade_from_source:
+        def set_grade(store):
+            if not str(store.get_lens(student_id).get("grade_level") or "").strip():
+                store.update_profile(student_id, {"grade_level": grade_from_source})
+
+        _with_student_store(set_grade)
     # Operator ruling (brief §8.1): a locally saved lens propagates to Drive.
     # Enqueue is offline-safe — the T6 queue holds until push_file can drain.
     try:
