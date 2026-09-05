@@ -41,3 +41,4 @@ tests/fixtures/docpipe/real_anon/
 
 # QA test files (fictional student data — never commit)
 qa-test-files/
+.test-venv/

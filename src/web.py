@@ -5995,6 +5995,16 @@ async def parent_approve(request: Request, payload: dict):
         status = int(result.pop("__status__", 400))
         error = result.pop("__error__")
         return JSONResponse({"error": error, **result}, status_code=status)
+    from src.lingua_viva.deliverables.store import save_snapshot
+    try:
+        result["saved_deliverable"] = await asyncio.to_thread(
+            save_snapshot, "parent_report", "Approved parent note", dict(result), teacher_id=teacher_id,
+        )
+    except OSError:
+        return JSONResponse({
+            "error": "deliverable_not_saved",
+            "message": "The note could not be saved. Check free disk space and try approving again. Your draft is still on screen.",
+        }, status_code=503)
     await asyncio.to_thread(log_event, "parent_report_approved", query_text=student_id)
     return result
 

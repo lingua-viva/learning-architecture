@@ -35,6 +35,10 @@
 version: 1
 
 reachable_from_ui:
+  - route: "GET /api/artifacts/saved"
+    call_site: 'api("/api/artifacts/saved")'
+  - route: "GET /api/artifacts/saved/{identifier}"
+    call_site: 'api(`/api/artifacts/saved/${encodeURIComponent(button.dataset.openSaved)}`)'
   - route: "GET /"
     call_site: "__root_document__"
     note: >-

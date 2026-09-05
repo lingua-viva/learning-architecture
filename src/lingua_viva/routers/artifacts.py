@@ -23,7 +23,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from src.lingua_viva import coursework_pack as cwp
@@ -31,6 +31,44 @@ from src.lingua_viva.pdf_generator import artifacts_dir
 from src.lingua_viva.poi_progression import PROGRESSION_PHASES, PoIProgressionStore
 
 router = APIRouter(prefix="/api")
+
+
+def _saved_work_access(request: Request, teacher_id: str):
+    from src.lingua_viva.access_roles import access_context_from_request, auth_mode
+    ctx = access_context_from_request(request)
+    if auth_mode() == "off":
+        return True
+    return ctx.authenticated and (ctx.role in {"admin", "coordinator"} or ctx.teacher_id == teacher_id)
+
+
+@router.get("/artifacts/saved")
+def saved_work(request: Request):
+    from src.lingua_viva.deliverables.store import list_snapshots
+    from src.lingua_viva.access_roles import require_role
+    refusal = require_role(request, {"teacher"})
+    if refusal is not None:
+        return refusal
+    items, unreadable = list_snapshots()
+    return {"items": [item for item in items if _saved_work_access(request, item["teacher_id"])],
+            "unreadable_count": unreadable}
+
+
+@router.get("/artifacts/saved/{identifier}")
+def saved_work_detail(identifier: str, request: Request):
+    from src.lingua_viva.deliverables.store import read_snapshot
+    from src.lingua_viva.access_roles import require_role
+    refusal = require_role(request, {"teacher"})
+    if refusal is not None:
+        return refusal
+    try:
+        record = read_snapshot(identifier)
+    except FileNotFoundError:
+        raise HTTPException(404, "Saved work was not found")
+    except (OSError, ValueError):
+        raise HTTPException(409, "This saved file could not be read. The original is preserved on disk.")
+    if not _saved_work_access(request, record.get("teacher_id", "")):
+        raise HTTPException(404, "Saved work was not found")
+    return record
 
 
 class CourseworkPackRequest(BaseModel):

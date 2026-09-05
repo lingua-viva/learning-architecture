@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 import os
 import threading
+import tempfile
+import uuid
+import re
 from pathlib import Path
 
 from src.lingua_viva.deliverables.schema import DeliverableRecord
@@ -71,3 +74,56 @@ def read_deliverables(session_id: str = "", action_plan_id: str = "", limit: int
         records = [r for r in records if r.action_plan_id == action_plan_id]
     records.sort(key=lambda r: r.created_at, reverse=True)
     return [r.as_dict() for r in records[:max(0, int(limit))]]
+
+
+def snapshots_dir() -> Path:
+    """Immutable output revisions alongside the existing deliverables index."""
+    path = _state_root() / "deliverables" / "saved"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def save_snapshot(kind: str, title: str, payload: dict, *, teacher_id: str = "") -> dict:
+    from src.lingua_viva.deliverables.schema import now_iso
+    from src.lingua_viva.docpipe.vault import _fsync_dir
+
+    identifier = "SAVED-" + uuid.uuid4().hex
+    record = {
+        "schema_version": "lv.saved-deliverable.v1", "id": identifier,
+        "kind": kind, "title": title, "created_at": now_iso(),
+        "teacher_id": teacher_id, "payload": payload,
+    }
+    directory = snapshots_dir()
+    destination = directory / (identifier + ".json")
+    fd, temporary = tempfile.mkstemp(prefix=".saving-", suffix=".tmp", dir=directory)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(record, handle, ensure_ascii=False)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, destination)
+        _fsync_dir(directory)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+    return {**{k: v for k, v in record.items() if k != "payload"}, "path": str(destination)}
+
+
+def read_snapshot(identifier: str) -> dict:
+    if not re.fullmatch(r"SAVED-[a-f0-9]{32}", identifier):
+        raise FileNotFoundError("Unknown saved work")
+    directory = snapshots_dir().resolve()
+    candidate = (directory / (identifier + ".json")).resolve()
+    if candidate.parent != directory:
+        raise FileNotFoundError("Unknown saved work")
+    return json.loads(candidate.read_text(encoding="utf-8"))
+
+
+def list_snapshots() -> tuple[list[dict], int]:
+    items, unreadable = [], 0
+    for path in snapshots_dir().glob("SAVED-*.json"):
+        try:
+            record = read_snapshot(path.stem)
+            items.append({k: record[k] for k in ("id", "kind", "title", "created_at", "teacher_id")})
+        except (OSError, ValueError, KeyError):
+            unreadable += 1
+    return sorted(items, key=lambda item: item["created_at"], reverse=True), unreadable

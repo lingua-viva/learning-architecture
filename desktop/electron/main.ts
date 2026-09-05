@@ -1,4 +1,5 @@
-import { app, BrowserWindow, dialog, ipcMain, Notification, session, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Notification, session, shell, screen } from "electron";
+import { visibleWindowBounds } from "./window-state";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { readFile, unlink, writeFile } from "node:fs/promises";
@@ -622,15 +623,17 @@ function installIpc(root: string): void {
 // --- Window management ---
 
 function createWindow(): BrowserWindow {
-  const state = readWindowState();
+  const primary = screen.getPrimaryDisplay();
+  const areas = [primary.workArea, ...screen.getAllDisplays().filter(d => d.id !== primary.id).map(d => d.workArea)];
+  const state = visibleWindowBounds(readWindowState(), areas);
   const window = new BrowserWindow({
     title: "Lingua Viva",
     width: state.width,
     height: state.height,
     x: state.x,
     y: state.y,
-    minWidth: 900,
-    minHeight: 640,
+    minWidth: Math.min(900, state.width),
+    minHeight: Math.min(640, state.height),
     show: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),

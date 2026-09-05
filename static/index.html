@@ -1512,19 +1512,18 @@
       ["reflect", "Reflect", "💭"]
     ];
 
-    // Plan #6 (2026-09-04, Olga's C4/SIR ruling): the SIR deployment profile hides
-    // Home / Daily / Plan / Slack and boots teachers to Students. Code is kept;
-    // only the nav is filtered. The profile comes from /api/school-profile.
+    // Operator 2026-09-05: retire Home / Daily / Plan / Slack for both schools.
+    // Keep historical code and saved work, but do not offer unfinished journeys.
     function deploymentProfile() {
       return ((state.schoolProfile || {}).deployment_profile || "la_scuola");
     }
     const SIR_HIDDEN_VIEWS = ["home", "daily", "plan", "slack"];
     function visibleNav(items) {
-      return deploymentProfile() === "sir" ? items.filter(([id]) => !SIR_HIDDEN_VIEWS.includes(id)) : items;
+      return items.filter(([id]) => !SIR_HIDDEN_VIEWS.includes(id));
     }
     function defaultViewFor(role) {
       if (role === "coordinator") return "programme";
-      return deploymentProfile() === "sir" ? "students" : "home";
+      return "students";
     }
 
     const $ = id => document.getElementById(id);
@@ -1702,6 +1701,7 @@
     }
 
     async function renderView() {
+      if (SIR_HIDDEN_VIEWS.includes(state.view)) state.view = defaultViewFor(state.role);
       const views = {
         home: renderHome,
         daily: renderDaily,
@@ -1729,7 +1729,7 @@
         knowledge: renderKnowledge
       };
       try {
-        await (views[state.view] || renderHome)();
+        await (views[state.view] || renderStudents)();
       } catch (error) {
         $("content").innerHTML = `<div class="panel"><h2>Could not load this view</h2><p>${escapeHtml(error.message)}</p></div>`;
       }
@@ -3099,6 +3099,9 @@
       await ensureStudents();
       const growth = await loadGrowth();
       const overview = await ensureOverview();
+      // A teacher may leave Students while startup requests are still running.
+      // Their next view must not be replaced by this older response.
+      if (state.view !== "students") return;
       $("content").innerHTML = `
         <div class="view-head"><div><h2>Student Lenses</h2><p>View profiles, observations, CEFR trajectory, grouping notes, and support proposals. The system suggests; the teacher decides.</p></div></div>
         <div class="panel" style="margin-bottom:14px;">
@@ -4594,9 +4597,7 @@
       empty.hidden = hasUnits;
       if (!hasUnits) {
         if (output) { output.hidden = true; output.innerHTML = ""; }
-        empty.innerHTML = `<p class="voice-hint" style="flex:1;">No units for ${escapeHtml(state.grade)} yet — a rubric is built from a unit.</p><button type="button" id="assess-go-plan">Add a unit in Plan</button>`;
-        const go = $("assess-go-plan");
-        if (go) go.addEventListener("click", () => { state.view = "plan"; renderShell(); renderView(); });
+        empty.innerHTML = `<p class="voice-hint">No curriculum units are available for ${escapeHtml(state.grade)} yet.</p>`;
       }
     }
 
@@ -5337,7 +5338,7 @@
           })
         });
         state.parentApproved = data;
-        showSaveToast("summary approved");
+        showSaveToast("summary approved and saved — reopen it in Sources");
       } catch (error) {
         button.disabled = false;
         showToast(error.message || "Approval was refused.", "error");
@@ -6110,10 +6111,10 @@
             <div style="display:flex;flex-direction:column;gap:4px;">
               <span>School profile</span>
               <select id="school-profile-select">
-                <option value="la_scuola">La Scuola — everything (Home, Daily, Plan, Slack included)</option>
+                <option value="la_scuola">La Scuola — opens on Students</option>
                 <option value="sir">Still I Rise — Prepare, Observe, Students, Assess, Ask, Summaries; opens on Students</option>
               </select>
-              <span class="voice-hint">Which surfaces this school's teachers see. Nothing is deleted — hidden views come back when you switch profile.</span>
+              <span class="voice-hint">Choose your school profile. Saved work stays on this computer when you switch.</span>
               <div class="row" style="margin-top:6px;"><button id="school-profile-save" type="button">Apply profile</button><span id="school-profile-status" class="voice-hint"></span></div>
             </div>
           </div>
@@ -6364,11 +6365,11 @@
           if (res.ok) {
             state.schoolProfile = null;
             await ensureSchoolProfile();
-            if (deploymentProfile() === "sir" && SIR_HIDDEN_VIEWS.includes(state.view)) state.view = defaultViewFor(state.role);
+            if (SIR_HIDDEN_VIEWS.includes(state.view)) state.view = defaultViewFor(state.role);
             renderShell();
             if (status) status.textContent = deploymentProfile() === "sir"
               ? "Applied. Still I Rise profile: Home, Daily, Plan and Slack are hidden; the app opens on Students."
-              : "Applied. La Scuola profile: every surface is shown.";
+              : "Applied. La Scuola profile: the app opens on Students. Home, Daily, Plan and Slack are hidden.";
           } else if (status) {
             status.textContent = data.error || "Could not apply the profile.";
           }
@@ -6887,20 +6888,48 @@
         <div class="view-head">
           <div>
             <h2>Sources</h2>
-            <p>Where Lingua Viva's materials come from: your school Slack, shared Google Drive folders, and folders on this computer.</p>
+            <p>Reopen saved work and manage the materials on this computer or in shared Google Drive folders.</p>
           </div>
         </div>
+        <div id="saved-work"></div>
         <div id="sources-registry"></div>
         <div id="sources-slack"></div>
         <div id="sources-drive"></div>
         <div id="sources-local"></div>`;
+      await renderSavedWork();
       await renderSourceRegistry();
-      await renderSlackSourceCard();
       await renderDriveSection();
       await renderLocalFoldersSection();
     }
 
     // --- Source registry (Slice 1) ----------------------------------------
+    async function renderSavedWork() {
+      const host = $("saved-work");
+      if (!host) return;
+      try {
+        const data = await api("/api/artifacts/saved");
+        host.innerHTML = `<div class="panel"><h3>Saved work</h3><p>Each saved version stays on this computer across app updates.</p>
+          ${data.unreadable_count ? '<p class="badge warn">Some saved files could not be read. Their originals remain on disk.</p>' : ''}
+          ${(data.items || []).map(item => `<div class="row"><span>${escapeHtml(item.title)} · ${escapeHtml(new Date(item.created_at).toLocaleString())}</span><button type="button" data-open-saved="${escapeHtml(item.id)}">Open</button></div>`).join('') || '<p>No saved deliverables yet. Approved summaries will appear here.</p>'}
+          <div id="saved-work-detail"></div></div>`;
+        host.querySelectorAll('[data-open-saved]').forEach(button => button.addEventListener('click', async () => {
+          try {
+            const record = await api(`/api/artifacts/saved/${encodeURIComponent(button.dataset.openSaved)}`);
+            const payload = record.payload;
+            $("saved-work-detail").innerHTML = `<h4>${escapeHtml(record.title)}</h4><pre style="white-space:pre-wrap">${escapeHtml(payload.printable_text || JSON.stringify(payload, null, 2))}</pre><button id="saved-work-download" type="button">Download saved version</button>${payload.print_html ? '<button id="saved-work-print" type="button">Print</button>' : ''}`;
+            $("saved-work-print")?.addEventListener('click', () => printPacketHtml(payload.print_html, record.title));
+            $("saved-work-download").addEventListener('click', () => {
+              const url = URL.createObjectURL(new Blob([JSON.stringify(record, null, 2)], {type: 'application/json'}));
+              const link = document.createElement('a'); link.href = url; link.download = record.id + '.json'; link.click();
+              setTimeout(() => URL.revokeObjectURL(url), 1000);
+            });
+          } catch (error) { showToast(error.message || 'Could not reopen this saved work.', 'error'); }
+        }));
+      } catch (error) {
+        host.innerHTML = `<div class="panel"><h3>Saved work</h3><p>${escapeHtml(error.message || 'Could not read saved work.')}</p></div>`;
+      }
+    }
+
     // SPEC_UNIFIED_SOURCES_WORKBENCH_2026-07-28 §Lingua Viva. One row per
     // source with a real status and count, plus the student-zone exclusion
     // made visible — a teacher should be able to see at a glance what Lingua
@@ -8852,7 +8881,7 @@
     // otherwise the first paint under SIR would show the four hidden surfaces.
     async function bootShell() {
       await ensureSchoolProfile();
-      if (deploymentProfile() === "sir" && SIR_HIDDEN_VIEWS.includes(state.view)) state.view = defaultViewFor(state.role);
+      if (SIR_HIDDEN_VIEWS.includes(state.view)) state.view = defaultViewFor(state.role);
       renderShell();
       renderView();
     }
