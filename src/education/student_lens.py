@@ -884,6 +884,15 @@ class StudentLensStore:
     # ------------------------------------------------------------------
 
     def _init_schema(self) -> None:
+        self._conn.executescript("""
+            CREATE TABLE IF NOT EXISTS assessment_records (
+                assessment_id TEXT PRIMARY KEY, student_id TEXT NOT NULL,
+                teacher_id TEXT NOT NULL, created_at TEXT NOT NULL, payload TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS assessment_withdrawals (
+                assessment_id TEXT PRIMARY KEY, teacher_id TEXT NOT NULL, recorded_at TEXT NOT NULL
+            );
+        """)
         self._conn.executescript(
             """
             CREATE TABLE IF NOT EXISTS students (
@@ -1702,6 +1711,39 @@ class StudentLensStore:
         ).fetchall()
         lens["observations"] = [self._observation_row_to_dict(r) for r in obs_rows]
         return lens
+
+    def append_assessment(self, student_id: str, value: dict, teacher_id: str) -> None:
+        from src.lingua_viva.assessment_data import validate_assessment
+        refusal = validate_assessment(value)
+        if refusal:
+            raise ValueError(refusal)
+        self.get_lens(student_id)
+        encoded = json.dumps(value, ensure_ascii=False, sort_keys=True)
+        existing = self._conn.execute(
+            "SELECT student_id, payload FROM assessment_records WHERE assessment_id = ?", (value['assessment_id'],)
+        ).fetchone()
+        if existing:
+            if existing['student_id'] != student_id or existing['payload'] != encoded:
+                raise ValueError('Use a new revision identifier to change an assessment.')
+            return
+        now = datetime.now(timezone.utc).isoformat()
+        with self._conn:
+            self._conn.execute('INSERT INTO assessment_records VALUES (?, ?, ?, ?, ?)',
+                               (value['assessment_id'], student_id, teacher_id, now, encoded))
+            self._conn.execute('UPDATE students SET profile_version = profile_version + 1, updated_at = ? WHERE student_id = ?',
+                               (now, student_id))
+
+    def withdraw_assessment(self, student_id: str, assessment_id: str, teacher_id: str) -> None:
+        row = self._conn.execute('SELECT student_id FROM assessment_records WHERE assessment_id = ?', (assessment_id,)).fetchone()
+        if row is None or row['student_id'] != student_id:
+            raise ValueError('Assessment not found for this student.')
+        now = datetime.now(timezone.utc).isoformat()
+        with self._conn:
+            changed = self._conn.execute('INSERT OR IGNORE INTO assessment_withdrawals VALUES (?, ?, ?)',
+                                        (assessment_id, teacher_id, now)).rowcount
+            if changed:
+                self._conn.execute('UPDATE students SET profile_version = profile_version + 1, updated_at = ? WHERE student_id = ?',
+                                   (now, student_id))
 
     def export_lens_view(self, student_id: str, audience: str = "teacher") -> dict:
         """Share-scoped lens view for teacher/family/HR PDFs.
@@ -3244,6 +3286,10 @@ class StudentLensStore:
 
     def _row_to_lens_dict(self, row: sqlite3.Row) -> dict:
         d = dict(row)
+        d['assessment_profile'] = [json.loads(item['payload']) for item in self._conn.execute(
+            'SELECT payload FROM assessment_records WHERE student_id = ? AND assessment_id NOT IN '
+            '(SELECT assessment_id FROM assessment_withdrawals) ORDER BY created_at', (d['student_id'],)
+        )]
         d["home_languages"] = json.loads(d["home_languages"])
         d["learning_differences"] = json.loads(d["learning_differences"])
         d["trauma_flag"] = bool(d["trauma_flag"])

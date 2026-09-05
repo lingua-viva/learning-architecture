@@ -422,6 +422,7 @@ export const PINNED_DEPS = [
   "httpx==0.28.1",
   "websockets==15.0.1",
   "pdfplumber==0.11.9",
+  "rapidocr-onnxruntime==1.4.4",
   "openpyxl>=3.1,<4",
   "python-docx>=1.1,<2",
   "sqlite-vec==0.1.9",
@@ -637,7 +638,7 @@ export type DepVerification = {
 
 const SERVER_IMPORTS = [
   "yaml", "fastapi", "starlette", "uvicorn", "httpx",
-  "websockets", "pdfplumber", "sqlite_vec", "requests", "multipart", "jsonschema",
+  "websockets", "pdfplumber", "rapidocr_onnxruntime", "sqlite_vec", "requests", "multipart", "jsonschema",
 ];
 const VOICE_IMPORTS = ["av", "ctranslate2", "faster_whisper"];
 

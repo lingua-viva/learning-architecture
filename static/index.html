@@ -1600,7 +1600,7 @@
         data = {};
       }
       if (!response.ok) {
-        const message = data.error || `Request failed: ${response.status}`;
+        const message = data.message || (typeof data.detail === "string" ? data.detail : null) || data.error || `Request failed: ${response.status}`;
         showToast(message);
         const error = new Error(message);
         if (data.code) error.code = data.code;
@@ -1628,6 +1628,7 @@
     }
 
     function switchView(view) {
+      if (state.assessmentRecording) { showToast('Stop and save the recording before changing views.', 'error'); return; }
       state.view = view;
       // Clear student selection on every tab switch so student identity
       // context never leaks across navigation boundaries.  This is a
@@ -3999,11 +4000,16 @@
           <button type="button" id="rti-set-tier">Set Tier</button>
           <span id="rti-tier-status" aria-live="polite"></span>
         </div>` : "";
+      if (!$(targetId)) return;
+      const assessmentsHtml = (lens.assessment_profile || []).map(record => `<details class="item"><summary>Reviewed ${escapeHtml(record.kind)} diagnostic</summary>
+        ${Object.entries(record.dimensions).map(([name, finding]) => `<h4>${escapeHtml(name)}</h4><p>${escapeHtml(finding.note)}</p><blockquote>${escapeHtml(finding.quote)}</blockquote>`).join('')}
+        <p class="voice-hint">Source: ${escapeHtml(record.source_id)}. Printable version saved in Sources.</p></details>`).join('');
       $(targetId).innerHTML = `
         <h3>${escapeHtml(lens.display_name)}</h3>
         <p>CEFR trajectory: <strong>${escapeHtml(lens.cefr_trajectory_30d)}</strong> · support tier <strong>${lens.rti_current_tier}</strong></p>
         ${decisionControls}
         <h3 style="margin-top:16px;">Recent observations</h3>
+        ${assessmentsHtml ? '<h3>Reviewed assessments</h3>' + assessmentsHtml : ''}
         <div class="list">${observations.length ? observations.map(o => `<div class="item"><p>${escapeHtml(o.raw_transcript)}</p><span class="badge">${escapeHtml(o.cefr_level_observed || "not tagged")}</span>${o.origin === "imported" ? ` <span class="badge">${escapeHtml(authorDisplayName(o.teacher_id || ""))}</span>` : ""}</div>`).join("") : "<p>No observations yet.</p>"}</div>
         ${showDecisionControls ? renderTriangulationSection(state.triangulation) : ""}
         <h3 style="margin-top:16px;">${showDecisionControls ? "Category Profile" : "Support profile"}</h3>
@@ -4569,6 +4575,137 @@
     }
 
     async function renderAssess() {
+      setTitle("Assess", "reviewed diagnostic · no grades");
+      await ensureStudents();
+      if (state.view !== "assess") return;
+      $("content").innerHTML = `<div class="panel"><h2>Review language work</h2><p>A recording, written work or document follows the same review. Originals and saved versions stay on this computer. No grade or CEFR level is assigned.</p>
+        <div class="form-grid"><label>Student<select id="diagnostic-student">${studentOptions()}</select></label><label>Language<select id="diagnostic-language"><option value="auto">Detect automatically</option><option value="it">Italian</option><option value="en">English</option></select></label></div>
+        <label>Recording, photo or document<input id="diagnostic-file" type="file" accept=".wav,.mp3,.m4a,.webm,.ogg,.mp4,.txt,.pdf,.docx,.xlsx,.png,.jpg,.jpeg,.webp,.tif,.tiff,.bmp"></label>
+        <div class="row"><button id="diagnostic-upload" type="button">Read file</button><button id="diagnostic-record" type="button">Record oral sample</button><span id="diagnostic-status" role="status"></span></div>
+        <p class="voice-hint">Oral samples: up to four minutes. Transcription runs locally; the first use downloads the multilingual speech model and can take several minutes.</p>
+        <label>Corrected text<textarea id="diagnostic-text" rows="8" placeholder="Upload, record, or paste the student's work here."></textarea></label>
+        <label><input id="diagnostic-text-confirmed" type="checkbox" style="width:auto"> I checked this text against the original.</label>
+        <label><input id="diagnostic-use-model" type="checkbox" checked style="width:auto"> Use the local language model for suggested findings.</label>
+        <button id="diagnostic-analyse" class="primary" type="button">Analyse corrected text</button></div>
+        <div id="diagnostic-review"></div>`;
+      let source = state.assessmentSource || {};
+      if (state.assessStudent) $("diagnostic-student").value = state.assessStudent;
+      if (state.assessmentDraftRecord) {
+        $("diagnostic-text").value = state.assessmentDraftRecord.transcript;
+        renderDiagnosticReview(state.assessmentDraftRecord);
+      }
+      $("diagnostic-student").addEventListener('change', () => {
+        state.assessStudent = $("diagnostic-student").value;
+        state.assessmentDraftRecord = null;
+        $("diagnostic-review").innerHTML = '';
+      });
+      $("diagnostic-text").addEventListener('input', () => {
+        $("diagnostic-text-confirmed").checked = false;
+        $("diagnostic-review").innerHTML = '';
+      });
+      async function readFile(file) {
+        const student = $("diagnostic-student").value;
+        if (!student) { showToast('Choose a student first.', 'error'); return; }
+        const status = $("diagnostic-status");
+        status.textContent = 'Saving the original and reading it locally…';
+        $("diagnostic-upload").disabled = true;
+        try {
+          const form = new FormData(); form.append('file', file); form.append('student_id', student); form.append('language', $("diagnostic-language").value);
+          const response = await fetch('/api/assess/source', {method: 'POST', body: form});
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.message || data.detail || data.error);
+          if (state.view !== 'assess' || $("diagnostic-student").value !== student) return;
+          source = data; state.assessmentSource = data;
+          $("diagnostic-text").value = data.text;
+          $("diagnostic-text-confirmed").checked = false;
+          $("diagnostic-review").innerHTML = '';
+          status.textContent = (data.requires_correction ? (data.low_confidence ? 'Photo reading is uncertain. ' : 'Photo text needs checking. ') + 'Check every line, especially handwriting and accented words. ' : '') + data.message;
+        } catch (error) { status.textContent = error.message || 'The file could not be read.'; }
+        finally { if ($("diagnostic-upload")) $("diagnostic-upload").disabled = false; }
+      }
+      $("diagnostic-upload").addEventListener('click', () => {
+        const file = $("diagnostic-file").files[0];
+        if (file) readFile(file); else showToast('Choose a file first.', 'error');
+      });
+      let recorder, stream, timer;
+      $("diagnostic-record").addEventListener('click', async () => {
+        const button = $("diagnostic-record");
+        if (recorder && recorder.state === 'recording') { recorder.stop(); return; }
+        if (!$("diagnostic-student").value) { showToast('Choose a student first.', 'error'); return; }
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({audio: true});
+          recorder = new MediaRecorder(stream); const chunks = [];
+          recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
+          recorder.onstop = () => {
+            state.assessmentRecording = false;
+            clearTimeout(timer); stream.getTracks().forEach(track => track.stop()); button.textContent = 'Record oral sample';
+            const file = new File(chunks, 'oral-sample.webm', {type: recorder.mimeType});
+            if (state.view === 'assess') readFile(file);
+          };
+          recorder.start(); state.assessmentRecording = true; button.textContent = 'Stop and transcribe';
+          $("diagnostic-status").textContent = 'Recording locally. Press Stop and transcribe when finished.';
+          timer = setTimeout(() => { if (recorder.state === 'recording') recorder.stop(); }, 239000);
+        } catch (error) {
+          stream?.getTracks().forEach(track => track.stop());
+          $("diagnostic-status").textContent = 'The microphone could not be opened. Allow microphone access or import a recording.';
+        }
+      });
+      $("diagnostic-analyse").addEventListener('click', async () => {
+        const button = $("diagnostic-analyse"); button.disabled = true;
+        $("diagnostic-status").textContent = 'Analysing locally. Your review is required before anything enters the lens…';
+        state.assessStudent = $("diagnostic-student").value;
+        const assessingStudent = state.assessStudent;
+        try {
+          const data = await api('/api/assess/analyse', {method: 'POST', body: JSON.stringify({
+            student_id: state.assessStudent, text: $("diagnostic-text").value,
+            text_confirmed: $("diagnostic-text-confirmed").checked, language: $("diagnostic-language").value,
+            kind: source.kind || 'written', source_id: source.source_id, duration_seconds: source.duration_seconds,
+            segments: source.segments, use_model: $("diagnostic-use-model").checked})});
+          if (state.view !== 'assess' || state.assessStudent !== assessingStudent) return;
+          state.assessmentDraftRecord = data.record;
+          renderDiagnosticReview(data.record);
+          $("diagnostic-status").textContent = 'Draft saved. Review below, or reopen this draft later in Sources.';
+        } catch (error) { if ($("diagnostic-status")) $("diagnostic-status").textContent = error.message; }
+        finally { button.disabled = false; }
+      });
+    }
+
+    function renderDiagnosticReview(record) {
+      const dimensions = ['fluency', 'syntax', 'grammar', 'vocabulary'];
+      const host = $("diagnostic-review");
+      host.innerHTML = `<div class="panel"><h3>Review the diagnostic</h3><p>${record.generation_status === 'local_model_suggestions' ? 'Local model suggestions with source quotes. Check each judgement; a quote does not prove the interpretation.' : 'Basic sample measurements only. No model judgement was accepted. Add your findings in each dimension.'}</p>
+        ${dimensions.map(name => `<fieldset data-diagnostic-dimension="${name}"><legend>${name[0].toUpperCase() + name.slice(1)}</legend>
+          <label>Finding<textarea data-note>${escapeHtml(record.dimensions[name].note)}</textarea></label>
+          <label>Evidence from the corrected text<textarea data-quote>${escapeHtml(record.dimensions[name].quote)}</textarea></label>
+          <label>Support needed<select data-support><option value="unknown">Not determined</option><option value="yes" ${record.dimensions[name].needs_support === true ? 'selected' : ''}>Yes</option><option value="no" ${record.dimensions[name].needs_support === false ? 'selected' : ''}>No need identified</option></select></label>
+          <label><input type="checkbox" data-dimension-confirm style="width:auto"> I reviewed this finding and its evidence.</label></fieldset>`).join('')}
+        <button id="diagnostic-confirm" class="primary" type="button">Confirm and save to lens</button><div id="diagnostic-final" role="status"></div></div>`;
+      $("diagnostic-confirm").addEventListener('click', async () => {
+        const allReviewed = Array.from(host.querySelectorAll('[data-dimension-confirm]')).every(box => box.checked);
+        if (!allReviewed) { showToast('Review and tick all four dimensions first.', 'error'); return; }
+        const reviewed = structuredClone(record);
+        host.querySelectorAll('[data-diagnostic-dimension]').forEach(group => {
+          const support = group.querySelector('[data-support]').value;
+          reviewed.dimensions[group.dataset.diagnosticDimension] = {note: group.querySelector('[data-note]').value,
+            quote: group.querySelector('[data-quote]').value, needs_support: support === 'unknown' ? null : support === 'yes'};
+        });
+        const button = $("diagnostic-confirm"); button.disabled = true;
+        try {
+          const result = await api('/api/assess/confirm', {method: 'POST', body: JSON.stringify({student_id: $("diagnostic-student").value, record: reviewed, confirmed: true})});
+          $("diagnostic-final").innerHTML = '<p>Saved to the lens and Sources. Earlier versions remain on disk.</p><button id="diagnostic-print" type="button">Print diagnostic</button><button id="diagnostic-undo" type="button">Remove from active lens</button>';
+          $("diagnostic-print").addEventListener('click', () => printPacketHtml(result.print_html, 'Language diagnostic'));
+          $("diagnostic-undo").addEventListener('click', async () => {
+            try {
+              const removed = await api('/api/assess/withdraw', {method: 'POST', body: JSON.stringify({student_id: $("diagnostic-student").value, assessment_id: reviewed.assessment_id})});
+              $("diagnostic-final").textContent = removed.message;
+            } catch (error) { showToast(error.message, 'error'); }
+          });
+          state.assessmentDraftRecord = null;
+        } catch (error) { $("diagnostic-final").textContent = error.message; button.disabled = false; }
+      });
+    }
+
+    async function renderRubricLibrary() {
       setTitle("Assess", "rubric design");
       await ensureOverview();
       $("content").innerHTML = `
@@ -6916,7 +7053,12 @@
           try {
             const record = await api(`/api/artifacts/saved/${encodeURIComponent(button.dataset.openSaved)}`);
             const payload = record.payload;
-            $("saved-work-detail").innerHTML = `<h4>${escapeHtml(record.title)}</h4><pre style="white-space:pre-wrap">${escapeHtml(payload.printable_text || JSON.stringify(payload, null, 2))}</pre><button id="saved-work-download" type="button">Download saved version</button>${payload.print_html ? '<button id="saved-work-print" type="button">Print</button>' : ''}`;
+            $("saved-work-detail").innerHTML = `<h4>${escapeHtml(record.title)}</h4><pre style="white-space:pre-wrap">${escapeHtml(payload.printable_text || (payload.record ? payload.record.transcript : JSON.stringify(payload, null, 2)))}</pre><button id="saved-work-download" type="button">Download saved version</button>${payload.print_html ? '<button id="saved-work-print" type="button">Print</button>' : ''}${record.kind === 'assessment_draft' ? '<button id="saved-work-resume" type="button">Continue review</button>' : ''}`;
+            $("saved-work-resume")?.addEventListener('click', () => {
+              state.assessStudent = payload.student_id; state.assessmentDraftRecord = payload.record;
+              state.assessmentSource = {source_id: payload.original_source_id, kind: payload.record.kind, duration_seconds: payload.record.duration_seconds, segments: payload.record.segments};
+              switchView('assess');
+            });
             $("saved-work-print")?.addEventListener('click', () => printPacketHtml(payload.print_html, record.title));
             $("saved-work-download").addEventListener('click', () => {
               const url = URL.createObjectURL(new Blob([JSON.stringify(record, null, 2)], {type: 'application/json'}));

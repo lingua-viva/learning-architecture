@@ -260,6 +260,20 @@ class ParentReportGenerator:
             if item.get("id"):
                 source_entry_ids.append(str(item["id"]))
 
+        # Only explicit teacher-reviewed support decisions from active diagnostics.
+        # Raw work/transcripts are never copied into a parent note.
+        for assessment in (reading['fields_used'].get('assessment_profile') or [])[-2:]:
+            for dimension, finding in assessment['dimensions'].items():
+                if finding['needs_support'] is None:
+                    continue
+                sentence = f"In recent language work ({dimension}), the teacher noted: {finding['note']}"
+                body_parts.append(sentence)
+                if finding['needs_support']:
+                    growth_areas.append(sentence)
+                else:
+                    strengths.append(sentence)
+                source_entry_ids.append(assessment['assessment_id'])
+
         # Evidence summaries (SPEC_LV_EVIDENCE_ETHOS_TRAITS_2026-08-01):
         # report-grade ledger evidence only (teacher_confirmed /
         # imported_verified — never model_suggested), newest first, capped

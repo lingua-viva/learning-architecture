@@ -977,7 +977,20 @@ async def extract_for_lens_update(
 
         all_fields: list[ExtractedField] = []
         unresolved: list[str] = []
-        red_detected = False
+        red_chunks = [chunk for chunk in relevant_chunks if _is_red_safeguarding(chunk.text)]
+        red_detected = bool(red_chunks)
+        if red_chunks:
+            import hashlib
+            from src.lingua_viva.safeguarding import record_restricted_input
+            from src.lingua_viva.access_roles import configured_teacher_id
+            record_restricted_input(
+                student_id=student_id, teacher_id=configured_teacher_id("local-teacher"),
+                text="\n\n".join(chunk.text for chunk in red_chunks),
+                source_key=hashlib.sha256(document_bytes).hexdigest(), kind="document",
+            )
+            # Neither ordinary import logs nor any model fallback may see RED chunks.
+            relevant_chunks = [chunk for chunk in relevant_chunks if chunk not in red_chunks]
+            section_text = "\n\n".join(chunk.text for chunk in relevant_chunks)
 
         for chunk in relevant_chunks:
             chunk_text = chunk.text

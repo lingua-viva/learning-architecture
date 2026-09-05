@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import tempfile
 import threading
+import os
+from io import BytesIO
 from abc import ABC, abstractmethod
 from pathlib import Path
 
@@ -68,16 +70,40 @@ class WhisperLocalProvider(STTProvider):
         finally:
             Path(tmp_path).unlink(missing_ok=True)
 
+    def transcribe_detailed(self, audio_bytes: bytes, *, language: str = 'auto') -> dict:
+        """Validated oral sample with timed evidence; decoding/transcription stay local."""
+        from faster_whisper.audio import decode_audio
+        import numpy as np
+        samples = decode_audio(BytesIO(audio_bytes), sampling_rate=16000)
+        duration = len(samples) / 16000
+        if duration < 2:
+            raise RuntimeError('This recording is too short. Record at least two seconds of speech.')
+        if duration > 240:
+            raise RuntimeError('This recording is longer than four minutes. Choose a shorter sample.')
+        if float(np.sqrt(np.mean(np.square(samples)))) < 0.0001:
+            raise RuntimeError('This recording is too quiet. Check the microphone and record again.')
+        if language not in {'auto', 'en', 'it'}:
+            raise RuntimeError('Choose Italian, English or automatic language detection.')
+        self._ensure_model()
+        segments, info = self._model.transcribe(samples, language=None if language == 'auto' else language,
+                                               beam_size=5, vad_filter=True)
+        spans = [{'start': float(item.start), 'end': float(item.end), 'text': item.text.strip()} for item in segments]
+        return {'text': ' '.join(item['text'] for item in spans).strip(), 'segments': spans,
+                'language': info.language, 'duration_seconds': duration}
+
 
 _provider: WhisperLocalProvider | None = None
 _provider_lock = threading.Lock()
 
 
-def get_stt_provider(model_size: str = "tiny") -> WhisperLocalProvider:
+def get_stt_provider(model_size: str | None = None) -> WhisperLocalProvider:
     global _provider
-    if _provider is not None:
+    model_size = model_size or os.environ.get('LV_WHISPER_MODEL', 'small')
+    if model_size not in {'tiny', 'base', 'small', 'medium'}:
+        raise RuntimeError('Choose a supported local speech model: tiny, base, small or medium.')
+    if _provider is not None and _provider.model_size == model_size:
         return _provider
     with _provider_lock:
-        if _provider is None:
+        if _provider is None or _provider.model_size != model_size:
             _provider = WhisperLocalProvider(model_size=model_size)
         return _provider

@@ -76,9 +76,22 @@ def main():
             with page.expect_download() as downloaded:
                 page.locator('#saved-work-download').click()
             assert downloaded.value.suggested_filename.startswith('SAVED-')
+            page.locator('[data-view="assess"]').click()
+            page.locator('#diagnostic-student').select_option('demo-1')
+            page.locator('#diagnostic-text').fill('Sono andato a scuola. Ho incontrato un amico.')
+            page.locator('#diagnostic-text-confirmed').check()
+            page.locator('#diagnostic-use-model').uncheck()
+            page.locator('#diagnostic-analyse').click()
+            expect(page.locator('#diagnostic-review')).to_contain_text('Review the diagnostic')
+            for checkbox in page.locator('[data-dimension-confirm]').all():
+                checkbox.check()
+            page.locator('#diagnostic-confirm').click()
+            expect(page.locator('#diagnostic-final')).to_contain_text('Saved to the lens')
+            page.locator('#diagnostic-undo').click()
+            expect(page.locator('#diagnostic-final')).to_contain_text('Removed from the active lens')
             assert not errors, errors
             browser.close()
-        print('PASS: draft -> review -> approve -> reload -> Sources -> reopen -> download; retired nav absent; no JavaScript errors')
+        print('PASS: parent note -> review -> approve -> reload -> reopen -> download; assessment text -> review -> lens -> saved output -> undo; retired nav absent; no JavaScript errors')
 
 
 if __name__ == '__main__':

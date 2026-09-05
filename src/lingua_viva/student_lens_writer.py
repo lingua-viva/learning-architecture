@@ -42,6 +42,7 @@ _CEFR_DUPLICATE_WINDOW_SECONDS = 400 * 24 * 3600
 # source_kind -> (support evidence_type, observation source_type); both
 # vocabularies are the store's (VALID_EVIDENCE_TYPES / VALID_SOURCE_TYPES).
 _SOURCE_KINDS = {
+    "assessment": ("report", "local_file"),
     "report": ("report", "local_file"),
     "teacher_note": ("teacher_note", "teacher_note"),
 }
@@ -175,7 +176,7 @@ def write_student_lens(
                 review_required.append(path)
                 account(field, _Outcome.REVIEW, "restricted field awaits teacher confirmation")
                 continue
-            if status == "needs_confirmation" and path not in confirmed_set:
+            if (status == "needs_confirmation" or spec.kind == "assessment") and path not in confirmed_set:
                 review_required.append(path)
                 account(field, _Outcome.REVIEW, "needs teacher confirmation")
                 continue
@@ -208,7 +209,7 @@ def write_student_lens(
                     refuse(field, f"Refused '{path}': {problem}")
                     continue
 
-            confidence = "imported_verified" if status == "verified" else "imported_needs_confirmation"
+            confidence = "imported_verified" if status == "verified" and spec.kind != "assessment" else "imported_needs_confirmation"
             if path in confirmed_set:
                 review_confirmed += 1
 
@@ -320,6 +321,14 @@ def _dispatch(
     value = field.value
     refs = list(field.supporting_chunk_ids or [])
     evidence_type, observation_source_type = source_types
+
+    if spec.kind == "assessment":
+        if value['source_id'] not in refs:
+            raise ValueError("The assessment must cite its retained corrected source.")
+        if confidence != "imported_needs_confirmation":
+            raise ValueError("Assessment judgements require explicit teacher confirmation.")
+        store.append_assessment(student_id, value, teacher_id)
+        return "teacher-confirmed assessment revision saved"
 
     if spec.kind == "cefr":
         dimension = resolved.bound["dimension"]

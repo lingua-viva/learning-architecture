@@ -34,15 +34,14 @@ def test_home_does_not_surface_doctor_health_warning_copy():
     assert "data.health?.summary" not in home
 
 
-def test_logo_click_returns_to_home():
+def test_logo_click_returns_to_students():
     html = (ROOT / "static" / "index.html").read_text()
 
     assert 'id="brand-home"' in html
-    # plan #6 (2026-09-04): the default view is profile-aware; under La Scuola
-    # (the default) a teacher's home is still Home, a coordinator's is Programme.
+    # Operator 2026-09-05: both schools open on Students; Home is retired.
     assert 'state.view = defaultViewFor(state.role)' in html
     assert 'if (role === "coordinator") return "programme";' in html
-    assert 'return deploymentProfile() === "sir" ? "students" : "home";' in html
+    assert 'return "students";' in html
 
 
 def test_still_i_rise_photo_is_mounted_in_topbar():
@@ -62,13 +61,12 @@ def test_version_badge_wired_in_topbar():
     assert '"/api/health"' in html
 
 
-def test_first_launch_welcome_explains_privacy_and_lands_on_home():
+def test_first_launch_welcome_explains_privacy_and_lands_on_students():
     html = (ROOT / "static" / "index.html").read_text()
 
     assert "World-class tools for world-class schools." in html
     assert "Everything stays on your machine. No student data leaves. Ever." in html
     assert "I am a:" in html
-    # plan #6 (2026-09-04): setRole lands on the profile-aware default — Home for a
-    # La Scuola teacher, Students under the SIR profile, Programme for a coordinator.
+    # Both teacher profiles now land on Students; coordinator opens Programme.
     assert 'state.view = defaultViewFor(role)' in html
-    assert 'return deploymentProfile() === "sir" ? "students" : "home";' in html
+    assert 'return "students";' in html

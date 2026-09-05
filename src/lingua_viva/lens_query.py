@@ -49,7 +49,7 @@ NEED_BUCKETS = ("needs", "evidence")
 _PATHS_READ: tuple[str, ...] = (
     "student_id", "display_name", "grade_level", "campus", "updated_at", "created_at",
     "rti_current_tier", "cefr_snapshot", "support_profile", "strengths_profile",
-    "academic_strengths", "personal_strengths",
+    "academic_strengths", "personal_strengths", "assessment_profile",
     *[f"cefr_snapshot.{d}" for d in VALID_CEFR_DIMENSIONS],
     *[f"support_profile.categories.{c}.{b}" for c in SUPPORT_CATEGORY_IDS
       for b in list(VALID_SUPPORT_BUCKETS) + ["evidence"]],
@@ -273,6 +273,11 @@ def search(store: StudentLensStore, lenses: list[dict], *, term: str = "", names
                 if term in str(item.get("text") or "").lower():
                     cites.append({"path": kind, "entry_id": item.get("id"),
                                   "source_ref_ids": item.get("source_ref_ids") or []})
+        for assessment in lens.get('assessment_profile') or []:
+            for dimension, finding in assessment['dimensions'].items():
+                if term in (finding['note'] + ' ' + finding['quote']).lower():
+                    cites.append({'path': 'assessment_profile', 'dimension': dimension,
+                                  'entry_id': assessment['assessment_id'], 'source_ref_ids': [assessment['source_id']]})
         if cites:
             hits.append({"student": _ref(lens, names), "citations": cites})
     return _result("search", lenses, term=term, hits=hits, count=len(hits))

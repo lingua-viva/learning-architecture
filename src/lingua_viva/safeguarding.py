@@ -326,6 +326,23 @@ def record_red_observation(
     return entry
 
 
+def record_restricted_input(*, student_id: str, teacher_id: str, text: str, source_key: str, kind: str) -> dict:
+    """Retain an input blocked before extraction and queue local coordinator review."""
+    for entry in read_restricted("coordinator"):
+        if entry.get("student_id") == student_id and (entry.get("extra") or {}).get("source_key") == source_key:
+            return entry
+    severity = classify_severity(text)
+    if severity.tier != RED:
+        severity = SeverityResult(tier=RED, rationale="The document safeguarding detector flagged this input.")
+    entry = record_red_observation(
+        student_id=student_id, teacher_id=teacher_id, raw_transcript=text,
+        template_type=kind, severity=severity, extra={"source_key": source_key},
+    )
+    enqueue_notification(kind="safeguarding_red", ref_id=entry["entry_id"],
+                         summary="A restricted safeguarding item requires coordinator review.")
+    return entry
+
+
 def _normalized_restricted_status(entry: dict) -> str:
     status = str(entry.get("status") or "").strip()
     if status == "awaiting_coordinator_review":

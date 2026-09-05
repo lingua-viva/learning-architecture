@@ -35,6 +35,14 @@
 version: 1
 
 reachable_from_ui:
+  - route: "POST /api/assess/source"
+    call_site: "fetch('/api/assess/source',"
+  - route: "POST /api/assess/analyse"
+    call_site: "api('/api/assess/analyse',"
+  - route: "POST /api/assess/confirm"
+    call_site: "api('/api/assess/confirm',"
+  - route: "POST /api/assess/withdraw"
+    call_site: "api('/api/assess/withdraw',"
   - route: "GET /api/artifacts/saved"
     call_site: 'api("/api/artifacts/saved")'
   - route: "GET /api/artifacts/saved/{identifier}"

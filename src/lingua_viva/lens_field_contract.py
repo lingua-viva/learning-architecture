@@ -84,7 +84,7 @@ class MissingEssentialFieldError(Exception):
 # Vocabulary
 # ---------------------------------------------------------------------------
 
-KINDS = ("scalar", "cefr", "support_profile", "strengths", "ethos_profile", "blob", "marker")
+KINDS = ("scalar", "cefr", "support_profile", "strengths", "ethos_profile", "blob", "marker", "assessment")
 ORIGINS = ("authored", "derived", "projection")
 STATUSES = ("writable", "declared_not_implemented", "read_only")
 SENSITIVITIES = ("normal", "restricted")
@@ -106,6 +106,13 @@ SUPPORT_BUCKETS_ALL: tuple[str, ...] = tuple(VALID_SUPPORT_BUCKETS) + ("evidence
 # may rely on. Undeclared keys inside a blob are the same defect as undeclared
 # paths outside it.
 LENS_SHAPES: dict[str, dict[str, Any]] = {
+    "assessment_profile": {"[]": {"assessment_id": "str", "kind": "oral|written|document",
+        "source_id": "str", "transcript": "str", "language": "str",
+        "original_source_id": "str|null", "segments": "[{start: seconds, end: seconds, text: str}]",
+        "metrics": "{word_count: int, distinct_words: int, sentence_count: int, words_per_minute?: number}",
+        "generation_status": "deterministic_review|local_model_suggestions", "duration_seconds": "number|null",
+        "dimensions": {name: {"note": "str", "quote": "str", "needs_support": "bool|null"}
+                       for name in ("fluency", "syntax", "grammar", "vocabulary")}}},
     "cefr_snapshot": {dim: "level|null" for dim in VALID_CEFR_DIMENSIONS},
     "rti_tier_history": {"[]": {"tier": "int", "from": "iso", "to": "iso|null", "trigger": "str|null"}},
     "sel_summary": {
@@ -204,7 +211,14 @@ def _free_text(value: Any, bound: dict) -> Optional[str]:
 # C = SUPPORT_CATEGORY_IDS, L = _LENS_FIELD_IDS (== docpipe PROFILE_FIELDS),
 # U = UPDATABLE_PROFILE_FIELDS.
 
+from src.lingua_viva.assessment_data import validate_assessment
+
 REGISTRY: tuple[FieldSpec, ...] = (
+    FieldSpec("assessment_record", "assessment", "authored", "writable",
+              writer="store:append_assessment", requires_sources=True, validator=validate_assessment,
+              note="Teacher-confirmed diagnostic revision; immutable, no grade or automatic CEFR update."),
+    FieldSpec("assessment_profile", "blob", "derived", "read_only",
+              note="Projection of active append-only assessment records; withdrawals preserve history."),
     # -- identity / scalars ------------------------------------------------
     FieldSpec("student_id", "scalar", "authored", "read_only",
               note="identity; set once by create_lens"),
@@ -389,6 +403,7 @@ class FieldRequirement:
 # Deliverable ids follow deliverables/schema.py DELIVERABLE_TYPES where one
 # exists; `prepare` is content_differentiator's tiering step (UX U9).
 OUTPUT_REQUIREMENTS: dict[str, tuple[FieldRequirement, ...]] = {
+    "assessment_document": (FieldRequirement("assessment_profile", "essential"),),
     # Prepare (content_differentiator.assign_tier_for_student): the RTI tier
     # is the primary signal and without it the tier is a guess — essential.
     # CEFR pulls a student up/down within the tier; its absence has a ruled
@@ -408,6 +423,7 @@ OUTPUT_REQUIREMENTS: dict[str, tuple[FieldRequirement, ...]] = {
         FieldRequirement("home_languages", "enriching"),
         FieldRequirement("support_profile", "enriching"),
         FieldRequirement("strengths_profile", "enriching"),
+        FieldRequirement("assessment_profile", "enriching"),
     ),
 }
 

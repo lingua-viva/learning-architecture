@@ -54,3 +54,54 @@ verified by name and digest, quarantined outside the vault, and its manifest
 rebuilt with the one pre-existing source retained. No student lens rows changed.
 The helper and import log now honor LV_STATE_HOME; a regression test checks that
 LV_CONFIG_HOME remains untouched when a separate workspace is configured.
+
+## Operator's subsequent scope ruling
+
+Working journeys only: question/input through a usable saved deliverable. Slack
+is out; Daily and Home removed from both schools' navigation; Plan stays hidden
+until its interactive research/material workflow works. Preserve all prior work.
+
+## Built and measured in the isolated branch (not yet released)
+
+- Approved parent notes are immutable saved JSON revisions, reopened/downloaded/
+  printed in Sources. Disk failure refuses a successful save. Actual headless
+  Edge + real API: draft, review, approve, reload, reopen, download PASS.
+- That browser run caught a late Students response overwriting Sources. Guard
+  added and same run passed. Retired navigation absent in the actual DOM.
+- Desktop window bounds clamp to a connected display's usable area. TypeScript
+  build and actual compiled-function tests pass (unplugged monitor, small screen,
+  negative display coordinates, invalid numeric saved bounds).
+- Document safeguarding previously claimed restricted routing without calling it.
+  English/Italian synthetic family reports now enter the restricted ledger and
+  local coordinator queue once; sensitive chunks never reach normal extraction
+  logs or the model fallback. 42 related tests passed after two red cases.
+- Assess now has text, document, file audio and in-app recording controls, a
+  mandatory corrected-text step, four editable diagnostic dimensions with quotes,
+  confirmation through the field contract, a printable saved result, and undo.
+  Records are append-only in the existing student SQLite store; assessment_profile
+  is a projection, not another writable student blob. No grades or automatic CEFR.
+  Drafts are saved and can resume from Sources. Active findings appear in the lens,
+  L11 search and (for explicit reviewed support decisions) parent summaries.
+- Actual Edge/API text diagnostic -> review -> lens -> saved output -> undo PASS.
+  English/Italian API journey tests also prove summary inclusion and withdrawal.
+- qwen3:8b was present when checked. Actual local model runs on deliberately flawed
+  English/Italian samples returned findings with exact evidence quotes. Category
+  assignments were imperfect: these are suggestions, not semantic verification.
+  The fluency dimension keeps measured data/review instructions because a text
+  model cannot hear pauses. Both runs used local_only=True.
+- Whisper small, actual synthetic eSpeak recordings: English 25.5s, WER 0.000;
+  Italian 27.9s, WER 0.065. Timed segments retained. This proves synthetic-speech
+  plumbing, not accuracy for a child's voice, accent or classroom noise.
+- Local OCR uses rapidocr-onnxruntime 1.4.4, whose wheel includes models; source
+  inspected after installation. Synthetic English/Italian image test with socket
+  connections blocked passed. Every OCR result requires correction; scores are
+  recognition estimates, not accuracy guarantees. Real handwriting pending.
+  Reference: https://rapidai.github.io/RapidOCRDocs/main/install_usage/rapidocr/usage/
+- Latest focused regression: 72 passed. Browser and TypeScript passed. Linux full
+  suite at 072a6f2 had 3114 passed / 6 failed: four documented baseline failures plus
+  two now-obsolete Home-default assertions, updated for the operator's ruling.
+  The Assess/OCR slice still requires its Linux full run and UI re-lock.
+
+Remaining before any completion claim: all-source browser path, Linux validation,
+installer/dependency smoke, release-window check, live release verification and
+install-over-install measurement. Teacher witness and clean Mac are still pending.
