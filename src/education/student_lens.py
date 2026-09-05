@@ -1791,6 +1791,11 @@ class StudentLensStore:
             raise LensNotFoundError(student_id)
         if hard:
             self._conn.execute(
+                'DELETE FROM assessment_withdrawals WHERE assessment_id IN '
+                '(SELECT assessment_id FROM assessment_records WHERE student_id = ?)', (student_id,)
+            )
+            self._conn.execute('DELETE FROM assessment_records WHERE student_id = ?', (student_id,))
+            self._conn.execute(
                 "DELETE FROM observations WHERE student_id = ?", (student_id,)
             )
             self._conn.execute(

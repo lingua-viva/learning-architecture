@@ -105,3 +105,26 @@ until its interactive research/material workflow works. Preserve all prior work.
 Remaining before any completion claim: all-source browser path, Linux validation,
 installer/dependency smoke, release-window check, live release verification and
 install-over-install measurement. Teacher witness and clean Mac are still pending.
+
+### Follow-through checks
+
+Actual Edge + real API, using installer-pinned faster-whisper 1.1.1 and
+opencv-python 5.0.0.93: synthetic photo, scanned PDF, English WAV, Italian WAV,
+and the in-app MediaRecorder control (synthetic microphone device) each reached
+text correction, diagnostic review, lens and saved output. The same run passed
+the administrator query -> saved CSV journey. No JavaScript errors.
+
+Linux OCR's first failure was real: the bundled angle classifier flipped an
+upright DejaVu Italian line. Disabling the angle classifier after EXIF orientation
+made that exact image pass, including OpenCV 5.0.0.93. Correction remains mandatory.
+
+Sources now resumes both text-correction and diagnostic-review checkpoints and
+downloads their original files. Classroom packets join the same saved-work view.
+Two red tests exposed same-second packet filename reuse and absent reopen controls;
+packet filenames now include a revision suffix and PDF/Markdown saves are atomic.
+
+The baseline test defects are corrected: add the missing pytest import to the
+grounding tests; simulate PermissionError directly in the reconciliation test so
+it tests the same failure on Windows and root Linux. The missing-field expectation
+now includes the declared assessment_profile. These changes do not remove checks.
+The new Linux full-suite result will be recorded after the UI lock is updated.

@@ -6,6 +6,7 @@ Uses local Edge on Windows; otherwise Playwright's installed Chromium.
 import os
 import sys
 import tempfile
+import re
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -34,8 +35,12 @@ def main():
         _with_student_store(seed)
         client = TestClient(app)
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(channel="msedge" if sys.platform == "win32" else None, headless=True)
-            context = browser.new_context(service_workers="block")
+            args = []
+            if '--microphone' in sys.argv:
+                args = ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream',
+                        '--use-file-for-fake-audio-capture=' + str(ROOT / 'tests/fixtures/assessment/synthetic-en.wav')]
+            browser = playwright.chromium.launch(channel="msedge" if sys.platform == "win32" else None, headless=True, args=args)
+            context = browser.new_context(service_workers="block", permissions=['microphone'])
             def dispatch(route):
                 req = route.request
                 url = urlsplit(req.url)
@@ -78,7 +83,11 @@ def main():
             assert downloaded.value.suggested_filename.startswith('SAVED-')
             page.locator('[data-view="assess"]').click()
             page.locator('#diagnostic-student').select_option('demo-1')
-            page.locator('#diagnostic-text').fill('Sono andato a scuola. Ho incontrato un amico.')
+            try:
+                page.locator('#diagnostic-text').fill('Sono andato a scuola. Ho incontrato un amico.', timeout=10000)
+            except Exception:
+                print('ASSESS FAILURE:', page.locator('#content').inner_text(), 'ERRORS:', errors, flush=True)
+                raise
             page.locator('#diagnostic-text-confirmed').check()
             page.locator('#diagnostic-use-model').uncheck()
             page.locator('#diagnostic-analyse').click()
@@ -89,9 +98,67 @@ def main():
             expect(page.locator('#diagnostic-final')).to_contain_text('Saved to the lens')
             page.locator('#diagnostic-undo').click()
             expect(page.locator('#diagnostic-final')).to_contain_text('Removed from the active lens')
+            if '--sources' in sys.argv:
+                from io import BytesIO
+                from PIL import Image, ImageDraw, ImageFont
+                photo = Image.new('RGB', (1100, 220), 'white')
+                draw = ImageDraw.Draw(photo)
+                font = ImageFont.truetype('C:/Windows/Fonts/arial.ttf', 36) if sys.platform == 'win32' else ImageFont.load_default(size=36)
+                draw.text((25, 55), 'Sono andato a scuola con un amico.', font=font, fill='black')
+                png = BytesIO(); photo.save(png, format='PNG')
+                from reportlab.pdfgen.canvas import Canvas
+                from reportlab.lib.utils import ImageReader
+                scanned = BytesIO(); canvas = Canvas(scanned)
+                canvas.drawImage(ImageReader(png), 40, 600, width=520, height=104); canvas.save()
+                fixtures = [('work.png', png.getvalue(), 'scuola'), ('scan.pdf', scanned.getvalue(), 'scuola')]
+                for lang, term in [('en', 'school'), ('it', 'scuola')]:
+                    fixtures.append((f'oral-{lang}.wav', (ROOT / f'tests/fixtures/assessment/synthetic-{lang}.wav').read_bytes(), term))
+                for filename, content, term in fixtures:
+                    page.locator('[data-view="assess"]').click()
+                    page.locator('#diagnostic-student').select_option('demo-1')
+                    page.locator('#diagnostic-language').select_option('it' if term == 'scuola' else 'en')
+                    page.locator('#diagnostic-file').set_input_files({'name': filename, 'mimeType': 'application/octet-stream', 'buffer': content})
+                    page.locator('#diagnostic-upload').click()
+                    expect(page.locator('#diagnostic-text')).to_have_value(re.compile(term), timeout=180000)
+                    page.locator('#diagnostic-text-confirmed').check()
+                    page.locator('#diagnostic-use-model').uncheck()
+                    page.locator('#diagnostic-analyse').click()
+                    expect(page.locator('[data-dimension-confirm]').first).to_be_visible()
+                    for checkbox in page.locator('[data-dimension-confirm]').all():
+                        checkbox.check()
+                    page.locator('#diagnostic-confirm').click()
+                    expect(page.locator('#diagnostic-final')).to_contain_text('Saved to the lens')
+                    print('PASS source -> correction -> diagnostic -> lens -> saved output:', filename, flush=True)
+            if '--microphone' in sys.argv:
+                page.locator('[data-view="assess"]').click()
+                page.locator('#diagnostic-student').select_option('demo-1')
+                page.locator('#diagnostic-language').select_option('en')
+                page.locator('#diagnostic-text').fill('')
+                page.locator('#diagnostic-record').click()
+                expect(page.locator('#diagnostic-record')).to_have_text('Stop and transcribe')
+                page.wait_for_timeout(6500)
+                page.locator('#diagnostic-record').click()
+                expect(page.locator('#diagnostic-text')).to_have_value(re.compile(r'\w+'), timeout=180000)
+                page.locator('#diagnostic-text-confirmed').check()
+                page.locator('#diagnostic-use-model').uncheck()
+                page.locator('#diagnostic-analyse').click()
+                expect(page.locator('[data-dimension-confirm]').first).to_be_visible()
+                for checkbox in page.locator('[data-dimension-confirm]').all():
+                    checkbox.check()
+                page.locator('#diagnostic-confirm').click()
+                expect(page.locator('#diagnostic-final')).to_contain_text('Saved to the lens')
+                print('PASS: in-app microphone (synthetic device) -> transcription -> corrected review -> saved diagnostic', flush=True)
+            page.locator('#change-role').click()
+            page.locator('[data-role="coordinator"]').click()
+            page.locator('[data-view="lensquery"]').click()
+            page.locator('#lens-query-run').click()
+            expect(page.locator('#lens-query-result')).to_contain_text('Answer saved in Sources')
+            with page.expect_download() as csv_download:
+                page.locator('#lens-query-csv').click()
+            assert csv_download.value.suggested_filename == 'lens-query.csv'
             assert not errors, errors
             browser.close()
-        print('PASS: parent note -> review -> approve -> reload -> reopen -> download; assessment text -> review -> lens -> saved output -> undo; retired nav absent; no JavaScript errors')
+        print('PASS: parent note -> review -> approve -> reload -> reopen -> download; assessment text -> review -> lens -> saved output -> undo; admin query -> saved CSV; retired nav absent; no JavaScript errors')
 
 
 if __name__ == '__main__':

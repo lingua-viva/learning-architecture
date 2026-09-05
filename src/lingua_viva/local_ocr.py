@@ -27,7 +27,9 @@ def read_image(content: bytes) -> dict:
     with _lock:
         if _engine is None:
             _engine = RapidOCR(intra_op_num_threads=2, inter_op_num_threads=2)
-        rows, _ = _engine(pixels, text_score=0.1)
+        # EXIF has already oriented the page. The bundled angle classifier
+        # flipped an upright Italian fixture upside down on Linux.
+        rows, _ = _engine(pixels, text_score=0.1, use_cls=False)
     lines = [{'text': str(row[1]), 'confidence': float(row[2])} for row in (rows or [])]
     return {'text': '\n'.join(line['text'] for line in lines), 'ocr_lines': lines,
             'low_confidence': not lines or any(line['confidence'] < 0.85 for line in lines),

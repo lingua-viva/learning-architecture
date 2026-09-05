@@ -115,7 +115,12 @@ def read_snapshot(identifier: str) -> dict:
     candidate = (directory / (identifier + ".json")).resolve()
     if candidate.parent != directory:
         raise FileNotFoundError("Unknown saved work")
-    return json.loads(candidate.read_text(encoding="utf-8"))
+    record = json.loads(candidate.read_text(encoding="utf-8"))
+    if not isinstance(record, dict) or record.get('id') != identifier or not isinstance(record.get('payload'), dict):
+        raise ValueError('Saved work has an invalid structure')
+    if any(not isinstance(record.get(key), str) for key in ('kind', 'title', 'created_at', 'teacher_id')):
+        raise ValueError('Saved work metadata is incomplete')
+    return record
 
 
 def list_snapshots() -> tuple[list[dict], int]:

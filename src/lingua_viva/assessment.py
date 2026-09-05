@@ -74,4 +74,5 @@ def render_from_lens(lens: dict, assessment_id: str) -> dict:
     return {'printable_text': printable,
             'print_html': '<!doctype html><html><head><meta charset="utf-8"><title>Language diagnostic</title></head><body><pre style="white-space:pre-wrap;font:16px sans-serif">' + escape(printable) + '</pre></body></html>',
             'assessment_id': assessment_id, 'source_id': record['source_id'],
+            'original_source_id': record.get('original_source_id'),
             'fields_used': list(view['fields_used']), 'fields_missing': view['fields_missing']}

@@ -52,7 +52,7 @@ def test_report_card_strengths_reach_the_parent_note(store):
     assert "reading comprehension" in body
     assert "support_profile" in draft.fields_used and "strengths_profile" in draft.fields_used
     assert len(draft.source_entry_ids) == 3            # one id per sentence drawn from the lens
-    assert draft.fields_enriching_missing == ["grade_level", "home_languages"]
+    assert draft.fields_enriching_missing == ["grade_level", "home_languages", "assessment_profile"]
 
 
 def test_an_observe_note_reaches_the_parent_note(store):

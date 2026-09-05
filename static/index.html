@@ -1493,6 +1493,7 @@
       "/api/students/support-summary"
     ];
     const adminNav = [
+      ["lensquery", "Lens queries", "🔎"],
       ["programme", "Programme", "🗺️"],
       ["evidence", "Evidence", "📦"],
       ["capacity", "Capacity", "👥"],
@@ -1703,6 +1704,7 @@
 
     async function renderView() {
       if (SIR_HIDDEN_VIEWS.includes(state.view)) state.view = defaultViewFor(state.role);
+      const renderingView = state.view;
       const views = {
         home: renderHome,
         daily: renderDaily,
@@ -1727,11 +1729,13 @@
         evidence: renderAdmin,
         capacity: renderAdmin,
         trends: renderAdmin,
-        knowledge: renderKnowledge
+        knowledge: renderKnowledge,
+        lensquery: renderLensQueries
       };
       try {
         await (views[state.view] || renderStudents)();
       } catch (error) {
+        if (state.view !== renderingView) return;
         $("content").innerHTML = `<div class="panel"><h2>Could not load this view</h2><p>${escapeHtml(error.message)}</p></div>`;
       }
       // Views re-create their mic status badges (e.g. Observe's
@@ -4589,6 +4593,7 @@
         <button id="diagnostic-analyse" class="primary" type="button">Analyse corrected text</button></div>
         <div id="diagnostic-review"></div>`;
       let source = state.assessmentSource || {};
+      if (source.text) $("diagnostic-text").value = source.text;
       if (state.assessStudent) $("diagnostic-student").value = state.assessStudent;
       if (state.assessmentDraftRecord) {
         $("diagnostic-text").value = state.assessmentDraftRecord.transcript;
@@ -7040,6 +7045,42 @@
     }
 
     // --- Source registry (Slice 1) ----------------------------------------
+    async function renderLensQueries() {
+      setTitle('Lens queries', 'local records');
+      const data = await api('/api/admin/lens-query/questions');
+      if (state.view !== 'lensquery') return;
+      $("content").innerHTML = `<div class="panel"><h2>Ask the saved lenses</h2><p>Answers come directly from local records. Missing information is shown. Students use anonymous ARON references in results and exports.</p>
+        <label>Question<select id="lens-query-question">${data.questions.map(q => `<option value="${escapeHtml(q.id)}">${escapeHtml(q.q)}</option>`).join('')}</select></label>
+        <div id="lens-query-parameters"></div><button id="lens-query-run" class="primary" type="button">Run and save answer</button><div id="lens-query-result"></div></div>`;
+      function parameters() {
+        const question = data.questions.find(q => q.id === $("lens-query-question").value);
+        const labels = {term: 'Search term', student: 'Student name or reference', days: 'Days since last update', min_categories: 'Minimum categories'};
+        $("lens-query-parameters").innerHTML = Object.entries(question.params).map(([key, value]) => `<label>${escapeHtml(labels[key] || key)}<input data-query-param="${escapeHtml(key)}" type="${typeof value === 'number' ? 'number' : 'text'}" value="${escapeHtml(value)}"></label>`).join('');
+      }
+      $("lens-query-question").addEventListener('change', parameters); parameters();
+      function table(value) {
+        if (Array.isArray(value)) return value.length ? value.map(item => `<div class="item">${table(item)}</div>`).join('') : '<span>None</span>';
+        if (value && typeof value === 'object') return '<table><tbody>' + Object.entries(value).map(([key, item]) => `<tr><th style="text-align:left;vertical-align:top">${escapeHtml(key.replaceAll('_', ' '))}</th><td>${table(item)}</td></tr>`).join('') + '</tbody></table>';
+        return escapeHtml(value === null ? 'Not recorded' : value);
+      }
+      $("lens-query-run").addEventListener('click', async () => {
+        const button = $("lens-query-run"); button.disabled = true;
+        const params = {};
+        document.querySelectorAll('[data-query-param]').forEach(input => { params[input.dataset.queryParam] = input.type === 'number' ? Number(input.value) : input.value; });
+        try {
+          const result = await api(`/api/admin/lens-query/${encodeURIComponent($("lens-query-question").value)}/save`, {method: 'POST', body: JSON.stringify(params)});
+          if (state.view !== 'lensquery') return;
+          $("lens-query-result").innerHTML = '<p>Answer saved in Sources.</p><button id="lens-query-csv" type="button">Download CSV</button>' + table(result.result);
+          $("lens-query-csv").addEventListener('click', () => {
+            const url = URL.createObjectURL(new Blob([result.csv], {type: 'text/csv;charset=utf-8'}));
+            const link = document.createElement('a'); link.href = url; link.download = 'lens-query.csv'; link.click();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+          });
+        } catch (error) { if ($("lens-query-result")) $("lens-query-result").textContent = error.message; }
+        finally { button.disabled = false; }
+      });
+    }
+
     async function renderSavedWork() {
       const host = $("saved-work");
       if (!host) return;
@@ -7053,12 +7094,25 @@
           try {
             const record = await api(`/api/artifacts/saved/${encodeURIComponent(button.dataset.openSaved)}`);
             const payload = record.payload;
-            $("saved-work-detail").innerHTML = `<h4>${escapeHtml(record.title)}</h4><pre style="white-space:pre-wrap">${escapeHtml(payload.printable_text || (payload.record ? payload.record.transcript : JSON.stringify(payload, null, 2)))}</pre><button id="saved-work-download" type="button">Download saved version</button>${payload.print_html ? '<button id="saved-work-print" type="button">Print</button>' : ''}${record.kind === 'assessment_draft' ? '<button id="saved-work-resume" type="button">Continue review</button>' : ''}`;
+            $("saved-work-detail").innerHTML = `<h4>${escapeHtml(record.title)}</h4><pre style="white-space:pre-wrap">${escapeHtml(payload.printable_text || payload.record?.transcript || payload.source?.text || 'Download this saved version to view its details.')}</pre><button id="saved-work-download" type="button">Download saved version</button>${payload.print_html ? '<button id="saved-work-print" type="button">Print</button>' : ''}${record.kind === 'assessment_draft' ? '<button id="saved-work-resume" type="button">Continue review</button>' : ''}`;
             $("saved-work-resume")?.addEventListener('click', () => {
               state.assessStudent = payload.student_id; state.assessmentDraftRecord = payload.record;
               state.assessmentSource = {source_id: payload.original_source_id, kind: payload.record.kind, duration_seconds: payload.record.duration_seconds, segments: payload.record.segments};
               switchView('assess');
             });
+            if (record.kind === 'source_reading') {
+              const resume = document.createElement('button'); resume.type = 'button'; resume.textContent = 'Continue text correction';
+              resume.addEventListener('click', () => {
+                state.assessStudent = payload.student_id; state.assessmentSource = payload.source;
+                state.assessmentDraftRecord = null; switchView('assess');
+              });
+              $("saved-work-detail").appendChild(resume);
+            }
+            if (payload.source || payload.original_source_id || payload.source_id) {
+              const original = document.createElement('a'); original.textContent = 'Download original';
+              original.href = `/api/artifacts/saved/${encodeURIComponent(record.id)}/original`;
+              original.setAttribute('download', ''); $("saved-work-detail").appendChild(original);
+            }
             $("saved-work-print")?.addEventListener('click', () => printPacketHtml(payload.print_html, record.title));
             $("saved-work-download").addEventListener('click', () => {
               const url = URL.createObjectURL(new Blob([JSON.stringify(record, null, 2)], {type: 'application/json'}));
@@ -8798,6 +8852,7 @@
     }
 
     async function renderAdmin() {
+      const adminView = state.view;
       const title = state.view[0].toUpperCase() + state.view.slice(1);
       // Both strings below used to deny the data underneath them. The
       // subtitle said "planned after pilot evidence" for Evidence, Capacity
@@ -8807,6 +8862,7 @@
       setTitle(title, state.view === "programme" ? "curriculum overview" : "local records");
       if (state.view === "programme") {
         const data = await api("/api/admin/programme");
+        if (state.view !== adminView) return;
         $("content").innerHTML = `<div class="panel"><h2>Programme overview</h2><p>The curriculum matrix currently loaded on this computer.</p><div class="list">${data.grade_bands.map(g => `<div class="item"><h3>${escapeHtml(g.grade)}</h3><p>${escapeHtml(g.curriculum_focus)}</p></div>`).join("")}</div></div>`;
         return;
       }
@@ -8816,6 +8872,7 @@
       // decoration. Students appear as ARON codes: these views get shown in
       // meetings and on projectors.
       const data = await api(`/api/admin/${state.view}`);
+      if (state.view !== adminView) return;
 
       if (data.available === false) {
         $("content").innerHTML = `

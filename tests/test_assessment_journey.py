@@ -20,6 +20,9 @@ def test_shared_diagnostic_full_journey(client, text):
     source = client.post('/api/assess/source', files={'file': ('work.txt', text.encode())}, data={'student_id': 'assess-demo'})
     assert source.status_code == 200, source.text
     item = source.json()
+    original = client.get('/api/artifacts/saved/' + item['saved_reading']['id'] + '/original')
+    assert original.status_code == 200
+    assert original.content == text.encode()
     analysed = client.post('/api/assess/analyse', json={'student_id': 'assess-demo', 'text': item['text'],
                            'source_id': item['source_id'], 'text_confirmed': True, 'use_model': False})
     assert analysed.status_code == 200, analysed.text

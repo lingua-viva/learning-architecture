@@ -61,6 +61,10 @@ a = Analysis(
         'src.lingua_viva.routers.sources',
         'src.lingua_viva.routers.safeguarding',
         'src.lingua_viva.routers.artifacts',
+        'src.lingua_viva.routers.assessment',
+        'src.lingua_viva.routers.document_import',
+        'src.lingua_viva.routers.students',
+        'src.lingua_viva.routers.admin_query',
         # Transitive dependencies of the router modules that PyInstaller
         # also can't trace through the dynamic import:
         'src.lingua_viva.poi_progression',

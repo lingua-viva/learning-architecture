@@ -391,7 +391,7 @@ def test_sidebar_nav_contract_counts_and_handlers():
         arrays[name] = re.findall(r'\["([^"]+)",\s*"([^"]+)",\s*"([^"]+)"\]', match.group(1))
 
     assert len(arrays["teacherNav"]) == 9
-    assert len(arrays["adminNav"]) == 5
+    assert len(arrays["adminNav"]) == 6
     assert len(arrays["utilityNav"]) == 10
 
     view_map = re.search(r"const views = \{(.*?)\n      \};", html, flags=re.S)

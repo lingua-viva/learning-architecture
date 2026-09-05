@@ -348,7 +348,11 @@ function waitForPythonResolution(window: BrowserWindow): Promise<string> {
           await downloadFile(pkgUrl, dest);
           emitProgress(window, "python_installing",
             "Opening installer — click \"Continue\" then \"Install\"...");
-          spawn("open", [dest], { detached: true }).unref();
+          await new Promise<void>((resolve, reject) => {
+            const launcher = spawn("open", [dest], { detached: true });
+            launcher.once("error", reject);
+            launcher.once("spawn", () => { launcher.unref(); resolve(); });
+          });
           startPolling();
         } catch (err) {
           // Download failed — fall back to website + poll
@@ -479,7 +483,11 @@ function waitForOllamaResolution(window: BrowserWindow): Promise<void> {
           execSync(`unzip -o -q "${dest}" -d "${appDest}/"`, { timeout: 60000 });
 
           // Launch Ollama.app — it auto-starts the daemon
-          spawn("open", [path.join(appDest, "Ollama.app")], { detached: true }).unref();
+          await new Promise<void>((resolve, reject) => {
+            const launcher = spawn("open", [path.join(appDest, "Ollama.app")], { detached: true });
+            launcher.once("error", reject);
+            launcher.once("spawn", () => { launcher.unref(); resolve(); });
+          });
           try { fs.unlinkSync(dest); } catch {}
 
           emitProgress(window, "ollama_installing",

@@ -246,7 +246,8 @@ def render_document(
     if output_path is not None:
         path = Path(output_path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(pdf_bytes)
+        from src.lingua_viva.docpipe.vault import _atomic_write_bytes
+        _atomic_write_bytes(path, pdf_bytes)
         return path
     return pdf_bytes
 

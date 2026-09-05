@@ -71,6 +71,29 @@ def saved_work_detail(identifier: str, request: Request):
     return record
 
 
+@router.get("/artifacts/saved/{identifier}/original")
+def saved_work_original(identifier: str, request: Request):
+    import re
+    from fastapi.responses import FileResponse
+    from src.lingua_viva.docpipe import vault
+    record = saved_work_detail(identifier, request)
+    if not isinstance(record, dict):
+        return record
+    payload = record.get('payload') or {}
+    source_id = (payload.get('source') or {}).get('source_id') or payload.get('original_source_id') or payload.get('source_id')
+    if not isinstance(source_id, str) or not re.fullmatch(r'SRC-IMPORT-[a-f0-9]{64}', source_id):
+        raise HTTPException(404, 'No original file is linked to this saved work.')
+    try:
+        source = vault.get_source(source_id)
+        directory = (vault.vault_root() / 'sources' / source_id).resolve()
+        path = (directory / ('original' + source.original_ext)).resolve()
+        if path.parent != directory or not path.is_file():
+            raise FileNotFoundError()
+    except (OSError, ValueError):
+        raise HTTPException(404, 'The original file could not be found.')
+    return FileResponse(path, media_type='application/octet-stream', filename=source.data['original_filename'])
+
+
 class CourseworkPackRequest(BaseModel):
     class_id: str = Field(..., description='Grade/class ref, e.g. "G3"')
     unit_id: Optional[str] = None

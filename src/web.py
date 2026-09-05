@@ -5548,6 +5548,13 @@ async def lesson_materials_packet_approve(request: Request, payload: dict):
         return JSONResponse({"error": "approval_failed", "detail": str(exc)}, status_code=422)
 
     trace_id = f"lesson-packet-{uuid.uuid4().hex[:12]}"
+    from src.lingua_viva.deliverables.store import save_snapshot
+    try:
+        saved = save_snapshot('lesson_material_packet', f'Class materials: {lesson.topic}',
+                              {'printable_text': markdown, 'print_html': packet['print_html'],
+                               'student_print_html': packet['student_print_html']}, teacher_id=teacher_id)
+    except OSError:
+        return JSONResponse({'error': 'packet_not_saved', 'message': 'The packet could not be added to saved work. Check free disk space and try saving again.'}, status_code=503)
     deliverable_id = compute_deliverable_id(trace_id, "")
     source_ids = [
         sid
@@ -5607,6 +5614,7 @@ async def lesson_materials_packet_approve(request: Request, payload: dict):
         "individual_support": [item.__dict__ for item in individual_support],
         "deliverable": deliverable.as_dict(),
         "audit_receipt": receipt.as_dict(),
+        "saved_deliverable": saved,
         "sync_status": sync_status,
         "drive_result": drive_result,
     }

@@ -35,6 +35,12 @@
 version: 1
 
 reachable_from_ui:
+  - route: "GET /api/admin/lens-query/questions"
+    call_site: "api('/api/admin/lens-query/questions')"
+  - route: "POST /api/admin/lens-query/{question_id}/save"
+    call_site: 'api(`/api/admin/lens-query/${encodeURIComponent($("lens-query-question").value)}/save`,'
+  - route: "GET /api/artifacts/saved/{identifier}/original"
+    call_site: '`/api/artifacts/saved/${encodeURIComponent(record.id)}/original`'
   - route: "POST /api/assess/source"
     call_site: "fetch('/api/assess/source',"
   - route: "POST /api/assess/analyse"
@@ -991,18 +997,8 @@ intentionally_backend_only:
       UI reads progression (GET has a call site) but has no record
       control; writes are programmatic/test-driven today.
 
-  - route: "GET /api/admin/lens-query/questions"
-    status: deferred_undecided
-    reason: >-
-      U18 admin query across lenses (routers/admin_query.py, 2026-09-03):
-      the declared question list. Backend built behind the /api/admin role
-      gate; the admin UI (adminNav exists in static/index.html) has no
-      query panel yet — UX_MATRIX item 13. `lv lens-query` is the CLI door.
-
   - route: "GET /api/admin/lens-query/{question_id}"
-    status: deferred_undecided
+    status: permanent
     reason: >-
-      U18: runs one question (L1..L12) over the student lens STORE through
-      the lens field contract — deterministic, ARON codes by default, every
-      result carries scored/targets/cannot_tell. No UI call site yet; same
-      missing admin panel as the questions route.
+      Read-only query API and CLI door. The administrator UI uses the save
+      route, which calls this same query implementation and saves its answer.

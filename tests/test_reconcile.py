@@ -515,7 +515,7 @@ def test_take_new_refuses_to_replace_a_symlink(update_env, tmp_path):
     assert live_path.is_symlink()
 
 
-def test_take_new_file_errors_return_error_dict_and_keep_pending(update_env):
+def test_take_new_file_errors_return_error_dict_and_keep_pending(update_env, monkeypatch):
     """Hardening iteration 6: an unreadable staged file raised
     PermissionError through the route (500). Must return an error dict,
     keep the pending entry, and leave the teacher's live copy untouched."""
@@ -523,11 +523,16 @@ def test_take_new_file_errors_return_error_dict_and_keep_pending(update_env):
     staged = rec.pending_root() / rel
     live_path = rec.live_root() / rel
     live_before = live_path.read_bytes()
-    os.chmod(staged, 0o000)
-    try:
+    # Simulate the OS error directly: chmod(000) does not deny reads to root
+    # and Windows ACLs do not implement these Unix permission bits.
+    read_bytes = Path.read_bytes
+    def denied(path):
+        if path == staged:
+            raise PermissionError('staged file is unreadable')
+        return read_bytes(path)
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, 'read_bytes', denied)
         result = rec.resolve_pending(rel, "take_new")
-    finally:
-        os.chmod(staged, 0o644)
     assert result["status"] == "error"
     assert rec.pending_count() == 1  # still pending — retry possible
     assert live_path.read_bytes() == live_before

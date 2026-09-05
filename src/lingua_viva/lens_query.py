@@ -121,6 +121,8 @@ def _has_strategy(cat: dict) -> bool:
 
 def field_present(lens: dict, path: str) -> bool:
     """Is a declared path populated on this lens dict (from get_lens)?"""
+    if path == 'assessment_record':
+        return bool(lens.get('assessment_profile'))
     parts = path.split(".")
     if parts[0] == "cefr_snapshot" and len(parts) == 2:
         return bool((lens.get("cefr_snapshot") or {}).get(parts[1]))
@@ -160,7 +162,7 @@ def census(store: StudentLensStore, lenses: list[dict], *, names: bool = False, 
         has_strengths = any(field_present(lens, p) for p in ("academic_strengths", "personal_strengths"))
         has_cefr = any(field_present(lens, f"cefr_snapshot.{d}") for d in VALID_CEFR_DIMENSIONS)
         has_obs = bool(store.export_lens(lens["student_id"]).get("observations"))
-        if not (has_support or has_strengths or has_cefr or has_obs):
+        if not (has_support or has_strengths or has_cefr or has_obs or lens.get('assessment_profile')):
             empty.append(_ref(lens, names))
     return _result("census", lenses, by_grade=dict(by_grade), by_campus=dict(by_campus),
                    empty_lenses=empty, empty_count=len(empty))

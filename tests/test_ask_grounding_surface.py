@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
+import pytest
 
 from src.lingua_viva.voice_tone import (
     CLARIFY_THRESHOLD,

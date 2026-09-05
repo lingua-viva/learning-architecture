@@ -1338,7 +1338,7 @@ def lesson_packet_dir() -> Path:
 
 def lesson_packet_filename(lesson: LessonInput) -> str:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-    return f"lesson-packet-{_safe_slug(lesson.topic)}-{stamp}.md"
+    return f"lesson-packet-{_safe_slug(lesson.topic)}-{stamp}-{uuid.uuid4().hex[:12]}.md"
 
 
 def lesson_packet_pdf_stem(lesson: LessonInput, materials: list[TierMaterial]) -> str:
@@ -1367,9 +1367,8 @@ def write_printable_packet(
         status="APPROVED",
         individual_support=individual_support or [],
     )
-    tmp = path.with_name(f".{path.name}.tmp")
-    tmp.write_text(markdown, encoding="utf-8")
-    tmp.replace(path)
+    from src.lingua_viva.docpipe.vault import _atomic_write_bytes
+    _atomic_write_bytes(path, markdown.encode('utf-8'))
     try:
         os.chmod(path, 0o600)
     except OSError:

@@ -18,10 +18,52 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 router = APIRouter(prefix="/api/admin")
+
+
+@router.post("/lens-query/{question_id}/save")
+async def save_lens_query(question_id: str, request: Request, payload: dict):
+    from src.lingua_viva.access_roles import require_role, effective_teacher_id
+    refusal = require_role(request, {'coordinator'})
+    if refusal is not None:
+        return refusal
+    import csv
+    import io
+    from src.lingua_viva.lens_query import QUESTIONS
+    from src.lingua_viva.deliverables.store import save_snapshot
+    result = await lens_query_run(question_id, names=0, days=payload.get('days'),
+                                 min_categories=payload.get('min_categories'), term=payload.get('term'), student=payload.get('student'))
+    if not isinstance(result, dict):
+        return result
+    title = next((q['q'] for q in QUESTIONS if q['id'] == question_id), 'Lens query')
+    rows = []
+    def flatten(value, label='Result'):
+        if isinstance(value, dict):
+            for key, item in value.items():
+                flatten(item, label + ' / ' + key.replace('_', ' '))
+        elif isinstance(value, list):
+            if not value:
+                rows.append([label, 'None'])
+            for index, item in enumerate(value, 1):
+                flatten(item, label + f' {index}')
+        else:
+            rows.append([label, 'Not recorded' if value is None else str(value)])
+    flatten(result)
+    stream = io.StringIO(newline=''); writer = csv.writer(stream)
+    writer.writerow(['Field', 'Value'])
+    for row in rows:
+        writer.writerow([("'" + value if value.startswith(('=', '+', '-', '@')) else value) for value in row])
+    csv_text = stream.getvalue()
+    printable = title + '\n\n' + '\n'.join(f'{label}: {value}' for label, value in rows)
+    try:
+        saved = save_snapshot('lens_query', title, {'printable_text': printable, 'csv': csv_text, 'result': result},
+                              teacher_id=effective_teacher_id(request, 'local-teacher'))
+    except OSError:
+        return JSONResponse({'error': 'query_not_saved', 'message': 'The answer could not be saved. Check free disk space and retry.'}, status_code=503)
+    return {'result': result, 'csv': csv_text, 'saved_deliverable': saved}
 
 
 @router.get("/lens-query/questions")

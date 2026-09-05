@@ -87,8 +87,15 @@ async def source(request: Request):
         return refusal
     if not text.strip():
         raise HTTPException(422, 'No speech or readable text was found. The original is saved.')
-    return {**ocr, 'source_id': original.source_id, 'text': text, 'kind': kind, 'duration_seconds': duration, 'segments': segments,
+    reading = {**ocr, 'source_id': original.source_id, 'text': text, 'kind': kind, 'duration_seconds': duration, 'segments': segments,
             'message': 'Correct the text before analysing. Nothing has been added to the lens.'}
+    from src.lingua_viva.deliverables.store import save_snapshot
+    try:
+        reading['saved_reading'] = save_snapshot('source_reading', 'Source awaiting text correction',
+                            {'student_id': student_id, 'source': dict(reading)}, teacher_id=teacher_id)
+    except OSError:
+        raise HTTPException(503, 'The original is retained, but its reading could not be saved. Check free disk space and retry.')
+    return reading
 
 
 @router.post("/analyse")
