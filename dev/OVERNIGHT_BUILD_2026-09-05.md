@@ -149,3 +149,18 @@ Moving listener registration before that await fixes the reproduced failure.
 Actual local-model coursework upload -> three tiers -> packet preview -> saved
 packet -> Sources reopen/print controls now passes. The test's first preview
 attempt correctly refused until generation was explicitly performed.
+
+Observe follow-through: two red tests showed its microphone route discarded the
+original and did not fail on an archival disk error. Audio is now retained before
+transcription, passed with the corrected text, and linked to the confirmed OBS
+identifier in saved work. RED skips normal saved-work publication. Actual Edge
+microphone -> corrected textarea -> observation -> Sources -> original audio
+download passes. Download uses a fetched blob and named errors; the initial
+direct download navigation was canceled in the browser harness. Related regression:
+36 passed, one skipped. The stronger Prepare check also passes with evaporation,
+condensation or precipitation visibly present in each tier from the uploaded file.
+
+Release 0.2.94 run 33948560512 passed all jobs, including packaged AppImage fresh
+boot. Downloaded the actual Mac verification log: commit 2758ad8,
+TeamIdentifier=XWT7RB624U, codesign verification succeeded. The first failure
+did not recur. This release precedes the Observe retention follow-through.

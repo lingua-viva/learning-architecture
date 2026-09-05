@@ -3033,6 +3033,13 @@ async def voice_stt(request: Request):
     audio = await request.body()
     if not audio:
         return JSONResponse({"error": "audio body required"}, status_code=400)
+    if len(audio) > 50 * 1024 * 1024:
+        return JSONResponse({"error": "Choose a recording up to 50 MB."}, status_code=413)
+    from src.lingua_viva.docpipe.lens_extract import preserve_import_source
+    try:
+        original = await asyncio.to_thread(preserve_import_source, audio, "recording.webm")
+    except (OSError, ValueError):
+        return JSONResponse({"error": "recording_not_saved", "message": "The recording could not be saved. Check free disk space and retry."}, status_code=503)
     try:
         from src.lingua_viva.voice_stt import get_stt_provider
 
@@ -3044,7 +3051,7 @@ async def voice_stt(request: Request):
         return JSONResponse({"error": "faster-whisper is not installed.", "available": False}, status_code=503)
     except Exception as exc:  # noqa: BLE001
         return JSONResponse({"error": f"Could not transcribe audio ({type(exc).__name__})."}, status_code=422)
-    return {"transcript": transcript, "provider": "faster-whisper", "local_only": True}
+    return {"transcript": transcript, "provider": "faster-whisper", "local_only": True, "source_id": original.source_id}
 
 
 @app.post("/api/voice/act")
@@ -3860,6 +3867,11 @@ async def observe_capture(request: Request, payload: dict):
     transcript = str(payload.get("transcript") or payload.get("raw_transcript") or "").strip()
     if not transcript:
         return JSONResponse({"error": "Observation text is required."}, status_code=400)
+    from src.lingua_viva.recording_archive import validate_recordings, save_recordings
+    try:
+        recording_ids = validate_recordings(payload.get("source_ids") or [])
+    except (ValueError, OSError):
+        return JSONResponse({"error": "The linked recording could not be found. Record again or save the corrected text without it."}, status_code=422)
 
     # BUG-T5.2 (Claudia QA v0.2.78): a pre-selected student must not silently
     # absorb an observation whose text names a different student — or a
@@ -3991,6 +4003,12 @@ async def observe_capture(request: Request, payload: dict):
         # RED: nothing entered the lens store — skip routing memory and
         # Drive sync entirely. The response note explains the routing.
         return result
+    if recording_ids:
+        try:
+            result["saved_recordings"] = await asyncio.to_thread(
+                save_recordings, recording_ids, result.get("observation") or {}, teacher_id)
+        except OSError:
+            return JSONResponse({"error": "The observation is saved, but its recording link could not be saved. Check free disk space and retry."}, status_code=503)
     if result.get("duplicate"):
         return result
 

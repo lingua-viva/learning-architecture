@@ -36,7 +36,7 @@ def main():
         client = TestClient(app)
         with sync_playwright() as playwright:
             args = []
-            if '--microphone' in sys.argv:
+            if '--microphone' in sys.argv or '--observe-microphone' in sys.argv:
                 args = ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream',
                         '--use-file-for-fake-audio-capture=' + str(ROOT / 'tests/fixtures/assessment/synthetic-en.wav')]
             browser = playwright.chromium.launch(channel="msedge" if sys.platform == "win32" else None, headless=True, args=args)
@@ -161,6 +161,8 @@ def main():
                 page.locator('#generate-activity').click()
                 expect(page.locator('#activity-output')).to_contain_text('Foundational', timeout=180000)
                 assert 'template text' not in page.locator('#activity-output').inner_text(), 'Real local model generation did not complete'
+                for card in page.locator('#activity-output > .panel').all():
+                    assert re.search(r'evapor|condens|precipit', card.inner_text(), re.I), 'Tier did not visibly use the uploaded water-cycle content'
                 page.locator('#preview-lesson-packet').click()
                 expect(page.locator('#approve-lesson-packet')).to_be_visible(timeout=180000)
                 page.locator('#approve-lesson-packet').click()
@@ -170,6 +172,25 @@ def main():
                 expect(page.locator('#saved-work-detail')).to_contain_text('water cycle')
                 expect(page.locator('#saved-work-print')).to_be_visible()
                 print('PASS: uploaded coursework -> packet preview -> approved saved packet -> reopen/print control', flush=True)
+            if '--observe-microphone' in sys.argv:
+                page.locator('[data-view="observe"]').click()
+                page.locator('#obs-student').select_option('demo-1')
+                page.locator('#obs-mic').click()
+                expect(page.locator('#obs-mic')).to_have_attribute('aria-pressed', 'true')
+                page.wait_for_timeout(6500)
+                page.locator('#obs-mic').click()
+                expect(page.locator('#obs-text')).to_have_value(re.compile(r'\w+'), timeout=180000)
+                page.locator('#save-observation').click()
+                expect(page.locator('#obs-result')).to_contain_text('Recorded for', timeout=180000)
+                page.locator('[data-view="sources"]').click()
+                page.locator('[data-open-saved]').first.click()
+                expect(page.locator('#saved-work-detail')).to_contain_text('Recorded observation')
+                originals = page.locator('#saved-work-detail a[href$="/original"]')
+                expect(originals).to_be_visible()
+                with page.expect_download() as audio_download:
+                    originals.click()
+                assert Path(audio_download.value.path()).stat().st_size > 1000
+                print('PASS: Observe microphone -> corrected words -> lens -> saved observation with downloadable original audio', flush=True)
             page.locator('#change-role').click()
             page.locator('[data-role="coordinator"]').click()
             page.locator('[data-view="lensquery"]').click()

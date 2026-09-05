@@ -205,3 +205,42 @@ jobs:
             git pull --rebase origin main
           done
           git push origin main
+
+      # AGENTS.md release rule 7: retire earlier desktop distributions only
+      # after the new pinned site is actually live. CLI releases stay separate.
+      - name: Retire superseded desktop releases after live verification
+        uses: actions/github-script@v7
+        env:
+          NEXT_TAG: ${{ needs.auto-release.outputs.tag }}
+        with:
+          script: |
+            const tag = process.env.NEXT_TAG;
+            const version = value => /^desktop-v(\d+)\.(\d+)\.(\d+)$/.exec(value)?.slice(1).map(Number);
+            const current = version(tag);
+            if (!current) throw new Error('Invalid desktop release tag');
+            let live = false;
+            for (let attempt = 0; attempt < 20; attempt++) {
+              const response = await fetch('https://linguaviva.art/?release_check=' + Date.now());
+              const html = await response.text();
+              const pins = [...new Set(html.match(/desktop-v\d+\.\d+\.\d+/g) || [])];
+              if (response.ok && pins.length === 1 && pins[0] === tag) { live = true; break; }
+              await new Promise(resolve => setTimeout(resolve, 15000));
+            }
+            if (!live) throw new Error('New site pin is not live; earlier releases retained');
+            const older = value => {
+              const parts = version(value);
+              if (!parts) return false;
+              for (let index = 0; index < 3; index++) {
+                if (parts[index] !== current[index]) return parts[index] < current[index];
+              }
+              return false;
+            };
+            const releases = await github.paginate(github.rest.repos.listReleases, context.repo);
+            const names = new Set(['LinguaViva.dmg', 'LinguaViva-Setup.exe', 'LinguaViva.AppImage', 'LinguaViva.deb']);
+            for (const release of releases) {
+              if (release.draft || !older(release.tag_name) || !release.assets.some(asset => names.has(asset.name))) continue;
+              await github.rest.repos.deleteRelease({...context.repo, release_id: release.id});
+              try { await github.rest.git.deleteRef({...context.repo, ref: 'tags/' + release.tag_name}); }
+              catch (error) { if (error.status !== 404 && error.status !== 422) throw error; }
+              core.info('Retired superseded desktop distribution: ' + release.tag_name);
+            }

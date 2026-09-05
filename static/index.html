@@ -1037,14 +1037,14 @@
               updateVoiceCompanion("error", "Voice unavailable");
               return;
             }
-            if (!response.ok) throw new Error(data.error || "transcription failed");
+            if (!response.ok) throw new Error(data.message || data.error || "transcription failed");
             const transcript = String(data.transcript || "").trim();
             const input = this.get(inputId);
             if (input) input.value = transcript;
             if (transcript) {
               if (status) status.textContent = "Captured.";
               updateVoiceCompanion("processing", "Thinking...");
-              onTranscript(transcript);
+              onTranscript(transcript, data);
             } else if (status) {
               status.textContent = "I did not hear words. Tap to try again.";
               updateVoiceCompanion("error", "No words heard");
@@ -2118,7 +2118,7 @@
       const select = $(id);
       select.innerHTML = grade.units.length
         ? grade.units.map(unit => `<option value="${unit.unit_id}" ${unit.unit_id === state.unitId ? "selected" : ""}>${escapeHtml(unit.title)}</option>`).join("")
-        : '<option value="">No units yet — add one in Plan</option>';
+        : '<option value="">No units yet</option>';
       state.unitId = select.value || (grade.units.length ? state.unitId : "");
       select.addEventListener("change", event => { state.unitId = event.target.value; });
       return grade.units.length;
@@ -2729,14 +2729,17 @@
       $("suggest-observation").addEventListener("click", suggestObservation);
       $("add-support-entry").addEventListener("click", () => addSupportEntry());
       // T5: Observe mic — conversational dictation that accumulates into the textarea.
+      state.observationRecordingIds = [];
       $("obs-mic").addEventListener("click", () => {
+        const recordedStudent = $("obs-student").value;
         voiceRuntime.captureLocalStt({
           statusId: "mic-status",
           micId: "obs-mic",
           inputId: null, // We handle insertion ourselves for accumulation
-          onTranscript(transcript) {
+          onTranscript(transcript, recording) {
             const textarea = $("obs-text");
-            if (!textarea) return;
+            if (!textarea || $("obs-student").value !== recordedStudent) return;
+            if (recording?.source_id) state.observationRecordingIds.push(recording.source_id);
             // Accumulate: append with a space separator (conversational dictation)
             const existing = textarea.value.trim();
             textarea.value = existing ? existing + " " + transcript : transcript;
@@ -2765,6 +2768,7 @@
     }
 
     function clearObserveForm(options = {}) {
+      state.observationRecordingIds = [];
       const keepStudent = Boolean(options.preserveStudent);
       const selectedBeforeClear = keepStudent && $("obs-student") ? $("obs-student").value : "";
       state.selectedStudent = selectedBeforeClear || "";
@@ -2946,6 +2950,7 @@
             student_id: $("obs-student").value,
             transcript,
             template_type: templateType,
+            source_ids: state.observationRecordingIds || [],
             cefr_dimension: $("obs-dim").value || null,
             cefr_level_observed: $("obs-level").value || null,
             cefr_direction: $("obs-direction").value || null,
@@ -7114,6 +7119,22 @@
               const original = document.createElement('a'); original.textContent = 'Download original';
               original.href = `/api/artifacts/saved/${encodeURIComponent(record.id)}/original`;
               original.setAttribute('download', ''); $("saved-work-detail").appendChild(original);
+              original.addEventListener('click', async event => {
+                event.preventDefault();
+                try {
+                  const response = await fetch(original.href);
+                  if (!response.ok) {
+                    const failure = await response.json();
+                    throw new Error(failure.detail || failure.message || 'The original could not be opened.');
+                  }
+                  const disposition = response.headers.get('Content-Disposition') || '';
+                  const encodedName = /filename\*=utf-8''([^;]+)/i.exec(disposition);
+                  const plainName = /filename="([^"]+)"/i.exec(disposition);
+                  const link = document.createElement('a'); link.href = URL.createObjectURL(await response.blob());
+                  link.download = encodedName ? decodeURIComponent(encodedName[1]) : (plainName?.[1] || 'original');
+                  link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+                } catch (error) { showToast(error.message || 'Could not download the original.', 'error'); }
+              });
             }
             $("saved-work-print")?.addEventListener('click', () => printPacketHtml(payload.print_html, record.title));
             $("saved-work-download").addEventListener('click', () => {
