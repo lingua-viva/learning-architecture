@@ -16,6 +16,10 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v190 (2026-09-05): Resume source correction and diagnostic drafts; download
+#     originals; mount administrator queries with saved CSV; reopen classroom
+#     packets. Ignore failures from views left behind during navigation.
+#     Actual browser journeys, including synthetic microphone, passed. LF lock.
 #   v189 (2026-09-05): Assess upload/record/correct/review/confirm/print/undo;
 #     saved drafts resume in Sources, assessments visible in Students. Plain
 #     server error messages. Actual Edge/API text journey passed. Linux lock.
@@ -894,7 +898,7 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 189
+version: 190
 # v122 (2026-08-06): Failure-mode hardening. src/web.py: voice-act observation
 #   dedup guard (same 60s window as observe/capture, prevents network-retry
 #   duplicates). src/education/parent_report.py: personal_context evidence
