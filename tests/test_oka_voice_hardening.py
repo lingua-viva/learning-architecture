@@ -17,8 +17,8 @@ def test_both_voice_surfaces_use_shared_oka_runtime():
 
 def test_voice_errors_cannot_submit_a_preexisting_typed_draft():
     assert "if (!blob.size)" in HTML
-    assert "onTranscript(transcript);" in HTML
-    assert 'throw new Error(data.error || "transcription failed")' in HTML
+    assert "onTranscript(transcript, data);" in HTML
+    assert 'throw new Error(data.message || data.error || "transcription failed")' in HTML
 
 
 def test_voice_callbacks_tolerate_navigation_away():
