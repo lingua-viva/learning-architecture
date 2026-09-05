@@ -16,6 +16,10 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v188 (2026-09-05): Operator overnight scope: hide Home/Daily/Plan/Slack
+#     for both profiles; approved summaries saved on disk, Sources reopens,
+#     downloads and prints earlier versions. Guard late Students responses
+#     from replacing a newer view. Real Edge/API journey passed. Linux lock.
 #   v187 (2026-09-05): U3 review step (witnessed by Claudia). static/index.html:
 #     the import preview shows plain labels (fieldLabel) instead of raw
 #     paths, a tick box on every field that needs the teacher's OK plus an
@@ -887,7 +891,7 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 187
+version: 188
 # v122 (2026-08-06): Failure-mode hardening. src/web.py: voice-act observation
 #   dedup guard (same 60s window as observe/capture, prevents network-retry
 #   duplicates). src/education/parent_report.py: personal_context evidence
