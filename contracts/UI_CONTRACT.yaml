@@ -16,6 +16,9 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v189 (2026-09-05): Assess upload/record/correct/review/confirm/print/undo;
+#     saved drafts resume in Sources, assessments visible in Students. Plain
+#     server error messages. Actual Edge/API text journey passed. Linux lock.
 #   v188 (2026-09-05): Operator overnight scope: hide Home/Daily/Plan/Slack
 #     for both profiles; approved summaries saved on disk, Sources reopens,
 #     downloads and prints earlier versions. Guard late Students responses
@@ -891,7 +894,7 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 188
+version: 189
 # v122 (2026-08-06): Failure-mode hardening. src/web.py: voice-act observation
 #   dedup guard (same 60s window as observe/capture, prevents network-retry
 #   duplicates). src/education/parent_report.py: personal_context evidence
