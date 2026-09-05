@@ -206,22 +206,32 @@ def _deterministic_grade(text: str) -> Optional[str]:
     return None
 
 
+# The four CEFR dimensions and the words a report card uses for them. Italian
+# forms are first-class: a La Scuola pagella says "Ascolto / Parlato / Lettura /
+# Scrittura" (witnessed by Claudia 2026-09-05 - the English-only reader left
+# Abigail's snapshot empty). Multi-word labels sit before single words so the
+# alternation tries the longer form first.
+CEFR_DIMENSION_LABELS: dict[str, tuple[str, ...]] = {
+    "listening": ("comprensione dell'ascolto", "comprensione orale", "listening", "ascolto"),
+    "speaking": ("produzione orale", "interazione orale", "espressione orale", "speaking", "parlato"),
+    "reading": ("comprensione scritta", "comprensione del testo", "reading", "lettura"),
+    "writing": ("produzione scritta", "espressione scritta", "writing", "scrittura"),
+}
+
+
 def _deterministic_cefr(text: str) -> dict[str, str]:
     found: dict[str, str] = {}
     lower = text.lower()
-    dims = ("listening", "speaking", "reading", "writing")
     for level in sorted(CEFR_LEVELS, key=len, reverse=True):
         level_l = re.escape(level.lower())
-        for dim in dims:
+        for dim, labels in CEFR_DIMENSION_LABELS.items():
             if dim in found:
                 continue
-            # (?!\w) not \b after the level: "+" is a non-word char, so
-            # `a2\+\b` never matches "a2+." and the plus levels were silently
-            # downgraded to their base level (2026-09-04, chain run).
+            label_re = "(?:" + "|".join(re.escape(label) for label in labels) + ")"
             patterns = [
-                rf"{dim}\s*[:\-]?\s*{level_l}(?!\w)",
-                rf"\b{level_l}(?!\w)[^.\n]{{0,25}}\b{dim}\b",
-                rf"\b{dim}\b[^.\n]{{0,25}}\b{level_l}(?!\w)",
+                rf"\b{label_re}\s*[:\-\u2013\u00b7]?\s*{level_l}(?!\w)",
+                rf"\b{level_l}(?!\w)[^.\n]{{0,25}}\b{label_re}\b",
+                rf"\b{label_re}\b[^.\n]{{0,25}}\b{level_l}(?!\w)",
             ]
             if any(re.search(pat, lower) for pat in patterns):
                 found[dim] = level
