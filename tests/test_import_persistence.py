@@ -85,6 +85,7 @@ def test_document_route_preserves_original_before_processing(tmp_path, monkeypat
     from src.web import app
 
     monkeypatch.setenv("LV_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("LV_STATE_HOME", str(tmp_path))
     with_store = StudentLensStore()
     with_store.create_lens(student_id="s-demo", display_name="Demo Student")
     with_store.close()
@@ -116,3 +117,13 @@ def test_document_route_names_storage_failure_without_processing(monkeypatch):
     assert response.status_code == 503
     assert response.json()["error"] == "source_not_saved"
     assert "sensitive internal" not in response.text
+
+
+def test_retained_sources_and_runs_honour_state_home_override(tmp_path, monkeypatch):
+    monkeypatch.setenv("LV_CONFIG_HOME", str(tmp_path / "configuration"))
+    monkeypatch.setenv("LV_STATE_HOME", str(tmp_path / "workspace"))
+    source = lens_extract.preserve_import_source(b"Lettura: A2", "pagella.txt")
+    log = lens_extract.save_extraction_log({"s-demo": result()}, "pagella.txt", source_id=source.source_id)
+    assert log.is_relative_to(tmp_path / "workspace")
+    assert (tmp_path / "workspace" / "vault" / "sources" / source.source_id / "original.txt").exists()
+    assert not (tmp_path / "configuration").exists()

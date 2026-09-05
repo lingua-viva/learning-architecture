@@ -911,6 +911,7 @@ async def extract_for_lens_update(
     matched_students: list[dict[str, Any]],
     lens_store: Optional[StudentLensStore] = None,
     engine: Any = None,
+    document_text: Optional[str] = None,
 ) -> dict[str, ExtractionResult]:
     """Extract lens-update data from a student document.
 
@@ -924,11 +925,10 @@ async def extract_for_lens_update(
     5. Map all extractions to STUDENT_LENS_FIELDS
     6. Safety rules: trauma_flag NEVER auto-set, RED → restricted
     """
-    # Decode document text
-    try:
-        text = document_bytes.decode("utf-8", errors="replace")
-    except Exception:
-        text = ""
+    # The document route/CLI already decoded PDF/DOCX/XLSX for matching.
+    # Re-decoding their ZIP/PDF bytes as UTF-8 created garbage lens evidence.
+    # Typed Observe callers still provide UTF-8 bytes directly.
+    text = document_text if document_text is not None else document_bytes.decode("utf-8", errors="replace")
 
     if not text.strip():
         return {
@@ -1306,7 +1306,7 @@ def _deduplicate_fields(fields: list[ExtractedField]) -> list[ExtractedField]:
 def _imports_dir(state_home: Optional[Path] = None) -> Path:
     if state_home is None:
         from src.lingua_viva.config import lv_home
-        state_home = lv_home()
+        state_home = Path(os.environ["LV_STATE_HOME"]) if os.environ.get("LV_STATE_HOME") else lv_home()
     imports = state_home / "imports"
     imports.mkdir(parents=True, exist_ok=True)
     return imports
@@ -1339,7 +1339,6 @@ def preserve_import_source(
     """
     import hashlib
     import mimetypes
-    from src.lingua_viva.config import lv_home
     from src.lingua_viva.docpipe import vault
     from src.lingua_viva.docpipe.contracts import SourceRecord
 
@@ -1348,7 +1347,7 @@ def preserve_import_source(
     source_id = "SRC-IMPORT-" + hashlib.sha256(
         (digest + "\0" + filename).encode("utf-8")
     ).hexdigest()
-    root = (state_home or lv_home()) / "vault"
+    root = state_home / "vault" if state_home is not None else vault.vault_root()
     try:
         existing = vault.get_source(source_id, root=root)
     except FileNotFoundError:

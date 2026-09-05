@@ -59,14 +59,19 @@ async def import_document(request: Request):
 
     # Extract text from document (supports PDF, DOCX, XLSX, plain text)
     ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if ext in {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".webp", ".heic"}:
+        return JSONResponse({
+            "error": "ocr_not_available",
+            "message": "The original image is kept, but this import cannot read photos yet. Use a text-based PDF, Word document or text file. No lens was updated.",
+        }, status_code=422)
     try:
         from src.lingua_viva.docpipe.extract import extract_plain_text
-        text = extract_plain_text(content, ext)
+        text = extract_plain_text(content, ext or ".txt")
     except Exception:
-        try:
-            text = content.decode("utf-8", errors="replace")
-        except Exception:
-            text = ""
+        return JSONResponse({
+            "error": "text_extraction_failed",
+            "message": "The original file is kept, but its text could not be read. A scanned PDF needs OCR, which is not available in this import yet. Try a text-based PDF, Word document or text file. No lens was updated.",
+        }, status_code=422)
 
     if not text.strip():
         return JSONResponse(
@@ -125,6 +130,7 @@ async def import_document(request: Request):
 
         results = await extract_for_lens_update(
             document_bytes=content,
+            document_text=text,
             document_type=doc_type,
             matched_students=matched,
             lens_store=store,

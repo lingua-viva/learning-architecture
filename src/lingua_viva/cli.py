@@ -826,6 +826,7 @@ async def _lens_update(args: argparse.Namespace) -> int:
 
             results = await extract_for_lens_update(
                 document_bytes=content,
+                document_text=text,
                 document_type=doc_type,
                 matched_students=matched,
                 lens_store=store,

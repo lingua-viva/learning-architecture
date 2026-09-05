@@ -34,3 +34,22 @@ not started, despite the older handoff's wording.
 Checks required before any release: focused red/green tests, Linux replica, route
 reachability, protected-file hash lock when applicable, release window, tag ancestry,
 live download verification. Never convert an automated pass into a teacher witness.
+
+Second reproduced defect: PDF/Word text was decoded for matching but their binary
+bytes were then decoded as UTF-8 for lens extraction. Synthetic PDF and Word tests
+failed before the fix; both now retain originals and extract the decoded evidence.
+Broken documents and images no longer enter extraction as binary garbage. OCR is
+still pending and these imports return an explicit retained-original error.
+Windows focused verification: 35 passed.
+
+Linux full suite at first commit `1302feb`: 3108 passed, 4 failed, 34 skipped,
+32 xfailed. The failures match the documented baseline (three missing `pytest`
+imports in grounding tests and one root-permission reconciliation test); this is
+not a fully green run. The second fix still requires Linux verification.
+
+Test isolation incident: three synthetic binary fixtures reached the local vault
+because the new source helper ignored LV_STATE_HOME. Their exact files were
+verified by name and digest, quarantined outside the vault, and its manifest
+rebuilt with the one pre-existing source retained. No student lens rows changed.
+The helper and import log now honor LV_STATE_HOME; a regression test checks that
+LV_CONFIG_HOME remains untouched when a separate workspace is configured.
