@@ -738,6 +738,8 @@ async def _lens_update(args: argparse.Namespace) -> int:
         for path in paths:
             filename = path.name
             content = path.read_bytes()
+            from src.lingua_viva.docpipe.lens_extract import preserve_import_source
+            source = preserve_import_source(content, filename)
             try:
                 text = extract_plain_text(content, path.suffix.lower())
             except Exception as exc:
@@ -829,7 +831,7 @@ async def _lens_update(args: argparse.Namespace) -> int:
                 lens_store=store,
                 engine=engine,
             )
-            log_path = save_extraction_log(results, filename)
+            log_path = save_extraction_log(results, filename, source_id=source.source_id)
             all_logs.append(str(log_path))
 
             file_result = {

@@ -27,6 +27,7 @@ async def import_document(request: Request):
     from src.lingua_viva.docpipe.lens_match import match_document_to_students
     from src.lingua_viva.docpipe.lens_extract import (
         extract_for_lens_update,
+        preserve_import_source,
         save_extraction_log,
     )
     from src.education.student_lens import StudentLensStore
@@ -48,6 +49,13 @@ async def import_document(request: Request):
 
     content = await upload.read()
     filename = upload.filename or "imported-file"
+    try:
+        source = preserve_import_source(content, filename)
+    except (OSError, ValueError):
+        return JSONResponse({
+            "error": "source_not_saved",
+            "message": "The original file could not be saved on this computer. Check free disk space and folder access, then try again. No lens was updated.",
+        }, status_code=503)
 
     # Extract text from document (supports PDF, DOCX, XLSX, plain text)
     ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
@@ -124,7 +132,13 @@ async def import_document(request: Request):
         )
 
         # R6: Persist extraction log BEFORE any lens write
-        log_path = save_extraction_log(results, filename)
+        try:
+            log_path = save_extraction_log(results, filename, source_id=source.source_id)
+        except OSError:
+            return JSONResponse({
+                "error": "extraction_not_saved",
+                "message": "The original file is kept, but the processing result could not be saved. Check free disk space and try again. No lens was updated.",
+            }, status_code=503)
 
         # Build preview for UI
         preview: dict[str, dict] = {}
@@ -148,6 +162,7 @@ async def import_document(request: Request):
             "matched_students": matched,
             "extractions_preview": preview,
             "extraction_log_path": str(log_path),
+            "source_record_id": source.source_id,
             "message": (
                 f"Found information for {len(matched)} student(s). "
                 "Review below and click 'Update lenses' to apply."

@@ -20,6 +20,9 @@ import json
 import logging
 import os
 import re
+import tempfile
+import uuid
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -1322,50 +1325,109 @@ def resolve_import_log_path(log_path: str | Path, state_home: Optional[Path] = N
     return candidate
 
 
+def preserve_import_source(
+    content: bytes,
+    source_filename: str,
+    *,
+    state_home: Optional[Path] = None,
+):
+    """Keep the original in the existing local vault, independent of processors.
+
+    Identity includes bytes and filename: a changed document is a new source;
+    an identical re-import reuses its original without changing its metadata.
+    No source is uploaded, indexed into the normal lens, or reprocessed here.
+    """
+    import hashlib
+    import mimetypes
+    from src.lingua_viva.config import lv_home
+    from src.lingua_viva.docpipe import vault
+    from src.lingua_viva.docpipe.contracts import SourceRecord
+
+    filename = source_filename.replace("\\", "/").rsplit("/", 1)[-1] or "imported-file"
+    digest = hashlib.sha256(content).hexdigest()
+    source_id = "SRC-IMPORT-" + hashlib.sha256(
+        (digest + "\0" + filename).encode("utf-8")
+    ).hexdigest()
+    root = (state_home or lv_home()) / "vault"
+    try:
+        existing = vault.get_source(source_id, root=root)
+    except FileNotFoundError:
+        existing = None
+    if existing is not None:
+        original = root / "sources" / source_id / f"original{existing.original_ext}"
+        if hashlib.sha256(original.read_bytes()).hexdigest() != digest:
+            raise ValueError("Saved original failed its integrity check; it was not replaced.")
+        return existing
+    ext = Path(filename).suffix.lower()
+    if not re.fullmatch(r"\.[a-z0-9]+", ext):
+        ext = ".bin"
+    record = SourceRecord({
+        "schema_version": "docpipe.source.v1", "source_id": source_id,
+        "origin": "local", "drive_file_id": None, "path": filename,
+        "sha256": digest, "imported_at": datetime.now(timezone.utc).isoformat(),
+        "mime": mimetypes.guess_type(filename)[0] or "application/octet-stream",
+        "owner": "local-teacher", "original_filename": filename,
+        "original_ext": ext, "byte_size": len(content),
+    })
+    return vault.put_source(record, content, root=root)
+
+
 def save_extraction_log(
     results: dict[str, ExtractionResult],
     source_filename: str,
     state_home: Optional[Path] = None,
+    *,
+    source_id: Optional[str] = None,
 ) -> Path:
     """Save extraction results as NDJSON before any lens write (R6).
 
-    Location: ~/.lingua-viva/imports/{timestamp}_{filename}.ndjson
-    Format: one JSON line per extracted field, with source chunk reference.
+    A run has its own identity, even when the filename and clock are unchanged.
+    The saved chunks preserve what THIS processor read, rather than asking a
+    future version to reconstruct it. Existing field rows remain compatible;
+    additive result rows also retain empty results and source identity.
     """
     imports = _imports_dir(state_home)
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     safe_name = re.sub(r"[^\w.\-]", "_", source_filename)[:60]
-    log_path = imports / f"{timestamp}_{safe_name}.ndjson"
+    log_path = imports / f"{timestamp}_{uuid.uuid4().hex}_{safe_name}.ndjson"
+    rows = []
+    extracted_at = datetime.now(timezone.utc).isoformat()
+    for student_id, result in results.items():
+        rows.append({
+            "student_id": student_id, "type": "extraction_result",
+            "schema_version": "lv.import-run.v1",
+            "target_schema_id": result.target_schema_id,
+            "source_files": result.source_files,
+            "source_filename": source_filename, "source_id": source_id,
+            "chunks_used": [asdict(chunk) for chunk in result.chunks_used],
+            "extracted_at": extracted_at,
+        })
+        for field in result.fields:
+            rows.append({
+                "student_id": student_id, **asdict(field),
+                "source_filename": source_filename, "source_id": source_id,
+                "extracted_at": extracted_at,
+            })
+        for question in result.unresolved_questions:
+            rows.append({
+                "student_id": student_id, "type": "unresolved_question",
+                "question": question, "source_filename": source_filename,
+                "source_id": source_id, "extracted_at": extracted_at,
+            })
 
-    with log_path.open("w", encoding="utf-8") as f:
-        for student_id, result in results.items():
-            for field in result.fields:
-                entry = {
-                    "student_id": student_id,
-                    "field_path": field.field_path,
-                    "value": field.value,
-                    "confidence": field.confidence,
-                    "status": field.status,
-                    "supporting_chunk_ids": field.supporting_chunk_ids,
-                    "source_filename": source_filename,
-                    "extracted_at": datetime.now(timezone.utc).isoformat(),
-                }
-                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-            # Also log unresolved questions
-            for question in result.unresolved_questions:
-                entry = {
-                    "student_id": student_id,
-                    "type": "unresolved_question",
-                    "question": question,
-                    "source_filename": source_filename,
-                    "extracted_at": datetime.now(timezone.utc).isoformat(),
-                }
-                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-
+    fd, raw_path = tempfile.mkstemp(prefix=".import-", suffix=".tmp", dir=imports)
+    temp_path = Path(raw_path)
     try:
-        os.chmod(log_path, 0o600)
-    except OSError:
-        pass
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            for entry in rows:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temp_path, log_path)
+        from src.lingua_viva.docpipe.vault import _fsync_dir
+        _fsync_dir(imports)
+    finally:
+        temp_path.unlink(missing_ok=True)
     return log_path
 
 
@@ -1384,14 +1446,18 @@ def load_extraction_log(log_path: Path) -> dict[str, ExtractionResult]:
             continue
         student_id = entry.get("student_id", "")
         if student_id not in by_student:
-            by_student[student_id] = {"fields": [], "unresolved": [], "sources": []}
+            by_student[student_id] = {"fields": [], "unresolved": [], "sources": [], "chunks": [], "schema": "student_lens"}
         # Restore the source filename the log already carries per entry
         # (2026-09-04): without it every applied import said "file.txt" and
         # the writer's CEFR dedupe key could not tell two documents apart.
         source_name = str(entry.get("source_filename") or "").strip()
         if source_name and source_name not in by_student[student_id]["sources"]:
             by_student[student_id]["sources"].append(source_name)
-        if entry.get("type") == "unresolved_question":
+        if entry.get("type") == "extraction_result":
+            by_student[student_id]["schema"] = entry.get("target_schema_id", "student_lens")
+            by_student[student_id]["chunks"] = [SourceChunk(**c) for c in entry.get("chunks_used", [])]
+            by_student[student_id]["sources"] = list(entry.get("source_files") or [entry.get("source_filename", "")])
+        elif entry.get("type") == "unresolved_question":
             by_student[student_id]["unresolved"].append(entry.get("question", ""))
         elif "field_path" in entry:
             by_student[student_id]["fields"].append(
@@ -1407,11 +1473,11 @@ def load_extraction_log(log_path: Path) -> dict[str, ExtractionResult]:
     results = {}
     for student_id, data in by_student.items():
         results[student_id] = ExtractionResult(
-            target_schema_id="student_lens",
+            target_schema_id=data["schema"],
             fields=data["fields"],
             unresolved_questions=data["unresolved"],
             source_files=list(data["sources"]),
-            chunks_used=[],
+            chunks_used=data["chunks"],
         )
     return results
 
