@@ -281,7 +281,7 @@ REPO = Path(__file__).resolve().parent.parent
 #   both routes, parent recommendation provenance fields (web.py only).
 # v180 (2026-09-01): BUG-T5.2 — Observe save student gate (ambiguous
 #   surname / mismatched name refuses to save; "Which student?" chooser).
-EXPECTED_VERSION = 190
+EXPECTED_VERSION = 191
 
 
 def _html() -> str:

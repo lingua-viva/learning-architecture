@@ -16,6 +16,8 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v191 (2026-09-05): Continuing a saved diagnostic draft creates a distinct
+#     revision, including after withdrawal of an earlier confirmed version.
 #   v190 (2026-09-05): Resume source correction and diagnostic drafts; download
 #     originals; mount administrator queries with saved CSV; reopen classroom
 #     packets. Ignore failures from views left behind during navigation.
@@ -898,7 +900,7 @@
 #     rollup chips, Remove = soft-delete), "Add as evidence" per source
 #     ledger record (provenance pointer, never file bytes), Parents
 #     "Include evidence summaries" checkbox.
-version: 190
+version: 191
 # v122 (2026-08-06): Failure-mode hardening. src/web.py: voice-act observation
 #   dedup guard (same 60s window as observe/capture, prevents network-retry
 #   duplicates). src/education/parent_report.py: personal_context evidence
