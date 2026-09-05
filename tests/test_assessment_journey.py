@@ -47,6 +47,9 @@ def test_shared_diagnostic_full_journey(client, text):
         assert len(store.export_lens('assess-demo')['assessment_profile']) == 1
     removed = client.post('/api/assess/withdraw', json={'student_id': 'assess-demo', 'assessment_id': record['assessment_id']})
     assert removed.status_code == 200
+    repeat = client.post('/api/assess/confirm', json={'student_id': 'assess-demo', 'record': record, 'confirmed': True})
+    assert repeat.status_code == 422
+    assert 'removed' in repeat.json()['message']
     parent_after = client.post('/api/parents/recommendation', json={'student_id': 'assess-demo'})
     assert 'Practising complete sentences' not in parent_after.json()['body']
     with StudentLensStore() as store:

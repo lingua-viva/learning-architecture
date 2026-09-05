@@ -7096,7 +7096,8 @@
             const payload = record.payload;
             $("saved-work-detail").innerHTML = `<h4>${escapeHtml(record.title)}</h4><pre style="white-space:pre-wrap">${escapeHtml(payload.printable_text || payload.record?.transcript || payload.source?.text || 'Download this saved version to view its details.')}</pre><button id="saved-work-download" type="button">Download saved version</button>${payload.print_html ? '<button id="saved-work-print" type="button">Print</button>' : ''}${record.kind === 'assessment_draft' ? '<button id="saved-work-resume" type="button">Continue review</button>' : ''}`;
             $("saved-work-resume")?.addEventListener('click', () => {
-              state.assessStudent = payload.student_id; state.assessmentDraftRecord = payload.record;
+              state.assessStudent = payload.student_id; state.assessmentDraftRecord = structuredClone(payload.record);
+              state.assessmentDraftRecord.assessment_id = 'ASSESS-' + crypto.randomUUID();
               state.assessmentSource = {source_id: payload.original_source_id, kind: payload.record.kind, duration_seconds: payload.record.duration_seconds, segments: payload.record.segments};
               switchView('assess');
             });

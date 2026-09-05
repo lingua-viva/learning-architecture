@@ -1725,6 +1725,8 @@ class StudentLensStore:
         if existing:
             if existing['student_id'] != student_id or existing['payload'] != encoded:
                 raise ValueError('Use a new revision identifier to change an assessment.')
+            if self._conn.execute('SELECT 1 FROM assessment_withdrawals WHERE assessment_id = ?', (value['assessment_id'],)).fetchone():
+                raise ValueError('This revision was removed. Analyse the corrected text again to create a new revision.')
             return
         now = datetime.now(timezone.utc).isoformat()
         with self._conn:

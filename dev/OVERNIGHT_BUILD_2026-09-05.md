@@ -127,4 +127,11 @@ The baseline test defects are corrected: add the missing pytest import to the
 grounding tests; simulate PermissionError directly in the reconciliation test so
 it tests the same failure on Windows and root Linux. The missing-field expectation
 now includes the declared assessment_profile. These changes do not remove checks.
-The new Linux full-suite result will be recorded after the UI lock is updated.
+Linux full suite at f89275c: 3,133 passed, 37 skipped, 32 expected failures,
+zero failures (Python 3.11.16, LF checkout). The subsequent withdrawn-assessment
+retry check also passes: a removed revision returns a named refusal, while
+continuing a saved draft creates a new revision identifier.
+
+Still pending: production build, signed asset verification, live site pin and
+install-over-install measurement. The browser evidence above uses synthetic
+sources, not a teacher witness. Claudia's real pagella retry has not started.
