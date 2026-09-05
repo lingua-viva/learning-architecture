@@ -220,16 +220,31 @@ CEFR_DIMENSION_LABELS: dict[str, tuple[str, ...]] = {
 
 
 def _deterministic_cefr(text: str) -> dict[str, str]:
+    """Two passes. First the direct form ("Lettura: A2", "Listening A2") for
+    every dimension - unambiguous, so it must win. Then, only for dimensions
+    still unfound, the loose forms where a level and a label sit within 25
+    characters. Running the loose forms first let "Listening: A2, Speaking: A1"
+    give speaking A2 (the A2 sat within 25 chars of "speaking")."""
     found: dict[str, str] = {}
     lower = text.lower()
-    for level in sorted(CEFR_LEVELS, key=len, reverse=True):
+    levels = sorted(CEFR_LEVELS, key=len, reverse=True)
+    label_res = {
+        dim: "(?:" + "|".join(re.escape(label) for label in labels) + ")"
+        for dim, labels in CEFR_DIMENSION_LABELS.items()
+    }
+    for level in levels:
         level_l = re.escape(level.lower())
-        for dim, labels in CEFR_DIMENSION_LABELS.items():
+        for dim, label_re in label_res.items():
             if dim in found:
                 continue
-            label_re = "(?:" + "|".join(re.escape(label) for label in labels) + ")"
+            if re.search(rf"\b{label_re}\s*[:\-\u2013\u00b7]?\s*{level_l}(?!\w)", lower):
+                found[dim] = level
+    for level in levels:
+        level_l = re.escape(level.lower())
+        for dim, label_re in label_res.items():
+            if dim in found:
+                continue
             patterns = [
-                rf"\b{label_re}\s*[:\-\u2013\u00b7]?\s*{level_l}(?!\w)",
                 rf"\b{level_l}(?!\w)[^.\n]{{0,25}}\b{label_re}\b",
                 rf"\b{label_re}\b[^.\n]{{0,25}}\b{level_l}(?!\w)",
             ]

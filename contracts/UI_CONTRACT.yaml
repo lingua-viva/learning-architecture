@@ -16,6 +16,12 @@
 # hashes after the lock was already taken, which preflight then caught.
 #
 # Bump log (one line per deliberate change — the comments are the changelog):
+#   v187 (2026-09-05): U3 review step (witnessed by Claudia). static/index.html:
+#     the import preview shows plain labels (fieldLabel) instead of raw
+#     paths, a tick box on every field that needs the teacher's OK plus an
+#     "include everything" toggle; Update all lenses sends confirmed_fields;
+#     the result names the student and counts written / waiting / refused
+#     with the refusal reasons. No web.py change. Lock re-taken on Linux.
 #   v186 (2026-09-04): School profile control in Settings (operator, same
 #     day): a select (La Scuola / Still I Rise) + Apply that POSTs
 #     deployment_profile, re-reads the profile and repaints the shell so

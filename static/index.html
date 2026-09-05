@@ -3779,6 +3779,21 @@
       pollIngestJob();
     }
 
+    // U3 (2026-09-05): a teacher reads "Communication & language · evidence", never
+    // "support_profile.categories.communication_and_language.evidence".
+    function fieldLabel(path) {
+      const p = String(path || "");
+      let m = p.match(/^cefr_snapshot\.(\w+)$/);
+      if (m) return `CEFR ${m[1]}`;
+      m = p.match(/^support_profile\.categories\.([a-z_]+)\.([a-z_]+)$/);
+      if (m) return `${categoryLabel(m[1])} · ${m[2].replace(/_/g, " ")}`;
+      if (p === "academic_strengths") return "Academic strength";
+      if (p === "personal_strengths") return "Personal strength";
+      if (p === "home_languages") return "Home languages";
+      if (p === "grade_level") return "Grade";
+      return p.replace(/_/g, " ").replace(/\./g, " · ");
+    }
+
     async function submitDocumentImport(event) {
       event.preventDefault();
       const input = $("doc-import-file");
@@ -3823,8 +3838,13 @@
         if (fields.length > 0) {
           html += `<div style="padding:6px 12px;font-size:0.9em;">`;
           for (const f of fields) {
-            const badge = f.status === "verified" ? "ok" : f.status === "needs_confirmation" ? "warn" : "";
-            html += `<div class="row" style="gap:6px;margin:2px 0;"><code>${escapeHtml(f.field_path)}</code><span>${escapeHtml(String(f.value))}</span><span class="badge ${badge}">${escapeHtml(f.status)}</span></div>`;
+            const held = f.status === "needs_confirmation";
+            const badge = f.status === "verified" ? "ok" : held ? "warn" : "";
+            const statusWord = f.status === "verified" ? "verified" : held ? "needs your OK" : escapeHtml(f.status);
+            const tick = held
+              ? `<input type="checkbox" data-confirm-field data-student="${escapeHtml(student.student_id)}" data-path="${escapeHtml(f.field_path)}" style="width:auto;" title="Tick to include this in the lens">`
+              : `<span style="display:inline-block;width:16px;"></span>`;
+            html += `<div class="row" style="gap:6px;margin:2px 0;align-items:center;">${tick}<strong style="min-width:200px;">${escapeHtml(fieldLabel(f.field_path))}</strong><span>${escapeHtml(String(f.value))}</span><span class="badge ${badge}">${statusWord}</span></div>`;
           }
           html += `</div>`;
         }
@@ -3835,6 +3855,7 @@
       }
       html += `</div>`;
       html += `<div class="row" style="gap:8px;margin-top:8px;">`;
+      html += `<label class="row" style="gap:6px;align-items:center;"><input type="checkbox" id="doc-import-confirm-all" style="width:auto;"> Include everything marked "needs your OK"</label>`;
       html += `<button class="primary" id="doc-import-apply" type="button">Update all lenses</button>`;
       html += `<button id="doc-import-cancel" type="button">Cancel</button>`;
       html += `</div>`;
@@ -3845,21 +3866,30 @@
         $("doc-import-apply").disabled = true;
         $("doc-import-apply").textContent = "Updating…";
         try {
+          // U3 (2026-09-05): what the teacher ticked travels as confirmed_fields.
+          const confirmedFields = {};
+          results.querySelectorAll("[data-confirm-field]:checked").forEach(box => {
+            (confirmedFields[box.dataset.student] = confirmedFields[box.dataset.student] || []).push(box.dataset.path);
+          });
           const applyRes = await fetch("/api/students/apply-extractions", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
             body: JSON.stringify({
               extraction_log_path: data.extraction_log_path,
               confirmed_students: data.matched_students.map(s => s.student_id),
+              confirmed_fields: confirmedFields,
             }),
           });
           const applyData = await applyRes.json();
           if (!applyRes.ok) throw new Error(applyData.error || "apply failed");
           const updated = applyData.updated_students || [];
-          let summary = updated.map(u =>
-            `<span class="badge ok">${escapeHtml(u.student_id)} — ${u.written_count} field(s) updated</span>`
-          ).join(" ");
-          results.innerHTML = `<p>Lenses updated.</p><div class="source-line">${summary}</div>`;
+          const summary = updated.map(u => {
+            const waiting = u.review_count || (u.review_required || []).length || 0;
+            const refused = u.refused_count || 0;
+            const refusedRows = (u.accounting || []).filter(a => a.outcome === "refused").map(a => `<div class="voice-hint">Not imported — ${escapeHtml(fieldLabel(a.field_path))}: ${escapeHtml(a.reason || "")}</div>`).join("");
+            return `<div class="item"><strong>${escapeHtml(u.display_name || "this student")}</strong> — ${plural(u.written_count || 0, "field")} updated${waiting ? `, ${waiting} waiting for your confirmation (tick them above and update again)` : ""}${refused ? `, ${refused} refused` : ""}${refusedRows}</div>`;
+          }).join("");
+          results.innerHTML = `<p>Lenses updated.</p><div class="list">${summary}</div>` + (updated.some(u => (u.review_count || (u.review_required || []).length)) ? `<p class="voice-hint">To confirm the held items, upload the same file again, tick them, and click Update all lenses.</p>` : "");
           showToast(`Updated ${updated.length} student lens(es).`, "ok");
           state.students = null;
           await renderStudents();
@@ -3868,6 +3898,11 @@
           $("doc-import-apply").textContent = "Update all lenses";
           results.innerHTML += `<p style="color:var(--c-warn)">${escapeHtml(err.message)}</p>`;
         }
+      });
+
+      const confirmAll = $("doc-import-confirm-all");
+      if (confirmAll) confirmAll.addEventListener("change", () => {
+        results.querySelectorAll("[data-confirm-field]").forEach(box => { box.checked = confirmAll.checked; });
       });
 
       // Wire cancel button

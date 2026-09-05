@@ -1424,8 +1424,13 @@ async def apply_extractions_to_lenses(
     results: dict[str, ExtractionResult],
     lens_store: Optional[StudentLensStore] = None,
     confirmed_students: Optional[list[str]] = None,
+    confirmed_fields: Optional[dict[str, list[str]]] = None,
 ) -> dict[str, dict]:
     """Write all extractions to their target lenses (R5).
+
+    confirmed_fields (U3, 2026-09-05): {student_id: [field_path, ...]} - the
+    held (needs_confirmation) fields the teacher ticked; the writer treats
+    them as confirmed and writes them. Everything else keeps its status.
 
     Uses write_student_lens() from student_lens_writer.py.
     Respects all safety rules (trauma_flag, source_ref_ids, confidence).
@@ -1453,6 +1458,7 @@ async def apply_extractions_to_lenses(
             summary = write_student_lens(
                 result=result,
                 teacher_id="local-teacher",
+                confirmed_fields=list((confirmed_fields or {}).get(student_id) or []),
                 hint={"assigned_student_id": student_id},
                 store=lens_store,
             )

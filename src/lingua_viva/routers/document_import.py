@@ -181,6 +181,16 @@ async def apply_extractions(request: Request):
 
     log_path_str = payload.get("extraction_log_path", "")
     confirmed_students = payload.get("confirmed_students", [])
+    # U3 (2026-09-05, witnessed by Claudia): the held fields the teacher ticked.
+    confirmed_fields = payload.get("confirmed_fields") or {}
+    if not isinstance(confirmed_fields, dict) or not all(
+        isinstance(k, str) and isinstance(v, list) and all(isinstance(p, str) for p in v)
+        for k, v in confirmed_fields.items()
+    ):
+        return JSONResponse(
+            {"error": "confirmed_fields must map a student_id to a list of field paths"},
+            status_code=400,
+        )
 
     if not log_path_str:
         return JSONResponse(
@@ -216,12 +226,20 @@ async def apply_extractions(request: Request):
             results=results,
             lens_store=store,
             confirmed_students=confirmed_students or None,
+            confirmed_fields=confirmed_fields or None,
         )
 
         updated = []
         for student_id, summary in summaries.items():
+            try:
+                display_name = str(store.get_lens(student_id).get("display_name") or "")
+            except Exception:
+                display_name = ""
+            review = summary.get("review_required", [])
             updated.append({
                 "student_id": student_id,
+                "display_name": display_name,
+                "review_count": len(review),
                 "fields_written": summary.get("written_fields", []),
                 "review_required": summary.get("review_required", []),
                 # Glass-box at the boundary the teacher actually uses
