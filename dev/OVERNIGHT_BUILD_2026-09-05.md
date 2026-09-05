@@ -45,7 +45,8 @@ Windows focused verification: 35 passed.
 Linux full suite at first commit `1302feb`: 3108 passed, 4 failed, 34 skipped,
 32 xfailed. The failures match the documented baseline (three missing `pytest`
 imports in grounding tests and one root-permission reconciliation test); this is
-not a fully green run. The second fix still requires Linux verification.
+not a fully green run. Linux focused verification at `2c6f638`: all 35 tests
+passed, matching Windows. These commits remain local; no release has been made.
 
 Test isolation incident: three synthetic binary fixtures reached the local vault
 because the new source helper ignored LV_STATE_HOME. Their exact files were
