@@ -164,3 +164,48 @@ Release 0.2.94 run 33948560512 passed all jobs, including packaged AppImage fres
 boot. Downloaded the actual Mac verification log: commit 2758ad8,
 TeamIdentifier=XWT7RB624U, codesign verification succeeded. The first failure
 did not recur. This release precedes the Observe retention follow-through.
+
+## Final release and installed evidence
+
+- Application code through `304622a`; `desktop-v0.2.95` tags `eaa5ed4` and
+  contains those changes. Release run **33949144081** passed every job, including
+  the full CI gate, three builds, packaged AppImage fresh boot, release, live pin
+  verification and retirement of superseded desktop distributions. The separate
+  CLI release remains. All four desktop asset URLs resolved with HTTP 200.
+- Actual downloaded Mac verification log reports commit `eaa5ed4`, successful
+  codesign verification and **TeamIdentifier=XWT7RB624U**. This is CI signing
+  evidence, not a fresh-Mac teacher witness.
+- Final LF Linux full suite: **3,135 passed, 37 skipped, 32 expected failures,
+  zero failures**. An obsolete voice callback text assertion was updated to
+  include the recording reference; both its focused rerun and final suite pass.
+- Windows installer downloaded from that release, SHA256 verified against the
+  published asset digest:
+  `8e7870d8d52fa7e4b5b1d01d382dcdbac482e88169f65dcad705a17d91e6890a`.
+  Silent install returned 0. Installed app.asar reports **0.2.95**. The running
+  packaged backend reports **OK, 7/7 routers**. One backend process tree owns
+  port 8787. The visible app window is titled Still I Rise.
+- The installer added OCR successfully. Actual private runtime package versions:
+  faster-whisper 1.1.1, rapidocr-onnxruntime 1.4.4, opencv-python 5.0.0.93.
+- Reinstall from **0.2.92 -> 0.2.95** preserved all existing database rows:
+  six student lenses and six teacher-roster rows; no existing row changed or
+  disappeared. The new assessment tables are empty. Retained originals, import
+  runs, job files and existing saved materials have unchanged hashes. Startup
+  logs, request/Doctor logs and the regenerated filesystem index changed as
+  expected. A full private workspace backup and measurements are outside Git,
+  under Documents/Lingua-Viva-Review-2026-09-04. Old installer 0.2.92 remains
+  available locally for recovery.
+- Ran the browser harness again with **LV_BROWSER_APP_ROOT pointing inside the
+  installed application's resources/app**, with an assertion that src.web came
+  from that location. All photo/PDF/English-audio/Italian-audio/Assess-microphone,
+  Observe-microphone-original-download, actual-local-model Prepare, parent-note,
+  and administrator-query journeys passed with isolated synthetic state. No
+  JavaScript errors. This run did not add synthetic records to the installed
+  teacher workspace.
+
+The live site pin was read as **desktop-v0.2.95**. The public release list contains
+one desktop version, plus the separate CLI track. Teacher click paths and precise
+scope are in [OVERNIGHT_VERIFIED_JOURNEYS_2026-09-05.md](OVERNIGHT_VERIFIED_JOURNEYS_2026-09-05.md).
+
+Still pending: Claudia's real pagella chain, real handwriting and child speech,
+native-speaker safeguarding review, clean-Mac teacher verification, and any UX
+not covered by the stated journeys. Do not mark those rows level 4 from this run.

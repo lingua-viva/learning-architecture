@@ -11,7 +11,8 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
+APP_ROOT = Path(os.environ.get('LV_BROWSER_APP_ROOT', ROOT)).resolve()
+sys.path.insert(0, str(APP_ROOT))
 
 
 def main():
@@ -24,6 +25,8 @@ def main():
             os.environ[key] = str(workspace)
         os.environ["LV_STUDENT_DB_PATH"] = str(workspace / "students.db")
         from src.web import app, _with_student_store
+        import src.web
+        assert Path(src.web.__file__).resolve().is_relative_to(APP_ROOT), 'Wrong application checkout loaded'
         from fastapi.testclient import TestClient
         from playwright.sync_api import sync_playwright, expect
 
