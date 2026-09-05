@@ -148,6 +148,28 @@ def main():
                 page.locator('#diagnostic-confirm').click()
                 expect(page.locator('#diagnostic-final')).to_contain_text('Saved to the lens')
                 print('PASS: in-app microphone (synthetic device) -> transcription -> corrected review -> saved diagnostic', flush=True)
+            if '--prepare' in sys.argv:
+                page.locator('[data-view="prepare"]').click()
+                page.locator('#lesson-file-input').set_input_files({'name': 'water-cycle.txt', 'mimeType': 'text/plain',
+                    'buffer': b'The water cycle: Water evaporates when warmed by the sun. Water vapour cools and condenses into clouds. Rain returns water to rivers. Draw and label evaporation, condensation and precipitation.'})
+                try:
+                    expect(page.locator('#selected-lesson-line')).to_contain_text('water-cycle', timeout=30000)
+                except Exception:
+                    print('PREPARE FAILURE:', page.locator('#content').inner_text(), 'ERRORS:', errors, flush=True)
+                    raise
+                page.locator('#prep-topic').fill('The water cycle')
+                page.locator('#generate-activity').click()
+                expect(page.locator('#activity-output')).to_contain_text('Foundational', timeout=180000)
+                assert 'template text' not in page.locator('#activity-output').inner_text(), 'Real local model generation did not complete'
+                page.locator('#preview-lesson-packet').click()
+                expect(page.locator('#approve-lesson-packet')).to_be_visible(timeout=180000)
+                page.locator('#approve-lesson-packet').click()
+                expect(page.locator('#lesson-packet-output')).to_contain_text('approved', timeout=30000)
+                page.locator('[data-view="sources"]').click()
+                page.locator('[data-open-saved]').first.click()
+                expect(page.locator('#saved-work-detail')).to_contain_text('water cycle')
+                expect(page.locator('#saved-work-print')).to_be_visible()
+                print('PASS: uploaded coursework -> packet preview -> approved saved packet -> reopen/print control', flush=True)
             page.locator('#change-role').click()
             page.locator('[data-role="coordinator"]').click()
             page.locator('[data-view="lensquery"]').click()

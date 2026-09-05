@@ -135,3 +135,17 @@ continuing a saved draft creates a new revision identifier.
 Still pending: production build, signed asset verification, live site pin and
 install-over-install measurement. The browser evidence above uses synthetic
 sources, not a teacher witness. Claudia's real pagella retry has not started.
+
+First release attempt: run 33948190822, desktop-v0.2.93. Test gate, backend
+smoke, Windows and Linux builds passed. macOS failed during app notarization /
+stapling / DMG rebuild; release and site pin were skipped. Public job annotations
+only reported exit 1, and job log download requires GitHub authentication (403).
+Follow-up adds explicit failure-stage reporting and a release asset containing
+the actual codesign verification output, with an exact XWT7RB624U team gate.
+
+Additional real browser check: uploading immediately on Prepare initially lost
+the file because listeners were registered after an asynchronous unit fetch.
+Moving listener registration before that await fixes the reproduced failure.
+Actual local-model coursework upload -> three tiers -> packet preview -> saved
+packet -> Sources reopen/print controls now passes. The test's first preview
+attempt correctly refused until generation was explicitly performed.

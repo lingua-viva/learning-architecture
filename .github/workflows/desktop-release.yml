@@ -225,22 +225,29 @@ jobs:
           fi
           echo "Notarizing app: $APP"
 
+          LV_NOTARY_PHASE="create app archive"
+          trap 'echo "::error::macOS delivery failed during: $LV_NOTARY_PHASE"' ERR
           ditto -c -k --keepParent "$APP" "$RUNNER_TEMP/app-notarize.zip"
+          LV_NOTARY_PHASE="submit app to Apple"
           xcrun notarytool submit "$RUNNER_TEMP/app-notarize.zip" \
             --key "$RUNNER_TEMP/api-key/AuthKey.p8" \
             --key-id "$APPLE_API_KEY_ID" \
             --issuer "$APPLE_API_ISSUER" \
             --wait --timeout 10m
 
+          LV_NOTARY_PHASE="staple accepted app"
           xcrun stapler staple "$APP"
+          LV_NOTARY_PHASE="validate app ticket"
           xcrun stapler validate "$APP"
           echo "✓ .app notarized, stapled, and validated"
 
+          LV_NOTARY_PHASE="locate original DMG"
           DMG=$(find desktop/release -maxdepth 1 -name "*.dmg" -type f | head -1)
           if [ -z "$DMG" ]; then
             echo "::error::No .dmg found to rebuild"
             exit 1
           fi
+          LV_NOTARY_PHASE="stage stapled app for DMG"
           rm -f "$DMG"
           STAGE=$RUNNER_TEMP/dmg-stage
           rm -rf "$STAGE" && mkdir -p "$STAGE"
@@ -310,6 +317,9 @@ jobs:
             echo "::error::No .app bundle found to verify"
             exit 1
           fi
+          mkdir -p release
+          exec > >(tee release/LinguaViva-mac-verification.txt) 2>&1
+          echo "Commit: $(git rev-parse HEAD)"
           echo "=== Codesign verify ==="
           codesign --verify --deep --strict "$APP"
           echo "=== Gatekeeper assessment ==="
@@ -317,9 +327,9 @@ jobs:
           echo "=== Signing identity ==="
           codesign -dv "$APP" 2>&1 | grep -E "Authority|TeamIdentifier|Identifier"
           # Hard gate: if TeamIdentifier is "not set", fail the build
-          TEAM=$(codesign -dv "$APP" 2>&1 | grep TeamIdentifier | awk '{print $NF}')
-          if [ "$TEAM" = "not" ] || [ -z "$TEAM" ]; then
-            echo "::error::App is NOT signed with a Developer ID (TeamIdentifier=$TEAM). Cannot ship."
+          TEAM=$(codesign -dv "$APP" 2>&1 | sed -n 's/^TeamIdentifier=//p')
+          if [ "$TEAM" != "XWT7RB624U" ]; then
+            echo "::error::Unexpected signing team: $TEAM. Expected XWT7RB624U. Cannot ship."
             exit 1
           fi
           echo "✓ Signed by team: $TEAM"
@@ -360,6 +370,7 @@ jobs:
           path: |
             desktop/release/${{ matrix.rename_to }}
             desktop/release/LinguaViva.deb
+            desktop/release/LinguaViva-mac-verification.txt
 
   # D1-P0-001 gate (2026-08-10): backend-smoke boots src/web.py from the
   # checkout with CI-installed deps — it can never catch a broken packaged
@@ -445,5 +456,6 @@ jobs:
             artifacts/LinguaViva-Setup.exe
             artifacts/LinguaViva.AppImage
             artifacts/LinguaViva.deb
+            artifacts/LinguaViva-mac-verification.txt
           generate_release_notes: true
           prerelease: true  # MUST stay true — desktop releases steal the CLI's "latest" slot otherwise

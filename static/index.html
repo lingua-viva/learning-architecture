@@ -1939,7 +1939,6 @@
         state.grade = event.target.value;
         await populateUnitSelect("prep-unit");
       });
-	      await populateUnitSelect("prep-unit");
 	      $("generate-activity").addEventListener("click", generateActivity);
 	      $("generate-lesson-plan").addEventListener("click", generateLessonPlan);
 	      $("preview-lesson-plan").addEventListener("click", previewLessonPlan);
@@ -1972,6 +1971,8 @@
         event.target.value = "";
         await importLessonFile(file);
       });
+      await populateUnitSelect("prep-unit");
+      if (state.view !== "prepare") return;
       renderSelectedLessonLine();
       updatePrepareActionState();
       if (state.pendingOpenUnitEditor) {
